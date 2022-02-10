@@ -11,6 +11,9 @@ title: omniparser
 # Your name to show in the footer
 author: ouankou
 
+# Website URL
+base_url: parser.ouankou.com
+
 # --- List of links in the navigation bar --- #
 
 navbar-links:
