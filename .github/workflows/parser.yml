@@ -1,4 +1,4 @@
-name: raiden-parser CI
+name: omniparser CI
 
 on:
   push:
