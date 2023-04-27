@@ -1,3 +1,2 @@
-# omniparser
-A standalone unified parser for OpenMP and OpenACC. It is based on ANTLR 4. It is designed to be a framework that can be extended to support other directive-based programming interface.
-For each language, there is an individual set of gammar and IR. 
+# Rust-based OpenMP/OpenACC Unified Parser (ROUP) 
+ROUP is a standalone, unified parser for OpenMP and OpenACC, developed using Rust. It is designed as an extensible framework that can be expanded to support additional directive-based programming interfaces. For each language, ROUP provides a unique set of grammars and intermediate representations (IRs).
