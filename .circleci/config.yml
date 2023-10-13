@@ -9,10 +9,10 @@ jobs:
     # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
     # See: https://circleci.com/docs/configuration-reference/#executor-job
     docker:
-      - image: cimg/rust:1.73
+      - image: << parameters.image >>
     resource_class: arm.medium
     steps:
-      - run: uname -a
+      - run: lscpu
       - run: lsb_release -a
       - run: rustc --version
       - run: cargo --version
@@ -23,3 +23,6 @@ workflows:
   say-hello-workflow:
     jobs:
       - say-hello
+          matrix:
+            parameters:
+              image: ["cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71"]
