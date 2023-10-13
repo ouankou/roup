@@ -22,10 +22,11 @@ jobs:
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
+# Test the latest two versions, which shipped with the latest Debian stable (12) and Ubuntu LTS (22.04).
 workflows:
   say-hello-workflow:
     jobs:
       - say-hello:
           matrix:
             parameters:
-              image: ["cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71"]
+              image: ["cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.66", "cimg/rust:1.63"]
