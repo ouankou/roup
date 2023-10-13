@@ -22,7 +22,7 @@ jobs:
 workflows:
   say-hello-workflow:
     jobs:
-      - say-hello
+      - say-hello:
           matrix:
             parameters:
               image: ["cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71"]
