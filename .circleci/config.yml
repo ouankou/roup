@@ -8,12 +8,13 @@ jobs:
   say-hello:
     # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
     # See: https://circleci.com/docs/configuration-reference/#executor-job
-    machine:
-      image: ubuntu-2204:current
+    docker:
+      - image: cimg/rust:1.71
     resource_class: arm.medium
     steps:
       - run: uname -a
-      - run: echo "Hello, Arm!"
+      - run: rustc --version
+      - run: cargo --version
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
