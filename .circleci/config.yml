@@ -22,11 +22,11 @@ jobs:
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
-# Test the latest six versions.
+# Test the latest three stable versions.
 workflows:
   say-hello-workflow:
     jobs:
       - say-hello:
           matrix:
             parameters:
-              image: ["cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71", "cimg/rust:1.70", "cimg/rust:1.69", "cimg/rust:1.68"]
+              image: ["cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71"]
