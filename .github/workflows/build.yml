@@ -28,7 +28,5 @@ jobs:
           components: rustfmt
       - name: Check rust information
         run: |
-          lscpu
-          uname -a
           rustc --version
           cargo --version
