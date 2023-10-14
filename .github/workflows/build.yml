@@ -1,0 +1,30 @@
+name: ROUP CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build
+    strategy:
+      matrix:
+        version: [1.73, 1.72, 1.71]
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@{{ matrix.version }}
+      - name: Check rust information
+        run: |
+          lscpu
+          uname -a
+          rustc --version
+          cargo --version
