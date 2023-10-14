@@ -1,4 +1,4 @@
-name: ROUP CI
+name: Publish
 
 on:
   push:
