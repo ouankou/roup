@@ -24,6 +24,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.version }}
+          components: rustfmt
       - name: Check rust information
         run: |
           lscpu
