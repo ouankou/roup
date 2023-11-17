@@ -29,4 +29,4 @@ workflows:
       - say-hello:
           matrix:
             parameters:
-              image: ["cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71"]
+              image: ["cimg/rust:1.74", "cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71"]
