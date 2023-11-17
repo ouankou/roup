@@ -1,12 +1,12 @@
 name: Publish
 
 on:
+  repository_dispatch:
+    types: [circleci-success]
   workflow_run:
     workflows: ["ROUP CI"]
     types:
       - completed
-  repository_dispatch:
-    types: [circleci-success]
 
 jobs:
   build:
