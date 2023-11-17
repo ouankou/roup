@@ -21,9 +21,6 @@ jobs:
       - run: cargo --version
 
   notify-github:
-    parameters:
-      image:
-        type: string
     docker:
       - image: cimg/base:current
     resource_class: arm.medium
