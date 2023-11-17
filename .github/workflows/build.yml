@@ -16,7 +16,7 @@ jobs:
     name: Build
     strategy:
       matrix:
-        version: [1.73, 1.72, 1.71]
+        version: [1.74, 1.73, 1.72, 1.71]
         os: [ubuntu-22.04, windows-2022, macos-13]
 
     runs-on: ${{ matrix.os }}
