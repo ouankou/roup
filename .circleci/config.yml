@@ -19,6 +19,13 @@ jobs:
       - run: lsb_release -a
       - run: rustc --version
       - run: cargo --version
+      - run:
+      name: Trigger GitHub Dispatch Event
+      command: |
+      curl -X POST -u "username:${GITHUB_TOKEN}" \
+      -H "Accept: application/vnd.github.v3+json" \
+      "https://api.github.com/repos/ouankou/roup/dispatches" \
+      -d '{"event_type": "circleci-success"}
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
