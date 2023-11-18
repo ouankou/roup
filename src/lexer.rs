@@ -1,7 +1,6 @@
 use nom::{
     bytes::complete::tag,
-    sequence::tuple,
-    character::complete::{space1, alphanumeric1},
+    character::complete::{alphanumeric1},
     IResult,
 };
 

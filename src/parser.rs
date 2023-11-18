@@ -1,9 +1,9 @@
 use super::lexer;
 use nom::{
     bytes::complete::{tag, is_not},
-    character::complete::{alpha1, char, multispace0, multispace1},
-    combinator::{map, map_res, opt},
-    sequence::{pair, preceded, separated_pair, tuple},
+    character::complete::{char, multispace1},
+    combinator::{map, opt},
+    sequence::{tuple},
     multi::{separated_list0, separated_list1},
     IResult,
 };
