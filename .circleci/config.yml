@@ -2,15 +2,10 @@
 # See: https://circleci.com/docs/configuration-reference
 version: 2.1
 
-parameters:
-  pull_request:
-    type: boolean
-    default: true
-
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/configuration-reference/#jobs
 jobs:
-  build:
+  build-and-test:
     # Specify the execution environment. You can specify an image from Docker Hub or use one of our convenience images from CircleCI's Developer Hub.
     # See: https://circleci.com/docs/configuration-reference/#executor-job
     parameters:
@@ -25,7 +20,7 @@ jobs:
       - run: rustc --version
       - run: cargo --version
 
-  notify-pull-request:
+  notify-github:
     docker:
       - image: cimg/base:current
     resource_class: arm.medium
@@ -33,41 +28,37 @@ jobs:
       - run:
           name: Trigger GitHub Dispatch Event
           command: |
-            curl -X POST -u "ouankou:${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/ouankou/roup/dispatches" \
-            -d '{"event_type": "circleci-pull-request"}'
-
-  notify-push:
-    docker:
-      - image: cimg/base:current
-    resource_class: arm.medium
-    steps:
-      - run:
-          name: Trigger GitHub Dispatch Event
-          command: |
-            curl -X POST -u "ouankou:${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/ouankou/roup/dispatches" \
-            -d '{"event_type": "circleci-push"}'
+            if [ -n "${CIRCLE_PULL_REQUEST}" ]; then
+              echo "This build was triggered by a pull request."
+              curl -X POST -u "ouankou:${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/ouankou/roup/dispatches" \
+              -d '{"event_type": "circleci-pull-request"}'
+            else
+              echo "This build was triggered by a push to the branch."
+              curl -X POST -u "ouankou:${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/ouankou/roup/dispatches" \
+              -d '{"event_type": "circleci-push"}'
+            fi
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
 # Test the latest three stable versions.
 workflows:
-  test:
+  build-and-test:
     jobs:
-      - build:
+      - build-and-test:
           matrix:
             parameters:
               image: ["cimg/rust:1.74", "cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71"]
+          filters:
+            branches:
+              only: main
 
-  pull-request:
-    when: << pipeline.parameters.pull_request >>
-    jobs:
-      - notify-pull-request
-
-  push:
-    unless: << pipeline.parameters.pull_request >>
-    jobs:
-      - notify-push
+      - notify-github:
+          requires:
+            - build-and-test
+          filters:
+            branches:
+              only: main
