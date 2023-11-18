@@ -1,12 +1,8 @@
 name: ROUP CI
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  repository_dispatch:
+    types: [circleci-push, circleci-pull-request]
 
 env:
   CARGO_TERM_COLOR: always
@@ -36,5 +32,8 @@ jobs:
         run: |
           rustc --version
           cargo --version
+
+      - name: Check llvm information
+        run: |
           clang --version
           clang++ -v

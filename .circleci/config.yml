@@ -2,6 +2,11 @@
 # See: https://circleci.com/docs/configuration-reference
 version: 2.1
 
+parameters:
+  pull_request:
+    type: boolean
+    default: true
+
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/configuration-reference/#jobs
 jobs:
@@ -20,7 +25,7 @@ jobs:
       - run: rustc --version
       - run: cargo --version
 
-  notify-github:
+  notify-pull-request:
     docker:
       - image: cimg/base:current
     resource_class: arm.medium
@@ -29,20 +34,40 @@ jobs:
           name: Trigger GitHub Dispatch Event
           command: |
             curl -X POST -u "ouankou:${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/ouankou/roup/dispatches" \
-            -d '{"event_type": "circleci-success"}'
+            -d '{"event_type": "circleci-pull-request"}'
+
+  notify-push:
+    docker:
+      - image: cimg/base:current
+    resource_class: arm.medium
+    steps:
+      - run:
+          name: Trigger GitHub Dispatch Event
+          command: |
+            curl -X POST -u "ouankou:${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/ouankou/roup/dispatches" \
+            -d '{"event_type": "circleci-push"}'
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/configuration-reference/#workflows
 # Test the latest three stable versions.
 workflows:
-  test-workflow:
+  test:
     jobs:
       - build:
           matrix:
             parameters:
               image: ["cimg/rust:1.74", "cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71"]
-      - notify-github:
-          requires:
-            - build
+
+  pull-request:
+    when: << pipeline.parameters.pull_request >>
+    jobs:
+      - notify-pull-request
+
+  push:
+    unless: << pipeline.parameters.pull_request >>
+    jobs:
+      - notify-push
