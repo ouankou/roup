@@ -16,7 +16,7 @@ jobs:
     name: Build
     strategy:
       matrix:
-        version: [1.76, 1.75, 1.74]
+        version: [1.76, 1.75, 1.74, 1.73, 1.72, 1.71]
         os: [ubuntu-22.04, windows-2022, macos-14]
 
     runs-on: ${{ matrix.os }}
@@ -25,7 +25,7 @@ jobs:
 
       - uses: KyleMayes/install-llvm-action@v1
         with:
-          version: "15"
+          version: "18"
     
       - uses: dtolnay/rust-toolchain@stable
         with:
