@@ -23,6 +23,7 @@ jobs:
   notify-github:
     docker:
       - image: cimg/base:current
+# https://circleci.com/product/features/resource-classes/
     resource_class: arm.medium
     steps:
       - run:
@@ -51,7 +52,7 @@ workflows:
       - build-and-test:
           matrix:
             parameters:
-              image: ["cimg/rust:1.74", "cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71"]
+              image: ["cimg/rust:1.76", "cimg/rust:1.75", "cimg/rust:1.74", "cimg/rust:1.73", "cimg/rust:1.72", "cimg/rust:1.71"]
           filters:
             branches:
               only: main
