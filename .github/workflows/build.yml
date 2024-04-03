@@ -26,6 +26,7 @@ jobs:
       - uses: KyleMayes/install-llvm-action@v2
         with:
           version: "17"
+          env: true
     
       - uses: dtolnay/rust-toolchain@stable
         with:
