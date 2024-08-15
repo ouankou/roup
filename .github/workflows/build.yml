@@ -23,9 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+# Check supported versions at: https://github.com/KyleMayes/install-llvm-action/blob/master/assets.json
       - uses: KyleMayes/install-llvm-action@v2
         with:
-          version: "18.1.8"
+          version: "17.0.6"
     
       - uses: dtolnay/rust-toolchain@stable
         with:
