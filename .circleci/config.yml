@@ -52,7 +52,7 @@ workflows:
       - build-and-test:
           matrix:
             parameters:
-              image: ["cimg/rust:1.77", "cimg/rust:1.76", "cimg/rust:1.75", "cimg/rust:1.74", "cimg/rust:1.73", "cimg/rust:1.72"]
+              image: ["cimg/rust:1.80", "cimg/rust:1.79", "cimg/rust:1.78", "cimg/rust:1.77", "cimg/rust:1.76", "cimg/rust:1.75"]
           filters:
             branches:
               only: main
