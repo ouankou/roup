@@ -18,18 +18,11 @@ jobs:
       matrix:
       # Version should be guarded with quotes (1.80 -> "1.80"). Otherwise, 1.80 may be recognized as 1.8, which is a much older version.
         version: ["1.82", "1.81", "1.80", "1.79", "1.78", "1.77"]
-        os: [ubuntu-24.04, windows-2022, macos-14]
+        os: [ubuntu-latest, windows-latest, macos-14]
 
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install dependencies on Ubuntu
-        if: ${{ matrix.os == 'ubuntu-24.04' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libtinfo5
 
 # Check supported versions at: https://github.com/KyleMayes/install-llvm-action/blob/master/assets.json
       - uses: KyleMayes/install-llvm-action@v2
