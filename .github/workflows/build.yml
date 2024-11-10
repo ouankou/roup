@@ -30,7 +30,7 @@ jobs:
         if: ${{ matrix.os != 'ubuntu-24.04' }}
         uses: KyleMayes/install-llvm-action@v2
         with:
-          version: "{{ matrix.llvm }}"
+          version: "${{ matrix.llvm }}"
 
       - name: Set up LLVM on on Ubuntu
         if: ${{ matrix.os == 'ubuntu-24.04' }}
