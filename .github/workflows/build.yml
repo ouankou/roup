@@ -18,7 +18,7 @@ jobs:
       matrix:
       # Version should be guarded with quotes (1.80 -> "1.80"). Otherwise, 1.80 may be recognized as 1.8, which is a much older version.
         version: ["1.83", "1.82", "1.81", "1.80", "1.79", "1.78"]
-        os: [ubuntu-24.04, windows-2022, macos-15]
+        os: [ubuntu-24.04, windows-2025, macos-15]
         llvm: ["18"]
 
     runs-on: ${{ matrix.os }}
