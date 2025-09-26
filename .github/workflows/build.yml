@@ -17,9 +17,9 @@ jobs:
     strategy:
       matrix:
       # Version should be guarded with quotes (1.80 -> "1.80"). Otherwise, 1.80 may be recognized as 1.8, which is a much older version.
-        version: ["1.84", "1.83", "1.82", "1.81", "1.80", "1.79"]
-        os: [ubuntu-24.04, windows-2025, macos-15]
-        llvm: ["18"]
+        version: ["1.90", "1.89", "1.88", "1.87", "1.86", "1.85"]
+        os: [ubuntu-24.04, ubuntu-24.04-arm,windows-2025, macos-15]
+        llvm: ["20"]
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -27,13 +27,13 @@ jobs:
 
       # Check supported versions at: https://github.com/KyleMayes/install-llvm-action/blob/master/assets.json
       - name: Set up LLVM on Windows and macOS
-        if: ${{ matrix.os != 'ubuntu-24.04' }}
+        if: ${{ matrix.os != 'ubuntu-24.04' && matrix.os != 'ubuntu-24.04-arm'}}
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: ${{ matrix.llvm }}
 
       - name: Set up LLVM on Ubuntu
-        if: ${{ matrix.os == 'ubuntu-24.04' }}
+        if: ${{ matrix.os == 'ubuntu-24.04' || matrix.os == 'ubuntu-24.04-arm'}}
         run: |
           wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
           sudo add-apt-repository -y 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${{ matrix.llvm }} main'
