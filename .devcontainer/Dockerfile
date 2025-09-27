@@ -10,7 +10,7 @@ ARG INSTALL_RUST=true
 ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
 ENV LLVM_VERSION=${LLVM_VERSION}
 ENV RUST_VERSION=${RUST_VERSION}
-ENV PATH=/root/.cargo/bin:/usr/lib/llvm-${LLVM_VERSION}/bin:${PATH}
+ENV PATH=/root/.cargo/bin:/home/vscode/.cargo/bin:/usr/lib/llvm-${LLVM_VERSION}/bin:${PATH}
 
 RUN set -eux \
     # Basic deps used by the installers and general dev tools
@@ -51,13 +51,12 @@ ENV CPATH=/usr/lib/llvm-${LLVM_VERSION}/include
 # Optionally install rustup and the requested Rust toolchain (controlled by INSTALL_RUST build arg)
 RUN if [ "${INSTALL_RUST}" = "true" ]; then \
         set -eux; \
-        curl -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh; \
-        chmod +x /tmp/rustup-init.sh; \
-        /tmp/rustup-init.sh -y --default-toolchain "${RUST_VERSION}"; \
-        . /root/.cargo/env; \
-        rustup default "${RUST_VERSION}"; \
-        rustup component add rust-src rustfmt clippy || true; \
-        rm -f /tmp/rustup-init.sh; \
+        # Ensure sudo exists so we can run the rustup installer as the vscode user during build
+        apt-get update; apt-get install -y --no-install-recommends sudo; \
+        # Install rustup for the 'vscode' user so the toolchain is available to the non-root workspace user
+        sudo -u vscode bash -lc "curl -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION}"; \
+        # Use the user's cargo environment to install components
+        sudo -u vscode bash -lc "export PATH=\"$HOME/.cargo/bin:$PATH\"; rustup default ${RUST_VERSION}; rustup component add rust-src rustfmt clippy || true"; \
         rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*; \
     else \
         echo "Skipping Rust installation (INSTALL_RUST=${INSTALL_RUST})"; \
