@@ -27,7 +27,7 @@
       }
     }
   },
-  "postCreateCommand": "bash -lc \"echo LLVM_VERSION=$LLVM_VERSION; echo RUST_VERSION=$RUST_VERSION; if command -v clang >/dev/null 2>&1; then clang --version | head -n1; elif command -v clang-21 >/dev/null 2>&1; then clang-21 --version | head -n1; else echo 'clang not found'; fi; if command -v rustc >/dev/null 2>&1; then rustc --version; else echo 'rustc not found. Install Rust with: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh'; fi; if command -v cargo >/dev/null 2>&1; then cargo --version; else echo 'cargo not found. Install Rust with: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh'; fi\"",
+  "postCreateCommand": "bash -lc \"echo LLVM_VERSION=$LLVM_VERSION; echo RUST_VERSION=$RUST_VERSION; if command -v clang >/dev/null 2>&1; then clang --version | head -n1; elif command -v clang-21 >/dev/null 2>&1; then clang-21 --version | head -n1; else echo 'clang not found'; fi; RUST_OK=0; if command -v rustc >/dev/null 2>&1; then rustc --version || true; else echo 'rustc not found'; RUST_OK=1; fi; if command -v cargo >/dev/null 2>&1; then cargo --version || true; else echo 'cargo not found'; RUST_OK=1; fi; if [ $RUST_OK -eq 0 ]; then echo 'Rust smoke test: PASS'; else echo 'Rust smoke test: FAIL - run: curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh'; fi\"",
   "postStartCommand": "bash -lc 'echo devcontainer started at $(date)'",
   "shutdownAction": "stopContainer",
   "remoteUser": "vscode"
