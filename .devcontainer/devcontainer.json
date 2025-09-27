@@ -1,0 +1,33 @@
+{
+  "name": "roup - devcontainer (Ubuntu 24.04)",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "LLVM_VERSION": "21",
+      "RUST_VERSION": "1.90"
+    }
+  },
+  "remoteEnv": {
+    "LLVM_VERSION": "21",
+    "RUST_VERSION": "1.90"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpptools-extension-pack"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.shell.linux": "/bin/bash"
+      }
+    }
+  },
+  "postCreateCommand": "bash -lc 'echo LLVM_VERSION=$LLVM_VERSION; echo RUST_VERSION=$RUST_VERSION; clang --version || clang-21 --version; rustc --version; cargo --version'",
+  "postStartCommand": "bash -lc 'echo devcontainer started at $(date)'",
+  "shutdownAction": "stopContainer",
+  "remoteUser": "vscode"
+}
