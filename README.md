@@ -26,3 +26,16 @@ Clause: private
 Clause: private
 ```
 
+## Devcontainer
+
+This repository includes a devcontainer configuration under `.devcontainer/` which provides a reproducible development environment.
+
+- The devcontainer image installs LLVM and, by default, the Rust toolchain via `rustup`.
+- If you want the container to always include Rust (recommended), rebuild the container so the `.devcontainer/Dockerfile` runs the rustup installer.
+
+To rebuild the devcontainer in VS Code: open the Command Palette and run "Dev Containers: Rebuild Container".
+
+If you need to opt-out of installing Rust (not recommended), the Dockerfile respects the build argument `INSTALL_RUST` (defaults to `true`). To build without Rust set `INSTALL_RUST=false` when building the image.
+
+The Dockerfile sets the default Rust toolchain to 1.90. You can override this by changing the `RUST_VERSION` build argument in `.devcontainer/devcontainer.json` or when building.
+

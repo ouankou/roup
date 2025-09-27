@@ -4,6 +4,7 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 ARG DEBIAN_FRONTEND=noninteractive
 ARG LLVM_VERSION=21
 ARG RUST_VERSION=1.90
+ARG INSTALL_RUST=true
 
 # Export sensible runtime envs
 ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
@@ -47,15 +48,19 @@ ENV C_INCLUDE_PATH=/usr/lib/llvm-${LLVM_VERSION}/include
 ENV CPLUS_INCLUDE_PATH=/usr/lib/llvm-${LLVM_VERSION}/include
 ENV CPATH=/usr/lib/llvm-${LLVM_VERSION}/include
 
-# Install rustup and the requested Rust toolchain
-RUN set -eux; \
-    curl -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh; \
-    chmod +x /tmp/rustup-init.sh; \
-    /tmp/rustup-init.sh -y --default-toolchain "${RUST_VERSION}"; \
-    . /root/.cargo/env; \
-    rustup default "${RUST_VERSION}"; \
-    rustup component add rust-src rustfmt clippy || true; \
-    rm -f /tmp/rustup-init.sh; \
-    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*;
+# Optionally install rustup and the requested Rust toolchain (controlled by INSTALL_RUST build arg)
+RUN if [ "${INSTALL_RUST}" = "true" ]; then \
+        set -eux; \
+        curl -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh; \
+        chmod +x /tmp/rustup-init.sh; \
+        /tmp/rustup-init.sh -y --default-toolchain "${RUST_VERSION}"; \
+        . /root/.cargo/env; \
+        rustup default "${RUST_VERSION}"; \
+        rustup component add rust-src rustfmt clippy || true; \
+        rm -f /tmp/rustup-init.sh; \
+        rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*; \
+    else \
+        echo "Skipping Rust installation (INSTALL_RUST=${INSTALL_RUST})"; \
+    fi
 
 CMD ["/bin/bash"]
