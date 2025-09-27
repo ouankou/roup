@@ -1,7 +1,7 @@
 {
   "name": "roup - devcontainer (Ubuntu 24.04)",
   "build": {
-    "dockerfile": ".devcontainer/Dockerfile",
+  "dockerfile": "Dockerfile",
     "context": "..",
     "args": {
       "LLVM_VERSION": "21",
