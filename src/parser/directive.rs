@@ -203,6 +203,12 @@ impl DirectiveRegistryBuilder {
     }
 }
 
+impl Default for DirectiveRegistryBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // legacy byte-based identifier checker removed in favor of char-based helper
 
 #[cfg(test)]

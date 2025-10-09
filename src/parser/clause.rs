@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use nom::{
-    character::complete::{multispace0, multispace1},
     multi::separated_list0,
     IResult,
 };
@@ -69,10 +68,11 @@ impl ClauseRegistry {
     }
 
     pub fn parse_sequence<'a>(&self, input: &'a str) -> IResult<&'a str, Vec<Clause<'a>>> {
-        let (input, _) = multispace0(input)?;
+        let (input, _) = crate::lexer::skip_space_and_comments(input)?;
         let parse_clause = |input| self.parse_clause(input);
-        let (input, clauses) = separated_list0(multispace1, parse_clause)(input)?;
-        let (input, _) = multispace0(input)?;
+        // allow comments and whitespace between clauses (and before the first clause)
+        let (input, clauses) = separated_list0(|i| crate::lexer::skip_space1_and_comments(i), parse_clause)(input)?;
+        let (input, _) = crate::lexer::skip_space_and_comments(input)?;
         Ok((input, clauses))
     }
 
@@ -103,6 +103,8 @@ impl ClauseRegistryBuilder {
             default_rule: ClauseRule::Flexible,
         }
     }
+
+    // Allow construction via Default in addition to new()
 
     pub fn register_with_rule(mut self, name: &'static str, rule: ClauseRule) -> Self {
         self.register_with_rule_mut(name, rule);
@@ -139,6 +141,12 @@ impl ClauseRegistryBuilder {
     }
 }
 
+impl Default for ClauseRegistryBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn starts_with_parenthesis(input: &str) -> bool {
     input.trim_start().starts_with('(')
 }
@@ -161,7 +169,7 @@ fn parse_parenthesized_clause<'a>(name: &'a str, input: &'a str) -> IResult<&'a 
         let start = idx;
         let mut depth = 1;
         let mut end_index = None;
-        while let Some((inner_idx, inner_ch)) = iter.next() {
+        for (inner_idx, inner_ch) in iter.by_ref() {
             match inner_ch {
                 '(' => depth += 1,
                 ')' => {

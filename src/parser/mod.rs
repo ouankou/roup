@@ -6,7 +6,7 @@ pub use clause::{Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, Clau
 pub use directive::{Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule};
 
 use super::lexer;
-use nom::{character::complete::multispace1, sequence::tuple, IResult};
+use nom::{sequence::tuple, IResult};
 
 pub struct Parser {
     clause_registry: ClauseRegistry,
@@ -22,8 +22,12 @@ impl Parser {
     }
 
     pub fn parse<'a>(&self, input: &'a str) -> IResult<&'a str, Directive<'a>> {
-        let (input, _) =
-            tuple((lexer::lex_pragma, multispace1, lexer::lex_omp, multispace1))(input)?;
+        let (input, _) = tuple((
+            lexer::lex_pragma,
+            lexer::skip_space1_and_comments,
+            lexer::lex_omp,
+            lexer::skip_space1_and_comments,
+        ))(input)?;
         self.directive_registry.parse(input, &self.clause_registry)
     }
 }
