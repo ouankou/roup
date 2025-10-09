@@ -183,7 +183,7 @@ fn parse_parenthesized_clause<'a>(name: &'a str, input: &'a str) -> IResult<&'a 
         })?;
 
         let content_start = start + 1;
-        let content = &input[content_start..end_index].trim();
+        let content = input[content_start..end_index].trim();
         let rest = &input[end_index + 1..];
 
         return Ok((

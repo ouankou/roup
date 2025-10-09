@@ -97,7 +97,8 @@ impl DirectiveRegistry {
             }
 
             if idx > space_start {
-                let prefix_candidate = input[start..idx].trim_end();
+                let slice = &input[start..idx];
+                let prefix_candidate = slice.trim_end();
                 if idx < bytes.len() && is_identifier(bytes[idx]) {
                     if self.prefixes.contains(prefix_candidate)
                         || self.rules.contains_key(prefix_candidate)
