@@ -39,3 +39,7 @@ If you need to opt-out of installing Rust (not recommended), the Dockerfile resp
 
 The Dockerfile sets the default Rust toolchain to 1.90. You can override this by changing the `RUST_VERSION` build argument in `.devcontainer/devcontainer.json` or when building.
 
+## OpenMP 6.0 Support Overview
+
+See [OpenMP 6.0 Support Matrix](docs/OPENMP_SUPPORT.md) for a detailed view of which directives, combined constructs, and clauses the parser currently recognizes.
+

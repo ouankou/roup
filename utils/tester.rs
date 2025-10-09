@@ -9,9 +9,8 @@ fn main() {
             for clause in directive.clauses {
                 match clause.kind {
                     ClauseKind::Bare => println!("Clause: {}", clause.name),
-                    ClauseKind::IdentifierList(values) => {
-                        let joined = values.join(", ");
-                        println!("Clause: {}({})", clause.name, joined);
+                    ClauseKind::Parenthesized(value) => {
+                        println!("Clause: {}({})", clause.name, value);
                     }
                 }
             }

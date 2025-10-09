@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
 use nom::{
-    character::complete::{char, multispace0, multispace1},
-    multi::{separated_list0, separated_list1},
-    sequence::{delimited, tuple},
+    character::complete::{multispace0, multispace1},
+    multi::separated_list0,
     IResult,
 };
 
@@ -14,7 +13,7 @@ type ClauseParserFn = for<'a> fn(&'a str, &'a str) -> IResult<&'a str, Clause<'a
 #[derive(Debug, PartialEq, Eq)]
 pub enum ClauseKind<'a> {
     Bare,
-    IdentifierList(Vec<&'a str>),
+    Parenthesized(&'a str),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -26,8 +25,10 @@ pub struct Clause<'a> {
 #[derive(Clone, Copy)]
 pub enum ClauseRule {
     Bare,
-    IdentifierList { delimiter: char },
+    Parenthesized,
+    Flexible,
     Custom(ClauseParserFn),
+    Unsupported,
 }
 
 impl ClauseRule {
@@ -40,10 +41,19 @@ impl ClauseRule {
                     kind: ClauseKind::Bare,
                 },
             )),
-            ClauseRule::IdentifierList { delimiter } => {
-                parse_identifier_list_clause(name, input, delimiter)
+            ClauseRule::Parenthesized => parse_parenthesized_clause(name, input),
+            ClauseRule::Flexible => {
+                if starts_with_parenthesis(input) {
+                    parse_parenthesized_clause(name, input)
+                } else {
+                    ClauseRule::Bare.parse(name, input)
+                }
             }
             ClauseRule::Custom(parser) => parser(name, input),
+            ClauseRule::Unsupported => Err(nom::Err::Failure(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Tag,
+            ))),
         }
     }
 }
@@ -77,9 +87,7 @@ impl ClauseRegistry {
 
 impl Default for ClauseRegistry {
     fn default() -> Self {
-        ClauseRegistry::builder()
-            .register_identifier_list("private", ',')
-            .build()
+        ClauseRegistry::builder().build()
     }
 }
 
@@ -92,24 +100,25 @@ impl ClauseRegistryBuilder {
     pub fn new() -> Self {
         Self {
             rules: HashMap::new(),
-            default_rule: ClauseRule::Bare,
+            default_rule: ClauseRule::Flexible,
         }
     }
 
-    pub fn register_bare(mut self, name: &'static str) -> Self {
-        self.rules.insert(name, ClauseRule::Bare);
+    pub fn register_with_rule(mut self, name: &'static str, rule: ClauseRule) -> Self {
+        self.rules.insert(name, rule);
         self
     }
 
-    pub fn register_identifier_list(mut self, name: &'static str, delimiter: char) -> Self {
-        self.rules
-            .insert(name, ClauseRule::IdentifierList { delimiter });
-        self
+    pub fn register_bare(self, name: &'static str) -> Self {
+        self.register_with_rule(name, ClauseRule::Bare)
     }
 
-    pub fn register_custom(mut self, name: &'static str, parser: ClauseParserFn) -> Self {
-        self.rules.insert(name, ClauseRule::Custom(parser));
-        self
+    pub fn register_parenthesized(self, name: &'static str) -> Self {
+        self.register_with_rule(name, ClauseRule::Parenthesized)
+    }
+
+    pub fn register_custom(self, name: &'static str, parser: ClauseParserFn) -> Self {
+        self.register_with_rule(name, ClauseRule::Custom(parser))
     }
 
     pub fn with_default_rule(mut self, rule: ClauseRule) -> Self {
@@ -125,25 +134,66 @@ impl ClauseRegistryBuilder {
     }
 }
 
-fn parse_identifier_list_clause<'a>(
-    name: &'a str,
-    input: &'a str,
-    delimiter: char,
-) -> IResult<&'a str, Clause<'a>> {
-    let separator = tuple((multispace0, char(delimiter), multispace0));
-    let (input, values) = delimited(
-        char('('),
-        separated_list1(separator, lexer::lex_clause),
-        char(')'),
-    )(input)?;
+fn starts_with_parenthesis(input: &str) -> bool {
+    input.chars().skip_while(|c| c.is_whitespace()).next() == Some('(')
+}
 
-    Ok((
+fn parse_parenthesized_clause<'a>(name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
+    let mut iter = input.char_indices();
+
+    while let Some((idx, ch)) = iter.next() {
+        if ch.is_whitespace() {
+            continue;
+        }
+
+        if ch != '(' {
+            return Err(nom::Err::Error(nom::error::Error::new(
+                &input[idx..],
+                nom::error::ErrorKind::Char,
+            )));
+        }
+
+        let start = idx;
+        let mut depth = 1;
+        let mut end_index = None;
+        while let Some((inner_idx, inner_ch)) = iter.next() {
+            match inner_ch {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end_index = Some(inner_idx);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let end_index = end_index.ok_or_else(|| {
+            nom::Err::Error(nom::error::Error::new(
+                &input[start..],
+                nom::error::ErrorKind::Char,
+            ))
+        })?;
+
+        let content_start = start + 1;
+        let content = &input[content_start..end_index].trim();
+        let rest = &input[end_index + 1..];
+
+        return Ok((
+            rest,
+            Clause {
+                name,
+                kind: ClauseKind::Parenthesized(content),
+            },
+        ));
+    }
+
+    Err(nom::Err::Error(nom::error::Error::new(
         input,
-        Clause {
-            name,
-            kind: ClauseKind::IdentifierList(values),
-        },
-    ))
+        nom::error::ErrorKind::Char,
+    )))
 }
 
 #[cfg(test)]
@@ -191,10 +241,7 @@ mod tests {
         assert_eq!(rest, "");
         assert_eq!(clauses.len(), 1);
         assert_eq!(clauses[0].name, "private");
-        assert_eq!(
-            clauses[0].kind,
-            ClauseKind::IdentifierList(vec!["a", "b", "c"])
-        );
+        assert_eq!(clauses[0].kind, ClauseKind::Parenthesized("a, b, c"));
     }
 
     fn parse_single_identifier<'a>(name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
@@ -206,7 +253,7 @@ mod tests {
             input,
             Clause {
                 name,
-                kind: ClauseKind::IdentifierList(vec![identifier]),
+                kind: ClauseKind::Parenthesized(identifier),
             },
         ))
     }
@@ -224,6 +271,18 @@ mod tests {
         assert_eq!(rest, "");
         assert_eq!(clauses.len(), 1);
         assert_eq!(clauses[0].name, "device");
-        assert_eq!(clauses[0].kind, ClauseKind::IdentifierList(vec!["gpu"]));
+        assert_eq!(clauses[0].kind, ClauseKind::Parenthesized("gpu"));
+    }
+
+    #[test]
+    fn rejects_unregistered_clause_when_default_is_unsupported() {
+        let registry = ClauseRegistry::builder()
+            .with_default_rule(ClauseRule::Unsupported)
+            .register_bare("nowait")
+            .build();
+
+        let result = registry.parse_sequence("unknown");
+
+        assert!(result.is_err());
     }
 }

@@ -1,5 +1,6 @@
 mod clause;
 mod directive;
+pub mod openmp;
 
 pub use clause::{Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, ClauseRule};
 pub use directive::{Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule};
@@ -23,18 +24,13 @@ impl Parser {
     pub fn parse<'a>(&self, input: &'a str) -> IResult<&'a str, Directive<'a>> {
         let (input, _) =
             tuple((lexer::lex_pragma, multispace1, lexer::lex_omp, multispace1))(input)?;
-        let (input, directive_name) = lexer::lex_directive(input)?;
-        self.directive_registry
-            .parse(directive_name, input, &self.clause_registry)
+        self.directive_registry.parse(input, &self.clause_registry)
     }
 }
 
 impl Default for Parser {
     fn default() -> Self {
-        Self {
-            clause_registry: ClauseRegistry::default(),
-            directive_registry: DirectiveRegistry::default(),
-        }
+        openmp::parser()
     }
 }
 
@@ -58,10 +54,7 @@ mod tests {
         assert_eq!(directive.name, "parallel");
         assert_eq!(directive.clauses.len(), 2);
         assert_eq!(directive.clauses[0].name, "private");
-        assert_eq!(
-            directive.clauses[0].kind,
-            ClauseKind::IdentifierList(vec!["a", "b"])
-        );
+        assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("a, b"));
         assert_eq!(directive.clauses[1].name, "nowait");
         assert_eq!(directive.clauses[1].kind, ClauseKind::Bare);
     }
@@ -77,7 +70,7 @@ mod tests {
                 input,
                 Clause {
                     name,
-                    kind: ClauseKind::IdentifierList(vec![value]),
+                    kind: ClauseKind::Parenthesized(value),
                 },
             ))
         }
@@ -115,9 +108,6 @@ mod tests {
         assert_eq!(directive.name, "target");
         assert_eq!(directive.clauses.len(), 1);
         assert_eq!(directive.clauses[0].name, "device");
-        assert_eq!(
-            directive.clauses[0].kind,
-            ClauseKind::IdentifierList(vec!["gpu"])
-        );
+        assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("gpu"));
     }
 }
