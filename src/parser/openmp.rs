@@ -3,6 +3,8 @@ use super::{
     Parser,
 };
 
+const OPENMP_DEFAULT_CLAUSE_RULE: ClauseRule = ClauseRule::Unsupported;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum OpenMpClause {
     Nowait,
@@ -331,7 +333,7 @@ impl OpenMpDirective {
 }
 
 pub fn clause_registry() -> ClauseRegistry {
-    let mut builder = ClauseRegistryBuilder::new().with_default_rule(ClauseRule::Unsupported);
+    let mut builder = ClauseRegistryBuilder::new().with_default_rule(OPENMP_DEFAULT_CLAUSE_RULE);
 
     for clause in OpenMpClause::ALL {
         builder.register_with_rule_mut(clause.name(), clause.rule());
