@@ -154,7 +154,7 @@ fn parse_parenthesized_clause<'a>(name: &'a str, input: &'a str) -> IResult<&'a 
         if ch != '(' {
             return Err(nom::Err::Error(nom::error::Error::new(
                 &input[idx..],
-                nom::error::ErrorKind::Char,
+                nom::error::ErrorKind::Fail,
             )));
         }
 
@@ -178,7 +178,7 @@ fn parse_parenthesized_clause<'a>(name: &'a str, input: &'a str) -> IResult<&'a 
         let end_index = end_index.ok_or_else(|| {
             nom::Err::Error(nom::error::Error::new(
                 &input[start..],
-                nom::error::ErrorKind::Char,
+                nom::error::ErrorKind::Fail,
             ))
         })?;
 
@@ -197,7 +197,7 @@ fn parse_parenthesized_clause<'a>(name: &'a str, input: &'a str) -> IResult<&'a 
 
     Err(nom::Err::Error(nom::error::Error::new(
         input,
-        nom::error::ErrorKind::Char,
+        nom::error::ErrorKind::Fail,
     )))
 }
 

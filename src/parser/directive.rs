@@ -67,51 +67,62 @@ impl DirectiveRegistry {
     }
 
     fn lex_name<'a>(&self, input: &'a str) -> IResult<&'a str, &'a str> {
-        let bytes = input.as_bytes();
-        let mut idx = 0;
-        while idx < bytes.len() && bytes[idx].is_ascii_whitespace() {
-            idx += 1;
-        }
+        use crate::lexer::is_identifier_char as is_ident_char;
 
-        let start = idx;
+        let mut chars = input.char_indices();
+        // skip leading whitespace
+        let start = loop {
+            match chars.next() {
+                Some((_, ch)) if ch.is_whitespace() => continue,
+                Some((idx, _)) => break idx,
+                None => return Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::Tag))),
+            }
+        };
+
+        let mut idx = start;
         let mut last_match_end = None;
 
-        while idx < bytes.len() {
-            let token_start = idx;
-            while idx < bytes.len() && is_identifier(bytes[idx]) {
-                idx += 1;
-            }
-
-            if token_start == idx {
+        while let Some((pos, ch)) = input[idx..].char_indices().next() {
+            // advance over one identifier token
+            if !is_ident_char(ch) {
                 break;
             }
-
-            let candidate = &input[start..idx];
-            if self.rules.contains_key(candidate) {
-                last_match_end = Some(idx);
-            }
-
-            let space_start = idx;
-            while idx < bytes.len() && bytes[idx].is_ascii_whitespace() {
-                idx += 1;
-            }
-
-            if idx > space_start {
-                let prefix_candidate = input[start..idx].trim_end();
-                if idx < bytes.len() && is_identifier(bytes[idx]) {
-                    if self.prefixes.contains(prefix_candidate)
-                        || self.rules.contains_key(prefix_candidate)
-                    {
-                        continue;
-                    }
-
+            // find end of identifier token starting at idx
+            let mut j = idx + pos;
+            while let Some((p, ch2)) = input[j..].char_indices().next() {
+                if !is_ident_char(ch2) {
                     break;
                 }
-
-                break;
-            } else {
-                break;
+                j = j + p + ch2.len_utf8();
             }
+
+            let candidate = &input[start..j];
+            if self.rules.contains_key(candidate) {
+                last_match_end = Some(j);
+            }
+
+            // advance idx past any whitespace following the identifier
+            idx = j;
+            while let Some((p, chw)) = input[idx..].char_indices().next() {
+                if chw.is_whitespace() {
+                    idx = idx + p + chw.len_utf8();
+                } else {
+                    break;
+                }
+            }
+
+            // if next character starts an identifier, loop to extend candidate
+            if let Some((_, next_ch)) = input[idx..].char_indices().next() {
+                if is_ident_char(next_ch) {
+                    // check if prefix is registered; if so, continue to extend
+                    let prefix_candidate = input[start..idx].trim_end();
+                    if self.prefixes.contains(prefix_candidate) || self.rules.contains_key(prefix_candidate) {
+                        continue;
+                    }
+                }
+            }
+
+            break;
         }
 
         let name_end = last_match_end
@@ -192,9 +203,7 @@ impl DirectiveRegistryBuilder {
     }
 }
 
-fn is_identifier(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || byte == b'_'
-}
+// legacy byte-based identifier checker removed in favor of char-based helper
 
 #[cfg(test)]
 mod tests {

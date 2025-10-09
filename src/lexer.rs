@@ -3,7 +3,7 @@ use nom::{
     IResult,
 };
 
-fn is_identifier_char(c: char) -> bool {
+pub fn is_identifier_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
