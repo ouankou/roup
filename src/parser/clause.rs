@@ -140,7 +140,7 @@ impl ClauseRegistryBuilder {
 }
 
 fn starts_with_parenthesis(input: &str) -> bool {
-    input.chars().skip_while(|c| c.is_whitespace()).next() == Some('(')
+    input.trim_start().starts_with('(')
 }
 
 fn parse_parenthesized_clause<'a>(name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
