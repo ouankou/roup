@@ -105,6 +105,11 @@ impl ClauseRegistryBuilder {
     }
 
     pub fn register_with_rule(mut self, name: &'static str, rule: ClauseRule) -> Self {
+        self.register_with_rule_mut(name, rule);
+        self
+    }
+
+    pub fn register_with_rule_mut(&mut self, name: &'static str, rule: ClauseRule) -> &mut Self {
         self.rules.insert(name, rule);
         self
     }

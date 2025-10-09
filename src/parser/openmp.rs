@@ -334,7 +334,7 @@ pub fn clause_registry() -> ClauseRegistry {
     let mut builder = ClauseRegistryBuilder::new().with_default_rule(ClauseRule::Unsupported);
 
     for clause in OpenMpClause::ALL {
-        builder = builder.register_with_rule(clause.name(), clause.rule());
+        builder.register_with_rule_mut(clause.name(), clause.rule());
     }
 
     builder.build()
