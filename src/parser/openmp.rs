@@ -198,6 +198,8 @@ impl OpenMpClause {
             | OpenMpClause::Exclusive
             | OpenMpClause::Reproducible
             | OpenMpClause::DynamicAllocators => ClauseRule::Bare,
+            // The 'ordered' and 'unroll' clauses can appear both with and without parentheses
+            // (e.g., 'ordered' vs 'ordered(2)'), so we use the Flexible rule to support both forms.
             OpenMpClause::Ordered | OpenMpClause::Unroll => ClauseRule::Flexible,
             _ => ClauseRule::Parenthesized,
         }
