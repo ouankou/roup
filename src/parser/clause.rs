@@ -52,7 +52,7 @@ impl ClauseRule {
             ClauseRule::Custom(parser) => parser(name, input),
             ClauseRule::Unsupported => Err(nom::Err::Failure(nom::error::Error::new(
                 input,
-                nom::error::ErrorKind::Tag,
+                nom::error::ErrorKind::Fail,
             ))),
         }
     }
