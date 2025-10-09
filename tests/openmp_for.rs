@@ -1,0 +1,56 @@
+use roup::parser::{ClauseKind, Parser};
+
+fn parse(input: &str) -> roup::parser::Directive<'_> {
+    let parser = Parser::default();
+    let (_, directive) = parser.parse(input).expect("directive should parse");
+    directive
+}
+
+#[test]
+fn parses_for_with_iteration_clauses() {
+    let directive = parse("#pragma omp for schedule(guided,16) ordered(2) private(i, j)");
+
+    assert_eq!(directive.name, "for");
+    assert_eq!(directive.clauses.len(), 3);
+    assert_eq!(directive.clauses[0].name, "schedule");
+    assert_eq!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized("guided,16")
+    );
+    assert_eq!(directive.clauses[1].name, "ordered");
+    assert_eq!(directive.clauses[1].kind, ClauseKind::Parenthesized("2"));
+    assert_eq!(directive.clauses[2].name, "private");
+    assert_eq!(directive.clauses[2].kind, ClauseKind::Parenthesized("i, j"));
+}
+
+#[test]
+fn parses_for_simd_with_linear_clause() {
+    let directive =
+        parse("#pragma omp for simd linear(x:2) safelen(8) simdlen(4) reduction(-:diff)");
+
+    assert_eq!(directive.name, "for simd");
+    assert_eq!(directive.clauses.len(), 4);
+    assert_eq!(directive.clauses[0].name, "linear");
+    assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("x:2"));
+    assert_eq!(directive.clauses[1].name, "safelen");
+    assert_eq!(directive.clauses[1].kind, ClauseKind::Parenthesized("8"));
+    assert_eq!(directive.clauses[2].name, "simdlen");
+    assert_eq!(directive.clauses[2].kind, ClauseKind::Parenthesized("4"));
+    assert_eq!(directive.clauses[3].name, "reduction");
+    assert_eq!(
+        directive.clauses[3].kind,
+        ClauseKind::Parenthesized("-:diff")
+    );
+}
+
+#[test]
+fn parses_for_with_bare_ordered_clause() {
+    let directive = parse("#pragma omp for ordered nowait");
+
+    assert_eq!(directive.name, "for");
+    assert_eq!(directive.clauses.len(), 2);
+    assert_eq!(directive.clauses[0].name, "ordered");
+    assert_eq!(directive.clauses[0].kind, ClauseKind::Bare);
+    assert_eq!(directive.clauses[1].name, "nowait");
+    assert_eq!(directive.clauses[1].kind, ClauseKind::Bare);
+}
