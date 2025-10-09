@@ -75,7 +75,12 @@ impl DirectiveRegistry {
             match chars.next() {
                 Some((_, ch)) if ch.is_whitespace() => continue,
                 Some((idx, _)) => break idx,
-                None => return Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::Tag))),
+                None => {
+                    return Err(nom::Err::Error(nom::error::Error::new(
+                        input,
+                        ErrorKind::Tag,
+                    )))
+                }
             }
         };
 
@@ -116,7 +121,9 @@ impl DirectiveRegistry {
                 if is_ident_char(next_ch) {
                     // check if prefix is registered; if so, continue to extend
                     let prefix_candidate = input[start..idx].trim_end();
-                    if self.prefixes.contains(prefix_candidate) || self.rules.contains_key(prefix_candidate) {
+                    if self.prefixes.contains(prefix_candidate)
+                        || self.rules.contains_key(prefix_candidate)
+                    {
                         continue;
                     }
                 }

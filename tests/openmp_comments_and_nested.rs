@@ -14,7 +14,10 @@ fn parses_clause_with_nested_parentheses() {
     assert_eq!(directive.name, "for");
     assert_eq!(directive.clauses.len(), 2);
     assert_eq!(directive.clauses[0].name, "reduction");
-    assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("max:(f(a), g(b))"));
+    assert_eq!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized("max:(f(a), g(b))")
+    );
     assert_eq!(directive.clauses[1].name, "private");
     assert_eq!(directive.clauses[1].kind, ClauseKind::Parenthesized("i"));
 }
