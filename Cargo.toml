@@ -1,0 +1,7 @@
+[package]
+name = "roup"
+version = "0.1.0"
+authors = ["Anjia Wang <anjia@ouankou.com>"]
+edition = "2021"
+
+[dependencies]
