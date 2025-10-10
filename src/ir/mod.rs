@@ -43,6 +43,10 @@
 //! - `display`: Pretty-printing IR back to pragmas
 
 // Re-export main types
+pub use expression::{
+    BinaryOperator, Expression, ExpressionAst, ExpressionKind, ParserConfig, UnaryOperator,
+};
 pub use types::{Language, SourceLocation};
 
+mod expression;
 mod types;
