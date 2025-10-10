@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use nom::{multi::separated_list0, IResult};
+use nom::{multi::separated_list0, IResult, Parser};
 
 use crate::lexer;
 
@@ -69,7 +69,8 @@ impl ClauseRegistry {
         let parse_clause = |input| self.parse_clause(input);
         // allow comments and whitespace between clauses (and before the first clause)
         let (input, clauses) =
-            separated_list0(|i| crate::lexer::skip_space1_and_comments(i), parse_clause)(input)?;
+            separated_list0(|i| crate::lexer::skip_space1_and_comments(i), parse_clause)
+                .parse(input)?;
         let (input, _) = crate::lexer::skip_space_and_comments(input)?;
         Ok((input, clauses))
     }
