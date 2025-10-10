@@ -43,12 +43,17 @@
 //! - `display`: Pretty-printing IR back to pragmas
 
 // Re-export main types
+pub use clause::{
+    AtomicOp, DefaultKind, DependType, DeviceType, LastprivateModifier, LinearModifier, MapType,
+    MemoryOrder, OrderKind, ProcBind, ReductionOperator, ScheduleKind, ScheduleModifier,
+};
 pub use expression::{
     BinaryOperator, Expression, ExpressionAst, ExpressionKind, ParserConfig, UnaryOperator,
 };
 pub use types::{Language, SourceLocation};
 pub use variable::{ArraySection, Identifier, Variable};
 
+mod clause;
 mod expression;
 mod types;
 mod variable;
