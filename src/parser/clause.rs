@@ -115,6 +115,74 @@ impl ClauseRegistry {
     pub fn is_empty(&self) -> bool {
         self.rules.is_empty()
     }
+
+    /// Create a builder to construct a ClauseRegistry fluently
+    ///
+    /// Learning Rust: Builder Pattern
+    /// ===============================
+    /// Builder pattern creates complex objects step-by-step
+    /// - Separates construction from representation
+    /// - Enables method chaining for fluent API
+    /// - Common in Rust (e.g., std::process::Command)
+    pub fn builder() -> ClauseRegistryBuilder {
+        ClauseRegistryBuilder::new()
+    }
+}
+
+/// Builder for constructing a ClauseRegistry
+///
+/// Learning Rust: Builder Pattern Implementation
+/// ==============================================
+/// The builder:
+/// 1. Accumulates configuration
+/// 2. Provides a fluent interface (method chaining)
+/// 3. build() consumes the builder and creates the final object
+pub struct ClauseRegistryBuilder {
+    rules: HashMap<&'static str, &'static str>,
+}
+
+impl ClauseRegistryBuilder {
+    /// Create a new builder
+    pub fn new() -> Self {
+        ClauseRegistryBuilder {
+            rules: HashMap::new(),
+        }
+    }
+
+    /// Register a clause (returns Self for chaining)
+    ///
+    /// Learning Rust: Method Chaining
+    /// ===============================
+    /// Returning 'Self' allows: builder.register(...).register(...)
+    /// This is more ergonomic than calling register() multiple times
+    pub fn register(mut self, name: &'static str, description: &'static str) -> Self {
+        self.rules.insert(name, description);
+        self // Return self for chaining
+    }
+
+    /// Build the final ClauseRegistry
+    ///
+    /// Learning Rust: Consuming Methods
+    /// =================================
+    /// Takes 'self' (not &self) - consumes the builder
+    /// After build(), the builder is gone (moved)
+    /// Prevents using the builder after construction
+    pub fn build(self) -> ClauseRegistry {
+        ClauseRegistry {
+            rules: self.rules,
+        }
+    }
+}
+
+/// Learning Rust: Default Trait
+/// =============================
+/// Default trait provides a default constructor
+/// Enables: ClauseRegistryBuilder::default()
+/// Required by some APIs
+impl Default for ClauseRegistryBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -185,6 +253,40 @@ mod tests {
         
         // None case
         assert_eq!(registry.get_description("nonexistent"), None);
+    }
+
+    #[test]
+    fn builder_creates_registry_fluently() {
+        // Learning Rust: Fluent Builder Pattern
+        // ======================================
+        // Method chaining creates readable configuration
+        let registry = ClauseRegistry::builder()
+            .register("private", "Privatize variables")
+            .register("shared", "Share variables")
+            .register("nowait", "Don't wait for completion")
+            .build();
+
+        assert_eq!(registry.len(), 3);
+        assert!(registry.contains("private"));
+        assert!(registry.contains("shared"));
+        assert!(registry.contains("nowait"));
+        
+        // Learning Rust: Ownership After build()
+        // =======================================
+        // After build(), the builder is consumed (moved)
+        // Can't use it again - compiler prevents this!
+        // This is enforced at compile time - no runtime cost!
+    }
+
+    #[test]
+    fn builder_can_be_created_via_default() {
+        // Default trait enables using ::default()
+        let registry = ClauseRegistryBuilder::default()
+            .register("reduction", "Reduction operation")
+            .build();
+        
+        assert_eq!(registry.len(), 1);
+        assert!(registry.contains("reduction"));
     }
 }
 
