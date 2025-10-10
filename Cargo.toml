@@ -5,3 +5,9 @@ authors = ["Anjia Wang <anjia@ouankou.com>"]
 edition = "2021"
 
 [dependencies]
+# Learning Rust: External Dependencies
+# =====================================
+# Cargo makes it easy to use external crates (libraries)
+# nom = parser combinator library for building parsers
+# Version 8.0.0 uses semantic versioning
+nom = "8.0.0"
