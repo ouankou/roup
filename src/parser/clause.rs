@@ -1,5 +1,13 @@
 use std::fmt;
 
+/// Learning Rust: Collections - HashMap
+/// =====================================
+/// HashMap is Rust's hash table (like unordered_map in C++)
+/// - Key-value pairs
+/// - O(1) average lookup
+/// - Not in prelude, must import from std::collections
+use std::collections::HashMap;
+
 /// Represents the different kinds of clauses in OpenMP directives
 #[derive(Debug, PartialEq, Eq)]
 pub enum ClauseKind<'a> {
@@ -45,6 +53,70 @@ impl<'a> fmt::Display for Clause<'a> {
     }
 }
 
+/// A registry that stores parsing rules for different clause types
+///
+/// Learning Rust: Owned vs Borrowed Data
+/// ======================================
+/// HashMap<&'static str, ClauseRule>
+/// - Keys are &'static str (string literals - live forever)
+/// - Values are &'static str descriptions (owned by the HashMap)
+/// - The HashMap owns its data and will clean up when dropped
+pub struct ClauseRegistry {
+    rules: HashMap<&'static str, &'static str>,
+}
+
+impl ClauseRegistry {
+    /// Create a new empty registry
+    pub fn new() -> Self {
+        ClauseRegistry {
+            rules: HashMap::new(),
+        }
+    }
+
+    /// Register a clause name with a description
+    ///
+    /// Learning Rust: Mutable Methods
+    /// ===============================
+    /// &mut self allows the method to modify the struct
+    /// Required for HashMap::insert which changes the map
+    pub fn register(&mut self, name: &'static str, description: &'static str) {
+        self.rules.insert(name, description);
+    }
+
+    /// Check if a clause is registered
+    ///
+    /// Learning Rust: Option Type
+    /// ==========================
+    /// HashMap::get returns Option<&V>:
+    /// - Some(&value) if key exists
+    /// - None if key doesn't exist
+    /// 
+    /// Option is Rust's way of handling "nullable" values safely!
+    /// No null pointer exceptions - compiler forces you to handle None
+    pub fn get_description(&self, name: &str) -> Option<&str> {
+        // Learning Rust: Copying vs Moving
+        // =================================
+        // get() returns Option<&&str>, map() converts to Option<&str>
+        // The * dereferences to copy the &str (which is just 2 words)
+        self.rules.get(name).map(|&desc| desc)
+    }
+
+    /// Check if a clause exists in the registry
+    pub fn contains(&self, name: &str) -> bool {
+        self.rules.contains_key(name)
+    }
+
+    /// Get the number of registered clauses
+    pub fn len(&self) -> usize {
+        self.rules.len()
+    }
+
+    /// Check if the registry is empty
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,4 +147,44 @@ mod tests {
             "private(x, y)"
         );
     }
+
+    #[test]
+    fn creates_empty_registry() {
+        let registry = ClauseRegistry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+    }
+
+    #[test]
+    fn registers_and_retrieves_clauses() {
+        let mut registry = ClauseRegistry::new();
+        
+        // Learning Rust: Method Chaining with Mutation
+        // =============================================
+        // Each register() call mutates the registry
+        registry.register("private", "Data privatization clause");
+        registry.register("shared", "Data sharing clause");
+        
+        assert_eq!(registry.len(), 2);
+        assert!(registry.contains("private"));
+        assert!(registry.contains("shared"));
+        assert!(!registry.contains("unknown"));
+        
+        // Learning Rust: Pattern Matching on Option
+        // ==========================================
+        // Must handle both Some and None cases
+        match registry.get_description("private") {
+            Some(desc) => assert_eq!(desc, "Data privatization clause"),
+            None => panic!("Expected to find 'private' clause"),
+        }
+        
+        // Using if let for single case
+        if let Some(desc) = registry.get_description("shared") {
+            assert_eq!(desc, "Data sharing clause");
+        }
+        
+        // None case
+        assert_eq!(registry.get_description("nonexistent"), None);
+    }
 }
+
