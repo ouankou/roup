@@ -64,3 +64,101 @@ pub struct Directive<'a> {
     pub clauses: Vec<Clause<'a>>,
 }
 
+/// Learning Rust: Methods (impl blocks)
+/// =====================================
+/// Use 'impl' blocks to add methods to structs
+/// - Methods can borrow self (&self), mutate (&mut self), or consume (self)
+/// - &self is like 'this' in C++, but explicit!
+impl<'a> Clause<'a> {
+    /// Creates a new bare clause (no parameters)
+    /// 
+    /// Learning Rust: Associated Functions
+    /// ====================================
+    /// Functions without 'self' are associated functions (like static methods)
+    /// Called via Clause::bare("nowait"), not instance.bare()
+    pub fn bare(name: &'a str) -> Self {
+        Clause {
+            name,
+            kind: ClauseKind::Bare,
+        }
+    }
+
+    /// Creates a new parenthesized clause
+    pub fn parenthesized(name: &'a str, value: &'a str) -> Self {
+        Clause {
+            name,
+            kind: ClauseKind::Parenthesized(value),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Learning Rust: Unit Tests
+    /// ==========================
+    /// #[cfg(test)] means this module only compiles during testing
+    /// #[test] marks a function as a test
+    /// Tests live alongside code - encouraged in Rust!
+    
+    #[test]
+    fn creates_bare_clause() {
+        let clause = Clause::bare("nowait");
+        assert_eq!(clause.name, "nowait");
+        
+        // Learning Rust: Pattern Matching with match
+        // ===========================================
+        // Match is like switch but EXHAUSTIVE - must handle all cases!
+        // The compiler ensures you don't miss a case
+        match clause.kind {
+            ClauseKind::Bare => {
+                // Success! This is what we expect
+            }
+            ClauseKind::Parenthesized(_) => {
+                panic!("Expected Bare, got Parenthesized");
+            }
+        }
+    }
+
+    #[test]
+    fn creates_parenthesized_clause() {
+        let clause = Clause::parenthesized("private", "a, b");
+        assert_eq!(clause.name, "private");
+        
+        // Learning Rust: Pattern Matching with if let
+        // ============================================
+        // When you only care about one variant, use 'if let'
+        // More concise than match when you have one case
+        if let ClauseKind::Parenthesized(value) = clause.kind {
+            assert_eq!(value, "a, b");
+        } else {
+            panic!("Expected Parenthesized clause");
+        }
+    }
+
+    #[test]
+    fn creates_directive_with_clauses() {
+        // Learning Rust: Vec Literals
+        // ============================
+        // vec! macro creates a Vec from a list of elements
+        let directive = Directive {
+            name: "parallel",
+            clauses: vec![
+                Clause::bare("nowait"),
+                Clause::parenthesized("private", "x"),
+            ],
+        };
+
+        assert_eq!(directive.name, "parallel");
+        assert_eq!(directive.clauses.len(), 2);
+        
+        // Learning Rust: Indexing
+        // =======================
+        // Vec can be indexed like arrays
+        // But be careful - panics if index out of bounds!
+        assert_eq!(directive.clauses[0].name, "nowait");
+        assert_eq!(directive.clauses[1].name, "private");
+    }
+}
+
