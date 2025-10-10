@@ -1,6 +1,12 @@
 // ROUP: Rust-based OpenMP/OpenACC Unified Parser
 // This is the entry point for the library
 
+/// Learning Rust: Standard Library Imports
+/// ========================================
+/// 'use' brings items into scope
+/// std::fmt - formatting and display traits
+use std::fmt;
+
 /// Represents the different kinds of clauses in OpenMP directives
 /// 
 /// Learning Rust: Enums
@@ -92,6 +98,44 @@ impl<'a> Clause<'a> {
     }
 }
 
+/// Learning Rust: Trait Implementation (Display)
+/// ==============================================
+/// Traits are like interfaces - they define behavior
+/// Display trait enables formatted output with {}
+/// Debug (from #[derive(Debug)]) uses {:?}
+impl<'a> fmt::Display for Clause<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Learning Rust: Pattern Matching in Practice
+        // ============================================
+        // Match on self.kind to decide how to format
+        match self.kind {
+            ClauseKind::Bare => write!(f, "{}", self.name),
+            ClauseKind::Parenthesized(value) => write!(f, "{}({})", self.name, value),
+        }
+    }
+}
+
+impl<'a> fmt::Display for Directive<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#pragma omp {}", self.name)?;
+        
+        // Learning Rust: Iterators
+        // ========================
+        // for loops iterate over anything that implements Iterator
+        // enumerate() adds index to iteration
+        // ? operator propagates errors (returns early if Err)
+        for (idx, clause) in self.clauses.iter().enumerate() {
+            if idx == 0 {
+                write!(f, " ")?;
+            } else {
+                write!(f, " ")?;
+            }
+            write!(f, "{}", clause)?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,6 +203,36 @@ mod tests {
         // But be careful - panics if index out of bounds!
         assert_eq!(directive.clauses[0].name, "nowait");
         assert_eq!(directive.clauses[1].name, "private");
+    }
+
+    #[test]
+    fn display_formats_bare_clause() {
+        let clause = Clause::bare("nowait");
+        // Learning Rust: to_string() and Display
+        // =======================================
+        // Any type implementing Display gets to_string() for free
+        assert_eq!(clause.to_string(), "nowait");
+    }
+
+    #[test]
+    fn display_formats_parenthesized_clause() {
+        let clause = Clause::parenthesized("private", "a, b");
+        assert_eq!(clause.to_string(), "private(a, b)");
+    }
+
+    #[test]
+    fn display_formats_complete_directive() {
+        let directive = Directive {
+            name: "parallel",
+            clauses: vec![
+                Clause::parenthesized("private", "x, y"),
+                Clause::bare("nowait"),
+            ],
+        };
+        assert_eq!(
+            directive.to_string(),
+            "#pragma omp parallel private(x, y) nowait"
+        );
     }
 }
 
