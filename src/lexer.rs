@@ -127,7 +127,7 @@ pub fn skip_space_and_comments(input: &str) -> IResult<&str, &str> {
 /// Skip whitespace/comments - requires at least one
 pub fn skip_space1_and_comments(input: &str) -> IResult<&str, &str> {
     let (rest, _) = skip_space_and_comments(input)?;
-    
+
     // Learning Rust: Error Handling in Parsers
     // =========================================
     // Return an error if nothing was consumed
@@ -154,7 +154,7 @@ mod tests {
     fn parses_pragma_keyword() {
         let result = lex_pragma("#pragma omp parallel");
         assert!(result.is_ok());
-        
+
         // Learning Rust: Destructuring
         // =============================
         // Extract values from tuples using pattern matching
@@ -175,7 +175,7 @@ mod tests {
         let (rest, name) = lex_identifier("parallel private").unwrap();
         assert_eq!(name, "parallel");
         assert_eq!(rest, " private");
-        
+
         let (rest2, name2) = lex_identifier("private_data(x)").unwrap();
         assert_eq!(name2, "private_data");
         assert_eq!(rest2, "(x)");
@@ -192,7 +192,7 @@ mod tests {
     fn skips_whitespace() {
         let (rest, _) = skip_space_and_comments("   hello").unwrap();
         assert_eq!(rest, "hello");
-        
+
         let (rest, _) = skip_space_and_comments("\t\n  world").unwrap();
         assert_eq!(rest, "world");
     }
@@ -201,7 +201,7 @@ mod tests {
     fn skips_c_style_comments() {
         let (rest, _) = skip_space_and_comments("/* comment */ code").unwrap();
         assert_eq!(rest, "code");
-        
+
         let (rest, _) = skip_space_and_comments("/* multi\nline\ncomment */ after").unwrap();
         assert_eq!(rest, "after");
     }
@@ -223,7 +223,7 @@ mod tests {
     fn skip_space1_requires_whitespace() {
         let result = skip_space1_and_comments("no_space");
         assert!(result.is_err());
-        
+
         let result = skip_space1_and_comments(" has_space");
         assert!(result.is_ok());
     }

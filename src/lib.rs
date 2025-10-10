@@ -1,12 +1,31 @@
-// ROUP: Rust-based OpenMP/OpenACC Unified Parser
-// This is the entry point for the library
+//! # Rust-based OpenMP/OpenACC Unified Parser (ROUP)
+//!
+//! ROUP is a standalone, unified parser for OpenMP and OpenACC, designed as an
+//! extensible framework for directive-based programming interfaces.
+//!
+//! ## Learning from This Project
+//!
+//! This codebase is organized to teach Rust programming concepts step-by-step:
+//!
+//! 1. **Basics**: Structs, enums, lifetimes, pattern matching
+//! 2. **Intermediate**: Modules, traits, HashMap/Option, builder pattern
+//! 3. **Advanced**: Parser combinators using nom, function pointers, registries
+//! 4. **IR Layer**: Semantic representation, enums for polymorphism, FFI design
+//!
+//! Study the git history to see how the project evolved!
 
-/// Learning Rust: Module Declaration
-/// ==================================
-/// Declare submodules with 'pub mod'
-/// The actual code lives in parser/mod.rs (or parser.rs)
+// ============================================================================
+// Module Organization
+// ============================================================================
+//
+// This library is organized into focused modules:
+//
+// - `lexer`: Tokenization using nom parser combinators
+// - `parser`: Directive and clause parsing infrastructure
+// - `ir`: Intermediate representation (semantic layer)
+//
+// Each module teaches different Rust concepts while building a working parser.
+
+pub mod ir;
 pub mod lexer;
 pub mod parser;
-
-// Re-export commonly used types for convenience
-pub use parser::{Clause, ClauseKind};
