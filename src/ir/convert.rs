@@ -232,7 +232,7 @@ pub fn parse_clause_data<'a>(
     match clause.name {
         // Bare clauses (no parameters)
         "nowait" | "nogroup" | "untied" | "mergeable" | "seq_cst" | "relaxed" | "release"
-        | "acquire" | "acq_rel" => Ok(ClauseData::Bare),
+        | "acquire" | "acq_rel" => Ok(ClauseData::Bare(Identifier::new(clause.name))),
 
         // default(kind)
         "default" => {
@@ -471,7 +471,8 @@ mod tests {
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
-        assert!(matches!(data, ClauseData::Bare));
+        assert!(matches!(data, ClauseData::Bare(_)));
+        assert_eq!(data.to_string(), "nowait");
     }
 
     #[test]

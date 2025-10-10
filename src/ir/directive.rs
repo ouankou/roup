@@ -706,14 +706,12 @@ impl<'a> DirectiveIR<'a> {
 
 impl<'a> fmt::Display for DirectiveIR<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Write pragma prefix based on language
-        write!(f, "{} omp {}", self.language.pragma_prefix(), self.kind)?;
+        // Write pragma prefix (already includes "omp ")
+        write!(f, "{}{}", self.language.pragma_prefix(), self.kind)?;
 
         // Write clauses
-        if !self.clauses.is_empty() {
-            for clause in self.clauses.iter() {
-                write!(f, " {}", clause)?;
-            }
+        for clause in self.clauses.iter() {
+            write!(f, " {}", clause)?;
         }
 
         Ok(())

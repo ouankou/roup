@@ -718,7 +718,7 @@ pub enum ClauseData<'a> {
     // Bare clauses (no parameters)
     // ========================================================================
     /// Clause with no parameters (e.g., `nowait`, `nogroup`)
-    Bare,
+    Bare(Identifier<'a>),
 
     // ========================================================================
     // Simple expression clauses
@@ -937,7 +937,7 @@ pub enum ClauseData<'a> {
 impl<'a> fmt::Display for ClauseData<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ClauseData::Bare => write!(f, ""),
+            ClauseData::Bare(name) => write!(f, "{}", name),
             ClauseData::Expression(expr) => write!(f, "{}", expr),
             ClauseData::ItemList(items) => {
                 for (i, item) in items.iter().enumerate() {
@@ -1098,6 +1098,88 @@ impl<'a> fmt::Display for ClauseData<'a> {
             // Simplified Display for remaining variants (can be expanded as needed)
             _ => write!(f, "<clause>"),
         }
+    }
+}
+
+impl<'a> ClauseData<'a> {
+    /// Check if this is a default clause
+    pub fn is_default(&self) -> bool {
+        matches!(self, ClauseData::Default(_))
+    }
+
+    /// Check if this is a private clause
+    pub fn is_private(&self) -> bool {
+        matches!(self, ClauseData::Private { .. })
+    }
+
+    /// Check if this is a firstprivate clause
+    pub fn is_firstprivate(&self) -> bool {
+        matches!(self, ClauseData::Firstprivate { .. })
+    }
+
+    /// Check if this is a lastprivate clause
+    pub fn is_lastprivate(&self) -> bool {
+        matches!(self, ClauseData::Lastprivate { .. })
+    }
+
+    /// Check if this is a shared clause
+    pub fn is_shared(&self) -> bool {
+        matches!(self, ClauseData::Shared { .. })
+    }
+
+    /// Check if this is a reduction clause
+    pub fn is_reduction(&self) -> bool {
+        matches!(self, ClauseData::Reduction { .. })
+    }
+
+    /// Check if this is a map clause
+    pub fn is_map(&self) -> bool {
+        matches!(self, ClauseData::Map { .. })
+    }
+
+    /// Check if this is an if clause
+    pub fn is_if(&self) -> bool {
+        matches!(self, ClauseData::If { .. })
+    }
+
+    /// Check if this is a num_threads clause
+    pub fn is_num_threads(&self) -> bool {
+        matches!(self, ClauseData::NumThreads { .. })
+    }
+
+    /// Check if this is a collapse clause
+    pub fn is_collapse(&self) -> bool {
+        matches!(self, ClauseData::Collapse { .. })
+    }
+
+    /// Check if this is an ordered clause
+    pub fn is_ordered(&self) -> bool {
+        matches!(self, ClauseData::Ordered { .. })
+    }
+
+    /// Check if this is a schedule clause
+    pub fn is_schedule(&self) -> bool {
+        matches!(self, ClauseData::Schedule { .. })
+    }
+
+    /// Check if this is a device clause
+    pub fn is_device(&self) -> bool {
+        matches!(self, ClauseData::Device { .. })
+    }
+
+    /// Check if this is a depend clause
+    pub fn is_depend(&self) -> bool {
+        matches!(self, ClauseData::Depend { .. })
+    }
+
+    /// Check if this is a linear clause
+    pub fn is_linear(&self) -> bool {
+        matches!(self, ClauseData::Linear { .. })
+    }
+
+    /// Check if this is a proc_bind clause
+    pub fn is_proc_bind(&self) -> bool {
+        matches!(self, ClauseData::ProcBind(_))
     }
 }
 
@@ -1464,8 +1546,8 @@ mod tests {
 
     #[test]
     fn test_clause_data_bare() {
-        let clause = ClauseData::Bare;
-        assert_eq!(clause.to_string(), "");
+        let clause = ClauseData::Bare(Identifier::new("nowait"));
+        assert_eq!(clause.to_string(), "nowait");
     }
 
     #[test]
