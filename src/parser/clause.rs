@@ -1,46 +1,26 @@
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
-/// Learning Rust: Collections - HashMap
-/// =====================================
-/// HashMap is Rust's hash table (like unordered_map in C++)
-/// - Key-value pairs
-/// - O(1) average lookup
-/// - Not in prelude, must import from std::collections
-use std::collections::HashMap;
+use nom::{multi::separated_list0, IResult, Parser};
 
-/// Represents the different kinds of clauses in OpenMP directives
+use crate::lexer;
+
+type ClauseParserFn = for<'a> fn(&'a str, &'a str) -> IResult<&'a str, Clause<'a>>;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum ClauseKind<'a> {
-    /// A clause without parameters, e.g., "nowait"
     Bare,
-    /// A clause with parenthesized content, e.g., "private(a, b)"
     Parenthesized(&'a str),
 }
 
-/// Represents a single clause in an OpenMP directive
 #[derive(Debug, PartialEq, Eq)]
 pub struct Clause<'a> {
-    /// The name of the clause (e.g., "private", "nowait")
     pub name: &'a str,
-    /// The kind/type of this clause
     pub kind: ClauseKind<'a>,
 }
 
 impl<'a> Clause<'a> {
-    /// Creates a new bare clause (no parameters)
-    pub fn bare(name: &'a str) -> Self {
-        Clause {
-            name,
-            kind: ClauseKind::Bare,
-        }
-    }
-
-    /// Creates a new parenthesized clause
-    pub fn parenthesized(name: &'a str, value: &'a str) -> Self {
-        Clause {
-            name,
-            kind: ClauseKind::Parenthesized(value),
-        }
+    pub fn to_source_string(&self) -> String {
+        self.to_string()
     }
 }
 
@@ -53,240 +33,305 @@ impl<'a> fmt::Display for Clause<'a> {
     }
 }
 
-/// A registry that stores parsing rules for different clause types
-///
-/// Learning Rust: Owned vs Borrowed Data
-/// ======================================
-/// HashMap<&'static str, ClauseRule>
-/// - Keys are &'static str (string literals - live forever)
-/// - Values are &'static str descriptions (owned by the HashMap)
-/// - The HashMap owns its data and will clean up when dropped
+#[derive(Clone, Copy)]
+pub enum ClauseRule {
+    Bare,
+    Parenthesized,
+    Flexible,
+    Custom(ClauseParserFn),
+    Unsupported,
+}
+
+impl ClauseRule {
+    fn parse<'a>(self, name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
+        match self {
+            ClauseRule::Bare => Ok((
+                input,
+                Clause {
+                    name,
+                    kind: ClauseKind::Bare,
+                },
+            )),
+            ClauseRule::Parenthesized => parse_parenthesized_clause(name, input),
+            ClauseRule::Flexible => {
+                if starts_with_parenthesis(input) {
+                    parse_parenthesized_clause(name, input)
+                } else {
+                    ClauseRule::Bare.parse(name, input)
+                }
+            }
+            ClauseRule::Custom(parser) => parser(name, input),
+            ClauseRule::Unsupported => Err(nom::Err::Failure(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Fail,
+            ))),
+        }
+    }
+}
+
 pub struct ClauseRegistry {
-    rules: HashMap<&'static str, &'static str>,
+    rules: HashMap<&'static str, ClauseRule>,
+    default_rule: ClauseRule,
 }
 
 impl ClauseRegistry {
-    /// Create a new empty registry
-    pub fn new() -> Self {
-        ClauseRegistry {
-            rules: HashMap::new(),
-        }
-    }
-
-    /// Register a clause name with a description
-    ///
-    /// Learning Rust: Mutable Methods
-    /// ===============================
-    /// &mut self allows the method to modify the struct
-    /// Required for HashMap::insert which changes the map
-    pub fn register(&mut self, name: &'static str, description: &'static str) {
-        self.rules.insert(name, description);
-    }
-
-    /// Check if a clause is registered
-    ///
-    /// Learning Rust: Option Type
-    /// ==========================
-    /// HashMap::get returns Option<&V>:
-    /// - Some(&value) if key exists
-    /// - None if key doesn't exist
-    /// 
-    /// Option is Rust's way of handling "nullable" values safely!
-    /// No null pointer exceptions - compiler forces you to handle None
-    pub fn get_description(&self, name: &str) -> Option<&str> {
-        // Learning Rust: Copying vs Moving
-        // =================================
-        // get() returns Option<&&str>, map() converts to Option<&str>
-        // The * dereferences to copy the &str (which is just 2 words)
-        self.rules.get(name).map(|&desc| desc)
-    }
-
-    /// Check if a clause exists in the registry
-    pub fn contains(&self, name: &str) -> bool {
-        self.rules.contains_key(name)
-    }
-
-    /// Get the number of registered clauses
-    pub fn len(&self) -> usize {
-        self.rules.len()
-    }
-
-    /// Check if the registry is empty
-    pub fn is_empty(&self) -> bool {
-        self.rules.is_empty()
-    }
-
-    /// Create a builder to construct a ClauseRegistry fluently
-    ///
-    /// Learning Rust: Builder Pattern
-    /// ===============================
-    /// Builder pattern creates complex objects step-by-step
-    /// - Separates construction from representation
-    /// - Enables method chaining for fluent API
-    /// - Common in Rust (e.g., std::process::Command)
     pub fn builder() -> ClauseRegistryBuilder {
         ClauseRegistryBuilder::new()
     }
+
+    pub fn parse_sequence<'a>(&self, input: &'a str) -> IResult<&'a str, Vec<Clause<'a>>> {
+        let (input, _) = crate::lexer::skip_space_and_comments(input)?;
+        let parse_clause = |input| self.parse_clause(input);
+        // allow comments and whitespace between clauses (and before the first clause)
+        let (input, clauses) =
+            separated_list0(|i| crate::lexer::skip_space1_and_comments(i), parse_clause)
+                .parse(input)?;
+        let (input, _) = crate::lexer::skip_space_and_comments(input)?;
+        Ok((input, clauses))
+    }
+
+    fn parse_clause<'a>(&self, input: &'a str) -> IResult<&'a str, Clause<'a>> {
+        let (input, name) = lexer::lex_clause(input)?;
+
+        let rule = self.rules.get(name).copied().unwrap_or(self.default_rule);
+
+        rule.parse(name, input)
+    }
 }
 
-/// Builder for constructing a ClauseRegistry
-///
-/// Learning Rust: Builder Pattern Implementation
-/// ==============================================
-/// The builder:
-/// 1. Accumulates configuration
-/// 2. Provides a fluent interface (method chaining)
-/// 3. build() consumes the builder and creates the final object
+impl Default for ClauseRegistry {
+    fn default() -> Self {
+        ClauseRegistry::builder().build()
+    }
+}
+
 pub struct ClauseRegistryBuilder {
-    rules: HashMap<&'static str, &'static str>,
+    rules: HashMap<&'static str, ClauseRule>,
+    default_rule: ClauseRule,
 }
 
 impl ClauseRegistryBuilder {
-    /// Create a new builder
     pub fn new() -> Self {
-        ClauseRegistryBuilder {
+        Self {
             rules: HashMap::new(),
+            default_rule: ClauseRule::Flexible,
         }
     }
 
-    /// Register a clause (returns Self for chaining)
-    ///
-    /// Learning Rust: Method Chaining
-    /// ===============================
-    /// Returning 'Self' allows: builder.register(...).register(...)
-    /// This is more ergonomic than calling register() multiple times
-    pub fn register(mut self, name: &'static str, description: &'static str) -> Self {
-        self.rules.insert(name, description);
-        self // Return self for chaining
+    // Allow construction via Default in addition to new()
+
+    pub fn register_with_rule(mut self, name: &'static str, rule: ClauseRule) -> Self {
+        self.register_with_rule_mut(name, rule);
+        self
     }
 
-    /// Build the final ClauseRegistry
-    ///
-    /// Learning Rust: Consuming Methods
-    /// =================================
-    /// Takes 'self' (not &self) - consumes the builder
-    /// After build(), the builder is gone (moved)
-    /// Prevents using the builder after construction
+    pub fn register_with_rule_mut(&mut self, name: &'static str, rule: ClauseRule) -> &mut Self {
+        self.rules.insert(name, rule);
+        self
+    }
+
+    pub fn register_bare(self, name: &'static str) -> Self {
+        self.register_with_rule(name, ClauseRule::Bare)
+    }
+
+    pub fn register_parenthesized(self, name: &'static str) -> Self {
+        self.register_with_rule(name, ClauseRule::Parenthesized)
+    }
+
+    pub fn register_custom(self, name: &'static str, parser: ClauseParserFn) -> Self {
+        self.register_with_rule(name, ClauseRule::Custom(parser))
+    }
+
+    pub fn with_default_rule(mut self, rule: ClauseRule) -> Self {
+        self.default_rule = rule;
+        self
+    }
+
     pub fn build(self) -> ClauseRegistry {
         ClauseRegistry {
             rules: self.rules,
+            default_rule: self.default_rule,
         }
     }
 }
 
-/// Learning Rust: Default Trait
-/// =============================
-/// Default trait provides a default constructor
-/// Enables: ClauseRegistryBuilder::default()
-/// Required by some APIs
 impl Default for ClauseRegistryBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
+fn starts_with_parenthesis(input: &str) -> bool {
+    input.trim_start().starts_with('(')
+}
+
+fn parse_parenthesized_clause<'a>(name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
+    let mut iter = input.char_indices();
+
+    while let Some((idx, ch)) = iter.next() {
+        if ch.is_whitespace() {
+            continue;
+        }
+
+        if ch != '(' {
+            return Err(nom::Err::Error(nom::error::Error::new(
+                &input[idx..],
+                nom::error::ErrorKind::Fail,
+            )));
+        }
+
+        let start = idx;
+        let mut depth = 1;
+        let mut end_index = None;
+        for (inner_idx, inner_ch) in iter.by_ref() {
+            match inner_ch {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end_index = Some(inner_idx);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let end_index = end_index.ok_or_else(|| {
+            nom::Err::Error(nom::error::Error::new(
+                &input[start..],
+                nom::error::ErrorKind::Fail,
+            ))
+        })?;
+
+        let content_start = start + 1;
+        let content = input[content_start..end_index].trim();
+        let rest = &input[end_index + 1..];
+
+        return Ok((
+            rest,
+            Clause {
+                name,
+                kind: ClauseKind::Parenthesized(content),
+            },
+        ));
+    }
+
+    Err(nom::Err::Error(nom::error::Error::new(
+        input,
+        nom::error::ErrorKind::Fail,
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lexer;
+    use nom::character::complete::char;
 
     #[test]
-    fn creates_bare_clause() {
-        let clause = Clause::bare("nowait");
-        assert_eq!(clause.name, "nowait");
-        assert_eq!(clause.kind, ClauseKind::Bare);
+    fn parses_empty_clause_sequence() {
+        let registry = ClauseRegistry::default();
+
+        let (rest, clauses) = registry.parse_sequence("").expect("parsing should succeed");
+
+        assert_eq!(rest, "");
+        assert!(clauses.is_empty());
     }
 
     #[test]
-    fn creates_parenthesized_clause() {
-        let clause = Clause::parenthesized("private", "a, b");
-        assert_eq!(clause.name, "private");
-        if let ClauseKind::Parenthesized(value) = clause.kind {
-            assert_eq!(value, "a, b");
-        } else {
-            panic!("Expected Parenthesized clause");
-        }
-    }
+    fn parses_bare_clause_with_default_rule() {
+        let registry = ClauseRegistry::default();
 
-    #[test]
-    fn display_formats_clauses() {
-        assert_eq!(Clause::bare("nowait").to_string(), "nowait");
+        let (rest, clauses) = registry
+            .parse_sequence("nowait")
+            .expect("parsing should succeed");
+
+        assert_eq!(rest, "");
         assert_eq!(
-            Clause::parenthesized("private", "x, y").to_string(),
-            "private(x, y)"
+            clauses,
+            vec![Clause {
+                name: "nowait",
+                kind: ClauseKind::Bare,
+            }]
         );
     }
 
     #[test]
-    fn creates_empty_registry() {
-        let registry = ClauseRegistry::new();
-        assert!(registry.is_empty());
-        assert_eq!(registry.len(), 0);
+    fn parses_identifier_list_clause() {
+        let registry = ClauseRegistry::default();
+
+        let (rest, clauses) = registry
+            .parse_sequence("private(a, b, c)")
+            .expect("parsing should succeed");
+
+        assert_eq!(rest, "");
+        assert_eq!(clauses.len(), 1);
+        assert_eq!(clauses[0].name, "private");
+        assert_eq!(clauses[0].kind, ClauseKind::Parenthesized("a, b, c"));
     }
 
     #[test]
-    fn registers_and_retrieves_clauses() {
-        let mut registry = ClauseRegistry::new();
-        
-        // Learning Rust: Method Chaining with Mutation
-        // =============================================
-        // Each register() call mutates the registry
-        registry.register("private", "Data privatization clause");
-        registry.register("shared", "Data sharing clause");
-        
-        assert_eq!(registry.len(), 2);
-        assert!(registry.contains("private"));
-        assert!(registry.contains("shared"));
-        assert!(!registry.contains("unknown"));
-        
-        // Learning Rust: Pattern Matching on Option
-        // ==========================================
-        // Must handle both Some and None cases
-        match registry.get_description("private") {
-            Some(desc) => assert_eq!(desc, "Data privatization clause"),
-            None => panic!("Expected to find 'private' clause"),
-        }
-        
-        // Using if let for single case
-        if let Some(desc) = registry.get_description("shared") {
-            assert_eq!(desc, "Data sharing clause");
-        }
-        
-        // None case
-        assert_eq!(registry.get_description("nonexistent"), None);
+    fn clause_display_roundtrips_bare_clause() {
+        let clause = Clause {
+            name: "nowait",
+            kind: ClauseKind::Bare,
+        };
+
+        assert_eq!(clause.to_string(), "nowait");
+        assert_eq!(clause.to_source_string(), "nowait");
     }
 
     #[test]
-    fn builder_creates_registry_fluently() {
-        // Learning Rust: Fluent Builder Pattern
-        // ======================================
-        // Method chaining creates readable configuration
+    fn clause_display_roundtrips_parenthesized_clause() {
+        let clause = Clause {
+            name: "private",
+            kind: ClauseKind::Parenthesized("a, b"),
+        };
+
+        assert_eq!(clause.to_string(), "private(a, b)");
+        assert_eq!(clause.to_source_string(), "private(a, b)");
+    }
+
+    fn parse_single_identifier<'a>(name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
+        let (input, _) = char('(')(input)?;
+        let (input, identifier) = lexer::lex_clause(input)?;
+        let (input, _) = char(')')(input)?;
+
+        Ok((
+            input,
+            Clause {
+                name,
+                kind: ClauseKind::Parenthesized(identifier),
+            },
+        ))
+    }
+
+    #[test]
+    fn supports_custom_clause_rule() {
         let registry = ClauseRegistry::builder()
-            .register("private", "Privatize variables")
-            .register("shared", "Share variables")
-            .register("nowait", "Don't wait for completion")
+            .register_custom("device", parse_single_identifier)
             .build();
 
-        assert_eq!(registry.len(), 3);
-        assert!(registry.contains("private"));
-        assert!(registry.contains("shared"));
-        assert!(registry.contains("nowait"));
-        
-        // Learning Rust: Ownership After build()
-        // =======================================
-        // After build(), the builder is consumed (moved)
-        // Can't use it again - compiler prevents this!
-        // This is enforced at compile time - no runtime cost!
+        let (rest, clauses) = registry
+            .parse_sequence("device(gpu)")
+            .expect("parsing should succeed");
+
+        assert_eq!(rest, "");
+        assert_eq!(clauses.len(), 1);
+        assert_eq!(clauses[0].name, "device");
+        assert_eq!(clauses[0].kind, ClauseKind::Parenthesized("gpu"));
     }
 
     #[test]
-    fn builder_can_be_created_via_default() {
-        // Default trait enables using ::default()
-        let registry = ClauseRegistryBuilder::default()
-            .register("reduction", "Reduction operation")
+    fn rejects_unregistered_clause_when_default_is_unsupported() {
+        let registry = ClauseRegistry::builder()
+            .with_default_rule(ClauseRule::Unsupported)
+            .register_bare("nowait")
             .build();
-        
-        assert_eq!(registry.len(), 1);
-        assert!(registry.contains("reduction"));
+
+        let result = registry.parse_sequence("unknown");
+
+        assert!(result.is_err());
     }
 }
-
