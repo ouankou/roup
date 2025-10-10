@@ -47,6 +47,8 @@ pub use expression::{
     BinaryOperator, Expression, ExpressionAst, ExpressionKind, ParserConfig, UnaryOperator,
 };
 pub use types::{Language, SourceLocation};
+pub use variable::{ArraySection, Identifier, Variable};
 
 mod expression;
 mod types;
+mod variable;
