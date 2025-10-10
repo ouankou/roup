@@ -339,3 +339,206 @@ fn roundtrip_semantic_preservation() {
     assert_eq!(ir.kind(), ir2.kind());
     assert_eq!(ir.clauses().len(), ir2.clauses().len());
 }
+
+/// Test round-trip with reduction clause
+#[test]
+fn roundtrip_parallel_with_reduction() {
+    let input = "#pragma omp parallel reduction(+: sum)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    assert!(ir.kind().is_parallel());
+    assert!(ir.has_clause(|c| c.is_reduction()));
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp parallel reduction(+: sum)");
+}
+
+/// Test round-trip with multiple reduction items
+#[test]
+fn roundtrip_reduction_multiple_items() {
+    let input = "#pragma omp parallel reduction(*: a, b, c)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    assert!(ir.has_clause(|c| c.is_reduction()));
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp parallel reduction(*: a, b, c)");
+}
+
+/// Test round-trip with min/max reduction
+#[test]
+fn roundtrip_reduction_minmax() {
+    let input = "#pragma omp parallel reduction(min: value)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp parallel reduction(min: value)");
+}
+
+/// Test round-trip with schedule clause (static)
+#[test]
+fn roundtrip_for_schedule_static() {
+    let input = "#pragma omp for schedule(static)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    assert!(ir.has_clause(|c| c.is_schedule()));
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp for schedule(static)");
+}
+
+/// Test round-trip with schedule clause with chunk size
+#[test]
+fn roundtrip_for_schedule_with_chunk() {
+    let input = "#pragma omp for schedule(dynamic, 10)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp for schedule(dynamic, 10)");
+}
+
+/// Test round-trip with schedule modifiers
+#[test]
+fn roundtrip_for_schedule_with_modifier() {
+    let input = "#pragma omp for schedule(monotonic: static, 4)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp for schedule(monotonic: static, 4)");
+}
+
+/// Test round-trip with map clause
+#[test]
+fn roundtrip_target_with_map() {
+    let input = "#pragma omp target map(to: arr)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    assert!(ir.kind().is_target());
+    assert!(ir.has_clause(|c| c.is_map()));
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp target map(to: arr)");
+}
+
+/// Test round-trip with map tofrom
+#[test]
+fn roundtrip_target_map_tofrom() {
+    let input = "#pragma omp target map(tofrom: x, y, z)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp target map(tofrom: x, y, z)");
+}
+
+/// Test round-trip with depend clause
+#[test]
+fn roundtrip_task_with_depend() {
+    let input = "#pragma omp task depend(in: x, y)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    assert!(ir.kind().is_task());
+    assert!(ir.has_clause(|c| c.is_depend()));
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp task depend(in: x, y)");
+}
+
+/// Test round-trip with depend out
+#[test]
+fn roundtrip_task_depend_out() {
+    let input = "#pragma omp task depend(out: result)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp task depend(out: result)");
+}
+
+/// Test round-trip with linear clause
+#[test]
+fn roundtrip_simd_with_linear() {
+    let input = "#pragma omp simd linear(i: 2)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    assert!(ir.kind().is_simd());
+    assert!(ir.has_clause(|c| c.is_linear()));
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp simd linear(i: 2)");
+}
+
+/// Test round-trip with proc_bind
+#[test]
+fn roundtrip_parallel_proc_bind() {
+    let input = "#pragma omp parallel proc_bind(close)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    assert!(ir.has_clause(|c| c.is_proc_bind()));
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp parallel proc_bind(close)");
+}
+
+/// Test round-trip with complex combination
+#[test]
+fn roundtrip_complex_parallel_for() {
+    let input = "#pragma omp parallel for schedule(static, 16) reduction(+: sum) private(i)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    assert!(ir.kind().is_parallel());
+    assert!(ir.kind().is_loop());
+    assert_eq!(ir.clauses().len(), 3);
+    assert!(ir.has_clause(|c| c.is_schedule()));
+    assert!(ir.has_clause(|c| c.is_reduction()));
+    assert!(ir.has_clause(|c| c.is_private()));
+
+    let output = ir.to_string();
+    assert_eq!(
+        output,
+        "#pragma omp parallel for schedule(static, 16) reduction(+: sum) private(i)"
+    );
+}

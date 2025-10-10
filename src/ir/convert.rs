@@ -42,8 +42,9 @@
 //! ```
 
 use super::{
-    ClauseData, ClauseItem, DefaultKind, DirectiveIR, DirectiveKind, Expression, Identifier,
-    Language, ParserConfig, SourceLocation,
+    ClauseData, ClauseItem, DefaultKind, DependType, DirectiveIR, DirectiveKind, Expression,
+    Identifier, Language, MapType, ParserConfig, ProcBind, ReductionOperator, ScheduleKind,
+    ScheduleModifier, SourceLocation,
 };
 use crate::parser::{Clause, ClauseKind, Directive};
 
@@ -217,6 +218,233 @@ pub fn parse_identifier_list(content: &str) -> Vec<ClauseItem<'_>> {
         .collect()
 }
 
+/// Parse a reduction operator from a string
+///
+/// ## Example
+///
+/// ```
+/// # use roup::ir::{convert::parse_reduction_operator, ReductionOperator};
+/// let op = parse_reduction_operator("+").unwrap();
+/// assert_eq!(op, ReductionOperator::Add);
+///
+/// let op = parse_reduction_operator("min").unwrap();
+/// assert_eq!(op, ReductionOperator::Min);
+/// ```
+pub fn parse_reduction_operator(op_str: &str) -> Result<ReductionOperator, ConversionError> {
+    match op_str {
+        "+" => Ok(ReductionOperator::Add),
+        "-" => Ok(ReductionOperator::Subtract),
+        "*" => Ok(ReductionOperator::Multiply),
+        "&" => Ok(ReductionOperator::BitwiseAnd),
+        "|" => Ok(ReductionOperator::BitwiseOr),
+        "^" => Ok(ReductionOperator::BitwiseXor),
+        "&&" => Ok(ReductionOperator::LogicalAnd),
+        "||" => Ok(ReductionOperator::LogicalOr),
+        "min" => Ok(ReductionOperator::Min),
+        "max" => Ok(ReductionOperator::Max),
+        _ => Err(ConversionError::InvalidClauseSyntax(format!(
+            "Unknown reduction operator: {}",
+            op_str
+        ))),
+    }
+}
+
+/// Parse a schedule clause
+///
+/// Format: `schedule([modifier[, modifier]:] kind[, chunk_size])`
+///
+/// ## Example
+///
+/// ```
+/// # use roup::ir::convert::parse_schedule_clause;
+/// let clause = parse_schedule_clause("static, 10").unwrap();
+/// // Returns ClauseData::Schedule with kind=Static, chunk_size=Some(10)
+/// ```
+pub fn parse_schedule_clause(content: &str) -> Result<ClauseData<'_>, ConversionError> {
+    // Check for modifiers (they end with a colon)
+    let (modifiers, rest) = if let Some(colon_pos) = content.find(':') {
+        let (mod_str, kind_str) = content.split_at(colon_pos);
+        let kind_str = kind_str[1..].trim(); // Skip the ':'
+
+        // Parse modifiers (comma-separated)
+        let mods: Vec<ScheduleModifier> = mod_str
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| match s {
+                "monotonic" => Ok(ScheduleModifier::Monotonic),
+                "nonmonotonic" => Ok(ScheduleModifier::Nonmonotonic),
+                "simd" => Ok(ScheduleModifier::Simd),
+                _ => Err(ConversionError::InvalidClauseSyntax(format!(
+                    "Unknown schedule modifier: {}",
+                    s
+                ))),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        (mods, kind_str)
+    } else {
+        (vec![], content)
+    };
+
+    // Parse kind and optional chunk size (comma-separated)
+    let parts: Vec<&str> = rest.split(',').map(|s| s.trim()).collect();
+
+    let kind = match parts.first() {
+        Some(&"static") => ScheduleKind::Static,
+        Some(&"dynamic") => ScheduleKind::Dynamic,
+        Some(&"guided") => ScheduleKind::Guided,
+        Some(&"auto") => ScheduleKind::Auto,
+        Some(&"runtime") => ScheduleKind::Runtime,
+        Some(s) => {
+            return Err(ConversionError::InvalidClauseSyntax(format!(
+                "Unknown schedule kind: {}",
+                s
+            )))
+        }
+        None => {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "schedule clause requires a kind".to_string(),
+            ))
+        }
+    };
+
+    let chunk_size = parts.get(1).map(|s| Expression::unparsed(s));
+
+    Ok(ClauseData::Schedule {
+        kind,
+        modifiers,
+        chunk_size,
+    })
+}
+
+/// Parse a map clause
+///
+/// Format: `map([[mapper(mapper-identifier),] map-type:] list)`
+///
+/// ## Example
+///
+/// ```
+/// # use roup::ir::convert::parse_map_clause;
+/// let clause = parse_map_clause("to: arr").unwrap();
+/// // Returns ClauseData::Map with map_type=To, items=[arr]
+/// ```
+pub fn parse_map_clause(content: &str) -> Result<ClauseData<'_>, ConversionError> {
+    // Simplified implementation: just handle "map-type: list"
+    // Full implementation would need to handle mapper(...) prefix
+
+    if let Some(colon_pos) = content.find(':') {
+        let (type_str, items_str) = content.split_at(colon_pos);
+        let items_str = &items_str[1..].trim(); // Skip the ':'
+
+        // Parse map type
+        let map_type = match type_str.trim() {
+            "to" => Some(MapType::To),
+            "from" => Some(MapType::From),
+            "tofrom" => Some(MapType::ToFrom),
+            "alloc" => Some(MapType::Alloc),
+            "release" => Some(MapType::Release),
+            "delete" => Some(MapType::Delete),
+            _ => {
+                return Err(ConversionError::InvalidClauseSyntax(format!(
+                    "Unknown map type: {}",
+                    type_str
+                )))
+            }
+        };
+
+        let items = parse_identifier_list(items_str);
+
+        Ok(ClauseData::Map {
+            map_type,
+            mapper: None,
+            items,
+        })
+    } else {
+        // No type specified, just items
+        let items = parse_identifier_list(content);
+        Ok(ClauseData::Map {
+            map_type: None,
+            mapper: None,
+            items,
+        })
+    }
+}
+
+/// Parse a dependence type from a string
+///
+/// ## Example
+///
+/// ```
+/// # use roup::ir::{convert::parse_depend_type, DependType};
+/// let dt = parse_depend_type("in").unwrap();
+/// assert_eq!(dt, DependType::In);
+/// ```
+pub fn parse_depend_type(type_str: &str) -> Result<DependType, ConversionError> {
+    match type_str {
+        "in" => Ok(DependType::In),
+        "out" => Ok(DependType::Out),
+        "inout" => Ok(DependType::Inout),
+        "mutexinoutset" => Ok(DependType::Mutexinoutset),
+        "depobj" => Ok(DependType::Depobj),
+        "source" => Ok(DependType::Source),
+        "sink" => Ok(DependType::Sink),
+        _ => Err(ConversionError::InvalidClauseSyntax(format!(
+            "Unknown depend type: {}",
+            type_str
+        ))),
+    }
+}
+
+/// Parse a linear clause
+///
+/// Format: `linear([modifier(list):] list[:step])`
+///
+/// ## Example
+///
+/// ```
+/// # use roup::ir::convert::parse_linear_clause;
+/// let clause = parse_linear_clause("x, y: 2").unwrap();
+/// // Returns ClauseData::Linear with items=[x, y], step=Some(2)
+/// ```
+pub fn parse_linear_clause(content: &str) -> Result<ClauseData<'_>, ConversionError> {
+    // Simplified implementation: handle "list: step" or just "list"
+    // Full implementation would handle modifier(list): syntax
+
+    // Check for step (last colon)
+    if let Some(last_colon) = content.rfind(':') {
+        // Check if this might be a modifier (has opening paren before colon)
+        let before_colon = &content[..last_colon];
+        if before_colon.contains('(') {
+            // This looks like modifier syntax - for now, treat as unsupported
+            return Err(ConversionError::Unsupported(
+                "linear clause with modifiers not yet supported".to_string(),
+            ));
+        }
+
+        // Split into items and step
+        let (items_str, step_str) = content.split_at(last_colon);
+        let step_str = &step_str[1..].trim(); // Skip the ':'
+
+        let items = parse_identifier_list(items_str);
+        let step = Some(Expression::unparsed(step_str));
+
+        Ok(ClauseData::Linear {
+            modifier: None,
+            items,
+            step,
+        })
+    } else {
+        // No step, just items
+        let items = parse_identifier_list(content);
+        Ok(ClauseData::Linear {
+            modifier: None,
+            items,
+            step: None,
+        })
+    }
+}
+
 /// Convert a parser Clause to IR ClauseData
 ///
 /// This is the main conversion function that handles all clause types.
@@ -345,6 +573,117 @@ pub fn parse_clause_data<'a>(
                 n: Some(Expression::unparsed(content.trim())),
             }),
         },
+
+        // reduction(operator: list)
+        "reduction" => {
+            if let ClauseKind::Parenthesized(content) = clause.kind {
+                // Find the colon separator between operator and list
+                if let Some(colon_pos) = content.find(':') {
+                    let (op_str, items_str) = content.split_at(colon_pos);
+                    let items_str = &items_str[1..].trim(); // Skip the ':'
+
+                    // Parse the operator
+                    let operator = parse_reduction_operator(op_str.trim())?;
+
+                    // Parse the item list
+                    let items = parse_identifier_list(items_str);
+
+                    Ok(ClauseData::Reduction { operator, items })
+                } else {
+                    Err(ConversionError::InvalidClauseSyntax(
+                        "reduction clause requires 'operator: list' format".to_string(),
+                    ))
+                }
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "reduction clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // schedule([modifier[, modifier]:] kind[, chunk_size])
+        "schedule" => {
+            if let ClauseKind::Parenthesized(content) = clause.kind {
+                parse_schedule_clause(content)
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "schedule clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // map([[mapper(mapper-identifier),] map-type:] list)
+        "map" => {
+            if let ClauseKind::Parenthesized(content) = clause.kind {
+                parse_map_clause(content)
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "map clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // depend(dependence-type: list)
+        "depend" => {
+            if let ClauseKind::Parenthesized(content) = clause.kind {
+                // Find the colon separator
+                if let Some(colon_pos) = content.find(':') {
+                    let (type_str, items_str) = content.split_at(colon_pos);
+                    let items_str = &items_str[1..].trim(); // Skip the ':'
+
+                    // Parse the dependence type
+                    let depend_type = parse_depend_type(type_str.trim())?;
+
+                    // Parse the item list
+                    let items = parse_identifier_list(items_str);
+
+                    Ok(ClauseData::Depend { depend_type, items })
+                } else {
+                    Err(ConversionError::InvalidClauseSyntax(
+                        "depend clause requires 'type: list' format".to_string(),
+                    ))
+                }
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "depend clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // linear([modifier(list):] list[:step])
+        "linear" => {
+            if let ClauseKind::Parenthesized(content) = clause.kind {
+                parse_linear_clause(content)
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "linear clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // proc_bind(master|close|spread|primary)
+        "proc_bind" => {
+            if let ClauseKind::Parenthesized(content) = clause.kind {
+                let kind_str = content.trim();
+                let proc_bind = match kind_str {
+                    "master" => ProcBind::Master,
+                    "close" => ProcBind::Close,
+                    "spread" => ProcBind::Spread,
+                    "primary" => ProcBind::Primary,
+                    _ => {
+                        return Err(ConversionError::InvalidClauseSyntax(format!(
+                            "Unknown proc_bind kind: {}",
+                            kind_str
+                        )))
+                    }
+                };
+                Ok(ClauseData::ProcBind(proc_bind))
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "proc_bind clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
 
         // For unsupported clauses, return a generic representation
         _ => Ok(ClauseData::Generic {
@@ -586,5 +925,311 @@ mod tests {
             convert_directive(&directive, SourceLocation::start(), Language::C, &config).unwrap();
         assert_eq!(ir.kind(), DirectiveKind::Parallel);
         assert_eq!(ir.clauses().len(), 2);
+    }
+
+    // Tests for reduction operator parsing
+    #[test]
+    fn test_parse_reduction_operator_arithmetic() {
+        assert_eq!(
+            parse_reduction_operator("+").unwrap(),
+            ReductionOperator::Add
+        );
+        assert_eq!(
+            parse_reduction_operator("-").unwrap(),
+            ReductionOperator::Subtract
+        );
+        assert_eq!(
+            parse_reduction_operator("*").unwrap(),
+            ReductionOperator::Multiply
+        );
+    }
+
+    #[test]
+    fn test_parse_reduction_operator_bitwise() {
+        assert_eq!(
+            parse_reduction_operator("&").unwrap(),
+            ReductionOperator::BitwiseAnd
+        );
+        assert_eq!(
+            parse_reduction_operator("|").unwrap(),
+            ReductionOperator::BitwiseOr
+        );
+        assert_eq!(
+            parse_reduction_operator("^").unwrap(),
+            ReductionOperator::BitwiseXor
+        );
+    }
+
+    #[test]
+    fn test_parse_reduction_operator_logical() {
+        assert_eq!(
+            parse_reduction_operator("&&").unwrap(),
+            ReductionOperator::LogicalAnd
+        );
+        assert_eq!(
+            parse_reduction_operator("||").unwrap(),
+            ReductionOperator::LogicalOr
+        );
+    }
+
+    #[test]
+    fn test_parse_reduction_operator_minmax() {
+        assert_eq!(
+            parse_reduction_operator("min").unwrap(),
+            ReductionOperator::Min
+        );
+        assert_eq!(
+            parse_reduction_operator("max").unwrap(),
+            ReductionOperator::Max
+        );
+    }
+
+    #[test]
+    fn test_parse_reduction_operator_unknown() {
+        assert!(parse_reduction_operator("unknown").is_err());
+    }
+
+    // Tests for reduction clause
+    #[test]
+    fn test_parse_clause_data_reduction() {
+        let clause = Clause {
+            name: "reduction",
+            kind: ClauseKind::Parenthesized("+: sum"),
+        };
+        let config = ParserConfig::default();
+        let data = parse_clause_data(&clause, &config).unwrap();
+        if let ClauseData::Reduction { operator, items } = data {
+            assert_eq!(operator, ReductionOperator::Add);
+            assert_eq!(items.len(), 1);
+        } else {
+            panic!("Expected Reduction clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_clause_data_reduction_multiple_items() {
+        let clause = Clause {
+            name: "reduction",
+            kind: ClauseKind::Parenthesized("*: a, b, c"),
+        };
+        let config = ParserConfig::default();
+        let data = parse_clause_data(&clause, &config).unwrap();
+        if let ClauseData::Reduction { operator, items } = data {
+            assert_eq!(operator, ReductionOperator::Multiply);
+            assert_eq!(items.len(), 3);
+        } else {
+            panic!("Expected Reduction clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_clause_data_reduction_minmax() {
+        let clause = Clause {
+            name: "reduction",
+            kind: ClauseKind::Parenthesized("min: value"),
+        };
+        let config = ParserConfig::default();
+        let data = parse_clause_data(&clause, &config).unwrap();
+        if let ClauseData::Reduction { operator, items } = data {
+            assert_eq!(operator, ReductionOperator::Min);
+            assert_eq!(items.len(), 1);
+        } else {
+            panic!("Expected Reduction clause");
+        }
+    }
+
+    // Tests for schedule clause
+    #[test]
+    fn test_parse_schedule_clause_static() {
+        let data = parse_schedule_clause("static").unwrap();
+        if let ClauseData::Schedule {
+            kind,
+            modifiers,
+            chunk_size,
+        } = data
+        {
+            assert_eq!(kind, ScheduleKind::Static);
+            assert!(modifiers.is_empty());
+            assert!(chunk_size.is_none());
+        } else {
+            panic!("Expected Schedule clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_schedule_clause_with_chunk() {
+        let data = parse_schedule_clause("dynamic, 10").unwrap();
+        if let ClauseData::Schedule {
+            kind,
+            modifiers,
+            chunk_size,
+        } = data
+        {
+            assert_eq!(kind, ScheduleKind::Dynamic);
+            assert!(modifiers.is_empty());
+            assert!(chunk_size.is_some());
+            assert_eq!(chunk_size.unwrap().to_string(), "10");
+        } else {
+            panic!("Expected Schedule clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_schedule_clause_with_modifier() {
+        let data = parse_schedule_clause("monotonic: static, 4").unwrap();
+        if let ClauseData::Schedule {
+            kind,
+            modifiers,
+            chunk_size,
+        } = data
+        {
+            assert_eq!(kind, ScheduleKind::Static);
+            assert_eq!(modifiers.len(), 1);
+            assert_eq!(modifiers[0], ScheduleModifier::Monotonic);
+            assert!(chunk_size.is_some());
+        } else {
+            panic!("Expected Schedule clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_schedule_clause_with_multiple_modifiers() {
+        let data = parse_schedule_clause("monotonic, simd: dynamic").unwrap();
+        if let ClauseData::Schedule {
+            kind,
+            modifiers,
+            chunk_size,
+        } = data
+        {
+            assert_eq!(kind, ScheduleKind::Dynamic);
+            assert_eq!(modifiers.len(), 2);
+            assert!(chunk_size.is_none());
+        } else {
+            panic!("Expected Schedule clause");
+        }
+    }
+
+    // Tests for map clause
+    #[test]
+    fn test_parse_map_clause_with_type() {
+        let data = parse_map_clause("to: arr").unwrap();
+        if let ClauseData::Map {
+            map_type,
+            mapper,
+            items,
+        } = data
+        {
+            assert_eq!(map_type, Some(MapType::To));
+            assert!(mapper.is_none());
+            assert_eq!(items.len(), 1);
+        } else {
+            panic!("Expected Map clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_map_clause_tofrom() {
+        let data = parse_map_clause("tofrom: x, y, z").unwrap();
+        if let ClauseData::Map {
+            map_type,
+            mapper,
+            items,
+        } = data
+        {
+            assert_eq!(map_type, Some(MapType::ToFrom));
+            assert!(mapper.is_none());
+            assert_eq!(items.len(), 3);
+        } else {
+            panic!("Expected Map clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_map_clause_without_type() {
+        let data = parse_map_clause("var1, var2").unwrap();
+        if let ClauseData::Map {
+            map_type,
+            mapper,
+            items,
+        } = data
+        {
+            assert!(map_type.is_none());
+            assert!(mapper.is_none());
+            assert_eq!(items.len(), 2);
+        } else {
+            panic!("Expected Map clause");
+        }
+    }
+
+    // Tests for depend clause
+    #[test]
+    fn test_parse_depend_type() {
+        assert_eq!(parse_depend_type("in").unwrap(), DependType::In);
+        assert_eq!(parse_depend_type("out").unwrap(), DependType::Out);
+        assert_eq!(parse_depend_type("inout").unwrap(), DependType::Inout);
+    }
+
+    #[test]
+    fn test_parse_clause_data_depend() {
+        let clause = Clause {
+            name: "depend",
+            kind: ClauseKind::Parenthesized("in: x, y"),
+        };
+        let config = ParserConfig::default();
+        let data = parse_clause_data(&clause, &config).unwrap();
+        if let ClauseData::Depend { depend_type, items } = data {
+            assert_eq!(depend_type, DependType::In);
+            assert_eq!(items.len(), 2);
+        } else {
+            panic!("Expected Depend clause");
+        }
+    }
+
+    // Tests for linear clause
+    #[test]
+    fn test_parse_linear_clause_simple() {
+        let data = parse_linear_clause("x, y").unwrap();
+        if let ClauseData::Linear {
+            modifier,
+            items,
+            step,
+        } = data
+        {
+            assert!(modifier.is_none());
+            assert_eq!(items.len(), 2);
+            assert!(step.is_none());
+        } else {
+            panic!("Expected Linear clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_linear_clause_with_step() {
+        let data = parse_linear_clause("i: 2").unwrap();
+        if let ClauseData::Linear {
+            modifier,
+            items,
+            step,
+        } = data
+        {
+            assert!(modifier.is_none());
+            assert_eq!(items.len(), 1);
+            assert!(step.is_some());
+            assert_eq!(step.unwrap().to_string(), "2");
+        } else {
+            panic!("Expected Linear clause");
+        }
+    }
+
+    // Tests for proc_bind clause
+    #[test]
+    fn test_parse_clause_data_proc_bind() {
+        let clause = Clause {
+            name: "proc_bind",
+            kind: ClauseKind::Parenthesized("close"),
+        };
+        let config = ParserConfig::default();
+        let data = parse_clause_data(&clause, &config).unwrap();
+        assert_eq!(data, ClauseData::ProcBind(ProcBind::Close));
     }
 }
