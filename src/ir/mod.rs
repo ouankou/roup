@@ -48,6 +48,7 @@ pub use clause::{
     LinearModifier, MapType, MemoryOrder, OrderKind, ProcBind, ReductionOperator, ScheduleKind,
     ScheduleModifier,
 };
+pub use directive::{DirectiveIR, DirectiveKind};
 pub use expression::{
     BinaryOperator, Expression, ExpressionAst, ExpressionKind, ParserConfig, UnaryOperator,
 };
@@ -55,6 +56,7 @@ pub use types::{Language, SourceLocation};
 pub use variable::{ArraySection, Identifier, Variable};
 
 mod clause;
+mod directive;
 mod expression;
 mod types;
 mod variable;
