@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
 use nom::{error::ErrorKind, IResult};
 
@@ -11,6 +14,28 @@ type DirectiveParserFn =
 pub struct Directive<'a> {
     pub name: &'a str,
     pub clauses: Vec<Clause<'a>>,
+}
+
+impl<'a> Directive<'a> {
+    pub fn to_pragma_string(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl<'a> fmt::Display for Directive<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#pragma omp {}", self.name)?;
+        if !self.clauses.is_empty() {
+            write!(f, " ")?;
+            for (idx, clause) in self.clauses.iter().enumerate() {
+                if idx > 0 {
+                    write!(f, " ")?;
+                }
+                write!(f, "{}", clause)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -291,5 +316,42 @@ mod tests {
         assert_eq!(directive.clauses.len(), 1);
         assert_eq!(directive.clauses[0].name, "private");
         assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("a"));
+    }
+
+    #[test]
+    fn directive_display_includes_all_clauses() {
+        let directive = Directive {
+            name: "parallel",
+            clauses: vec![
+                Clause {
+                    name: "private",
+                    kind: ClauseKind::Parenthesized("a, b"),
+                },
+                Clause {
+                    name: "nowait",
+                    kind: ClauseKind::Bare,
+                },
+            ],
+        };
+
+        assert_eq!(
+            directive.to_string(),
+            "#pragma omp parallel private(a, b) nowait"
+        );
+        assert_eq!(
+            directive.to_pragma_string(),
+            "#pragma omp parallel private(a, b) nowait"
+        );
+    }
+
+    #[test]
+    fn directive_display_without_clauses() {
+        let directive = Directive {
+            name: "barrier",
+            clauses: vec![],
+        };
+
+        assert_eq!(directive.to_string(), "#pragma omp barrier");
+        assert_eq!(directive.to_pragma_string(), "#pragma omp barrier");
     }
 }

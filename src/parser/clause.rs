@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use nom::{multi::separated_list0, IResult, Parser};
 
@@ -16,6 +16,21 @@ pub enum ClauseKind<'a> {
 pub struct Clause<'a> {
     pub name: &'a str,
     pub kind: ClauseKind<'a>,
+}
+
+impl<'a> Clause<'a> {
+    pub fn to_source_string(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl<'a> fmt::Display for Clause<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            ClauseKind::Bare => write!(f, "{}", self.name),
+            ClauseKind::Parenthesized(value) => write!(f, "{}({})", self.name, value),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -254,6 +269,28 @@ mod tests {
         assert_eq!(clauses.len(), 1);
         assert_eq!(clauses[0].name, "private");
         assert_eq!(clauses[0].kind, ClauseKind::Parenthesized("a, b, c"));
+    }
+
+    #[test]
+    fn clause_display_roundtrips_bare_clause() {
+        let clause = Clause {
+            name: "nowait",
+            kind: ClauseKind::Bare,
+        };
+
+        assert_eq!(clause.to_string(), "nowait");
+        assert_eq!(clause.to_source_string(), "nowait");
+    }
+
+    #[test]
+    fn clause_display_roundtrips_parenthesized_clause() {
+        let clause = Clause {
+            name: "private",
+            kind: ClauseKind::Parenthesized("a, b"),
+        };
+
+        assert_eq!(clause.to_string(), "private(a, b)");
+        assert_eq!(clause.to_source_string(), "private(a, b)");
     }
 
     fn parse_single_identifier<'a>(name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
