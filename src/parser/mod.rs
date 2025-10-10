@@ -6,7 +6,7 @@ pub use clause::{Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, Clau
 pub use directive::{Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule};
 
 use super::lexer;
-use nom::{sequence::tuple, IResult};
+use nom::{IResult, Parser as _};
 
 pub struct Parser {
     clause_registry: ClauseRegistry,
@@ -22,12 +22,13 @@ impl Parser {
     }
 
     pub fn parse<'a>(&self, input: &'a str) -> IResult<&'a str, Directive<'a>> {
-        let (input, _) = tuple((
+        let (input, _) = (
             lexer::lex_pragma,
             lexer::skip_space1_and_comments,
             lexer::lex_omp,
             lexer::skip_space1_and_comments,
-        ))(input)?;
+        )
+            .parse(input)?;
         self.directive_registry.parse(input, &self.clause_registry)
     }
 }
@@ -88,11 +89,12 @@ mod tests {
             input: &'a str,
             clause_registry: &ClauseRegistry,
         ) -> IResult<&'a str, Directive<'a>> {
-            let (input, _) = nom::sequence::tuple((
+            let (input, _) = (
                 nom::character::complete::multispace1,
                 nom::bytes::complete::tag("use:"),
                 nom::character::complete::multispace1,
-            ))(input)?;
+            )
+                .parse(input)?;
             let (input, clauses) = clause_registry.parse_sequence(input)?;
 
             Ok((input, Directive { name, clauses }))
