@@ -636,6 +636,106 @@ impl<'a> DirectiveIR<'a> {
         }
     }
 
+    // ========================================================================
+    // Convenience constructors
+    // ========================================================================
+
+    /// Create a simple directive with no clauses
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # use roup::ir::{DirectiveIR, DirectiveKind, Language, SourceLocation};
+    /// let dir = DirectiveIR::simple(DirectiveKind::Barrier, SourceLocation::start(), Language::C);
+    /// assert_eq!(dir.clauses().len(), 0);
+    /// ```
+    pub fn simple(kind: DirectiveKind, location: SourceLocation, language: Language) -> Self {
+        Self::new(kind, vec![], location, language)
+    }
+
+    /// Create a parallel directive with common clauses
+    ///
+    /// Convenience constructor for the most common OpenMP pattern.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # use roup::ir::{DirectiveIR, DefaultKind, Language, SourceLocation};
+    /// let dir = DirectiveIR::parallel(
+    ///     Some(DefaultKind::Shared),
+    ///     SourceLocation::start(),
+    ///     Language::C
+    /// );
+    /// assert!(dir.has_clause(|c| c.is_default()));
+    /// ```
+    pub fn parallel(
+        default: Option<super::DefaultKind>,
+        location: SourceLocation,
+        language: Language,
+    ) -> Self {
+        let mut clauses = vec![];
+        if let Some(kind) = default {
+            clauses.push(ClauseData::Default(kind));
+        }
+        Self::new(DirectiveKind::Parallel, clauses, location, language)
+    }
+
+    /// Create a for loop directive with schedule
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # use roup::ir::{DirectiveIR, ScheduleKind, Language, SourceLocation};
+    /// let dir = DirectiveIR::for_loop(
+    ///     ScheduleKind::Static,
+    ///     None,
+    ///     SourceLocation::start(),
+    ///     Language::C
+    /// );
+    /// assert!(dir.has_clause(|c| c.is_schedule()));
+    /// ```
+    pub fn for_loop(
+        schedule: super::ScheduleKind,
+        chunk_size: Option<super::Expression<'a>>,
+        location: SourceLocation,
+        language: Language,
+    ) -> Self {
+        let clauses = vec![ClauseData::Schedule {
+            kind: schedule,
+            modifiers: vec![],
+            chunk_size,
+        }];
+        Self::new(DirectiveKind::For, clauses, location, language)
+    }
+
+    /// Create a barrier directive (always simple)
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # use roup::ir::{DirectiveIR, DirectiveKind, Language, SourceLocation};
+    /// let dir = DirectiveIR::barrier(SourceLocation::start(), Language::C);
+    /// assert_eq!(dir.kind(), DirectiveKind::Barrier);
+    /// assert_eq!(dir.clauses().len(), 0);
+    /// ```
+    pub fn barrier(location: SourceLocation, language: Language) -> Self {
+        Self::simple(DirectiveKind::Barrier, location, language)
+    }
+
+    /// Create a taskwait directive (always simple)
+    pub fn taskwait(location: SourceLocation, language: Language) -> Self {
+        Self::simple(DirectiveKind::Taskwait, location, language)
+    }
+
+    /// Create a taskyield directive (always simple)
+    pub fn taskyield(location: SourceLocation, language: Language) -> Self {
+        Self::simple(DirectiveKind::Taskyield, location, language)
+    }
+
+    // ========================================================================
+    // Query API
+    // ========================================================================
+
     /// Get the directive kind
     pub fn kind(&self) -> DirectiveKind {
         self.kind

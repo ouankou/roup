@@ -43,6 +43,7 @@
 //! - `display`: Pretty-printing IR back to pragmas
 
 // Re-export main types
+pub use builder::DirectiveBuilder;
 pub use clause::{
     AtomicOp, ClauseData, ClauseItem, DefaultKind, DependType, DeviceType, LastprivateModifier,
     LinearModifier, MapType, MemoryOrder, OrderKind, ProcBind, ReductionOperator, ScheduleKind,
@@ -54,11 +55,14 @@ pub use expression::{
     BinaryOperator, Expression, ExpressionAst, ExpressionKind, ParserConfig, UnaryOperator,
 };
 pub use types::{Language, SourceLocation};
+pub use validate::{ValidationContext, ValidationError};
 pub use variable::{ArraySection, Identifier, Variable};
 
+mod builder;
 mod clause;
 pub mod convert;
 mod directive;
 mod expression;
 mod types;
+pub mod validate;
 mod variable;
