@@ -11,3 +11,11 @@ edition = "2021"
 # nom = parser combinator library for building parsers
 # Version 8.0.0 uses semantic versioning
 nom = "8.0.0"
+
+# Learning Rust: Binary Targets
+# ==============================
+# [[bin]] sections define executable programs
+# Libraries (lib.rs) + binaries work together
+[[bin]]
+name = "tester"
+path = "utils/tester.rs"
