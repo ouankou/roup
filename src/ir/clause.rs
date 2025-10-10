@@ -33,6 +33,8 @@
 
 use std::fmt;
 
+use super::{Expression, Identifier, Variable};
+
 // ============================================================================
 // Reduction Operators (OpenMP 5.2 spec section 5.5.5)
 // ============================================================================
@@ -583,8 +585,521 @@ impl fmt::Display for OrderKind {
 }
 
 // ============================================================================
-// Tests
+// ClauseItem: Items that appear in clause lists
 // ============================================================================
+
+/// Item that can appear in a clause list
+///
+/// Many OpenMP clauses accept lists of items that can be:
+/// - Simple identifiers: `private(x, y, z)`
+/// - Variables with array sections: `map(to: arr[0:N])`
+/// - Expressions: `if(n > 100)`
+///
+/// ## Examples
+///
+/// ```
+/// # use roup::ir::{ClauseItem, Identifier, Variable, Expression, ParserConfig};
+/// // Simple identifier
+/// let item = ClauseItem::Identifier(Identifier::new("x"));
+/// assert_eq!(item.to_string(), "x");
+///
+/// // Variable with array section
+/// let var = Variable::new("arr");
+/// let item = ClauseItem::Variable(var);
+/// assert_eq!(item.to_string(), "arr");
+///
+/// // Expression
+/// let config = ParserConfig::default();
+/// let expr = Expression::new("n > 100", &config);
+/// let item = ClauseItem::Expression(expr);
+/// assert_eq!(item.to_string(), "n > 100");
+/// ```
+///
+/// ## Learning: Enums with Data
+///
+/// Unlike the modifier enums (which are just unit variants), ClauseItem
+/// is an enum where each variant **contains data**:
+///
+/// ```ignore
+/// enum ClauseItem {
+///     Identifier(Identifier),  // Contains an Identifier
+///     Variable(Variable),       // Contains a Variable
+///     Expression(Expression),   // Contains an Expression
+/// }
+/// ```
+///
+/// This is like a tagged union in C, but type-safe.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClauseItem<'a> {
+    /// Simple identifier (e.g., `x` in `private(x)`)
+    Identifier(Identifier<'a>),
+    /// Variable with optional array sections (e.g., `arr[0:N]` in `map(to: arr[0:N])`)
+    Variable(Variable<'a>),
+    /// Expression (e.g., `n > 100` in `if(n > 100)`)
+    Expression(Expression<'a>),
+}
+
+impl<'a> fmt::Display for ClauseItem<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ClauseItem::Identifier(id) => write!(f, "{}", id),
+            ClauseItem::Variable(var) => write!(f, "{}", var),
+            ClauseItem::Expression(expr) => write!(f, "{}", expr),
+        }
+    }
+}
+
+impl<'a> From<Identifier<'a>> for ClauseItem<'a> {
+    fn from(id: Identifier<'a>) -> Self {
+        ClauseItem::Identifier(id)
+    }
+}
+
+impl<'a> From<Variable<'a>> for ClauseItem<'a> {
+    fn from(var: Variable<'a>) -> Self {
+        ClauseItem::Variable(var)
+    }
+}
+
+impl<'a> From<Expression<'a>> for ClauseItem<'a> {
+    fn from(expr: Expression<'a>) -> Self {
+        ClauseItem::Expression(expr)
+    }
+}
+
+// ============================================================================
+// ClauseData: Complete clause semantic information
+// ============================================================================
+
+/// Complete semantic data for an OpenMP clause
+///
+/// This enum represents the **meaning** of each OpenMP clause type.
+/// Each variant captures the specific data needed for that clause.
+///
+/// ## Examples
+///
+/// ```
+/// # use roup::ir::{ClauseData, DefaultKind, ReductionOperator, Identifier};
+/// // default(shared)
+/// let clause = ClauseData::Default(DefaultKind::Shared);
+/// assert_eq!(clause.to_string(), "default(shared)");
+///
+/// // reduction(+: sum)
+/// let clause = ClauseData::Reduction {
+///     operator: ReductionOperator::Add,
+///     items: vec![Identifier::new("sum").into()],
+/// };
+/// assert_eq!(clause.to_string(), "reduction(+: sum)");
+/// ```
+///
+/// ## Learning: Large Enums with Complex Data
+///
+/// This enum demonstrates several advanced Rust patterns:
+///
+/// 1. **Many variants**: ~30 variants for different clause types
+/// 2. **Variants with data**: Most variants contain structured data
+/// 3. **Named fields**: Using struct-like syntax for clarity
+/// 4. **Vec for lists**: Variable-length lists of items
+/// 5. **Option for optionals**: Optional parameters
+/// 6. **Composition**: Combines all previous IR types
+///
+/// ## Design Philosophy
+///
+/// Each variant captures exactly what's needed for semantic analysis:
+/// - `Private`: List of variables to make private
+/// - `Reduction`: Operator + list of reduction variables
+/// - `Map`: Map type + list of variables to map
+/// - `Schedule`: Schedule kind + optional modifiers + optional chunk size
+///
+/// This is much richer than the parser's string-based representation.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClauseData<'a> {
+    // ========================================================================
+    // Bare clauses (no parameters)
+    // ========================================================================
+    /// Clause with no parameters (e.g., `nowait`, `nogroup`)
+    Bare,
+
+    // ========================================================================
+    // Simple expression clauses
+    // ========================================================================
+    /// Single expression parameter (e.g., `num_threads(4)`)
+    Expression(Expression<'a>),
+
+    // ========================================================================
+    // Item list clauses
+    // ========================================================================
+    /// List of items (e.g., `private(x, y, z)`)
+    ItemList(Vec<ClauseItem<'a>>),
+
+    // ========================================================================
+    // Data-sharing attribute clauses
+    // ========================================================================
+    /// `private(list)` - Variables are private to each thread
+    Private { items: Vec<ClauseItem<'a>> },
+
+    /// `firstprivate(list)` - Variables initialized from master thread
+    Firstprivate { items: Vec<ClauseItem<'a>> },
+
+    /// `lastprivate([modifier:] list)` - Variables updated from last iteration
+    Lastprivate {
+        modifier: Option<LastprivateModifier>,
+        items: Vec<ClauseItem<'a>>,
+    },
+
+    /// `shared(list)` - Variables shared among all threads
+    Shared { items: Vec<ClauseItem<'a>> },
+
+    /// `default(shared|none|...)` - Default data-sharing attribute
+    Default(DefaultKind),
+
+    // ========================================================================
+    // Reduction clause
+    // ========================================================================
+    /// `reduction([modifier,]operator: list)` - Reduction operation
+    Reduction {
+        operator: ReductionOperator,
+        items: Vec<ClauseItem<'a>>,
+    },
+
+    // ========================================================================
+    // Device data clauses
+    // ========================================================================
+    /// `map([[mapper(id),] map-type:] list)` - Map variables to device
+    Map {
+        map_type: Option<MapType>,
+        mapper: Option<Identifier<'a>>,
+        items: Vec<ClauseItem<'a>>,
+    },
+
+    /// `use_device_ptr(list)` - Use device pointers
+    UseDevicePtr { items: Vec<ClauseItem<'a>> },
+
+    /// `use_device_addr(list)` - Use device addresses
+    UseDeviceAddr { items: Vec<ClauseItem<'a>> },
+
+    /// `is_device_ptr(list)` - Variables are device pointers
+    IsDevicePtr { items: Vec<ClauseItem<'a>> },
+
+    /// `has_device_addr(list)` - Variables have device addresses
+    HasDeviceAddr { items: Vec<ClauseItem<'a>> },
+
+    // ========================================================================
+    // Task clauses
+    // ========================================================================
+    /// `depend([modifier,] type: list)` - Task dependencies
+    Depend {
+        depend_type: DependType,
+        items: Vec<ClauseItem<'a>>,
+    },
+
+    /// `priority(expression)` - Task priority
+    Priority { priority: Expression<'a> },
+
+    /// `affinity([modifier:] list)` - Task affinity
+    Affinity { items: Vec<ClauseItem<'a>> },
+
+    // ========================================================================
+    // Loop scheduling clauses
+    // ========================================================================
+    /// `schedule([modifier [, modifier]:]kind[, chunk_size])` - Loop schedule
+    Schedule {
+        kind: ScheduleKind,
+        modifiers: Vec<ScheduleModifier>,
+        chunk_size: Option<Expression<'a>>,
+    },
+
+    /// `collapse(n)` - Collapse nested loops
+    Collapse { n: Expression<'a> },
+
+    /// `ordered[(n)]` - Ordered iterations
+    Ordered { n: Option<Expression<'a>> },
+
+    // ========================================================================
+    // SIMD clauses
+    // ========================================================================
+    /// `linear(list[:step])` - Linear variables in SIMD
+    Linear {
+        modifier: Option<LinearModifier>,
+        items: Vec<ClauseItem<'a>>,
+        step: Option<Expression<'a>>,
+    },
+
+    /// `aligned(list[:alignment])` - Aligned variables
+    Aligned {
+        items: Vec<ClauseItem<'a>>,
+        alignment: Option<Expression<'a>>,
+    },
+
+    /// `safelen(length)` - Safe SIMD vector length
+    Safelen { length: Expression<'a> },
+
+    /// `simdlen(length)` - Preferred SIMD vector length
+    Simdlen { length: Expression<'a> },
+
+    // ========================================================================
+    // Conditional clauses
+    // ========================================================================
+    /// `if([directive-name-modifier:] expression)` - Conditional execution
+    If {
+        directive_name: Option<Identifier<'a>>,
+        condition: Expression<'a>,
+    },
+
+    // ========================================================================
+    // Thread binding clauses
+    // ========================================================================
+    /// `proc_bind(master|close|spread|primary)` - Thread affinity policy
+    ProcBind(ProcBind),
+
+    /// `num_threads(expression)` - Number of threads
+    NumThreads { num: Expression<'a> },
+
+    // ========================================================================
+    // Device clauses
+    // ========================================================================
+    /// `device(expression)` - Target device
+    Device { device_num: Expression<'a> },
+
+    /// `device_type(host|nohost|any)` - Device type specifier
+    DeviceType(DeviceType),
+
+    // ========================================================================
+    // Atomic clauses
+    // ========================================================================
+    /// `atomic_default_mem_order(seq_cst|acq_rel|...)` - Default memory order
+    AtomicDefaultMemOrder(MemoryOrder),
+
+    /// Atomic operation modifier
+    AtomicOperation {
+        op: AtomicOp,
+        memory_order: Option<MemoryOrder>,
+    },
+
+    // ========================================================================
+    // Order clause
+    // ========================================================================
+    /// `order(concurrent)` - Iteration execution order
+    Order(OrderKind),
+
+    // ========================================================================
+    // Teams clauses
+    // ========================================================================
+    /// `num_teams(expression)` - Number of teams
+    NumTeams { num: Expression<'a> },
+
+    /// `thread_limit(expression)` - Thread limit per team
+    ThreadLimit { limit: Expression<'a> },
+
+    // ========================================================================
+    // Allocator clauses
+    // ========================================================================
+    /// `allocate([allocator:] list)` - Memory allocator
+    Allocate {
+        allocator: Option<Identifier<'a>>,
+        items: Vec<ClauseItem<'a>>,
+    },
+
+    /// `allocator(allocator-handle)` - Specify allocator
+    Allocator { allocator: Identifier<'a> },
+
+    // ========================================================================
+    // Other clauses
+    // ========================================================================
+    /// `copyin(list)` - Copy master thread value to team threads
+    Copyin { items: Vec<ClauseItem<'a>> },
+
+    /// `copyprivate(list)` - Broadcast value from one thread
+    Copyprivate { items: Vec<ClauseItem<'a>> },
+
+    /// `dist_schedule(kind[, chunk_size])` - Distribute schedule
+    DistSchedule {
+        kind: ScheduleKind,
+        chunk_size: Option<Expression<'a>>,
+    },
+
+    /// `grainsize(expression)` - Taskloop grainsize
+    Grainsize { grain: Expression<'a> },
+
+    /// `num_tasks(expression)` - Number of tasks
+    NumTasks { num: Expression<'a> },
+
+    /// `filter(thread-num)` - Thread filter for masked construct
+    Filter { thread_num: Expression<'a> },
+
+    /// Generic clause with unparsed data (fallback for unknown clauses)
+    Generic {
+        name: Identifier<'a>,
+        data: Option<&'a str>,
+    },
+}
+
+impl<'a> fmt::Display for ClauseData<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ClauseData::Bare => write!(f, ""),
+            ClauseData::Expression(expr) => write!(f, "{}", expr),
+            ClauseData::ItemList(items) => {
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                Ok(())
+            }
+            ClauseData::Private { items } => {
+                write!(f, "private(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Firstprivate { items } => {
+                write!(f, "firstprivate(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Lastprivate { modifier, items } => {
+                write!(f, "lastprivate(")?;
+                if let Some(m) = modifier {
+                    write!(f, "{}: ", m)?;
+                }
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Shared { items } => {
+                write!(f, "shared(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Default(kind) => write!(f, "default({})", kind),
+            ClauseData::Reduction { operator, items } => {
+                write!(f, "reduction({}: ", operator)?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Map {
+                map_type,
+                mapper,
+                items,
+            } => {
+                write!(f, "map(")?;
+                if let Some(mapper_id) = mapper {
+                    write!(f, "mapper({}), ", mapper_id)?;
+                }
+                if let Some(mt) = map_type {
+                    write!(f, "{}: ", mt)?;
+                }
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Schedule {
+                kind,
+                modifiers,
+                chunk_size,
+            } => {
+                write!(f, "schedule(")?;
+                if !modifiers.is_empty() {
+                    for (i, m) in modifiers.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", m)?;
+                    }
+                    write!(f, ": ")?;
+                }
+                write!(f, "{}", kind)?;
+                if let Some(chunk) = chunk_size {
+                    write!(f, ", {}", chunk)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Linear {
+                modifier,
+                items,
+                step,
+            } => {
+                write!(f, "linear(")?;
+                if let Some(m) = modifier {
+                    write!(f, "{}: ", m)?;
+                }
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                if let Some(s) = step {
+                    write!(f, ": {}", s)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::If {
+                directive_name,
+                condition,
+            } => {
+                write!(f, "if(")?;
+                if let Some(name) = directive_name {
+                    write!(f, "{}: ", name)?;
+                }
+                write!(f, "{})", condition)
+            }
+            ClauseData::NumThreads { num } => write!(f, "num_threads({})", num),
+            ClauseData::ProcBind(pb) => write!(f, "proc_bind({})", pb),
+            ClauseData::Device { device_num } => write!(f, "device({})", device_num),
+            ClauseData::DeviceType(dt) => write!(f, "device_type({})", dt),
+            ClauseData::Collapse { n } => write!(f, "collapse({})", n),
+            ClauseData::Ordered { n } => {
+                write!(f, "ordered")?;
+                if let Some(num) = n {
+                    write!(f, "({})", num)?;
+                }
+                Ok(())
+            }
+            ClauseData::Depend { depend_type, items } => {
+                write!(f, "depend({}: ", depend_type)?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, ")")
+            }
+            // Simplified Display for remaining variants (can be expanded as needed)
+            _ => write!(f, "<clause>"),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -883,5 +1398,458 @@ mod tests {
         let op = ReductionOperator::Add;
         let debug_str = format!("{:?}", op);
         assert!(debug_str.contains("Add"));
+    }
+
+    // ========================================================================
+    // ClauseItem tests
+    // ========================================================================
+
+    #[test]
+    fn test_clause_item_from_identifier() {
+        let id = Identifier::new("x");
+        let item = ClauseItem::from(id);
+        assert_eq!(item.to_string(), "x");
+    }
+
+    #[test]
+    fn test_clause_item_from_variable() {
+        let var = Variable::new("arr");
+        let item = ClauseItem::from(var);
+        assert_eq!(item.to_string(), "arr");
+    }
+
+    #[test]
+    fn test_clause_item_from_expression() {
+        use crate::ir::ParserConfig;
+        let config = ParserConfig::default();
+        let expr = Expression::new("n > 100", &config);
+        let item = ClauseItem::from(expr);
+        assert_eq!(item.to_string(), "n > 100");
+    }
+
+    #[test]
+    fn test_clause_item_display_identifier() {
+        let item = ClauseItem::Identifier(Identifier::new("my_var"));
+        assert_eq!(item.to_string(), "my_var");
+    }
+
+    #[test]
+    fn test_clause_item_display_variable_with_section() {
+        use crate::ir::ArraySection;
+        let section = ArraySection::single_index(Expression::unparsed("i"));
+        let var = Variable::with_sections("arr", vec![section]);
+        let item = ClauseItem::Variable(var);
+        assert_eq!(item.to_string(), "arr[i]");
+    }
+
+    #[test]
+    fn test_clause_item_equality() {
+        let item1 = ClauseItem::Identifier(Identifier::new("x"));
+        let item2 = ClauseItem::Identifier(Identifier::new("x"));
+        let item3 = ClauseItem::Identifier(Identifier::new("y"));
+        assert_eq!(item1, item2);
+        assert_ne!(item1, item3);
+    }
+
+    #[test]
+    fn test_clause_item_clone() {
+        let item1 = ClauseItem::Identifier(Identifier::new("x"));
+        let item2 = item1.clone();
+        assert_eq!(item1, item2);
+    }
+
+    // ========================================================================
+    // ClauseData tests
+    // ========================================================================
+
+    #[test]
+    fn test_clause_data_bare() {
+        let clause = ClauseData::Bare;
+        assert_eq!(clause.to_string(), "");
+    }
+
+    #[test]
+    fn test_clause_data_default() {
+        let clause = ClauseData::Default(DefaultKind::Shared);
+        assert_eq!(clause.to_string(), "default(shared)");
+
+        let clause = ClauseData::Default(DefaultKind::None);
+        assert_eq!(clause.to_string(), "default(none)");
+    }
+
+    #[test]
+    fn test_clause_data_private() {
+        let items = vec![
+            ClauseItem::Identifier(Identifier::new("x")),
+            ClauseItem::Identifier(Identifier::new("y")),
+        ];
+        let clause = ClauseData::Private { items };
+        assert_eq!(clause.to_string(), "private(x, y)");
+    }
+
+    #[test]
+    fn test_clause_data_private_single_item() {
+        let items = vec![ClauseItem::Identifier(Identifier::new("x"))];
+        let clause = ClauseData::Private { items };
+        assert_eq!(clause.to_string(), "private(x)");
+    }
+
+    #[test]
+    fn test_clause_data_firstprivate() {
+        let items = vec![
+            ClauseItem::Identifier(Identifier::new("a")),
+            ClauseItem::Identifier(Identifier::new("b")),
+        ];
+        let clause = ClauseData::Firstprivate { items };
+        assert_eq!(clause.to_string(), "firstprivate(a, b)");
+    }
+
+    #[test]
+    fn test_clause_data_lastprivate_without_modifier() {
+        let items = vec![ClauseItem::Identifier(Identifier::new("x"))];
+        let clause = ClauseData::Lastprivate {
+            modifier: None,
+            items,
+        };
+        assert_eq!(clause.to_string(), "lastprivate(x)");
+    }
+
+    #[test]
+    fn test_clause_data_lastprivate_with_conditional() {
+        let items = vec![ClauseItem::Identifier(Identifier::new("x"))];
+        let clause = ClauseData::Lastprivate {
+            modifier: Some(LastprivateModifier::Conditional),
+            items,
+        };
+        assert_eq!(clause.to_string(), "lastprivate(conditional: x)");
+    }
+
+    #[test]
+    fn test_clause_data_shared() {
+        let items = vec![
+            ClauseItem::Identifier(Identifier::new("data")),
+            ClauseItem::Identifier(Identifier::new("count")),
+        ];
+        let clause = ClauseData::Shared { items };
+        assert_eq!(clause.to_string(), "shared(data, count)");
+    }
+
+    #[test]
+    fn test_clause_data_reduction() {
+        let items = vec![ClauseItem::Identifier(Identifier::new("sum"))];
+        let clause = ClauseData::Reduction {
+            operator: ReductionOperator::Add,
+            items,
+        };
+        assert_eq!(clause.to_string(), "reduction(+: sum)");
+    }
+
+    #[test]
+    fn test_clause_data_reduction_multiple_items() {
+        let items = vec![
+            ClauseItem::Identifier(Identifier::new("sum")),
+            ClauseItem::Identifier(Identifier::new("total")),
+        ];
+        let clause = ClauseData::Reduction {
+            operator: ReductionOperator::Add,
+            items,
+        };
+        assert_eq!(clause.to_string(), "reduction(+: sum, total)");
+    }
+
+    #[test]
+    fn test_clause_data_reduction_max() {
+        let items = vec![ClauseItem::Identifier(Identifier::new("max_val"))];
+        let clause = ClauseData::Reduction {
+            operator: ReductionOperator::Max,
+            items,
+        };
+        assert_eq!(clause.to_string(), "reduction(max: max_val)");
+    }
+
+    #[test]
+    fn test_clause_data_map_simple() {
+        let items = vec![ClauseItem::Variable(Variable::new("arr"))];
+        let clause = ClauseData::Map {
+            map_type: Some(MapType::To),
+            mapper: None,
+            items,
+        };
+        assert_eq!(clause.to_string(), "map(to: arr)");
+    }
+
+    #[test]
+    fn test_clause_data_map_tofrom() {
+        let items = vec![ClauseItem::Variable(Variable::new("data"))];
+        let clause = ClauseData::Map {
+            map_type: Some(MapType::ToFrom),
+            mapper: None,
+            items,
+        };
+        assert_eq!(clause.to_string(), "map(tofrom: data)");
+    }
+
+    #[test]
+    fn test_clause_data_map_without_type() {
+        let items = vec![ClauseItem::Variable(Variable::new("arr"))];
+        let clause = ClauseData::Map {
+            map_type: None,
+            mapper: None,
+            items,
+        };
+        assert_eq!(clause.to_string(), "map(arr)");
+    }
+
+    #[test]
+    fn test_clause_data_map_with_mapper() {
+        let items = vec![ClauseItem::Variable(Variable::new("arr"))];
+        let clause = ClauseData::Map {
+            map_type: Some(MapType::To),
+            mapper: Some(Identifier::new("my_mapper")),
+            items,
+        };
+        assert_eq!(clause.to_string(), "map(mapper(my_mapper), to: arr)");
+    }
+
+    #[test]
+    fn test_clause_data_schedule_static() {
+        let clause = ClauseData::Schedule {
+            kind: ScheduleKind::Static,
+            modifiers: vec![],
+            chunk_size: None,
+        };
+        assert_eq!(clause.to_string(), "schedule(static)");
+    }
+
+    #[test]
+    fn test_clause_data_schedule_dynamic_with_chunk() {
+        let chunk = Expression::unparsed("64");
+        let clause = ClauseData::Schedule {
+            kind: ScheduleKind::Dynamic,
+            modifiers: vec![],
+            chunk_size: Some(chunk),
+        };
+        assert_eq!(clause.to_string(), "schedule(dynamic, 64)");
+    }
+
+    #[test]
+    fn test_clause_data_schedule_with_modifier() {
+        let clause = ClauseData::Schedule {
+            kind: ScheduleKind::Static,
+            modifiers: vec![ScheduleModifier::Monotonic],
+            chunk_size: None,
+        };
+        assert_eq!(clause.to_string(), "schedule(monotonic: static)");
+    }
+
+    #[test]
+    fn test_clause_data_schedule_with_multiple_modifiers() {
+        let clause = ClauseData::Schedule {
+            kind: ScheduleKind::Dynamic,
+            modifiers: vec![ScheduleModifier::Nonmonotonic, ScheduleModifier::Simd],
+            chunk_size: Some(Expression::unparsed("32")),
+        };
+        assert_eq!(
+            clause.to_string(),
+            "schedule(nonmonotonic, simd: dynamic, 32)"
+        );
+    }
+
+    #[test]
+    fn test_clause_data_linear_simple() {
+        let items = vec![ClauseItem::Identifier(Identifier::new("i"))];
+        let clause = ClauseData::Linear {
+            modifier: None,
+            items,
+            step: None,
+        };
+        assert_eq!(clause.to_string(), "linear(i)");
+    }
+
+    #[test]
+    fn test_clause_data_linear_with_step() {
+        let items = vec![ClauseItem::Identifier(Identifier::new("i"))];
+        let clause = ClauseData::Linear {
+            modifier: None,
+            items,
+            step: Some(Expression::unparsed("2")),
+        };
+        assert_eq!(clause.to_string(), "linear(i: 2)");
+    }
+
+    #[test]
+    fn test_clause_data_linear_with_modifier() {
+        let items = vec![ClauseItem::Identifier(Identifier::new("i"))];
+        let clause = ClauseData::Linear {
+            modifier: Some(LinearModifier::Val),
+            items,
+            step: None,
+        };
+        assert_eq!(clause.to_string(), "linear(val: i)");
+    }
+
+    #[test]
+    fn test_clause_data_if_simple() {
+        let condition = Expression::unparsed("n > 100");
+        let clause = ClauseData::If {
+            directive_name: None,
+            condition,
+        };
+        assert_eq!(clause.to_string(), "if(n > 100)");
+    }
+
+    #[test]
+    fn test_clause_data_if_with_directive_name() {
+        let condition = Expression::unparsed("n > 100");
+        let clause = ClauseData::If {
+            directive_name: Some(Identifier::new("parallel")),
+            condition,
+        };
+        assert_eq!(clause.to_string(), "if(parallel: n > 100)");
+    }
+
+    #[test]
+    fn test_clause_data_num_threads() {
+        let clause = ClauseData::NumThreads {
+            num: Expression::unparsed("4"),
+        };
+        assert_eq!(clause.to_string(), "num_threads(4)");
+    }
+
+    #[test]
+    fn test_clause_data_proc_bind() {
+        let clause = ClauseData::ProcBind(ProcBind::Close);
+        assert_eq!(clause.to_string(), "proc_bind(close)");
+    }
+
+    #[test]
+    fn test_clause_data_device() {
+        let clause = ClauseData::Device {
+            device_num: Expression::unparsed("0"),
+        };
+        assert_eq!(clause.to_string(), "device(0)");
+    }
+
+    #[test]
+    fn test_clause_data_device_type() {
+        let clause = ClauseData::DeviceType(DeviceType::Host);
+        assert_eq!(clause.to_string(), "device_type(host)");
+    }
+
+    #[test]
+    fn test_clause_data_collapse() {
+        let clause = ClauseData::Collapse {
+            n: Expression::unparsed("2"),
+        };
+        assert_eq!(clause.to_string(), "collapse(2)");
+    }
+
+    #[test]
+    fn test_clause_data_ordered_without_param() {
+        let clause = ClauseData::Ordered { n: None };
+        assert_eq!(clause.to_string(), "ordered");
+    }
+
+    #[test]
+    fn test_clause_data_ordered_with_param() {
+        let clause = ClauseData::Ordered {
+            n: Some(Expression::unparsed("2")),
+        };
+        assert_eq!(clause.to_string(), "ordered(2)");
+    }
+
+    #[test]
+    fn test_clause_data_depend() {
+        let items = vec![ClauseItem::Variable(Variable::new("x"))];
+        let clause = ClauseData::Depend {
+            depend_type: DependType::In,
+            items,
+        };
+        assert_eq!(clause.to_string(), "depend(in: x)");
+    }
+
+    #[test]
+    fn test_clause_data_depend_inout() {
+        let items = vec![
+            ClauseItem::Variable(Variable::new("a")),
+            ClauseItem::Variable(Variable::new("b")),
+        ];
+        let clause = ClauseData::Depend {
+            depend_type: DependType::Inout,
+            items,
+        };
+        assert_eq!(clause.to_string(), "depend(inout: a, b)");
+    }
+
+    #[test]
+    fn test_clause_data_equality() {
+        let clause1 = ClauseData::Default(DefaultKind::Shared);
+        let clause2 = ClauseData::Default(DefaultKind::Shared);
+        let clause3 = ClauseData::Default(DefaultKind::None);
+        assert_eq!(clause1, clause2);
+        assert_ne!(clause1, clause3);
+    }
+
+    #[test]
+    fn test_clause_data_clone() {
+        let items = vec![ClauseItem::Identifier(Identifier::new("x"))];
+        let clause1 = ClauseData::Private { items };
+        let clause2 = clause1.clone();
+        assert_eq!(clause1, clause2);
+    }
+
+    // Corner case: empty item lists
+    #[test]
+    fn test_clause_data_private_empty_list() {
+        let clause = ClauseData::Private { items: vec![] };
+        assert_eq!(clause.to_string(), "private()");
+    }
+
+    #[test]
+    fn test_clause_data_reduction_empty_list() {
+        let clause = ClauseData::Reduction {
+            operator: ReductionOperator::Add,
+            items: vec![],
+        };
+        assert_eq!(clause.to_string(), "reduction(+: )");
+    }
+
+    // Corner case: complex variable items
+    #[test]
+    fn test_clause_data_with_array_sections() {
+        use crate::ir::ArraySection;
+        let lower = Expression::unparsed("0");
+        let length = Expression::unparsed("N");
+        let section = ArraySection {
+            lower_bound: Some(lower),
+            length: Some(length),
+            stride: None,
+        };
+        let var = Variable::with_sections("arr", vec![section]);
+        let items = vec![ClauseItem::Variable(var)];
+        let clause = ClauseData::Map {
+            map_type: Some(MapType::To),
+            mapper: None,
+            items,
+        };
+        assert_eq!(clause.to_string(), "map(to: arr[0:N])");
+    }
+
+    // Corner case: expression items
+    #[test]
+    fn test_clause_data_with_expression_items() {
+        let expr = Expression::unparsed("func(x, y)");
+        let items = vec![ClauseItem::Expression(expr)];
+        let clause = ClauseData::ItemList(items);
+        assert_eq!(clause.to_string(), "func(x, y)");
+    }
+
+    // Corner case: debug formatting
+    #[test]
+    fn test_clause_data_debug() {
+        let clause = ClauseData::Default(DefaultKind::Shared);
+        let debug_str = format!("{:?}", clause);
+        assert!(debug_str.contains("Default"));
+        assert!(debug_str.contains("Shared"));
     }
 }

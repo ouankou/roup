@@ -44,8 +44,9 @@
 
 // Re-export main types
 pub use clause::{
-    AtomicOp, DefaultKind, DependType, DeviceType, LastprivateModifier, LinearModifier, MapType,
-    MemoryOrder, OrderKind, ProcBind, ReductionOperator, ScheduleKind, ScheduleModifier,
+    AtomicOp, ClauseData, ClauseItem, DefaultKind, DependType, DeviceType, LastprivateModifier,
+    LinearModifier, MapType, MemoryOrder, OrderKind, ProcBind, ReductionOperator, ScheduleKind,
+    ScheduleModifier,
 };
 pub use expression::{
     BinaryOperator, Expression, ExpressionAst, ExpressionKind, ParserConfig, UnaryOperator,
