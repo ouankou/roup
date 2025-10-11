@@ -34,7 +34,7 @@ Yes! ROUP is used in production for:
 - Documentation generators
 
 **Stability:**
-- 342 tests, all passing
+- 352 tests, all passing
 - Supports OpenMP 3.0 through 6.0
 - Active maintenance
 - Semantic versioning
