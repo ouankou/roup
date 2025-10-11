@@ -40,6 +40,8 @@ pub enum Resource {
     String(ByteString),
     /// Parsed AST root
     Ast(Box<crate::ir::DirectiveIR<'static>>),
+    /// Individual clause from a directive
+    Clause(Box<crate::ir::ClauseData<'static>>),
     /// Cursor for iteration
     Cursor(Cursor),
 }
@@ -229,9 +231,10 @@ pub fn get(handle: Handle) -> Option<Resource> {
     match reg.get(handle)? {
         Resource::String(s) => Some(Resource::String(s.clone())),
         Resource::Cursor(c) => Some(Resource::Cursor(c.clone())),
-        // AST can't be cloned, so we can't return it by value
-        // Callers should use with_resource for AST access
+        // AST and Clause can't be easily cloned, so we can't return them by value
+        // Callers should use with_resource for AST/Clause access
         Resource::Ast(_) => None,
+        Resource::Clause(_) => None,
     }
 }
 

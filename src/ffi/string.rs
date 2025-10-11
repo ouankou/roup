@@ -266,6 +266,20 @@ pub extern "C" fn omp_str_is_empty(handle: Handle) -> i32 {
 }
 
 // ============================================================================
+// Internal helper functions (not exposed to C)
+// ============================================================================
+
+/// Create a string handle from a Rust &str
+/// This is an internal helper for use by other FFI modules
+pub(crate) fn create_string_from_str(s: &str) -> Handle {
+    let mut byte_str = ByteString::new();
+    for &b in s.as_bytes() {
+        byte_str.push(b);
+    }
+    insert(Resource::String(byte_str))
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
