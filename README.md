@@ -1,25 +1,64 @@
-# Rust-based OpenMP/OpenACC Unified Parser (ROUP)
+# ROUP: Rust-based OpenMP Parser
 
-ROUP is a standalone, unified parser for OpenMP and OpenACC, developed using Rust. It is designed as an extensible framework that can be expanded to support additional directive-based programming interfaces.
+**Safe, fast, and comprehensive OpenMP directive parsing**
 
-**🚀 Quick Start:** See [`docs/QUICK_START.md`](docs/QUICK_START.md) for 5-minute setup in Rust, C, or C++
+[![Docs](https://img.shields.io/badge/docs-roup.ouankou.com-blue)](https://roup.ouankou.com)
+[![Tests](https://img.shields.io/badge/tests-342%20passing-green)](https://github.com/ouankou/roup)
+[![Safety](https://img.shields.io/badge/unsafe-0.9%25-yellow)](https://roup.ouankou.com/architecture.html#safety-boundaries)
+
+---
+
+## 🚀 Quick Start
+
+**5-Minute Setup:** Visit [roup.ouankou.com/getting-started.html](https://roup.ouankou.com/getting-started.html)
+
+### Rust
+```toml
+[dependencies]
+roup = "0.1"
+```
+
+### C/C++
+```bash
+cargo build --release
+# Link against target/release/libroup.{a,so,dylib}
+```
+
+**Full guides:** [Building Documentation](https://roup.ouankou.com/building.html)
 
 ## Features
 
-- ✅ **Multi-Language Support:** Native Rust API + C/C++ FFI
-- ✅ **OpenMP 5.0+:** 15+ directives, 50+ clauses
-- ✅ **Safe by Default:** 99.75% safe Rust code
+- ✅ **Multi-Language Support:** Rust, C, and C++ APIs
+- ✅ **OpenMP 6.0:** 120+ directives, 92+ clauses
+- ✅ **Safe by Default:** 99.1% safe Rust code
 - ✅ **Production Ready:** 342 tests, zero warnings
-- ✅ **Modern C++:** C++17 support with RAII wrappers
-- ✅ **Well Documented:** Comprehensive tutorials and API docs
+- ✅ **Modern C++:** C++17 RAII wrappers
+- ✅ **Well Documented:** [Comprehensive website](https://roup.ouankou.com)
+
+## Documentation
+
+📚 **Complete documentation at [roup.ouankou.com](https://roup.ouankou.com)**
+
+**Quick links:**
+- [Getting Started](https://roup.ouankou.com/getting-started.html) - 5-minute setup
+- [Rust Tutorial](https://roup.ouankou.com/rust-tutorial.html) - Complete Rust guide
+- [C Tutorial](https://roup.ouankou.com/c-tutorial.html) - C API with examples
+- [C++ Tutorial](https://roup.ouankou.com/cpp-tutorial.html) - C++17 RAII wrappers
+- [Building Guide](https://roup.ouankou.com/building.html) - Build for any platform
+- [API Reference](https://roup.ouankou.com/api-reference.html) - Complete API docs
+- [Architecture](https://roup.ouankou.com/architecture.html) - Internal design
+- [FAQ](https://roup.ouankou.com/faq.html) - Common questions
+- [Contributing](https://roup.ouankou.com/contributing.html) - How to contribute
 
 ## Language Support
 
-| Language | API Style | Tutorial |
-|----------|-----------|----------|
-| **Rust** | Idiomatic Rust types | Built-in docs (`cargo doc --open`) |
-| **C** | Standard C API (pointers) | [`examples/c/tutorial_basic.c`](examples/c/tutorial_basic.c) (450+ lines, 6 steps) |
-| **C++** | C++17 with RAII wrappers | [`examples/cpp/tutorial_basic.cpp`](examples/cpp/tutorial_basic.cpp) (600+ lines, 6 steps) |
+| Language | API Style | Documentation |
+|----------|-----------|---------------|
+| **Rust** | Idiomatic Rust | [Rust Tutorial](https://roup.ouankou.com/rust-tutorial.html) |
+| **C** | Pointer-based (malloc/free) | [C Tutorial](https://roup.ouankou.com/c-tutorial.html) |
+| **C++** | C++17 RAII wrappers | [C++ Tutorial](https://roup.ouankou.com/cpp-tutorial.html) |
+
+**Examples:** See [`examples/c/tutorial_basic.c`](examples/c/tutorial_basic.c) (433 lines) and [`examples/cpp/`](examples/cpp/) directory.
 
 ## Quick Examples
 
@@ -62,8 +101,10 @@ int main() {
 **Compile:**
 ```bash
 cargo build --release
-clang example.c -L./target/release -lroup -Wl,-rpath,./target/release -o example
+gcc example.c -L./target/release -lroup -lpthread -ldl -lm -o example
 ```
+
+**Full guide:** [C Tutorial](https://roup.ouankou.com/c-tutorial.html)
 
 ### C++
 
@@ -101,86 +142,74 @@ int main() {
 **Compile:**
 ```bash
 cargo build --release
-clang++ -std=c++17 example.cpp -L./target/release -lroup -Wl,-rpath,./target/release -o example
+g++ -std=c++17 example.cpp -L./target/release -lroup -lpthread -ldl -lm -o example
 ```
+
+**Full guide:** [C++ Tutorial](https://roup.ouankou.com/cpp-tutorial.html)
 
 ## Build and Test
 
 ```bash
-# Build library (Rust + C FFI)
+# Build library
 cargo build --release
 
-# Run Rust tests (342 tests)
+# Run all tests (342 tests)
 cargo test
 
-# Build C tutorial
-cd examples/c
-clang tutorial_basic.c -L../../target/release -lroup -Wl,-rpath,../../target/release -o tutorial
-./tutorial
-
-# Build C++ tutorial
-cd examples/cpp
-clang++ -std=c++17 tutorial_basic.cpp -L../../target/release -lroup -Wl,-rpath,../../target/release -o tutorial
-./tutorial
+# Build documentation
+cargo doc --no-deps --open
 ```
+
+**Platform-specific instructions:** [Building Guide](https://roup.ouankou.com/building.html)
 
 ## OpenMP Support
 
-ROUP supports **OpenMP 5.0+** with 15+ directives and 50+ clauses.
+ROUP supports **OpenMP 3.0 through 6.0** with comprehensive coverage:
 
-**Directives:** `parallel`, `for`, `sections`, `single`, `task`, `taskwait`, `target`, `teams`, `distribute`, `barrier`, `critical`, `atomic`, `metadirective`, and more.
+- **120+ directives**: `parallel`, `for`, `task`, `target`, `teams`, `metadirective`, and more
+- **92+ clauses**: `private`, `reduction`, `schedule`, `map`, `depend`, and many others
+- **Version tracking**: Know which OpenMP version introduced each feature
 
-**Clauses:** `private`, `shared`, `reduction`, `schedule`, `num_threads`, `if`, `map`, `device`, `default`, and many others.
-
-See [`docs/OPENMP_SUPPORT.md`](docs/OPENMP_SUPPORT.md) for the complete feature matrix.
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [`QUICK_START.md`](docs/QUICK_START.md) | 5-minute setup for Rust/C/C++ |
-| [`C_FFI_STATUS.md`](docs/C_FFI_STATUS.md) | Complete C API reference |
-| [`TUTORIAL_BUILDING_AND_RUNNING.md`](docs/TUTORIAL_BUILDING_AND_RUNNING.md) | Detailed build instructions |
-| [`IMPLEMENTATION_SUMMARY.md`](docs/IMPLEMENTATION_SUMMARY.md) | Implementation details |
-| [`DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md) | Project evolution (Phases 1-3) |
-| [`examples/c/tutorial_basic.c`](examples/c/tutorial_basic.c) | C tutorial (450+ lines, 6 steps) |
-| [`examples/cpp/tutorial_basic.cpp`](examples/cpp/tutorial_basic.cpp) | C++ tutorial (600+ lines, 6 steps) |
+See the [OpenMP Support Matrix](https://roup.ouankou.com/openmp-support.html) for complete details.
 
 ## Project Structure
 
 ```
 src/
-├── lib.rs              - Rust API + C API exports
-├── c_api.rs            - C API with minimal unsafe (18 functions, 632 lines)
+├── lib.rs              - Rust library entry point
+├── c_api.rs            - C FFI (16 functions, ~60 lines unsafe)
 ├── lexer.rs            - Tokenizer using nom
 └── parser/             - Parser modules
     ├── mod.rs          - Parser entry points
-    ├── clause.rs       - Clause parsing
-    ├── directive.rs    - Directive parsing
+    ├── clause.rs       - Clause parsing (92+ types)
+    ├── directive.rs    - Directive parsing (120+ types)
     └── openmp.rs       - OpenMP-specific definitions
 examples/
-├── c/                  - C tutorial (tutorial_basic.c, 450+ lines)
-└── cpp/                - C++ tutorial (tutorial_basic.cpp, 600+ lines)
-tests/                  - 342 Rust integration tests (10 files)
-docs/                   - Comprehensive documentation (15+ files)
+├── c/                  - C examples (tutorial_basic.c)
+└── cpp/                - C++ examples
+tests/                  - 342 integration tests
+docs/
+└── book/               - mdBook documentation website
 ```
+
+**Architecture details:** [Architecture Guide](https://roup.ouankou.com/architecture.html)
 
 ## Safety
 
-ROUP is written in **99.1% safe Rust** with only 18 unsafe blocks (~60 lines).
+ROUP is written in **99.1% safe Rust** with minimal unsafe code (~60 lines).
 
-The minimal `unsafe` code exists only in the C API (`src/c_api.rs`) for:
-- Converting C strings to Rust (`CStr::from_ptr`)
-- Converting between Rust `Box` and C raw pointers (`Box::into_raw`, `Box::from_raw`)
-- Dereferencing output pointers (NULL-checked)
+**Unsafe code exists only in `src/c_api.rs` for:**
+- Reading C strings (`CStr::from_ptr`)
+- Writing to output pointers (NULL-checked)
+- Converting between Rust `Box` and C raw pointers
 
-All unsafe code is:
-- **NULL-checked** before use
-- **Documented** with safety requirements
-- **Isolated** to the C API boundary
-- **Tested** with both C and C++ tutorials
+**All unsafe code is:**
+- ✅ NULL-checked before use
+- ✅ Documented with safety contracts
+- ✅ Isolated to FFI boundary
+- ✅ Thoroughly tested
 
-See [`docs/MINIMAL_UNSAFE_SUMMARY.md`](docs/MINIMAL_UNSAFE_SUMMARY.md) for detailed analysis.
+**Details:** [Architecture - Safety Boundaries](https://roup.ouankou.com/architecture.html#safety-boundaries)
 
 ## Compiler Requirements
 
@@ -195,48 +224,65 @@ See [`docs/MINIMAL_UNSAFE_SUMMARY.md`](docs/MINIMAL_UNSAFE_SUMMARY.md) for detai
 ## Testing
 
 ```bash
-# Rust tests (342 tests)
+# Run all tests
 cargo test
 
 # Expected output:
-# test result: ok. 342 passed; 0 failed; 1 ignored
+# test result: ok. 342 passed; 0 failed
 ```
 
 **Test Coverage:**
-- Basic directives (parallel, for, task, teams, target)
-- Complex features (reductions, metadirectives, nesting)
-- Edge cases (comments, whitespace, errors)
-- Roundtrip parsing (parse → format → parse)
+- ✅ All directive types (parallel, for, task, target, metadirective)
+- ✅ All clause types (private, reduction, schedule, map, depend)
+- ✅ Edge cases (comments, whitespace, malformed input)
+- ✅ FFI safety (NULL handling, memory management)
+- ✅ Roundtrip parsing (parse → format → parse)
 
-## C FFI API
+**See also:** [Contributing - Testing Guidelines](https://roup.ouankou.com/contributing.html#testing-guidelines)
 
-ROUP exports **18 C functions** for integration with C/C++ projects:
+## C API
 
-**Lifecycle:**
-- `roup_parse()` - Parse directive
+ROUP exports **16 C functions** for seamless C/C++ integration:
+
+**Core functions:**
+- `roup_parse()` - Parse OpenMP directive
 - `roup_directive_free()` - Free directive
-- `roup_clause_free()` - Free clause
-
-**Queries:**
 - `roup_directive_kind()` - Get directive type
-- `roup_directive_clause_count()` - Clause count
+- `roup_directive_clause_count()` - Get clause count
+- `roup_directive_clauses_iter()` - Create clause iterator
 - `roup_clause_kind()` - Get clause type
-- `roup_clause_schedule_kind()` - Schedule details
-- `roup_clause_reduction_operator()` - Reduction operator
 - And more...
 
-See [`docs/C_FFI_STATUS.md`](docs/C_FFI_STATUS.md) for complete API reference.
+**Full API reference:** [API Documentation](https://roup.ouankou.com/api-reference.html#c-api-reference)
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](https://roup.ouankou.com/contributing.html) for:
+
+- Development setup
+- Code quality standards
+- Testing requirements
+- Pull request process
+
+**Questions?** Check the [FAQ](https://roup.ouankou.com/faq.html) or [open a discussion](https://github.com/ouankou/roup/discussions).
 
 ## Learning Resources
 
-**For Rust Learners:**
-This project demonstrates Rust concepts from basics to advanced:
-1. **Basics:** Structs, enums, lifetimes, pattern matching
-2. **Intermediate:** Modules, traits, collections, builder pattern
-3. **Advanced:** Parser combinators, FFI, unsafe boundaries
+ROUP demonstrates Rust concepts from basics to advanced:
 
-Study the commit history and [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md) to see how the project evolved!
+- **Basics:** Structs, enums, pattern matching, ownership
+- **Intermediate:** Traits, generics, error handling, modules
+- **Advanced:** Parser combinators (nom), FFI, unsafe boundaries
+
+**For learners:**
+- Read the [Architecture Guide](https://roup.ouankou.com/architecture.html)
+- Study the [examples](examples/) directory
+- Check the commit history for evolution
+
+---
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
+
+**Copyright © 2024-2025 Anjia Wang**
