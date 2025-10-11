@@ -61,7 +61,8 @@ jobs:
           cargo build --release
           if [ "$RUNNER_OS" != "Windows" ]; then
             cd examples/c
-            gcc -o tutorial_basic tutorial_basic.c -I../../include -L../../target/release -lroup
+            clang -o basic_parse basic_parse.c -I../../include -L../../target/release -lroup
+            clang -o tutorial_basic tutorial_basic.c -I../../include -L../../target/release -lroup
             cd ../..
           fi
         shell: bash
@@ -70,7 +71,7 @@ jobs:
         run: |
           if [ "$RUNNER_OS" != "Windows" ]; then
             cd examples/cpp
-            g++ -std=c++17 -o tutorial_basic tutorial_basic.cpp -I../../include -L../../target/release -lroup
+            clang++ -std=c++17 -o tutorial_basic tutorial_basic.cpp -I../../include -L../../target/release -lroup
             cd ../..
           fi
         shell: bash
