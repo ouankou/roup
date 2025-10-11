@@ -36,7 +36,7 @@ ROUP is a production-ready parser for OpenMP directives, written in safe Rust wi
 ### 🛡️ Safe & Reliable
 
 - **99.1% safe Rust** - Memory safety guaranteed
-- **342 passing tests** - Comprehensive test coverage
+- **352 passing tests** - Comprehensive test coverage
 - **Fuzzing tested** - Handles malformed input gracefully
 - **NULL-safe C API** - Defensive checks at FFI boundary
 

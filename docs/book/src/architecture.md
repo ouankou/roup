@@ -672,10 +672,10 @@ int32_t kind = roup_directive_kind(NULL);  // Returns -1, won't crash
 ### Test Coverage
 
 ```
-Total Tests:    342
-Unit Tests:     280
-Integration:    50
-FFI Tests:      12
+Total Tests:    352
+Unit Tests:     239
+Integration:    51
+Doc Tests:      62
 ```
 
 ### Test Categories
@@ -791,16 +791,16 @@ ROUP's architecture prioritizes:
 1. **Safety**: 99.1% safe Rust, minimal unsafe only at FFI boundary
 2. **Performance**: Zero-copy lexing, minimal allocations
 3. **Usability**: Standard C patterns, clear error messages
-4. **Correctness**: 342 tests, comprehensive OpenMP support
+4. **Correctness**: 352 tests, comprehensive OpenMP support
 
 The three-layer design (Lexer → Parser → FFI) provides a clean separation of concerns while maintaining excellent performance characteristics.
 
 **Key Metrics:**
 - 16 FFI functions
 - ~60 lines of unsafe code (0.9%)
-- 120+ directive types
-- 92+ clause types  
-- 342 tests
+- 95 directives
+- 91 clauses
+- 352 tests
 - ~500ns to parse simple directive
 
 For implementation details, see the source code in `src/`.
