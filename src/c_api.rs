@@ -762,8 +762,10 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
 /// need cleanup. Only heap-allocated variable lists need explicit freeing.
 fn free_clause_data(clause: &OmpClause) {
     unsafe {
-        // Free variable lists if present (private, shared, firstprivate, lastprivate)
-        // Only clause kinds 2-5 have variable lists
+        // Free variable lists if present
+        // Clause kinds with variable lists (see convert_clause):
+        //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
+        // Other kinds use different data (reduction uses ReductionData, schedule uses ScheduleData)
         if clause.kind >= 2 && clause.kind <= 5 {
             let vars_ptr = clause.data.variables;
             if !vars_ptr.is_null() {
