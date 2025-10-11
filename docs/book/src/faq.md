@@ -26,18 +26,22 @@ ROUP (Rust OpenMP Parser) is a library for parsing OpenMP directives from C, C++
 
 ### Is ROUP production-ready?
 
-Yes! ROUP is used in production for:
-- Source code analysis tools
-- IDE extensions and plugins
-- Code transformation tools
-- Static analysis
-- Documentation generators
+**No, ROUP is experimental and under active development.**
 
-**Stability:**
-- 352 tests, all passing
-- Supports OpenMP 3.0 through 6.0
-- Active maintenance
-- Semantic versioning
+**Current status:**
+- ✅ 352 tests, all passing
+- ✅ Supports OpenMP 3.0-6.0 parsing
+- ⚠️ APIs may change between versions
+- ⚠️ Some OpenMP features still being implemented
+- ⚠️ Not recommended for production use yet
+
+**Best for:**
+- Research projects and prototypes
+- Educational purposes
+- Experimental tooling
+- Compiler research
+
+**Production readiness planned for:** Future v1.0 release (timeline TBD)
 
 ### What OpenMP versions are supported?
 
