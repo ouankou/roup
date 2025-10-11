@@ -8,14 +8,14 @@ ROUP provides comprehensive support for **OpenMP 6.0** directives and clauses fo
 
 | Feature | Support |
 |---------|---------|
-| **OpenMP Version** | 6.0 (latest) |
-| **Directives** | 120+ directives (all core + combined forms) |
-| **Clauses** | 92 clause types |
+| **OpenMP Version** | 3.0 - 6.0 |
+| **Directives** | 95 directives (core + combined forms) |
+| **Clauses** | 91 clause types |
 | **Languages** | C, C++, Fortran |
 | **Test Coverage** | 355 automated tests |
 | **Specification** | [OpenMP 6.0 PDF](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf) |
 
-**All directive and clause keywords from OpenMP 6.0 are fully supported.** ✅
+**ROUP supports the vast majority of OpenMP 3.0-6.0 directives and clauses.** ✅
 
 ---
 

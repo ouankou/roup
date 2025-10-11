@@ -42,14 +42,7 @@ Yes! ROUP is used in production for:
 ### What OpenMP versions are supported?
 
 ROUP supports directives and clauses from:
-- ✅ OpenMP 3.0
-- ✅ OpenMP 3.1
-- ✅ OpenMP 4.0
-- ✅ OpenMP 4.5
-- ✅ OpenMP 5.0
-- ✅ OpenMP 5.1
-- ✅ OpenMP 5.2
-- ✅ OpenMP 6.0
+- ✅ OpenMP 3.0-6.0
 
 See the [OpenMP Support Matrix](./openmp-support.md) for detailed coverage.
 
