@@ -1,0 +1,2 @@
+createSrcSidebar('[["roup",["",[["ir",[],["builder.rs","clause.rs","convert.rs","directive.rs","expression.rs","mod.rs","types.rs","validate.rs","variable.rs"]],["parser",[],["clause.rs","directive.rs","mod.rs","openmp.rs"]]],["c_api.rs","lexer.rs","lib.rs"]]],["tester",["",[],["tester.rs"]]]]');
+//{"start":19,"fragment_lengths":[241,33]}

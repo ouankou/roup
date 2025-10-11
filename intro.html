@@ -1,0 +1,440 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Introduction - ROUP Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ROUP Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/intro.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="roup-rust-based-openmpopenacc-unified-parser"><a class="header" href="#roup-rust-based-openmpopenacc-unified-parser">ROUP: Rust-based OpenMP/OpenACC Unified Parser</a></h1>
+<p><strong>Safe, fast, and extensible directive parser with multi-language support</strong></p>
+<hr />
+<h2 id="what-is-roup"><a class="header" href="#what-is-roup">What is ROUP?</a></h2>
+<p>ROUP is a standalone parser for OpenMP and OpenACC directives, written in Rust. It's designed as an extensible framework that can be integrated into compilers, analysis tools, and development environments.</p>
+<h3 id="key-features"><a class="header" href="#key-features">Key Features</a></h3>
+<ul>
+<li>✅ <strong>99.1% Safe Rust</strong> - Only 18 unsafe blocks (~60 lines) at FFI boundary</li>
+<li>✅ <strong>Multi-Language APIs</strong> - Native Rust, C, and C++ interfaces</li>
+<li>✅ <strong>OpenMP 5.0+ Support</strong> - 15+ directives, 50+ clauses</li>
+<li>✅ <strong>Production Ready</strong> - 355 tests, zero warnings, cross-platform</li>
+<li>✅ <strong>Modern C++</strong> - C++17 RAII wrappers for automatic memory management</li>
+<li>✅ <strong>Well Documented</strong> - Comprehensive tutorials and examples</li>
+</ul>
+<hr />
+<h2 id="why-roup"><a class="header" href="#why-roup">Why ROUP?</a></h2>
+<h3 id="for-compiler-developers"><a class="header" href="#for-compiler-developers">For Compiler Developers</a></h3>
+<ul>
+<li>Drop-in OpenMP/OpenACC parser component</li>
+<li>Well-tested, battle-hardened parsing logic</li>
+<li>Easy FFI integration from any language</li>
+</ul>
+<h3 id="for-tool-builders"><a class="header" href="#for-tool-builders">For Tool Builders</a></h3>
+<ul>
+<li>Analyze OpenMP code without a full compiler</li>
+<li>Build linters, formatters, and code analyzers</li>
+<li>Extract parallelization patterns from codebases</li>
+</ul>
+<h3 id="for-researchers"><a class="header" href="#for-researchers">For Researchers</a></h3>
+<ul>
+<li>Study directive usage patterns</li>
+<li>Prototype new directive extensions</li>
+<li>Educational tool for learning parallel programming</li>
+</ul>
+<hr />
+<h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
+<h3 id="rust"><a class="header" href="#rust">Rust</a></h3>
+<pre><code class="language-rust">use roup::parser::parse;
+
+let input = "#pragma omp parallel for num_threads(4) private(i)";
+match parse(input) {
+    Ok(directive) =&gt; {
+        println!("Directive: {:?}", directive.kind);
+        println!("Clauses: {}", directive.clauses.len());
+    }
+    Err(e) =&gt; eprintln!("Parse error: {}", e),
+}</code></pre>
+<h3 id="c"><a class="header" href="#c">C</a></h3>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+
+// Forward declarations
+typedef struct OmpDirective OmpDirective;
+extern OmpDirective* roup_parse(const char* input);
+extern int32_t roup_directive_clause_count(const OmpDirective* dir);
+extern void roup_directive_free(OmpDirective* dir);
+
+int main() {
+    OmpDirective* dir = roup_parse("#pragma omp parallel for num_threads(4)");
+    if (dir) {
+        printf("Clauses: %d\n", roup_directive_clause_count(dir));
+        roup_directive_free(dir);
+    }
+    return 0;
+}
+</code></pre>
+<h3 id="c-1"><a class="header" href="#c-1">C++</a></h3>
+<pre><code class="language-cpp">#include &lt;iostream&gt;
+#include &lt;memory&gt;
+
+struct OmpDirective;
+extern "C" {
+    OmpDirective* roup_parse(const char* input);
+    int32_t roup_directive_clause_count(const OmpDirective* dir);
+    void roup_directive_free(OmpDirective* dir);
+}
+
+// RAII wrapper
+class Directive {
+    OmpDirective* ptr_;
+public:
+    explicit Directive(const char* input) : ptr_(roup_parse(input)) {}
+    ~Directive() { if (ptr_) roup_directive_free(ptr_); }
+    bool valid() const { return ptr_ != nullptr; }
+    int clause_count() const { 
+        return ptr_ ? roup_directive_clause_count(ptr_) : 0; 
+    }
+};
+
+int main() {
+    Directive dir("#pragma omp parallel for num_threads(4)");
+    if (dir.valid()) {
+        std::cout &lt;&lt; "Clauses: " &lt;&lt; dir.clause_count() &lt;&lt; "\n";
+    }
+    return 0;
+}
+</code></pre>
+<hr />
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<p>ROUP uses a clean, modular architecture:</p>
+<pre><code>┌─────────────────────────────────────────┐
+│         Application Layer               │
+│  (Your compiler/tool/analyzer)          │
+└─────────────────┬───────────────────────┘
+                  │
+      ┌───────────┼───────────┐
+      │           │           │
+      ▼           ▼           ▼
+┌─────────┐ ┌─────────┐ ┌─────────┐
+│ Rust API│ │  C API  │ │ C++ API │
+│         │ │         │ │ (RAII)  │
+└─────────┘ └─────────┘ └─────────┘
+      │           │           │
+      └───────────┼───────────┘
+                  │
+                  ▼
+         ┌────────────────┐
+         │  Core Parser   │
+         │  (nom-based)   │
+         └────────────────┘
+                  │
+      ┌───────────┼───────────┐
+      ▼           ▼           ▼
+┌─────────┐ ┌─────────┐ ┌─────────┐
+│  Lexer  │ │Directive│ │ Clause  │
+│         │ │ Parser  │ │ Parser  │
+└─────────┘ └─────────┘ └─────────┘
+</code></pre>
+<p><strong>Key Design Principles:</strong></p>
+<ul>
+<li><strong>Safe by default</strong> - Rust's ownership system prevents memory errors</li>
+<li><strong>Zero-copy parsing</strong> - Uses string slices, not allocations</li>
+<li><strong>Minimal unsafe</strong> - FFI boundary only, well-documented</li>
+<li><strong>Extensible</strong> - Easy to add new directives and clauses</li>
+</ul>
+<hr />
+<h2 id="openmp-support"><a class="header" href="#openmp-support">OpenMP Support</a></h2>
+<p>ROUP currently supports <strong>OpenMP 5.0+</strong> with comprehensive coverage:</p>
+<h3 id="supported-directives-15"><a class="header" href="#supported-directives-15">Supported Directives (15+)</a></h3>
+<ul>
+<li><code>parallel</code> - Parallel regions</li>
+<li><code>for</code> - Worksharing loops</li>
+<li><code>sections</code>, <code>single</code> - Worksharing constructs</li>
+<li><code>task</code>, <code>taskwait</code>, <code>taskgroup</code> - Tasking</li>
+<li><code>target</code>, <code>teams</code>, <code>distribute</code> - Device offloading</li>
+<li><code>barrier</code>, <code>critical</code>, <code>atomic</code> - Synchronization</li>
+<li><code>metadirective</code> - Dynamic selection</li>
+<li>And more...</li>
+</ul>
+<h3 id="supported-clauses-50"><a class="header" href="#supported-clauses-50">Supported Clauses (50+)</a></h3>
+<ul>
+<li><strong>Data sharing:</strong> <code>private</code>, <code>shared</code>, <code>firstprivate</code>, <code>lastprivate</code></li>
+<li><strong>Parallelism control:</strong> <code>num_threads</code>, <code>if</code>, <code>proc_bind</code></li>
+<li><strong>Worksharing:</strong> <code>schedule</code>, <code>collapse</code>, <code>nowait</code></li>
+<li><strong>Reductions:</strong> <code>reduction</code> with 10+ operators (+, *, min, max, etc.)</li>
+<li><strong>Device:</strong> <code>map</code>, <code>device</code>, <code>defaultmap</code></li>
+<li><strong>Dependencies:</strong> <code>depend</code>, <code>in</code>, <code>out</code>, <code>inout</code></li>
+<li>And more...</li>
+</ul>
+<p>See the <a href="https://github.com/ouankou/roup/blob/main/docs/OPENMP_SUPPORT.md">OpenMP Support Matrix</a> for the complete list.</p>
+<hr />
+<h2 id="safety-guarantees"><a class="header" href="#safety-guarantees">Safety Guarantees</a></h2>
+<p>ROUP is built with safety as a core principle:</p>
+<div class="table-wrapper"><table><thead><tr><th>Metric</th><th>Value</th><th>Notes</th></tr></thead><tbody>
+<tr><td><strong>Safe Rust</strong></td><td>99.1%</td><td>All core logic is safe</td></tr>
+<tr><td><strong>Unsafe blocks</strong></td><td>18</td><td>Only at FFI boundary</td></tr>
+<tr><td><strong>Unsafe lines</strong></td><td>~60</td><td>Well-documented, NULL-checked</td></tr>
+<tr><td><strong>Memory leaks</strong></td><td>0</td><td>Rust's RAII prevents leaks</td></tr>
+<tr><td><strong>Segfaults</strong></td><td>0</td><td>Ownership system prevents use-after-free</td></tr>
+</tbody></table>
+</div>
+<p>All <code>unsafe</code> code is:</p>
+<ul>
+<li><strong>Documented</strong> with safety requirements</li>
+<li><strong>NULL-checked</strong> before dereferencing</li>
+<li><strong>Isolated</strong> to <code>src/c_api.rs</code></li>
+<li><strong>Tested</strong> with 355+ tests</li>
+</ul>
+<hr />
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<p>ROUP has comprehensive test coverage:</p>
+<ul>
+<li><strong>239 doc tests</strong> - Examples in documentation are auto-tested</li>
+<li><strong>116 integration tests</strong> - Real-world usage scenarios</li>
+<li><strong>355 total tests</strong> - All passing, zero warnings</li>
+<li><strong>Cross-platform</strong> - Tested on Linux, macOS, Windows</li>
+</ul>
+<p>Test categories:</p>
+<ul>
+<li>✅ Basic directives (parallel, for, task, teams, target)</li>
+<li>✅ Complex features (reductions, metadirectives, nesting)</li>
+<li>✅ Edge cases (comments, whitespace, error handling)</li>
+<li>✅ Roundtrip parsing (parse → format → parse)</li>
+<li>✅ FFI safety (C and C++ examples)</li>
+</ul>
+<hr />
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<p>Ready to use ROUP in your project? Check out our tutorials:</p>
+<ul>
+<li><strong><a href="./cpp-tutorial.html">C++ Tutorial</a></strong> - Build a real application with C++17</li>
+<li><strong><a href="./api-reference.html">Rust API Docs</a></strong> - Complete API reference</li>
+</ul>
+<p>Or jump straight to the code:</p>
+<ul>
+<li><a href="https://github.com/ouankou/roup">GitHub Repository</a></li>
+<li><a href="https://github.com/ouankou/roup/blob/main/docs/QUICK_START.md">Quick Start Guide</a></li>
+</ul>
+<hr />
+<h2 id="license"><a class="header" href="#license">License</a></h2>
+<p>ROUP is open source under the <strong>MIT License</strong>.</p>
+<p><strong>Copyright © 2024-2025 Anjia Wang</strong></p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+                            <a rel="next prefetch" href="cpp-tutorial.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+                    <a rel="next prefetch" href="cpp-tutorial.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

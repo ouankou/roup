@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["is_identifier_char","lex_clause","lex_directive","lex_identifier_token","lex_omp","lex_pragma","skip_space1_and_comments","skip_space_and_comments"]};

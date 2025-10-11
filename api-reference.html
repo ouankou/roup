@@ -1,0 +1,546 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Rust API Documentation - ROUP Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ROUP Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/api-reference.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h1>
+<p>ROUP provides comprehensive APIs for Rust, C, and C++.</p>
+<hr />
+<h2 id="rust-api-documentation"><a class="header" href="#rust-api-documentation">Rust API Documentation</a></h2>
+<p>The complete Rust API documentation is auto-generated from the source code using <code>rustdoc</code>.</p>
+<p><strong><a href="./api/roup/index.html">→ View Rust API Documentation</a></strong></p>
+<h3 id="key-modules"><a class="header" href="#key-modules">Key Modules</a></h3>
+<ul>
+<li>
+<p><strong><code>roup::parser</code></strong> - Main parsing functions</p>
+<ul>
+<li><code>parse()</code> - Parse OpenMP directive from string</li>
+<li><code>parse_with_config()</code> - Parse with custom configuration</li>
+</ul>
+</li>
+<li>
+<p><strong><code>roup::ir::directive</code></strong> - Directive types and structures</p>
+<ul>
+<li><code>DirectiveIR</code> - Main directive structure</li>
+<li><code>DirectiveKind</code> - Enum of directive types</li>
+</ul>
+</li>
+<li>
+<p><strong><code>roup::ir::clause</code></strong> - Clause types and data</p>
+<ul>
+<li><code>Clause</code> - Clause structure</li>
+<li><code>ClauseKind</code> - Enum of clause types</li>
+<li><code>ScheduleKind</code>, <code>ReductionOperator</code>, etc.</li>
+</ul>
+</li>
+<li>
+<p><strong><code>roup::ir::types</code></strong> - Common types</p>
+<ul>
+<li><code>Language</code> - Source language (C, C++, Fortran)</li>
+<li><code>SourceLocation</code> - Position in source code</li>
+</ul>
+</li>
+</ul>
+<h3 id="quick-links"><a class="header" href="#quick-links">Quick Links</a></h3>
+<ul>
+<li><a href="./api/roup/parser/index.html">Parse Functions</a></li>
+<li><a href="./api/roup/ir/directive/index.html">Directive Types</a></li>
+<li><a href="./api/roup/ir/clause/index.html">Clause Types</a></li>
+</ul>
+<hr />
+<h2 id="c-api-reference"><a class="header" href="#c-api-reference">C API Reference</a></h2>
+<p>ROUP exports 18 C functions for FFI integration. All functions are documented in the rustdoc, but here's a quick reference:</p>
+<h3 id="lifecycle-functions"><a class="header" href="#lifecycle-functions">Lifecycle Functions</a></h3>
+<pre><code class="language-c">// Parse OpenMP directive from C string
+OmpDirective* roup_parse(const char* input);
+
+// Free directive (required after parsing)
+void roup_directive_free(OmpDirective* directive);
+
+// Free clause (usually not needed - owned by directive)
+void roup_clause_free(OmpClause* clause);
+</code></pre>
+<h3 id="directive-query-functions"><a class="header" href="#directive-query-functions">Directive Query Functions</a></h3>
+<pre><code class="language-c">// Get directive kind (0=parallel, 1=for, etc.)
+int32_t roup_directive_kind(const OmpDirective* directive);
+
+// Get number of clauses
+int32_t roup_directive_clause_count(const OmpDirective* directive);
+
+// Create clause iterator
+OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
+</code></pre>
+<h3 id="iterator-functions"><a class="header" href="#iterator-functions">Iterator Functions</a></h3>
+<pre><code class="language-c">// Get next clause from iterator
+// Returns 1 if clause available, 0 if done
+int32_t roup_clause_iterator_next(OmpClauseIterator* iter, OmpClause** out);
+
+// Free iterator
+void roup_clause_iterator_free(OmpClauseIterator* iter);
+</code></pre>
+<h3 id="clause-query-functions"><a class="header" href="#clause-query-functions">Clause Query Functions</a></h3>
+<pre><code class="language-c">// Get clause kind (0=num_threads, 2=private, etc.)
+int32_t roup_clause_kind(const OmpClause* clause);
+
+// Get schedule kind (0=static, 1=dynamic, etc.)
+int32_t roup_clause_schedule_kind(const OmpClause* clause);
+
+// Get reduction operator (0=+, 1=-, 2=*, etc.)
+int32_t roup_clause_reduction_operator(const OmpClause* clause);
+
+// Get default data sharing (0=shared, 1=none)
+int32_t roup_clause_default_data_sharing(const OmpClause* clause);
+</code></pre>
+<h3 id="variable-list-functions"><a class="header" href="#variable-list-functions">Variable List Functions</a></h3>
+<pre><code class="language-c">// Get variable list from clause (e.g., private(x, y, z))
+OmpStringList* roup_clause_variables(const OmpClause* clause);
+
+// Get length of string list
+int32_t roup_string_list_len(const OmpStringList* list);
+
+// Get string at index
+const char* roup_string_list_get(const OmpStringList* list, int32_t index);
+
+// Free string list
+void roup_string_list_free(OmpStringList* list);
+</code></pre>
+<h3 id="mapping-tables"><a class="header" href="#mapping-tables">Mapping Tables</a></h3>
+<blockquote>
+<p><strong>Important:</strong> These values match the exact FFI enum discriminants in <code>include/roup.h</code>. Use these when decoding return values from <code>roup_directive_kind()</code>, <code>roup_clause_type()</code>, etc.</p>
+</blockquote>
+<h4 id="directive-kinds-directivekind-enum"><a class="header" href="#directive-kinds-directivekind-enum">Directive Kinds (DirectiveKind enum)</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Directive</th><th>Value</th><th>Directive</th></tr></thead><tbody>
+<tr><td>0</td><td><code>parallel</code></td><td>37</td><td><code>teams_distribute</code></td></tr>
+<tr><td>1</td><td><code>for</code></td><td>38</td><td><code>teams_distribute_simd</code></td></tr>
+<tr><td>2</td><td><code>sections</code></td><td>39</td><td><code>target_teams_distribute</code></td></tr>
+<tr><td>3</td><td><code>section</code></td><td>40</td><td><code>target_teams_distribute_simd</code></td></tr>
+<tr><td>4</td><td><code>single</code></td><td>41</td><td><code>distribute_parallel_for</code></td></tr>
+<tr><td>5</td><td><code>task</code></td><td>42</td><td><code>distribute_parallel_for_simd</code></td></tr>
+<tr><td>6</td><td><code>master</code></td><td>43</td><td><code>distribute_simd</code></td></tr>
+<tr><td>7</td><td><code>critical</code></td><td>44</td><td><code>parallel_for_simd</code></td></tr>
+<tr><td>8</td><td><code>barrier</code></td><td>45</td><td><code>taskloop_simd</code></td></tr>
+<tr><td>9</td><td><code>taskwait</code></td><td>46</td><td><code>master_taskloop_simd</code></td></tr>
+<tr><td>10</td><td><code>taskgroup</code></td><td>47</td><td><code>parallel_master_taskloop_simd</code></td></tr>
+<tr><td>11</td><td><code>atomic</code></td><td>48</td><td><code>target_parallel_for_simd</code></td></tr>
+<tr><td>12</td><td><code>flush</code></td><td>49</td><td><code>teams_distribute_parallel_for</code></td></tr>
+<tr><td>13</td><td><code>ordered</code></td><td>50</td><td><code>teams_distribute_parallel_for_simd</code></td></tr>
+<tr><td>14</td><td><code>simd</code></td><td>51</td><td><code>target_teams_distribute_parallel_for</code></td></tr>
+<tr><td>15</td><td><code>target</code></td><td>52</td><td><code>target_teams_distribute_parallel_for_simd</code></td></tr>
+<tr><td>16</td><td><code>target_data</code></td><td>53</td><td><code>loop</code></td></tr>
+<tr><td>17</td><td><code>target_enter_data</code></td><td>54</td><td><code>parallel_loop</code></td></tr>
+<tr><td>18</td><td><code>target_exit_data</code></td><td>55</td><td><code>teams_loop</code></td></tr>
+<tr><td>19</td><td><code>target_update</code></td><td>56</td><td><code>target_loop</code></td></tr>
+<tr><td>20</td><td><code>declare_target</code></td><td>57</td><td><code>target_parallel_loop</code></td></tr>
+<tr><td>21</td><td><code>teams</code></td><td>58</td><td><code>target_teams_loop</code></td></tr>
+<tr><td>22</td><td><code>distribute</code></td><td>59</td><td><code>masked</code></td></tr>
+<tr><td>23</td><td><code>declare_simd</code></td><td>60</td><td><code>scope</code></td></tr>
+<tr><td>24</td><td><code>declare_reduction</code></td><td>61</td><td><code>metadirective</code></td></tr>
+<tr><td>25</td><td><code>taskloop</code></td><td>62</td><td><code>declare_variant</code></td></tr>
+<tr><td>26</td><td><code>cancel</code></td><td>63</td><td><code>requires</code></td></tr>
+<tr><td>27</td><td><code>cancellation_point</code></td><td>64</td><td><code>assume</code></td></tr>
+<tr><td>28</td><td><code>parallel_for</code></td><td>65</td><td><code>nothing</code></td></tr>
+<tr><td>29</td><td><code>parallel_sections</code></td><td>66</td><td><code>error</code></td></tr>
+<tr><td>30</td><td><code>parallel_master</code></td><td>67</td><td><code>scan</code></td></tr>
+<tr><td>31</td><td><code>master_taskloop</code></td><td>68</td><td><code>depobj</code></td></tr>
+<tr><td>32</td><td><code>parallel_master_taskloop</code></td><td>69</td><td><code>tile</code></td></tr>
+<tr><td>33</td><td><code>target_parallel</code></td><td>70</td><td><code>unroll</code></td></tr>
+<tr><td>34</td><td><code>target_parallel_for</code></td><td>71</td><td><code>allocate</code></td></tr>
+<tr><td>35</td><td><code>target_simd</code></td><td>72</td><td><code>threadprivate</code></td></tr>
+<tr><td>36</td><td><code>target_teams</code></td><td>73</td><td><code>declare_mapper</code></td></tr>
+</tbody></table>
+</div>
+<h4 id="clause-kinds-clausetype-enum"><a class="header" href="#clause-kinds-clausetype-enum">Clause Kinds (ClauseType enum)</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Clause</th><th>Value</th><th>Clause</th></tr></thead><tbody>
+<tr><td>0</td><td><code>if</code></td><td>46</td><td><code>detach</code></td></tr>
+<tr><td>1</td><td><code>num_threads</code></td><td>47</td><td><code>affinity</code></td></tr>
+<tr><td>2</td><td><code>default</code></td><td>48</td><td><code>bind</code></td></tr>
+<tr><td>3</td><td><code>private</code></td><td>49</td><td><code>filter</code></td></tr>
+<tr><td>4</td><td><code>firstprivate</code></td><td>50</td><td><code>allocate</code></td></tr>
+<tr><td>5</td><td><code>lastprivate</code></td><td>51</td><td><code>allocator</code></td></tr>
+<tr><td>6</td><td><code>shared</code></td><td>52</td><td><code>uses_allocators</code></td></tr>
+<tr><td>7</td><td><code>reduction</code></td><td>53</td><td><code>inclusive</code></td></tr>
+<tr><td>8</td><td><code>copyin</code></td><td>54</td><td><code>exclusive</code></td></tr>
+<tr><td>9</td><td><code>copyprivate</code></td><td>55</td><td><code>when</code></td></tr>
+<tr><td>10</td><td><code>schedule</code></td><td>56</td><td><code>match</code></td></tr>
+<tr><td>11</td><td><code>ordered</code></td><td>57</td><td><code>at</code></td></tr>
+<tr><td>12</td><td><code>nowait</code></td><td>58</td><td><code>severity</code></td></tr>
+<tr><td>13</td><td><code>collapse</code></td><td>59</td><td><code>message</code></td></tr>
+<tr><td>14</td><td><code>untied</code></td><td>60</td><td><code>novariants</code></td></tr>
+<tr><td>15</td><td><code>final</code></td><td>61</td><td><code>nocontext</code></td></tr>
+<tr><td>16</td><td><code>mergeable</code></td><td>62</td><td><code>adjust_args</code></td></tr>
+<tr><td>17</td><td><code>depend</code></td><td>63</td><td><code>append_args</code></td></tr>
+<tr><td>18</td><td><code>priority</code></td><td>64</td><td><code>full</code></td></tr>
+<tr><td>19</td><td><code>grainsize</code></td><td>65</td><td><code>partial</code></td></tr>
+<tr><td>20</td><td><code>num_tasks</code></td><td>66</td><td><code>sizes</code></td></tr>
+<tr><td>21</td><td><code>nogroup</code></td><td>67</td><td><code>holds</code></td></tr>
+<tr><td>22</td><td><code>threads</code></td><td>68</td><td><code>absent</code></td></tr>
+<tr><td>23</td><td><code>simd</code></td><td>69</td><td><code>contains</code></td></tr>
+<tr><td>24</td><td><code>aligned</code></td><td>70</td><td><code>atomic_default_mem_order</code></td></tr>
+<tr><td>25</td><td><code>linear</code></td><td>71</td><td><code>dynamic_allocators</code></td></tr>
+<tr><td>26</td><td><code>uniform</code></td><td>72</td><td><code>reverse_offload</code></td></tr>
+<tr><td>27</td><td><code>inbranch</code></td><td>73</td><td><code>unified_address</code></td></tr>
+<tr><td>28</td><td><code>notinbranch</code></td><td>74</td><td><code>unified_shared_memory</code></td></tr>
+<tr><td>29</td><td><code>safelen</code></td><td>75</td><td><code>compare</code></td></tr>
+<tr><td>30</td><td><code>simdlen</code></td><td>76</td><td><code>fail</code></td></tr>
+<tr><td>31</td><td><code>device</code></td><td>77</td><td><code>seq_cst</code></td></tr>
+<tr><td>32</td><td><code>map</code></td><td>78</td><td><code>acq_rel</code></td></tr>
+<tr><td>33</td><td><code>num_teams</code></td><td>79</td><td><code>release</code></td></tr>
+<tr><td>34</td><td><code>thread_limit</code></td><td>80</td><td><code>acquire</code></td></tr>
+<tr><td>35</td><td><code>dist_schedule</code></td><td>81</td><td><code>relaxed</code></td></tr>
+<tr><td>36</td><td><code>proc_bind</code></td><td>82</td><td><code>hint</code></td></tr>
+<tr><td>37</td><td><code>defaultmap</code></td><td>83</td><td><code>update</code></td></tr>
+<tr><td>38</td><td><code>to</code></td><td>84</td><td><code>capture</code></td></tr>
+<tr><td>39</td><td><code>from</code></td><td>85</td><td><code>read</code></td></tr>
+<tr><td>40</td><td><code>use_device_ptr</code></td><td>86</td><td><code>write</code></td></tr>
+<tr><td>41</td><td><code>is_device_ptr</code></td><td>87</td><td><code>init</code></td></tr>
+<tr><td>42</td><td><code>link</code></td><td>88</td><td><code>use_device_addr</code></td></tr>
+<tr><td>43</td><td><code>nontemporal</code></td><td>89</td><td><code>has_device_addr</code></td></tr>
+<tr><td>44</td><td><code>order</code></td><td>90</td><td><code>enter</code></td></tr>
+<tr><td>45</td><td><code>destroy</code></td><td>91</td><td><code>doacross</code></td></tr>
+</tbody></table>
+</div>
+<h4 id="schedule-kinds-schedulekind-enum"><a class="header" href="#schedule-kinds-schedulekind-enum">Schedule Kinds (ScheduleKind enum)</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Schedule</th></tr></thead><tbody>
+<tr><td>0</td><td><code>static</code></td></tr>
+<tr><td>1</td><td><code>dynamic</code></td></tr>
+<tr><td>2</td><td><code>guided</code></td></tr>
+<tr><td>3</td><td><code>auto</code></td></tr>
+<tr><td>4</td><td><code>runtime</code></td></tr>
+</tbody></table>
+</div>
+<h4 id="default-kinds-defaultkind-enum"><a class="header" href="#default-kinds-defaultkind-enum">Default Kinds (DefaultKind enum)</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Default</th></tr></thead><tbody>
+<tr><td>0</td><td><code>shared</code></td></tr>
+<tr><td>1</td><td><code>none</code></td></tr>
+<tr><td>2</td><td><code>private</code></td></tr>
+<tr><td>3</td><td><code>firstprivate</code></td></tr>
+</tbody></table>
+</div>
+<h4 id="reduction-operators-reductionoperator-enum"><a class="header" href="#reduction-operators-reductionoperator-enum">Reduction Operators (ReductionOperator enum)</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Operator</th></tr></thead><tbody>
+<tr><td>0</td><td><code>+</code> (add)</td></tr>
+<tr><td>1</td><td><code>*</code> (multiply)</td></tr>
+<tr><td>2</td><td><code>-</code> (subtract)</td></tr>
+<tr><td>3</td><td><code>&amp;</code> (bitwise AND)</td></tr>
+<tr><td>4</td><td>`</td></tr>
+<tr><td>5</td><td><code>^</code> (bitwise XOR)</td></tr>
+<tr><td>6</td><td><code>&amp;&amp;</code> (logical AND)</td></tr>
+<tr><td>7</td><td>`</td></tr>
+<tr><td>8</td><td><code>min</code> (minimum)</td></tr>
+<tr><td>9</td><td><code>max</code> (maximum)</td></tr>
+<tr><td>10</td><td><code>custom</code> (user-defined)</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="c-raii-wrappers"><a class="header" href="#c-raii-wrappers">C++ RAII Wrappers</a></h2>
+<p>For modern C++17 applications, use the RAII wrappers provided in the <a href="./cpp-tutorial.html#step-2-create-raii-wrappers-modern-c">C++ Tutorial</a>.</p>
+<p><strong>Key classes:</strong></p>
+<ul>
+<li><code>roup::Directive</code> - Auto-frees directive on destruction</li>
+<li><code>roup::ClauseIterator</code> - Auto-frees iterator on destruction</li>
+<li><code>roup::StringList</code> - Auto-frees string list on destruction</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-cpp">#include "roup_wrapper.hpp"
+
+roup::Directive dir("#pragma omp parallel for num_threads(4)");
+if (dir) {
+    std::cout &lt;&lt; "Kind: " &lt;&lt; dir.kind() &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Clauses: " &lt;&lt; dir.clause_count() &lt;&lt; std::endl;
+}
+// Automatic cleanup when dir goes out of scope
+</code></pre>
+<hr />
+<h2 id="memory-management-rules"><a class="header" href="#memory-management-rules">Memory Management Rules</a></h2>
+<h3 id="rust-api"><a class="header" href="#rust-api">Rust API</a></h3>
+<ul>
+<li><strong>Automatic</strong> - Rust's ownership system handles everything</li>
+<li>No manual <code>free()</code> needed</li>
+</ul>
+<h3 id="c-api"><a class="header" href="#c-api">C API</a></h3>
+<ul>
+<li><strong>Manual</strong> - Must call <code>_free()</code> functions</li>
+<li><strong>Directive:</strong> Call <code>roup_directive_free()</code> when done</li>
+<li><strong>Iterator:</strong> Call <code>roup_clause_iterator_free()</code> when done</li>
+<li><strong>String List:</strong> Call <code>roup_string_list_free()</code> when done</li>
+<li><strong>Clauses:</strong> Do NOT free - owned by directive</li>
+</ul>
+<h3 id="c-raii-api"><a class="header" href="#c-raii-api">C++ RAII API</a></h3>
+<ul>
+<li><strong>Automatic</strong> - RAII wrappers call <code>_free()</code> in destructors</li>
+<li>Exception-safe - cleanup happens even with exceptions</li>
+</ul>
+<hr />
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="rust"><a class="header" href="#rust">Rust</a></h3>
+<pre><code class="language-rust">match parse(input) {
+    Ok(directive) =&gt; { /* use directive */ },
+    Err(e) =&gt; eprintln!("Parse error: {}", e),
+}</code></pre>
+<h3 id="c"><a class="header" href="#c">C</a></h3>
+<pre><code class="language-c">OmpDirective* dir = roup_parse(input);
+if (dir == NULL) {
+    fprintf(stderr, "Parse failed\n");
+    return 1;
+}
+// Use dir...
+roup_directive_free(dir);
+</code></pre>
+<h3 id="c-1"><a class="header" href="#c-1">C++</a></h3>
+<pre><code class="language-cpp">roup::Directive dir(input);
+if (!dir) {
+    std::cerr &lt;&lt; "Parse failed\n";
+    return 1;
+}
+// Use dir...
+</code></pre>
+<hr />
+<h2 id="thread-safety"><a class="header" href="#thread-safety">Thread Safety</a></h2>
+<ul>
+<li>✅ <strong>Parsing is thread-safe</strong> - Multiple threads can call <code>parse()</code> simultaneously</li>
+<li>✅ <strong>Read operations are thread-safe</strong> - Query functions are read-only</li>
+<li>⚠️ <strong>Modification is not thread-safe</strong> - Don't mutate same directive from multiple threads</li>
+<li>⚠️ <strong>Iterators are single-threaded</strong> - One iterator per thread</li>
+</ul>
+<hr />
+<h2 id="performance-tips"><a class="header" href="#performance-tips">Performance Tips</a></h2>
+<ol>
+<li><strong>Reuse parsed directives</strong> when possible</li>
+<li><strong>Avoid reparsing</strong> the same string repeatedly</li>
+<li><strong>Use iterators</strong> instead of random access</li>
+<li><strong>Batch operations</strong> to minimize FFI overhead (C/C++)</li>
+<li><strong>Profile first</strong> - parsing is usually not the bottleneck</li>
+</ol>
+<hr />
+<h2 id="further-reading"><a class="header" href="#further-reading">Further Reading</a></h2>
+<ul>
+<li><a href="./api/roup/index.html">Rust API Documentation</a> - Complete rustdoc</li>
+<li><a href="./cpp-tutorial.html">C++ Tutorial</a> - Real-world C++ examples</li>
+<li><a href="https://github.com/ouankou/roup">GitHub Repository</a> - Source code and examples</li>
+<li><a href="https://github.com/ouankou/roup/blob/main/docs/QUICK_START.md">Quick Start Guide</a> - Get started in 5 minutes</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="cpp-tutorial.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="cpp-tutorial.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

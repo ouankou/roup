@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ClauseKind","ClauseRule","DirectiveRule"],"fn":["parse_omp_directive"],"mod":["openmp"],"struct":["Clause","ClauseRegistry","ClauseRegistryBuilder","Directive","DirectiveRegistry","DirectiveRegistryBuilder","Parser"]};

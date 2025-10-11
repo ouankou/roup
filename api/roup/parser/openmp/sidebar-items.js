@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["OpenMpClause","OpenMpDirective"],"fn":["clause_registry","directive_registry","parser"]};

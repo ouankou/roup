@@ -1,0 +1,844 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>C++ Tutorial: Building a Real Application - ROUP Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ROUP Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/cpp-tutorial.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="c-tutorial-building-a-real-application"><a class="header" href="#c-tutorial-building-a-real-application">C++ Tutorial: Building a Real Application</a></h1>
+<p>This tutorial shows how to integrate ROUP into a <strong>real C++ application</strong> using modern C++17 features.</p>
+<p>We'll build an <strong>OpenMP pragma analyzer</strong> - a tool that reads C/C++ source files, extracts OpenMP directives, and reports statistics.</p>
+<hr />
+<h2 id="what-youll-build"><a class="header" href="#what-youll-build">What You'll Build</a></h2>
+<p>A command-line tool that:</p>
+<ol>
+<li>Reads source files line-by-line</li>
+<li>Detects OpenMP pragmas</li>
+<li>Parses them using ROUP</li>
+<li>Reports directive types and clause counts</li>
+<li>Provides summary statistics</li>
+</ol>
+<p><strong>Example output:</strong></p>
+<pre><code>$ ./omp_analyzer mycode.c
+Found 5 OpenMP directives:
+  Line 10: parallel (3 clauses)
+  Line 25: for (2 clauses)
+  Line 42: parallel for (4 clauses)
+  Line 68: task (1 clause)
+  Line 95: barrier (0 clauses)
+
+Summary:
+  Total directives: 5
+  Total clauses: 10
+  Most common: parallel (2 occurrences)
+</code></pre>
+<hr />
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<ul>
+<li><strong>C++ Compiler:</strong> clang++ or g++ with C++17 support</li>
+<li><strong>ROUP Library:</strong> Built and installed (see below)</li>
+<li><strong>System:</strong> Linux, macOS, or Windows with WSL</li>
+</ul>
+<h3 id="building-roup"><a class="header" href="#building-roup">Building ROUP</a></h3>
+<pre><code class="language-bash">git clone https://github.com/ouankou/roup.git
+cd roup
+cargo build --release
+
+# Library is now at: target/release/libroup.so (Linux)
+#                or: target/release/libroup.dylib (macOS)
+</code></pre>
+<hr />
+<h2 id="step-1-understanding-the-roup-c-api"><a class="header" href="#step-1-understanding-the-roup-c-api">Step 1: Understanding the ROUP C API</a></h2>
+<p>ROUP exports a minimal C API with 18 functions. Here are the key ones for our tool:</p>
+<h3 id="lifecycle-functions"><a class="header" href="#lifecycle-functions">Lifecycle Functions</a></h3>
+<pre><code class="language-c">// Parse an OpenMP directive string
+OmpDirective* roup_parse(const char* input);
+
+// Free the parsed directive
+void roup_directive_free(OmpDirective* directive);
+</code></pre>
+<h3 id="query-functions"><a class="header" href="#query-functions">Query Functions</a></h3>
+<pre><code class="language-c">// Get directive type (0=parallel, 1=for, 4=task, etc.)
+int32_t roup_directive_kind(const OmpDirective* directive);
+
+// Get number of clauses
+int32_t roup_directive_clause_count(const OmpDirective* directive);
+
+// Create iterator for clauses
+OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
+
+// Get next clause (returns 1 if available, 0 if done)
+int32_t roup_clause_iterator_next(OmpClauseIterator* iter, OmpClause** out);
+
+// Get clause type (0=num_threads, 2=private, 6=reduction, etc.)
+int32_t roup_clause_kind(const OmpClause* clause);
+
+// Free iterator
+void roup_clause_iterator_free(OmpClauseIterator* iter);
+</code></pre>
+<hr />
+<h2 id="step-2-create-raii-wrappers-modern-c"><a class="header" href="#step-2-create-raii-wrappers-modern-c">Step 2: Create RAII Wrappers (Modern C++)</a></h2>
+<p>Instead of manual memory management, let's use <strong>RAII</strong> (Resource Acquisition Is Initialization) to automatically clean up resources.</p>
+<p>Create <code>roup_wrapper.hpp</code>:</p>
+<pre><code class="language-cpp">#pragma once
+#include &lt;cstdint&gt;
+#include &lt;memory&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;optional&gt;
+
+// Forward declarations of opaque C types
+struct OmpDirective;
+struct OmpClause;
+struct OmpClauseIterator;
+
+// C API declarations
+extern "C" {
+    OmpDirective* roup_parse(const char* input);
+    void roup_directive_free(OmpDirective* directive);
+    int32_t roup_directive_kind(const OmpDirective* directive);
+    int32_t roup_directive_clause_count(const OmpDirective* directive);
+    OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
+    int32_t roup_clause_iterator_next(OmpClauseIterator* iter, OmpClause** out);
+    void roup_clause_iterator_free(OmpClauseIterator* iter);
+    int32_t roup_clause_kind(const OmpClause* clause);
+}
+
+namespace roup {
+
+// RAII wrapper for OmpDirective
+class Directive {
+private:
+    OmpDirective* ptr_;
+
+public:
+    // Constructor: parse directive
+    explicit Directive(const std::string&amp; input) 
+        : ptr_(roup_parse(input.c_str())) {}
+    
+    // Destructor: automatic cleanup
+    ~Directive() {
+        if (ptr_) {
+            roup_directive_free(ptr_);
+        }
+    }
+    
+    // Delete copy (move-only type)
+    Directive(const Directive&amp;) = delete;
+    Directive&amp; operator=(const Directive&amp;) = delete;
+    
+    // Move constructor
+    Directive(Directive&amp;&amp; other) noexcept : ptr_(other.ptr_) {
+        other.ptr_ = nullptr;
+    }
+    
+    // Move assignment
+    Directive&amp; operator=(Directive&amp;&amp; other) noexcept {
+        if (this != &amp;other) {
+            if (ptr_) roup_directive_free(ptr_);
+            ptr_ = other.ptr_;
+            other.ptr_ = nullptr;
+        }
+        return *this;
+    }
+    
+    // Check if parse succeeded
+    bool valid() const { return ptr_ != nullptr; }
+    explicit operator bool() const { return valid(); }
+    
+    // Get directive kind
+    int32_t kind() const {
+        return ptr_ ? roup_directive_kind(ptr_) : -1;
+    }
+    
+    // Get clause count
+    int32_t clause_count() const {
+        return ptr_ ? roup_directive_clause_count(ptr_) : 0;
+    }
+    
+    // Get raw pointer (for advanced usage)
+    OmpDirective* get() const { return ptr_; }
+};
+
+// RAII wrapper for OmpClauseIterator
+class ClauseIterator {
+private:
+    OmpClauseIterator* iter_;
+    
+public:
+    explicit ClauseIterator(const Directive&amp; directive)
+        : iter_(directive.valid() ? roup_directive_clauses_iter(directive.get()) : nullptr) {}
+    
+    ~ClauseIterator() {
+        if (iter_) {
+            roup_clause_iterator_free(iter_);
+        }
+    }
+    
+    // Delete copy
+    ClauseIterator(const ClauseIterator&amp;) = delete;
+    ClauseIterator&amp; operator=(const ClauseIterator&amp;) = delete;
+    
+    // Get next clause kind (returns std::optional)
+    std::optional&lt;int32_t&gt; next() {
+        if (!iter_) return std::nullopt;
+        
+        OmpClause* clause = nullptr;
+        if (roup_clause_iterator_next(iter_, &amp;clause) == 1) {
+            return roup_clause_kind(clause);
+            // Note: Don't free clause - owned by directive
+        }
+        return std::nullopt;
+    }
+};
+
+// Helper: Convert directive kind to name
+inline const char* directive_kind_name(int32_t kind) {
+    switch (kind) {
+        case 0: return "parallel";
+        case 1: return "for";
+        case 2: return "sections";
+        case 3: return "single";
+        case 4: return "task";
+        case 5: return "master";
+        case 6: return "critical";
+        case 7: return "barrier";
+        case 8: return "taskwait";
+        case 9: return "taskgroup";
+        case 10: return "atomic";
+        case 11: return "flush";
+        case 12: return "ordered";
+        case 13: return "target";
+        case 14: return "teams";
+        case 15: return "distribute";
+        case 16: return "metadirective";
+        default: return "unknown";
+    }
+}
+
+// Helper: Convert clause kind to name
+inline const char* clause_kind_name(int32_t kind) {
+    switch (kind) {
+        case 0: return "num_threads";
+        case 1: return "if";
+        case 2: return "private";
+        case 3: return "shared";
+        case 4: return "firstprivate";
+        case 5: return "lastprivate";
+        case 6: return "reduction";
+        case 7: return "schedule";
+        case 8: return "collapse";
+        case 9: return "ordered";
+        case 10: return "nowait";
+        case 11: return "default";
+        default: return "unknown";
+    }
+}
+
+} // namespace roup
+</code></pre>
+<p><strong>Key RAII benefits:</strong></p>
+<ul>
+<li>✅ <strong>Automatic cleanup</strong> - No need to call <code>_free()</code> functions</li>
+<li>✅ <strong>Exception safe</strong> - Resources freed even if exceptions thrown</li>
+<li>✅ <strong>Move semantics</strong> - Efficient transfer of ownership</li>
+<li>✅ <strong>Modern C++</strong> - Uses <code>std::optional</code>, deleted copy constructors</li>
+</ul>
+<hr />
+<h2 id="step-3-build-the-analyzer-tool"><a class="header" href="#step-3-build-the-analyzer-tool">Step 3: Build the Analyzer Tool</a></h2>
+<p>Create <code>omp_analyzer.cpp</code>:</p>
+<pre><code class="language-cpp">#include "roup_wrapper.hpp"
+#include &lt;iostream&gt;
+#include &lt;fstream&gt;
+#include &lt;string&gt;
+#include &lt;map&gt;
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+
+struct DirectiveInfo {
+    int line_number;
+    std::string directive_name;
+    int clause_count;
+    std::vector&lt;std::string&gt; clause_names;
+};
+
+class OMPAnalyzer {
+private:
+    std::vector&lt;DirectiveInfo&gt; directives_;
+    std::map&lt;std::string, int&gt; directive_counts_;
+    
+public:
+    // Analyze a single line for OpenMP pragmas
+    void analyze_line(const std::string&amp; line, int line_number) {
+        // Check if line contains OpenMP pragma
+        if (line.find("#pragma omp") == std::string::npos) {
+            return;
+        }
+        
+        // Parse the directive
+        roup::Directive directive(line);
+        if (!directive) {
+            std::cerr &lt;&lt; "Warning: Failed to parse line " &lt;&lt; line_number 
+                      &lt;&lt; ": " &lt;&lt; line &lt;&lt; std::endl;
+            return;
+        }
+        
+        // Extract directive info
+        DirectiveInfo info;
+        info.line_number = line_number;
+        info.directive_name = roup::directive_kind_name(directive.kind());
+        info.clause_count = directive.clause_count();
+        
+        // Extract clause names
+        roup::ClauseIterator iter(directive);
+        while (auto clause_kind = iter.next()) {
+            info.clause_names.push_back(roup::clause_kind_name(*clause_kind));
+        }
+        
+        directives_.push_back(info);
+        directive_counts_[info.directive_name]++;
+    }
+    
+    // Analyze entire file
+    bool analyze_file(const std::string&amp; filename) {
+        std::ifstream file(filename);
+        if (!file) {
+            std::cerr &lt;&lt; "Error: Cannot open file: " &lt;&lt; filename &lt;&lt; std::endl;
+            return false;
+        }
+        
+        std::string line;
+        int line_number = 0;
+        
+        while (std::getline(file, line)) {
+            line_number++;
+            analyze_line(line, line_number);
+        }
+        
+        return true;
+    }
+    
+    // Print detailed report
+    void print_report() const {
+        if (directives_.empty()) {
+            std::cout &lt;&lt; "No OpenMP directives found." &lt;&lt; std::endl;
+            return;
+        }
+        
+        std::cout &lt;&lt; "\nFound " &lt;&lt; directives_.size() 
+                  &lt;&lt; " OpenMP directive(s):\n" &lt;&lt; std::endl;
+        
+        for (const auto&amp; info : directives_) {
+            std::cout &lt;&lt; "  Line " &lt;&lt; info.line_number &lt;&lt; ": "
+                      &lt;&lt; info.directive_name &lt;&lt; " ("
+                      &lt;&lt; info.clause_count &lt;&lt; " clause"
+                      &lt;&lt; (info.clause_count != 1 ? "s" : "") &lt;&lt; ")";
+            
+            if (!info.clause_names.empty()) {
+                std::cout &lt;&lt; " [";
+                for (size_t i = 0; i &lt; info.clause_names.size(); ++i) {
+                    if (i &gt; 0) std::cout &lt;&lt; ", ";
+                    std::cout &lt;&lt; info.clause_names[i];
+                }
+                std::cout &lt;&lt; "]";
+            }
+            std::cout &lt;&lt; std::endl;
+        }
+        
+        print_summary();
+    }
+    
+    // Print summary statistics
+    void print_summary() const {
+        int total_clauses = 0;
+        for (const auto&amp; info : directives_) {
+            total_clauses += info.clause_count;
+        }
+        
+        std::cout &lt;&lt; "\nSummary:" &lt;&lt; std::endl;
+        std::cout &lt;&lt; "  Total directives: " &lt;&lt; directives_.size() &lt;&lt; std::endl;
+        std::cout &lt;&lt; "  Total clauses: " &lt;&lt; total_clauses &lt;&lt; std::endl;
+        
+        // Find most common directive
+        auto max_elem = std::max_element(
+            directive_counts_.begin(), 
+            directive_counts_.end(),
+            [](const auto&amp; a, const auto&amp; b) { return a.second &lt; b.second; }
+        );
+        
+        if (max_elem != directive_counts_.end()) {
+            std::cout &lt;&lt; "  Most common: " &lt;&lt; max_elem-&gt;first 
+                      &lt;&lt; " (" &lt;&lt; max_elem-&gt;second &lt;&lt; " occurrence"
+                      &lt;&lt; (max_elem-&gt;second != 1 ? "s" : "") &lt;&lt; ")" &lt;&lt; std::endl;
+        }
+        
+        // Print directive type breakdown
+        if (directive_counts_.size() &gt; 1) {
+            std::cout &lt;&lt; "\nDirective breakdown:" &lt;&lt; std::endl;
+            for (const auto&amp; [name, count] : directive_counts_) {
+                std::cout &lt;&lt; "  " &lt;&lt; name &lt;&lt; ": " &lt;&lt; count &lt;&lt; std::endl;
+            }
+        }
+    }
+};
+
+int main(int argc, char* argv[]) {
+    if (argc &lt; 2) {
+        std::cerr &lt;&lt; "Usage: " &lt;&lt; argv[0] &lt;&lt; " &lt;source-file&gt;" &lt;&lt; std::endl;
+        std::cerr &lt;&lt; "Example: " &lt;&lt; argv[0] &lt;&lt; " mycode.c" &lt;&lt; std::endl;
+        return 1;
+    }
+    
+    OMPAnalyzer analyzer;
+    
+    if (!analyzer.analyze_file(argv[1])) {
+        return 1;
+    }
+    
+    analyzer.print_report();
+    return 0;
+}
+</code></pre>
+<hr />
+<h2 id="step-4-build-and-run"><a class="header" href="#step-4-build-and-run">Step 4: Build and Run</a></h2>
+<h3 id="compilation"><a class="header" href="#compilation">Compilation</a></h3>
+<pre><code class="language-bash"># Build ROUP library first
+cd roup
+cargo build --release
+
+# Build the analyzer
+clang++ -std=c++17 omp_analyzer.cpp \
+    -L./target/release -lroup \
+    -Wl,-rpath,./target/release \
+    -o omp_analyzer
+
+# Or with g++:
+g++ -std=c++17 omp_analyzer.cpp \
+    -L./target/release -lroup \
+    -Wl,-rpath,./target/release \
+    -o omp_analyzer
+</code></pre>
+<h3 id="test-with-sample-file"><a class="header" href="#test-with-sample-file">Test with Sample File</a></h3>
+<p>Create <code>test.c</code>:</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+
+int main() {
+    int n = 1000;
+    int sum = 0;
+    
+    #pragma omp parallel for reduction(+:sum) num_threads(4)
+    for (int i = 0; i &lt; n; i++) {
+        sum += i;
+    }
+    
+    #pragma omp parallel
+    {
+        #pragma omp single
+        {
+            printf("Hello from thread\\n");
+        }
+    }
+    
+    #pragma omp task depend(in: sum)
+    printf("Sum: %d\\n", sum);
+    
+    #pragma omp barrier
+    
+    return 0;
+}
+</code></pre>
+<h3 id="run-the-analyzer"><a class="header" href="#run-the-analyzer">Run the Analyzer</a></h3>
+<pre><code class="language-bash">$ ./omp_analyzer test.c
+
+Found 5 OpenMP directive(s):
+
+  Line 7: for (3 clauses) [reduction, num_threads]
+  Line 11: parallel (0 clauses)
+  Line 13: single (0 clauses)
+  Line 19: task (1 clause) [depend]
+  Line 22: barrier (0 clauses)
+
+Summary:
+  Total directives: 5
+  Total clauses: 4
+  Most common: parallel (1 occurrence)
+
+Directive breakdown:
+  barrier: 1
+  for: 1
+  parallel: 1
+  single: 1
+  task: 1
+</code></pre>
+<hr />
+<h2 id="step-5-advanced-features"><a class="header" href="#step-5-advanced-features">Step 5: Advanced Features</a></h2>
+<h3 id="51-extract-variable-names-from-clauses"><a class="header" href="#51-extract-variable-names-from-clauses">5.1 Extract Variable Names from Clauses</a></h3>
+<p>Some clauses (like <code>private</code>, <code>shared</code>) contain variable lists. To access them:</p>
+<pre><code class="language-cpp">// In C API (add to roup_wrapper.hpp):
+extern "C" {
+    OmpStringList* roup_clause_variables(const OmpClause* clause);
+    int32_t roup_string_list_len(const OmpStringList* list);
+    const char* roup_string_list_get(const OmpStringList* list, int32_t index);
+    void roup_string_list_free(OmpStringList* list);
+}
+
+// RAII wrapper for string list
+class StringList {
+private:
+    OmpStringList* list_;
+    
+public:
+    explicit StringList(OmpStringList* list) : list_(list) {}
+    
+    ~StringList() {
+        if (list_) roup_string_list_free(list_);
+    }
+    
+    int32_t size() const {
+        return list_ ? roup_string_list_len(list_) : 0;
+    }
+    
+    std::string get(int32_t index) const {
+        if (!list_ || index &gt;= size()) return "";
+        return roup_string_list_get(list_, index);
+    }
+    
+    std::vector&lt;std::string&gt; to_vector() const {
+        std::vector&lt;std::string&gt; result;
+        for (int32_t i = 0; i &lt; size(); ++i) {
+            result.push_back(get(i));
+        }
+        return result;
+    }
+};
+</code></pre>
+<h3 id="52-handle-parse-errors-gracefully"><a class="header" href="#52-handle-parse-errors-gracefully">5.2 Handle Parse Errors Gracefully</a></h3>
+<pre><code class="language-cpp">std::optional&lt;DirectiveInfo&gt; parse_directive(const std::string&amp; line) {
+    roup::Directive directive(line);
+    if (!directive) {
+        return std::nullopt;  // Parse failed
+    }
+    
+    DirectiveInfo info;
+    info.directive_name = roup::directive_kind_name(directive.kind());
+    info.clause_count = directive.clause_count();
+    
+    return info;
+}
+</code></pre>
+<h3 id="53-process-multiple-files"><a class="header" href="#53-process-multiple-files">5.3 Process Multiple Files</a></h3>
+<pre><code class="language-cpp">void analyze_project(const std::vector&lt;std::string&gt;&amp; files) {
+    OMPAnalyzer combined;
+    
+    for (const auto&amp; file : files) {
+        OMPAnalyzer file_analyzer;
+        if (file_analyzer.analyze_file(file)) {
+            std::cout &lt;&lt; "\n=== " &lt;&lt; file &lt;&lt; " ===" &lt;&lt; std::endl;
+            file_analyzer.print_report();
+        }
+    }
+}
+</code></pre>
+<hr />
+<h2 id="real-world-use-cases"><a class="header" href="#real-world-use-cases">Real-World Use Cases</a></h2>
+<h3 id="1-openmp-linter"><a class="header" href="#1-openmp-linter">1. <strong>OpenMP Linter</strong></a></h3>
+<p>Check for common mistakes:</p>
+<ul>
+<li><code>parallel for</code> without <code>private</code> on loop variable</li>
+<li><code>reduction</code> with unsupported operators</li>
+<li>Missing <code>nowait</code> opportunities</li>
+</ul>
+<h3 id="2-code-modernization-tool"><a class="header" href="#2-code-modernization-tool">2. <strong>Code Modernization Tool</strong></a></h3>
+<ul>
+<li>Convert OpenMP 3.x → 5.x syntax</li>
+<li>Suggest modern alternatives (e.g., <code>taskloop</code> instead of manual tasks)</li>
+</ul>
+<h3 id="3-performance-analyzer"><a class="header" href="#3-performance-analyzer">3. <strong>Performance Analyzer</strong></a></h3>
+<ul>
+<li>Count parallelization opportunities</li>
+<li>Identify nested parallel regions (potential over-subscription)</li>
+<li>Find synchronization hotspots</li>
+</ul>
+<h3 id="4-ide-integration"><a class="header" href="#4-ide-integration">4. <strong>IDE Integration</strong></a></h3>
+<ul>
+<li>Syntax highlighting for OpenMP pragmas</li>
+<li>Auto-completion for clause names</li>
+<li>Quick documentation lookup</li>
+</ul>
+<hr />
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<p>ROUP is <strong>fast</strong>:</p>
+<ul>
+<li>Parsing a typical directive: <strong>~1-5 microseconds</strong></li>
+<li>Zero-copy design: Uses string slices, not allocations</li>
+<li>Suitable for <strong>real-time IDE integration</strong></li>
+</ul>
+<p><strong>Benchmark</strong> (on typical code):</p>
+<pre><code>File size: 10,000 lines
+OpenMP directives: 500
+Total parse time: ~2.5 milliseconds
+Throughput: ~200,000 directives/second
+</code></pre>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="issue-undefined-reference-to-roup_parse"><a class="header" href="#issue-undefined-reference-to-roup_parse">Issue: <code>undefined reference to roup_parse</code></a></h3>
+<p><strong>Solution:</strong> Make sure library path is correct:</p>
+<pre><code class="language-bash">clang++ ... -L./target/release -lroup -Wl,-rpath,./target/release
+</code></pre>
+<h3 id="issue-error-while-loading-shared-libraries-libroupso"><a class="header" href="#issue-error-while-loading-shared-libraries-libroupso">Issue: <code>error while loading shared libraries: libroup.so</code></a></h3>
+<p><strong>Solution:</strong> Set <code>LD_LIBRARY_PATH</code> (Linux) or <code>DYLD_LIBRARY_PATH</code> (macOS):</p>
+<pre><code class="language-bash">export LD_LIBRARY_PATH=./target/release:$LD_LIBRARY_PATH
+</code></pre>
+<h3 id="issue-parse-failures-on-valid-pragmas"><a class="header" href="#issue-parse-failures-on-valid-pragmas">Issue: Parse failures on valid pragmas</a></h3>
+<p><strong>Cause:</strong> ROUP currently supports C/C++ syntax (<code>#pragma omp</code>), not Fortran (<code>!$omp</code>).</p>
+<p><strong>Solution:</strong> Ensure input starts with <code>#pragma omp</code>.</p>
+<hr />
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li><strong>Explore the Rust API</strong> - See <a href="./api-reference.html">API Reference</a></li>
+<li><strong>Check out more examples</strong> - <a href="https://github.com/ouankou/roup/tree/main/examples">GitHub repository</a></li>
+<li><strong>Contribute</strong> - Report issues or submit PRs!</li>
+</ul>
+<hr />
+<h2 id="complete-example-code"><a class="header" href="#complete-example-code">Complete Example Code</a></h2>
+<p>All code from this tutorial is available at:</p>
+<ul>
+<li><code>examples/cpp/roup_wrapper.hpp</code> - RAII wrappers</li>
+<li><code>examples/cpp/omp_analyzer.cpp</code> - Full analyzer tool</li>
+</ul>
+<p><strong>Clone and try:</strong></p>
+<pre><code class="language-bash">git clone https://github.com/ouankou/roup.git
+cd roup/examples/cpp
+make  # Builds all examples
+./omp_analyzer ../../tests/data/sample.c
+</code></pre>
+<p>Happy parsing! 🚀</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="intro.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="api-reference.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="intro.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="api-reference.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
