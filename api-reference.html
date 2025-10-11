@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>API Documentation - ROUP Documentation</title>
+        <title>API Reference - ROUP Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -227,7 +227,8 @@
 </ul>
 <hr />
 <h2 id="c-api-reference"><a class="header" href="#c-api-reference">C API Reference</a></h2>
-<p>ROUP exports 18 C functions for FFI integration. All functions are documented in the rustdoc, but here's a quick reference:</p>
+<p>ROUP exports 16 C functions for FFI integration, providing a minimal C API with unsafe pointer operations only at the FFI boundary. All functions use direct C pointers (<code>*mut OmpDirective</code>, <code>*mut OmpClause</code>) following a standard malloc/free pattern.</p>
+<p><strong>Source</strong>: <code>src/c_api.rs</code> (~60 lines of unsafe code at FFI boundary, ~0.9% of file)</p>
 <h3 id="lifecycle-functions"><a class="header" href="#lifecycle-functions">Lifecycle Functions</a></h3>
 <pre><code class="language-c">// Parse OpenMP directive from C string
 OmpDirective* roup_parse(const char* input);
@@ -284,100 +285,41 @@ void roup_string_list_free(OmpStringList* list);
 </code></pre>
 <h3 id="mapping-tables"><a class="header" href="#mapping-tables">Mapping Tables</a></h3>
 <blockquote>
-<p><strong>Important:</strong> These values match the exact FFI enum discriminants in <code>include/roup.h</code>. Use these when decoding return values from <code>roup_directive_kind()</code>, <code>roup_clause_type()</code>, etc.</p>
+<p><strong>Important:</strong> These values are defined in <code>src/c_api.rs</code>. The C API uses a <strong>simple subset</strong> of OpenMP clauses with straightforward integer mapping.</p>
 </blockquote>
-<h4 id="directive-kinds-directivekind-enum"><a class="header" href="#directive-kinds-directivekind-enum">Directive Kinds (DirectiveKind enum)</a></h4>
-<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Directive</th><th>Value</th><th>Directive</th></tr></thead><tbody>
-<tr><td>0</td><td><code>parallel</code></td><td>37</td><td><code>teams_distribute</code></td></tr>
-<tr><td>1</td><td><code>for</code></td><td>38</td><td><code>teams_distribute_simd</code></td></tr>
-<tr><td>2</td><td><code>sections</code></td><td>39</td><td><code>target_teams_distribute</code></td></tr>
-<tr><td>3</td><td><code>section</code></td><td>40</td><td><code>target_teams_distribute_simd</code></td></tr>
-<tr><td>4</td><td><code>single</code></td><td>41</td><td><code>distribute_parallel_for</code></td></tr>
-<tr><td>5</td><td><code>task</code></td><td>42</td><td><code>distribute_parallel_for_simd</code></td></tr>
-<tr><td>6</td><td><code>master</code></td><td>43</td><td><code>distribute_simd</code></td></tr>
-<tr><td>7</td><td><code>critical</code></td><td>44</td><td><code>parallel_for_simd</code></td></tr>
-<tr><td>8</td><td><code>barrier</code></td><td>45</td><td><code>taskloop_simd</code></td></tr>
-<tr><td>9</td><td><code>taskwait</code></td><td>46</td><td><code>master_taskloop_simd</code></td></tr>
-<tr><td>10</td><td><code>taskgroup</code></td><td>47</td><td><code>parallel_master_taskloop_simd</code></td></tr>
-<tr><td>11</td><td><code>atomic</code></td><td>48</td><td><code>target_parallel_for_simd</code></td></tr>
-<tr><td>12</td><td><code>flush</code></td><td>49</td><td><code>teams_distribute_parallel_for</code></td></tr>
-<tr><td>13</td><td><code>ordered</code></td><td>50</td><td><code>teams_distribute_parallel_for_simd</code></td></tr>
-<tr><td>14</td><td><code>simd</code></td><td>51</td><td><code>target_teams_distribute_parallel_for</code></td></tr>
-<tr><td>15</td><td><code>target</code></td><td>52</td><td><code>target_teams_distribute_parallel_for_simd</code></td></tr>
-<tr><td>16</td><td><code>target_data</code></td><td>53</td><td><code>loop</code></td></tr>
-<tr><td>17</td><td><code>target_enter_data</code></td><td>54</td><td><code>parallel_loop</code></td></tr>
-<tr><td>18</td><td><code>target_exit_data</code></td><td>55</td><td><code>teams_loop</code></td></tr>
-<tr><td>19</td><td><code>target_update</code></td><td>56</td><td><code>target_loop</code></td></tr>
-<tr><td>20</td><td><code>declare_target</code></td><td>57</td><td><code>target_parallel_loop</code></td></tr>
-<tr><td>21</td><td><code>teams</code></td><td>58</td><td><code>target_teams_loop</code></td></tr>
-<tr><td>22</td><td><code>distribute</code></td><td>59</td><td><code>masked</code></td></tr>
-<tr><td>23</td><td><code>declare_simd</code></td><td>60</td><td><code>scope</code></td></tr>
-<tr><td>24</td><td><code>declare_reduction</code></td><td>61</td><td><code>metadirective</code></td></tr>
-<tr><td>25</td><td><code>taskloop</code></td><td>62</td><td><code>declare_variant</code></td></tr>
-<tr><td>26</td><td><code>cancel</code></td><td>63</td><td><code>requires</code></td></tr>
-<tr><td>27</td><td><code>cancellation_point</code></td><td>64</td><td><code>assume</code></td></tr>
-<tr><td>28</td><td><code>parallel_for</code></td><td>65</td><td><code>nothing</code></td></tr>
-<tr><td>29</td><td><code>parallel_sections</code></td><td>66</td><td><code>error</code></td></tr>
-<tr><td>30</td><td><code>parallel_master</code></td><td>67</td><td><code>scan</code></td></tr>
-<tr><td>31</td><td><code>master_taskloop</code></td><td>68</td><td><code>depobj</code></td></tr>
-<tr><td>32</td><td><code>parallel_master_taskloop</code></td><td>69</td><td><code>tile</code></td></tr>
-<tr><td>33</td><td><code>target_parallel</code></td><td>70</td><td><code>unroll</code></td></tr>
-<tr><td>34</td><td><code>target_parallel_for</code></td><td>71</td><td><code>allocate</code></td></tr>
-<tr><td>35</td><td><code>target_simd</code></td><td>72</td><td><code>threadprivate</code></td></tr>
-<tr><td>36</td><td><code>target_teams</code></td><td>73</td><td><code>declare_mapper</code></td></tr>
+<h4 id="directive-kinds"><a class="header" href="#directive-kinds">Directive Kinds</a></h4>
+<p>The C API provides <code>roup_directive_kind()</code> which returns an integer representing the directive type. The specific mapping depends on the parser's internal directive registry.</p>
+<p><strong>Common directive types</strong> (from parser):</p>
+<ul>
+<li>Parallel constructs: <code>parallel</code>, <code>parallel for</code>, <code>parallel sections</code></li>
+<li>Work-sharing: <code>for</code>, <code>sections</code>, <code>single</code>, <code>workshare</code></li>
+<li>Tasking: <code>task</code>, <code>taskloop</code>, <code>taskgroup</code>, <code>taskwait</code></li>
+<li>Device: <code>target</code>, <code>target data</code>, <code>target update</code>, <code>teams</code></li>
+<li>Synchronization: <code>barrier</code>, <code>critical</code>, <code>atomic</code>, <code>ordered</code></li>
+<li>SIMD: <code>simd</code>, <code>declare simd</code>, <code>distribute</code></li>
+<li>Advanced: <code>metadirective</code>, <code>declare variant</code>, <code>assume</code></li>
+</ul>
+<p>For a complete list of all 120+ supported directives with version compatibility, see the <a href="./openmp-support.html">OpenMP Support Matrix</a>.</p>
+<h4 id="clause-kinds-integer-discriminants"><a class="header" href="#clause-kinds-integer-discriminants">Clause Kinds (Integer Discriminants)</a></h4>
+<p>The C API supports 12 common clause types with simple integer mapping:</p>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Clause</th><th>Description</th><th>Example</th></tr></thead><tbody>
+<tr><td>0</td><td><code>num_threads</code></td><td>Thread count</td><td><code>num_threads(4)</code></td></tr>
+<tr><td>1</td><td><code>if</code></td><td>Conditional</td><td><code>if(condition)</code></td></tr>
+<tr><td>2</td><td><code>private</code></td><td>Private variables</td><td><code>private(x, y)</code></td></tr>
+<tr><td>3</td><td><code>shared</code></td><td>Shared variables</td><td><code>shared(a, b)</code></td></tr>
+<tr><td>4</td><td><code>firstprivate</code></td><td>Private with init</td><td><code>firstprivate(z)</code></td></tr>
+<tr><td>5</td><td><code>lastprivate</code></td><td>Private with final value</td><td><code>lastprivate(result)</code></td></tr>
+<tr><td>6</td><td><code>reduction</code></td><td>Reduction operation</td><td><code>reduction(+:sum)</code></td></tr>
+<tr><td>7</td><td><code>schedule</code></td><td>Loop scheduling</td><td><code>schedule(static, 100)</code></td></tr>
+<tr><td>8</td><td><code>collapse</code></td><td>Loop nesting</td><td><code>collapse(2)</code></td></tr>
+<tr><td>9</td><td><code>ordered</code></td><td>Ordered execution</td><td><code>ordered</code></td></tr>
+<tr><td>10</td><td><code>nowait</code></td><td>Remove barrier</td><td><code>nowait</code></td></tr>
+<tr><td>11</td><td><code>default</code></td><td>Default sharing</td><td><code>default(shared)</code></td></tr>
+<tr><td>999</td><td>Unknown</td><td>Unrecognized clause</td><td>-</td></tr>
 </tbody></table>
 </div>
-<h4 id="clause-kinds-clausetype-enum"><a class="header" href="#clause-kinds-clausetype-enum">Clause Kinds (ClauseType enum)</a></h4>
-<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Clause</th><th>Value</th><th>Clause</th></tr></thead><tbody>
-<tr><td>0</td><td><code>if</code></td><td>46</td><td><code>detach</code></td></tr>
-<tr><td>1</td><td><code>num_threads</code></td><td>47</td><td><code>affinity</code></td></tr>
-<tr><td>2</td><td><code>default</code></td><td>48</td><td><code>bind</code></td></tr>
-<tr><td>3</td><td><code>private</code></td><td>49</td><td><code>filter</code></td></tr>
-<tr><td>4</td><td><code>firstprivate</code></td><td>50</td><td><code>allocate</code></td></tr>
-<tr><td>5</td><td><code>lastprivate</code></td><td>51</td><td><code>allocator</code></td></tr>
-<tr><td>6</td><td><code>shared</code></td><td>52</td><td><code>uses_allocators</code></td></tr>
-<tr><td>7</td><td><code>reduction</code></td><td>53</td><td><code>inclusive</code></td></tr>
-<tr><td>8</td><td><code>copyin</code></td><td>54</td><td><code>exclusive</code></td></tr>
-<tr><td>9</td><td><code>copyprivate</code></td><td>55</td><td><code>when</code></td></tr>
-<tr><td>10</td><td><code>schedule</code></td><td>56</td><td><code>match</code></td></tr>
-<tr><td>11</td><td><code>ordered</code></td><td>57</td><td><code>at</code></td></tr>
-<tr><td>12</td><td><code>nowait</code></td><td>58</td><td><code>severity</code></td></tr>
-<tr><td>13</td><td><code>collapse</code></td><td>59</td><td><code>message</code></td></tr>
-<tr><td>14</td><td><code>untied</code></td><td>60</td><td><code>novariants</code></td></tr>
-<tr><td>15</td><td><code>final</code></td><td>61</td><td><code>nocontext</code></td></tr>
-<tr><td>16</td><td><code>mergeable</code></td><td>62</td><td><code>adjust_args</code></td></tr>
-<tr><td>17</td><td><code>depend</code></td><td>63</td><td><code>append_args</code></td></tr>
-<tr><td>18</td><td><code>priority</code></td><td>64</td><td><code>full</code></td></tr>
-<tr><td>19</td><td><code>grainsize</code></td><td>65</td><td><code>partial</code></td></tr>
-<tr><td>20</td><td><code>num_tasks</code></td><td>66</td><td><code>sizes</code></td></tr>
-<tr><td>21</td><td><code>nogroup</code></td><td>67</td><td><code>holds</code></td></tr>
-<tr><td>22</td><td><code>threads</code></td><td>68</td><td><code>absent</code></td></tr>
-<tr><td>23</td><td><code>simd</code></td><td>69</td><td><code>contains</code></td></tr>
-<tr><td>24</td><td><code>aligned</code></td><td>70</td><td><code>atomic_default_mem_order</code></td></tr>
-<tr><td>25</td><td><code>linear</code></td><td>71</td><td><code>dynamic_allocators</code></td></tr>
-<tr><td>26</td><td><code>uniform</code></td><td>72</td><td><code>reverse_offload</code></td></tr>
-<tr><td>27</td><td><code>inbranch</code></td><td>73</td><td><code>unified_address</code></td></tr>
-<tr><td>28</td><td><code>notinbranch</code></td><td>74</td><td><code>unified_shared_memory</code></td></tr>
-<tr><td>29</td><td><code>safelen</code></td><td>75</td><td><code>compare</code></td></tr>
-<tr><td>30</td><td><code>simdlen</code></td><td>76</td><td><code>fail</code></td></tr>
-<tr><td>31</td><td><code>device</code></td><td>77</td><td><code>seq_cst</code></td></tr>
-<tr><td>32</td><td><code>map</code></td><td>78</td><td><code>acq_rel</code></td></tr>
-<tr><td>33</td><td><code>num_teams</code></td><td>79</td><td><code>release</code></td></tr>
-<tr><td>34</td><td><code>thread_limit</code></td><td>80</td><td><code>acquire</code></td></tr>
-<tr><td>35</td><td><code>dist_schedule</code></td><td>81</td><td><code>relaxed</code></td></tr>
-<tr><td>36</td><td><code>proc_bind</code></td><td>82</td><td><code>hint</code></td></tr>
-<tr><td>37</td><td><code>defaultmap</code></td><td>83</td><td><code>update</code></td></tr>
-<tr><td>38</td><td><code>to</code></td><td>84</td><td><code>capture</code></td></tr>
-<tr><td>39</td><td><code>from</code></td><td>85</td><td><code>read</code></td></tr>
-<tr><td>40</td><td><code>use_device_ptr</code></td><td>86</td><td><code>write</code></td></tr>
-<tr><td>41</td><td><code>is_device_ptr</code></td><td>87</td><td><code>init</code></td></tr>
-<tr><td>42</td><td><code>link</code></td><td>88</td><td><code>use_device_addr</code></td></tr>
-<tr><td>43</td><td><code>nontemporal</code></td><td>89</td><td><code>has_device_addr</code></td></tr>
-<tr><td>44</td><td><code>order</code></td><td>90</td><td><code>enter</code></td></tr>
-<tr><td>45</td><td><code>destroy</code></td><td>91</td><td><code>doacross</code></td></tr>
-</tbody></table>
-</div>
-<h4 id="schedule-kinds-schedulekind-enum"><a class="header" href="#schedule-kinds-schedulekind-enum">Schedule Kinds (ScheduleKind enum)</a></h4>
+<p><strong>Note</strong>: The C API intentionally supports a focused subset of clauses for simplicity. The Rust API supports all 92+ OpenMP 6.0 clauses.</p>
+<h4 id="schedule-kinds"><a class="header" href="#schedule-kinds">Schedule Kinds</a></h4>
 <div class="table-wrapper"><table><thead><tr><th>Value</th><th>Schedule</th></tr></thead><tbody>
 <tr><td>0</td><td><code>static</code></td></tr>
 <tr><td>1</td><td><code>dynamic</code></td></tr>
@@ -506,6 +448,9 @@ if (!dir) {
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
+                            <a rel="next prefetch" href="openmp-support.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -517,6 +462,9 @@ if (!dir) {
                         <i class="fa fa-angle-left"></i>
                     </a>
 
+                    <a rel="next prefetch" href="openmp-support.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
             </nav>
 
         </div>

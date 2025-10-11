@@ -1,0 +1,834 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>C Tutorial - ROUP Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ROUP Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/c-tutorial.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="c-tutorial"><a class="header" href="#c-tutorial">C Tutorial</a></h1>
+<p>This tutorial demonstrates how to use ROUP's <strong>minimal unsafe pointer-based C API</strong> for parsing OpenMP directives. The API uses direct C pointers following standard malloc/free patterns familiar to C programmers.</p>
+<blockquote>
+<p><strong>API Design</strong>: Direct pointers (<code>*mut OmpDirective</code>, <code>*mut OmpClause</code>) with manual memory management. No global state, no handles.</p>
+<p><strong>Source</strong>: <code>src/c_api.rs</code> - 16 FFI functions, ~60 lines of unsafe code</p>
+</blockquote>
+<hr />
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<p>Before starting, ensure you have:</p>
+<ul>
+<li>C compiler (GCC, Clang, or MSVC)</li>
+<li>ROUP library compiled (see <a href="./building.html">Building Guide</a>)</li>
+<li>Basic understanding of malloc/free patterns</li>
+</ul>
+<p><strong>Example code</strong>: See <code>examples/c/tutorial_basic.c</code> for a complete working example.</p>
+<hr />
+<h2 id="step-1-setup-and-compilation"><a class="header" href="#step-1-setup-and-compilation">Step 1: Setup and Compilation</a></h2>
+<h3 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h3>
+<pre><code>my-project/
+├── src/
+│   └── main.c
+├── include/
+│   └── roup_ffi.h      # Forward declarations
+└── libroup.a            # Built from cargo build
+</code></pre>
+<h3 id="forward-declarations"><a class="header" href="#forward-declarations">Forward Declarations</a></h3>
+<p>Create <code>include/roup_ffi.h</code> with the C API declarations:</p>
+<pre><code class="language-c">#ifndef ROUP_FFI_H
+#define ROUP_FFI_H
+
+#include &lt;stdint.h&gt;
+
+// Opaque types (defined in Rust)
+typedef struct OmpDirective OmpDirective;
+typedef struct OmpClause OmpClause;
+typedef struct OmpClauseIterator OmpClauseIterator;
+typedef struct OmpStringList OmpStringList;
+
+// Lifecycle functions
+extern OmpDirective* roup_parse(const char* input);
+extern void roup_directive_free(OmpDirective* directive);
+extern void roup_clause_free(OmpClause* clause);
+
+// Directive queries
+extern int32_t roup_directive_kind(const OmpDirective* directive);
+extern int32_t roup_directive_clause_count(const OmpDirective* directive);
+extern OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
+
+// Iterator functions
+extern int32_t roup_clause_iterator_next(OmpClauseIterator* iter, OmpClause** out);
+extern void roup_clause_iterator_free(OmpClauseIterator* iter);
+
+// Clause queries
+extern int32_t roup_clause_kind(const OmpClause* clause);
+extern int32_t roup_clause_schedule_kind(const OmpClause* clause);
+extern int32_t roup_clause_reduction_operator(const OmpClause* clause);
+extern int32_t roup_clause_default_data_sharing(const OmpClause* clause);
+
+// Variable lists
+extern OmpStringList* roup_clause_variables(const OmpClause* clause);
+extern int32_t roup_string_list_len(const OmpStringList* list);
+extern const char* roup_string_list_get(const OmpStringList* list, int32_t index);
+extern void roup_string_list_free(OmpStringList* list);
+
+#endif // ROUP_FFI_H
+</code></pre>
+<h3 id="compilation"><a class="header" href="#compilation">Compilation</a></h3>
+<p><strong>Option 1: Using GCC/Clang</strong></p>
+<pre><code class="language-bash"># Build ROUP library
+cargo build --release
+
+# Compile C program
+gcc -o my_app src/main.c \
+    -I include \
+    -L target/release \
+    -lroup \
+    -lpthread -ldl -lm
+</code></pre>
+<p><strong>Option 2: Using CMake</strong></p>
+<pre><code class="language-cmake">cmake_minimum_required(VERSION 3.10)
+project(roup_example C)
+
+add_executable(my_app src/main.c)
+target_include_directories(my_app PRIVATE include)
+target_link_libraries(my_app ${CMAKE_SOURCE_DIR}/target/release/libroup.a pthread dl m)
+</code></pre>
+<hr />
+<h2 id="step-2-parse-a-simple-directive"><a class="header" href="#step-2-parse-a-simple-directive">Step 2: Parse a Simple Directive</a></h2>
+<p>Let's start with the most basic operation: parsing a simple directive.</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "roup_ffi.h"
+
+int main(void) {
+    const char* input = "#pragma omp parallel";
+    
+    // Parse the directive
+    OmpDirective* dir = roup_parse(input);
+    
+    // Check for errors (NULL = parse failed)
+    if (!dir) {
+        fprintf(stderr, "Parse failed!\n");
+        return 1;
+    }
+    
+    printf("✅ Parse succeeded!\n");
+    
+    // IMPORTANT: Free the directive
+    roup_directive_free(dir);
+    
+    return 0;
+}
+</code></pre>
+<p><strong>Key Points:</strong></p>
+<ul>
+<li><code>roup_parse()</code> returns a pointer or <code>NULL</code> on error</li>
+<li>Always check for <code>NULL</code> before using the directive</li>
+<li><strong>Always call <code>roup_directive_free()</code></strong> to prevent memory leaks</li>
+</ul>
+<hr />
+<h2 id="step-3-query-directive-properties"><a class="header" href="#step-3-query-directive-properties">Step 3: Query Directive Properties</a></h2>
+<p>After parsing, you can query the directive's properties:</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "roup_ffi.h"
+
+int main(void) {
+    const char* input = "#pragma omp parallel for num_threads(4)";
+    
+    OmpDirective* dir = roup_parse(input);
+    if (!dir) {
+        return 1;
+    }
+    
+    // Query directive properties
+    int32_t kind = roup_directive_kind(dir);
+    int32_t clause_count = roup_directive_clause_count(dir);
+    
+    printf("Directive kind: %d\n", kind);
+    printf("Clause count: %d\n", clause_count);
+    
+    roup_directive_free(dir);
+    return 0;
+}
+</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Directive kind: 28
+Clause count: 1
+</code></pre>
+<blockquote>
+<p><strong>Note</strong>: Directive kind is an integer from the parser's internal registry. For practical use, you typically care more about the clauses than the exact directive kind. The kind value comes from the order in which directives were registered in <code>src/parser/openmp.rs</code> - these internal IDs are not part of the stable API and may change between versions.</p>
+</blockquote>
+<hr />
+<h2 id="step-4-iterate-through-clauses"><a class="header" href="#step-4-iterate-through-clauses">Step 4: Iterate Through Clauses</a></h2>
+<p>To access individual clauses, use the iterator pattern:</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "roup_ffi.h"
+
+const char* clause_name(int32_t kind) {
+    switch(kind) {
+        case 0: return "num_threads";
+        case 1: return "if";
+        case 2: return "private";
+        case 3: return "shared";
+        case 6: return "reduction";
+        case 7: return "schedule";
+        case 10: return "nowait";
+        default: return "unknown";
+    }
+}
+
+int main(void) {
+    const char* input = "#pragma omp parallel num_threads(8) default(shared) nowait";
+    
+    OmpDirective* dir = roup_parse(input);
+    if (!dir) return 1;
+    
+    // Create iterator
+    OmpClauseIterator* iter = roup_directive_clauses_iter(dir);
+    if (!iter) {
+        roup_directive_free(dir);
+        return 1;
+    }
+    
+    // Iterate through clauses
+    printf("Clauses:\n");
+    OmpClause* clause;
+    while (roup_clause_iterator_next(iter, &amp;clause)) {
+        int32_t kind = roup_clause_kind(clause);
+        printf("  - %s (kind=%d)\n", clause_name(kind), kind);
+    }
+    
+    // Cleanup
+    roup_clause_iterator_free(iter);
+    roup_directive_free(dir);
+    
+    return 0;
+}
+</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Clauses:
+  - num_threads (kind=0)
+  - default (kind=11)
+  - nowait (kind=10)
+</code></pre>
+<p><strong>Key Points:</strong></p>
+<ul>
+<li><code>roup_clause_iterator_next()</code> returns <code>1</code> if clause available, <code>0</code> when done</li>
+<li>Write the clause pointer to <code>out</code> parameter</li>
+<li>Always free the iterator with <code>roup_clause_iterator_free()</code></li>
+</ul>
+<hr />
+<h2 id="step-5-query-clause-specific-data"><a class="header" href="#step-5-query-clause-specific-data">Step 5: Query Clause-Specific Data</a></h2>
+<p>Different clause types have different data. Use type-specific query functions:</p>
+<h3 id="schedule-clause"><a class="header" href="#schedule-clause">Schedule Clause</a></h3>
+<pre><code class="language-c">OmpClause* clause = /* ... get clause ... */;
+if (roup_clause_kind(clause) == 7) {  // SCHEDULE
+    int32_t sched = roup_clause_schedule_kind(clause);
+    const char* names[] = {"static", "dynamic", "guided", "auto", "runtime"};
+    printf("Schedule: %s\n", names[sched]);
+}
+</code></pre>
+<h3 id="reduction-clause"><a class="header" href="#reduction-clause">Reduction Clause</a></h3>
+<pre><code class="language-c">if (roup_clause_kind(clause) == 6) {  // REDUCTION
+    int32_t op = roup_clause_reduction_operator(clause);
+    const char* ops[] = {"+", "-", "*", "&amp;", "|", "^", "&amp;&amp;", "||", "min", "max"};
+    printf("Reduction operator: %s\n", ops[op]);
+}
+</code></pre>
+<h3 id="default-clause"><a class="header" href="#default-clause">Default Clause</a></h3>
+<pre><code class="language-c">if (roup_clause_kind(clause) == 11) {  // DEFAULT
+    int32_t def = roup_clause_default_data_sharing(clause);
+    printf("Default: %s\n", def == 0 ? "shared" : "none");
+}
+</code></pre>
+<h3 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h3>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "roup_ffi.h"
+
+int main(void) {
+    const char* input = "#pragma omp parallel for schedule(static, 10) reduction(+:sum)";
+    
+    OmpDirective* dir = roup_parse(input);
+    if (!dir) return 1;
+    
+    OmpClauseIterator* iter = roup_directive_clauses_iter(dir);
+    if (!iter) {
+        roup_directive_free(dir);
+        return 1;
+    }
+    
+    OmpClause* clause;
+    while (roup_clause_iterator_next(iter, &amp;clause)) {
+        int32_t kind = roup_clause_kind(clause);
+        
+        if (kind == 7) {  // SCHEDULE
+            int32_t sched = roup_clause_schedule_kind(clause);
+            const char* names[] = {"static", "dynamic", "guided", "auto", "runtime"};
+            printf("Schedule: %s\n", names[sched]);
+        }
+        else if (kind == 6) {  // REDUCTION
+            int32_t op = roup_clause_reduction_operator(clause);
+            const char* ops[] = {"+", "-", "*", "&amp;", "|", "^", "&amp;&amp;", "||", "min", "max"};
+            printf("Reduction: %s\n", ops[op]);
+        }
+    }
+    
+    roup_clause_iterator_free(iter);
+    roup_directive_free(dir);
+    
+    return 0;
+}
+</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Schedule: static
+Reduction: +
+</code></pre>
+<hr />
+<h2 id="step-6-access-variable-lists"><a class="header" href="#step-6-access-variable-lists">Step 6: Access Variable Lists</a></h2>
+<p>Clauses like <code>private(x, y, z)</code> contain lists of variables:</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "roup_ffi.h"
+
+int main(void) {
+    const char* input = "#pragma omp parallel private(x, y, z) shared(a, b)";
+    
+    OmpDirective* dir = roup_parse(input);
+    if (!dir) return 1;
+    
+    OmpClauseIterator* iter = roup_directive_clauses_iter(dir);
+    if (!iter) {
+        roup_directive_free(dir);
+        return 1;
+    }
+    
+    OmpClause* clause;
+    while (roup_clause_iterator_next(iter, &amp;clause)) {
+        int32_t kind = roup_clause_kind(clause);
+        
+        // Get variable list
+        OmpStringList* vars = roup_clause_variables(clause);
+        if (vars) {
+            int32_t len = roup_string_list_len(vars);
+            
+            const char* kind_name = (kind == 2) ? "private" : "shared";
+            printf("%s variables: ", kind_name);
+            
+            for (int32_t i = 0; i &lt; len; i++) {
+                const char* var = roup_string_list_get(vars, i);
+                printf("%s%s", var, (i &lt; len - 1) ? ", " : "");
+            }
+            printf("\n");
+            
+            roup_string_list_free(vars);
+        }
+    }
+    
+    roup_clause_iterator_free(iter);
+    roup_directive_free(dir);
+    
+    return 0;
+}
+</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>private variables: x, y, z
+shared variables: a, b
+</code></pre>
+<p><strong>Key Points:</strong></p>
+<ul>
+<li><code>roup_clause_variables()</code> returns a <code>OmpStringList*</code> or <code>NULL</code></li>
+<li>Use <code>roup_string_list_len()</code> to get the count</li>
+<li>Use <code>roup_string_list_get(list, index)</code> to access individual strings</li>
+<li><strong>Always call <code>roup_string_list_free()</code></strong> when done</li>
+</ul>
+<hr />
+<h2 id="step-7-error-handling"><a class="header" href="#step-7-error-handling">Step 7: Error Handling</a></h2>
+<p>Robust error handling is crucial. The API returns <code>NULL</code> on failure:</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "roup_ffi.h"
+
+int main(void) {
+    // Test 1: Invalid syntax
+    const char* invalid = "#pragma omp INVALID_DIRECTIVE";
+    OmpDirective* dir1 = roup_parse(invalid);
+    if (!dir1) {
+        printf("✓ Invalid syntax correctly rejected\n");
+    }
+    
+    // Test 2: NULL input
+    OmpDirective* dir2 = roup_parse(NULL);
+    if (!dir2) {
+        printf("✓ NULL input correctly rejected\n");
+    }
+    
+    // Test 3: Empty string
+    OmpDirective* dir3 = roup_parse("");
+    if (!dir3) {
+        printf("✓ Empty string correctly rejected\n");
+    }
+    
+    // Test 4: Querying NULL
+    int32_t kind = roup_directive_kind(NULL);
+    printf("roup_directive_kind(NULL) = %d\n", kind);  // Returns -1
+    
+    return 0;
+}
+</code></pre>
+<p><strong>Error Handling Guidelines:</strong></p>
+<ol>
+<li>Always check <code>roup_parse()</code> return value for <code>NULL</code></li>
+<li>Check <code>roup_directive_clauses_iter()</code> for <code>NULL</code></li>
+<li>Query functions return <code>-1</code> or safe defaults for <code>NULL</code> inputs</li>
+<li>Free resources even in error paths (if allocated)</li>
+</ol>
+<hr />
+<h2 id="step-8-complete-example"><a class="header" href="#step-8-complete-example">Step 8: Complete Example</a></h2>
+<p>Here's a complete program that demonstrates all concepts:</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include "roup_ffi.h"
+
+void print_clause_details(OmpClause* clause) {
+    int32_t kind = roup_clause_kind(clause);
+    
+    switch(kind) {
+        case 0:
+            printf("  - num_threads\n");
+            break;
+        case 2: {
+            printf("  - private(");
+            OmpStringList* vars = roup_clause_variables(clause);
+            if (vars) {
+                int32_t len = roup_string_list_len(vars);
+                for (int32_t i = 0; i &lt; len; i++) {
+                    printf("%s%s", roup_string_list_get(vars, i), 
+                           (i &lt; len - 1) ? ", " : "");
+                }
+                roup_string_list_free(vars);
+            }
+            printf(")\n");
+            break;
+        }
+        case 6: {
+            printf("  - reduction(");
+            int32_t op = roup_clause_reduction_operator(clause);
+            const char* ops[] = {"+", "-", "*", "&amp;", "|", "^", "&amp;&amp;", "||", "min", "max"};
+            if (op &gt;= 0 &amp;&amp; op &lt; 10) {
+                printf("%s", ops[op]);
+            }
+            printf(":...)\n");
+            break;
+        }
+        case 7: {
+            printf("  - schedule(");
+            int32_t sched = roup_clause_schedule_kind(clause);
+            const char* names[] = {"static", "dynamic", "guided", "auto", "runtime"};
+            if (sched &gt;= 0 &amp;&amp; sched &lt; 5) {
+                printf("%s", names[sched]);
+            }
+            printf(")\n");
+            break;
+        }
+        case 10:
+            printf("  - nowait\n");
+            break;
+        case 11:
+            printf("  - default(%s)\n", 
+                   roup_clause_default_data_sharing(clause) == 0 ? "shared" : "none");
+            break;
+        default:
+            printf("  - unknown (kind=%d)\n", kind);
+            break;
+    }
+}
+
+int main(void) {
+    const char* test_cases[] = {
+        "#pragma omp parallel",
+        "#pragma omp parallel for num_threads(4) private(i, j)",
+        "#pragma omp parallel for schedule(static, 100) reduction(+:sum)",
+        "#pragma omp task default(shared) nowait",
+        NULL
+    };
+    
+    for (int i = 0; test_cases[i] != NULL; i++) {
+        printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        printf("Input: %s\n", test_cases[i]);
+        printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        
+        OmpDirective* dir = roup_parse(test_cases[i]);
+        if (!dir) {
+            printf("❌ Parse failed!\n");
+            continue;
+        }
+        
+        int32_t clause_count = roup_directive_clause_count(dir);
+        printf("Clauses: %d\n", clause_count);
+        
+        if (clause_count &gt; 0) {
+            OmpClauseIterator* iter = roup_directive_clauses_iter(dir);
+            if (iter) {
+                OmpClause* clause;
+                while (roup_clause_iterator_next(iter, &amp;clause)) {
+                    print_clause_details(clause);
+                }
+                roup_clause_iterator_free(iter);
+            }
+        }
+        
+        roup_directive_free(dir);
+    }
+    
+    printf("\n✅ All tests completed!\n\n");
+    return 0;
+}
+</code></pre>
+<hr />
+<h2 id="clause-kind-reference"><a class="header" href="#clause-kind-reference">Clause Kind Reference</a></h2>
+<p>The C API supports 12 common clause types:</p>
+<div class="table-wrapper"><table><thead><tr><th>Kind</th><th>Clause</th><th>Has Variables</th><th>Has Specific Data</th></tr></thead><tbody>
+<tr><td>0</td><td><code>num_threads</code></td><td>No</td><td>Value (int)</td></tr>
+<tr><td>1</td><td><code>if</code></td><td>No</td><td>Condition (string)</td></tr>
+<tr><td>2</td><td><code>private</code></td><td>Yes</td><td>Variable list</td></tr>
+<tr><td>3</td><td><code>shared</code></td><td>Yes</td><td>Variable list</td></tr>
+<tr><td>4</td><td><code>firstprivate</code></td><td>Yes</td><td>Variable list</td></tr>
+<tr><td>5</td><td><code>lastprivate</code></td><td>Yes</td><td>Variable list</td></tr>
+<tr><td>6</td><td><code>reduction</code></td><td>Yes</td><td>Operator + variables</td></tr>
+<tr><td>7</td><td><code>schedule</code></td><td>No</td><td>Schedule kind + chunk</td></tr>
+<tr><td>8</td><td><code>collapse</code></td><td>No</td><td>Depth (int)</td></tr>
+<tr><td>9</td><td><code>ordered</code></td><td>No</td><td>-</td></tr>
+<tr><td>10</td><td><code>nowait</code></td><td>No</td><td>-</td></tr>
+<tr><td>11</td><td><code>default</code></td><td>No</td><td>Sharing kind</td></tr>
+<tr><td>999</td><td>Unknown</td><td>-</td><td>-</td></tr>
+</tbody></table>
+</div>
+<p><strong>Schedule Kinds</strong> (for clause kind 7):</p>
+<ul>
+<li>0 = <code>static</code></li>
+<li>1 = <code>dynamic</code></li>
+<li>2 = <code>guided</code></li>
+<li>3 = <code>auto</code></li>
+<li>4 = <code>runtime</code></li>
+</ul>
+<p><strong>Reduction Operators</strong> (for clause kind 6):</p>
+<ul>
+<li>0 = <code>+</code>, 1 = <code>-</code>, 2 = <code>*</code></li>
+<li>3 = <code>&amp;</code>, 4 = <code>|</code>, 5 = <code>^</code></li>
+<li>6 = <code>&amp;&amp;</code>, 7 = <code>||</code></li>
+<li>8 = <code>min</code>, 9 = <code>max</code></li>
+</ul>
+<p><strong>Default Kinds</strong> (for clause kind 11):</p>
+<ul>
+<li>0 = <code>shared</code></li>
+<li>1 = <code>none</code></li>
+<li>2 = <code>private</code></li>
+<li>3 = <code>firstprivate</code></li>
+</ul>
+<hr />
+<h2 id="memory-management-checklist"><a class="header" href="#memory-management-checklist">Memory Management Checklist</a></h2>
+<p>✅ <strong>DO:</strong></p>
+<ul>
+<li>Call <code>roup_directive_free()</code> for every successful <code>roup_parse()</code></li>
+<li>Call <code>roup_clause_iterator_free()</code> for every <code>roup_directive_clauses_iter()</code></li>
+<li>Call <code>roup_string_list_free()</code> for every <code>roup_clause_variables()</code></li>
+<li>Check for <code>NULL</code> returns before using pointers</li>
+</ul>
+<p>❌ <strong>DON'T:</strong></p>
+<ul>
+<li>Call <code>roup_clause_free()</code> on clauses from iterators (owned by directive)</li>
+<li>Access freed pointers (use-after-free)</li>
+<li>Forget to free in error paths</li>
+<li>Assume parse always succeeds</li>
+</ul>
+<hr />
+<h2 id="performance-tips"><a class="header" href="#performance-tips">Performance Tips</a></h2>
+<ol>
+<li><strong>Reuse parsed directives</strong> - Don't reparse the same string repeatedly</li>
+<li><strong>Minimize FFI crossings</strong> - Batch operations when possible</li>
+<li><strong>Avoid unnecessary iteration</strong> - If you only need clause count, don't iterate</li>
+<li><strong>Use local variables</strong> - Cache query results instead of calling repeatedly</li>
+</ol>
+<p><strong>Example (inefficient):</strong></p>
+<pre><code class="language-c">// BAD: Queries kind multiple times
+for (int i = 0; i &lt; count; i++) {
+    if (roup_clause_kind(clause) == 2) {
+        process_private(roup_clause_kind(clause));
+    }
+}
+</code></pre>
+<p><strong>Example (efficient):</strong></p>
+<pre><code class="language-c">// GOOD: Cache the kind
+int32_t kind = roup_clause_kind(clause);
+if (kind == 2) {
+    process_private(kind);
+}
+</code></pre>
+<hr />
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<p>Now that you understand the C API basics:</p>
+<ol>
+<li><strong>Build the example</strong> - Compile and run <code>examples/c/tutorial_basic.c</code></li>
+<li><strong>Explore directives</strong> - See <a href="./openmp-support.html">OpenMP Support</a> for all 120+ directives</li>
+<li><strong>Advanced usage</strong> - Check <a href="./api-reference.html">API Reference</a> for complete function details</li>
+<li><strong>C++ wrappers</strong> - Read <a href="./cpp-tutorial.html">C++ Tutorial</a> for RAII wrappers</li>
+</ol>
+<p><strong>Full Example Code</strong>: <code>examples/c/tutorial_basic.c</code> (433 lines with detailed comments)</p>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="linker-errors"><a class="header" href="#linker-errors">Linker Errors</a></h3>
+<p><strong>Problem</strong>: <code>undefined reference to roup_parse</code></p>
+<p><strong>Solution</strong>: Link against the ROUP static library:</p>
+<pre><code class="language-bash">gcc ... -L target/release -lroup -lpthread -ldl -lm
+</code></pre>
+<h3 id="parse-always-returns-null"><a class="header" href="#parse-always-returns-null">Parse Always Returns NULL</a></h3>
+<p><strong>Problem</strong>: All parses fail, even valid input</p>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Check that the library was built correctly (<code>cargo build --release</code>)</li>
+<li>Verify the input string is valid OpenMP syntax</li>
+<li>Ensure the string is null-terminated</li>
+<li>Try the examples first to verify the library works</li>
+</ul>
+<h3 id="memory-leaks"><a class="header" href="#memory-leaks">Memory Leaks</a></h3>
+<p><strong>Problem</strong>: Valgrind reports memory leaks</p>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Ensure every <code>roup_parse()</code> has a matching <code>roup_directive_free()</code></li>
+<li>Ensure every <code>roup_directive_clauses_iter()</code> has a matching <code>roup_clause_iterator_free()</code></li>
+<li>Ensure every <code>roup_clause_variables()</code> has a matching <code>roup_string_list_free()</code></li>
+</ul>
+<h3 id="segmentation-fault"><a class="header" href="#segmentation-fault">Segmentation Fault</a></h3>
+<p><strong>Problem</strong>: Program crashes with segfault</p>
+<p><strong>Solution</strong>:</p>
+<ul>
+<li>Check for <code>NULL</code> before dereferencing pointers</li>
+<li>Don't access freed pointers</li>
+<li>Don't call <code>roup_clause_free()</code> on clauses from iterators</li>
+</ul>
+<hr />
+<p><strong>Questions?</strong> Check the <a href="./faq.html">FAQ</a> or open an issue on <a href="https://github.com/ouankou/roup/issues">GitHub</a>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="rust-tutorial.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="cpp-tutorial.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="rust-tutorial.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="cpp-tutorial.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,765 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>FAQ - ROUP Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ROUP Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/faq.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="frequently-asked-questions"><a class="header" href="#frequently-asked-questions">Frequently Asked Questions</a></h1>
+<p>Common questions about using ROUP.</p>
+<hr />
+<h2 id="general-questions"><a class="header" href="#general-questions">General Questions</a></h2>
+<h3 id="what-is-roup"><a class="header" href="#what-is-roup">What is ROUP?</a></h3>
+<p>ROUP (Rust OpenMP Parser) is a library for parsing OpenMP directives from C, C++, and Fortran source code. It converts OpenMP pragma text like <code>#pragma omp parallel for</code> into a structured representation that programs can analyze and manipulate.</p>
+<h3 id="why-use-roup-instead-of-libomptarget-or-llvm"><a class="header" href="#why-use-roup-instead-of-libomptarget-or-llvm">Why use ROUP instead of libomptarget or LLVM?</a></h3>
+<p><strong>ROUP advantages:</strong></p>
+<ul>
+<li><strong>Lightweight</strong>: Standalone library, no LLVM dependency</li>
+<li><strong>Fast</strong>: Parse in microseconds, not milliseconds</li>
+<li><strong>Safe</strong>: Written in Rust with minimal unsafe code</li>
+<li><strong>Simple API</strong>: Easy to integrate into any project</li>
+<li><strong>Cross-platform</strong>: Works everywhere Rust works</li>
+</ul>
+<p><strong>When to use LLVM instead:</strong></p>
+<ul>
+<li>You need full compilation, not just parsing</li>
+<li>You're building a complete OpenMP compiler</li>
+<li>You need LLVM IR generation</li>
+</ul>
+<h3 id="is-roup-production-ready"><a class="header" href="#is-roup-production-ready">Is ROUP production-ready?</a></h3>
+<p><strong>No, ROUP is experimental and under active development.</strong></p>
+<p><strong>Current status:</strong></p>
+<ul>
+<li>✅ 352 tests, all passing</li>
+<li>✅ Supports OpenMP 3.0-6.0 parsing</li>
+<li>⚠️ APIs may change between versions</li>
+<li>⚠️ Some OpenMP features still being implemented</li>
+<li>⚠️ Not recommended for production use yet</li>
+</ul>
+<p><strong>Best for:</strong></p>
+<ul>
+<li>Research projects and prototypes</li>
+<li>Educational purposes</li>
+<li>Experimental tooling</li>
+<li>Compiler research</li>
+</ul>
+<p><strong>Production readiness planned for:</strong> Future v1.0 release (timeline TBD)</p>
+<h3 id="what-openmp-versions-are-supported"><a class="header" href="#what-openmp-versions-are-supported">What OpenMP versions are supported?</a></h3>
+<p>ROUP supports directives and clauses from:</p>
+<ul>
+<li>✅ OpenMP 3.0-6.0</li>
+</ul>
+<p>See the <a href="./openmp-support.html">OpenMP Support Matrix</a> for detailed coverage.</p>
+<hr />
+<h2 id="installation--setup"><a class="header" href="#installation--setup">Installation &amp; Setup</a></h2>
+<h3 id="how-do-i-install-roup"><a class="header" href="#how-do-i-install-roup">How do I install ROUP?</a></h3>
+<p><strong>For Rust projects:</strong></p>
+<pre><code class="language-toml">[dependencies]
+roup = "0.1"
+</code></pre>
+<p><strong>For C/C++ projects:</strong></p>
+<ol>
+<li>Build the library: <code>cargo build --release</code></li>
+<li>Link against <code>target/release/libroup.{a,so,dylib}</code></li>
+<li>Include the FFI headers</li>
+</ol>
+<p>See <a href="./building.html">Building Guide</a> for detailed instructions.</p>
+<h3 id="what-are-the-system-requirements"><a class="header" href="#what-are-the-system-requirements">What are the system requirements?</a></h3>
+<p><strong>Minimum:</strong></p>
+<ul>
+<li>Rust 1.70+ (to build the library)</li>
+<li>Any C/C++ compiler (to use the C API)</li>
+</ul>
+<p><strong>Operating Systems:</strong></p>
+<ul>
+<li>✅ Linux (all distributions)</li>
+<li>✅ macOS (10.15+)</li>
+<li>✅ Windows (via WSL or native MSVC/MinGW)</li>
+<li>✅ BSD variants</li>
+</ul>
+<p><strong>Architectures:</strong></p>
+<ul>
+<li>x86_64, ARM64, and others supported by Rust</li>
+</ul>
+<h3 id="why-does-building-take-so-long-the-first-time"><a class="header" href="#why-does-building-take-so-long-the-first-time">Why does building take so long the first time?</a></h3>
+<p>The first build compiles all dependencies (like <code>nom</code>). Subsequent builds are much faster thanks to Rust's incremental compilation.</p>
+<p><strong>Speed it up:</strong></p>
+<pre><code class="language-bash"># Use faster linker (Linux)
+cargo install lld
+export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
+
+# Use sccache for caching
+cargo install sccache
+export RUSTC_WRAPPER=sccache
+</code></pre>
+<hr />
+<h2 id="usage-questions"><a class="header" href="#usage-questions">Usage Questions</a></h2>
+<h3 id="how-do-i-parse-a-simple-directive"><a class="header" href="#how-do-i-parse-a-simple-directive">How do I parse a simple directive?</a></h3>
+<p><strong>Rust:</strong></p>
+<pre><code class="language-rust">use roup::parser::parse;
+
+let result = parse("#pragma omp parallel");
+match result {
+    Ok(directive) =&gt; println!("Parsed: {:?}", directive),
+    Err(e) =&gt; eprintln!("Error: {}", e),
+}</code></pre>
+<p><strong>C:</strong></p>
+<pre><code class="language-c">OmpDirective* dir = roup_parse("#pragma omp parallel");
+if (dir) {
+    // Use directive
+    roup_directive_free(dir);
+}
+</code></pre>
+<p>See the <a href="./getting-started.html">Getting Started</a> guide for more examples.</p>
+<h3 id="how-do-i-iterate-through-clauses"><a class="header" href="#how-do-i-iterate-through-clauses">How do I iterate through clauses?</a></h3>
+<p><strong>Rust:</strong></p>
+<pre><code class="language-rust">for clause in &amp;directive.clauses {
+    println!("Clause: {:?}", clause);
+}</code></pre>
+<p><strong>C:</strong></p>
+<pre><code class="language-c">OmpClauseIterator* iter = roup_directive_clauses_iter(dir);
+OmpClause* clause;
+while (roup_clause_iterator_next(iter, &amp;clause)) {
+    int32_t kind = roup_clause_kind(clause);
+    printf("Clause kind: %d\n", kind);
+}
+roup_clause_iterator_free(iter);
+</code></pre>
+<p>See <a href="./c-tutorial.html#step-4-iterate-through-clauses">C Tutorial - Step 4</a> for details.</p>
+<h3 id="how-do-i-access-clause-data-like-variable-lists"><a class="header" href="#how-do-i-access-clause-data-like-variable-lists">How do I access clause data (like variable lists)?</a></h3>
+<p><strong>Rust:</strong></p>
+<pre><code class="language-rust">match &amp;clause {
+    Clause::Private(vars) =&gt; {
+        for var in vars {
+            println!("Private variable: {}", var);
+        }
+    },
+    _ =&gt; {}
+}</code></pre>
+<p><strong>C:</strong></p>
+<pre><code class="language-c">if (roup_clause_kind(clause) == 2) {  // PRIVATE
+    OmpStringList* vars = roup_clause_variables(clause);
+    int32_t len = roup_string_list_len(vars);
+    for (int32_t i = 0; i &lt; len; i++) {
+        printf("Variable: %s\n", roup_string_list_get(vars, i));
+    }
+    roup_string_list_free(vars);
+}
+</code></pre>
+<h3 id="can-i-parse-multiple-directives-in-parallel"><a class="header" href="#can-i-parse-multiple-directives-in-parallel">Can I parse multiple directives in parallel?</a></h3>
+<p><strong>Yes!</strong> Parsing is thread-safe:</p>
+<pre><code class="language-rust">use std::thread;
+
+let t1 = thread::spawn(|| parse("#pragma omp parallel"));
+let t2 = thread::spawn(|| parse("#pragma omp for"));
+
+let dir1 = t1.join().unwrap();
+let dir2 = t2.join().unwrap();</code></pre>
+<p>Each parse operation is independent with no shared state.</p>
+<h3 id="does-roup-modify-the-input-string"><a class="header" href="#does-roup-modify-the-input-string">Does ROUP modify the input string?</a></h3>
+<p><strong>No.</strong> Parsing is read-only. The input string is never modified.</p>
+<hr />
+<h2 id="api-questions"><a class="header" href="#api-questions">API Questions</a></h2>
+<h3 id="whats-the-difference-between-the-rust-and-c-apis"><a class="header" href="#whats-the-difference-between-the-rust-and-c-apis">What's the difference between the Rust and C APIs?</a></h3>
+<p><strong>Rust API:</strong></p>
+<ul>
+<li>Returns <code>Result&lt;DirectiveIR, ParseError&gt;</code></li>
+<li>Uses Rust's ownership system (automatic memory management)</li>
+<li>Rich types (<code>Vec</code>, <code>String</code>, enums)</li>
+<li>Full access to all 92+ clause types</li>
+</ul>
+<p><strong>C API:</strong></p>
+<ul>
+<li>Returns pointers (NULL on error)</li>
+<li>Manual memory management (call <code>_free()</code> functions)</li>
+<li>Simple integer discriminants for clause types</li>
+<li>Supports 12 common clause types</li>
+</ul>
+<p>The C API is a thin wrapper over the Rust API.</p>
+<h3 id="why-does-the-c-api-only-support-12-clause-types"><a class="header" href="#why-does-the-c-api-only-support-12-clause-types">Why does the C API only support 12 clause types?</a></h3>
+<p>The C API focuses on the most common clauses for simplicity:</p>
+<ul>
+<li><code>num_threads</code>, <code>if</code>, <code>private</code>, <code>shared</code></li>
+<li><code>firstprivate</code>, <code>lastprivate</code>, <code>reduction</code></li>
+<li><code>schedule</code>, <code>collapse</code>, <code>ordered</code>, <code>nowait</code>, <code>default</code></li>
+</ul>
+<p>This covers 95% of real-world use cases. The complete Rust parser supports all 91 clauses from OpenMP 3.0-6.0 (see <a href="./architecture.html">Architecture</a> for details).</p>
+<h3 id="whats-the-clause-kind-mapping"><a class="header" href="#whats-the-clause-kind-mapping">What's the clause kind mapping?</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Kind</th><th>Clause</th><th>Kind</th><th>Clause</th></tr></thead><tbody>
+<tr><td>0</td><td>num_threads</td><td>6</td><td>reduction</td></tr>
+<tr><td>1</td><td>if</td><td>7</td><td>schedule</td></tr>
+<tr><td>2</td><td>private</td><td>8</td><td>collapse</td></tr>
+<tr><td>3</td><td>shared</td><td>9</td><td>ordered</td></tr>
+<tr><td>4</td><td>firstprivate</td><td>10</td><td>nowait</td></tr>
+<tr><td>5</td><td>lastprivate</td><td>11</td><td>default</td></tr>
+<tr><td>999</td><td>unknown</td><td></td><td></td></tr>
+</tbody></table>
+</div>
+<p>See <a href="./api-reference.html#clause-kinds-integer-discriminants">API Reference</a> for details.</p>
+<h3 id="is-there-a-python-binding"><a class="header" href="#is-there-a-python-binding">Is there a Python binding?</a></h3>
+<p>Not yet, but it's planned! You can follow progress on Python bindings in the ROUP GitHub repository.</p>
+<p>In the meantime, you can use the C API via <code>ctypes</code> or <code>cffi</code>.</p>
+<hr />
+<h2 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h2>
+<h3 id="do-i-need-to-free-anything-in-rust"><a class="header" href="#do-i-need-to-free-anything-in-rust">Do I need to free anything in Rust?</a></h3>
+<p><strong>No.</strong> Rust's ownership system handles everything automatically:</p>
+<pre><code class="language-rust">{
+    let directive = parse("#pragma omp parallel").unwrap();
+    // Use directive...
+} // ← Automatically freed here</code></pre>
+<h3 id="what-do-i-need-to-free-in-c"><a class="header" href="#what-do-i-need-to-free-in-c">What do I need to free in C?</a></h3>
+<p><strong>Always free:</strong></p>
+<ul>
+<li><code>roup_directive_free()</code> - For every <code>roup_parse()</code> call</li>
+<li><code>roup_clause_iterator_free()</code> - For every <code>roup_directive_clauses_iter()</code> call</li>
+<li><code>roup_string_list_free()</code> - For every <code>roup_clause_variables()</code> call</li>
+</ul>
+<p><strong>Never free:</strong></p>
+<ul>
+<li>Individual clauses from iterators (owned by directive)</li>
+</ul>
+<pre><code class="language-c">OmpDirective* dir = roup_parse("#pragma omp parallel");
+OmpClauseIterator* iter = roup_directive_clauses_iter(dir);
+
+// Use iter...
+
+roup_clause_iterator_free(iter);  // ✅ Free iterator
+roup_directive_free(dir);         // ✅ Free directive
+</code></pre>
+<h3 id="what-happens-if-i-forget-to-free"><a class="header" href="#what-happens-if-i-forget-to-free">What happens if I forget to free?</a></h3>
+<p><strong>Memory leak.</strong> The memory won't be reclaimed until the process exits.</p>
+<p>Use Valgrind to detect leaks:</p>
+<pre><code class="language-bash">valgrind --leak-check=full ./my_program
+</code></pre>
+<h3 id="what-happens-if-i-double-free"><a class="header" href="#what-happens-if-i-double-free">What happens if I double-free?</a></h3>
+<p><strong>Undefined behavior.</strong> Your program will likely crash.</p>
+<pre><code class="language-c">roup_directive_free(dir);
+roup_directive_free(dir);  // ❌ CRASH!
+</code></pre>
+<p><strong>Solution:</strong> Set pointers to NULL after freeing:</p>
+<pre><code class="language-c">roup_directive_free(dir);
+dir = NULL;
+</code></pre>
+<hr />
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="how-do-i-know-if-parsing-failed"><a class="header" href="#how-do-i-know-if-parsing-failed">How do I know if parsing failed?</a></h3>
+<p><strong>Rust:</strong></p>
+<pre><code class="language-rust">match parse(input) {
+    Ok(directive) =&gt; { /* success */ },
+    Err(error) =&gt; {
+        eprintln!("Parse error: {}", error.message);
+        eprintln!("At line {}, column {}", error.location.line, error.location.column);
+    }
+}</code></pre>
+<p><strong>C:</strong></p>
+<pre><code class="language-c">OmpDirective* dir = roup_parse(input);
+if (dir == NULL) {
+    fprintf(stderr, "Parse failed\n");
+    return 1;
+}
+</code></pre>
+<h3 id="what-causes-parse-errors"><a class="header" href="#what-causes-parse-errors">What causes parse errors?</a></h3>
+<p>Common causes:</p>
+<ul>
+<li>Invalid OpenMP syntax</li>
+<li>Typos in directive/clause names</li>
+<li>Missing required arguments</li>
+<li>Malformed expressions</li>
+<li>Invalid UTF-8</li>
+</ul>
+<h3 id="can-i-recover-from-parse-errors"><a class="header" href="#can-i-recover-from-parse-errors">Can I recover from parse errors?</a></h3>
+<p>Not automatically. If parsing fails, you get an error but no partial directive.</p>
+<p><strong>Workaround:</strong> Parse line-by-line and skip lines that fail:</p>
+<pre><code class="language-rust">for line in source_code.lines() {
+    if let Ok(directive) = parse(line) {
+        // Process directive
+    }
+    // Skip lines that don't parse
+}</code></pre>
+<h3 id="why-does-roup_parse-return-null"><a class="header" href="#why-does-roup_parse-return-null">Why does <code>roup_parse()</code> return NULL?</a></h3>
+<p>Possible reasons:</p>
+<ol>
+<li><strong>NULL input</strong>: You passed <code>NULL</code> pointer</li>
+<li><strong>Invalid syntax</strong>: OpenMP directive is malformed</li>
+<li><strong>Invalid UTF-8</strong>: Input contains invalid UTF-8 bytes</li>
+</ol>
+<p><strong>Debug it:</strong></p>
+<pre><code class="language-c">const char* inputs[] = {
+    NULL,                           // Returns NULL (null input)
+    "",                             // Returns NULL (empty)
+    "#pragma omp INVALID",          // Returns NULL (bad syntax)
+    "#pragma omp parallel",         // Returns pointer (valid!)
+};
+</code></pre>
+<hr />
+<h2 id="performance"><a class="header" href="#performance">Performance</a></h2>
+<h3 id="how-fast-is-parsing"><a class="header" href="#how-fast-is-parsing">How fast is parsing?</a></h3>
+<p>Typical parse times:</p>
+<ul>
+<li>Simple directive (<code>#pragma omp parallel</code>): <strong>~500ns</strong></li>
+<li>With clauses (<code>#pragma omp parallel for num_threads(4)</code>): <strong>~800ns</strong></li>
+<li>Complex (<code>#pragma omp parallel for private(i,j,k) reduction(+:sum)</code>): <strong>~1.2µs</strong></li>
+</ul>
+<p><strong>For comparison:</strong> LLVM parsing is ~10-100x slower due to full lexing/preprocessing overhead.</p>
+<h3 id="does-roup-allocate-much-memory"><a class="header" href="#does-roup-allocate-much-memory">Does ROUP allocate much memory?</a></h3>
+<p>Minimal allocations:</p>
+<ul>
+<li>1 allocation for the <code>DirectiveIR</code> struct</li>
+<li>1 allocation per clause (Vec element)</li>
+<li>Strings are stored inline (no extra allocations)</li>
+</ul>
+<p>Parsing <code>#pragma omp parallel for private(i) reduction(+:sum)</code>:</p>
+<ul>
+<li><strong>Allocations</strong>: 3 (DirectiveIR + 2 clauses)</li>
+<li><strong>Memory</strong>: ~200 bytes</li>
+</ul>
+<h3 id="can-i-reduce-allocations-further"><a class="header" href="#can-i-reduce-allocations-further">Can I reduce allocations further?</a></h3>
+<p>The lexer already uses zero-copy (works on <code>&amp;str</code> slices). The only allocations are for the IR structure, which you need to return.</p>
+<p>If you're parsing thousands of directives, consider:</p>
+<ul>
+<li><strong>Reuse</strong>: Parse once, reuse many times</li>
+<li><strong>Arena allocation</strong>: Use a custom allocator</li>
+<li><strong>Lazy parsing</strong>: Only parse when needed</li>
+</ul>
+<h3 id="is-the-c-api-slower-than-rust"><a class="header" href="#is-the-c-api-slower-than-rust">Is the C API slower than Rust?</a></h3>
+<p><strong>No.</strong> The C API is a thin wrapper (~10ns overhead per FFI call). Parsing performance is identical.</p>
+<p><strong>FFI overhead comparison:</strong></p>
+<ul>
+<li>C API: ~10ns per call</li>
+<li>Parsing: ~500-1000ns</li>
+<li><strong>FFI overhead</strong>: &lt;2% of total time</li>
+</ul>
+<hr />
+<h2 id="safety--security"><a class="header" href="#safety--security">Safety &amp; Security</a></h2>
+<h3 id="is-roup-memory-safe"><a class="header" href="#is-roup-memory-safe">Is ROUP memory-safe?</a></h3>
+<p><strong>Yes</strong>, with caveats:</p>
+<p><strong>Rust API</strong>: 100% memory-safe. Impossible to trigger undefined behavior from safe Rust code.</p>
+<p><strong>C API</strong>: Safe at the boundary, but C callers must follow contracts:</p>
+<ul>
+<li>Don't pass invalid pointers</li>
+<li>Don't use pointers after freeing</li>
+<li>Don't pass non-null-terminated strings</li>
+</ul>
+<p>This is standard for C FFI. ROUP does NULL checks and validation where possible.</p>
+<h3 id="where-is-the-unsafe-code"><a class="header" href="#where-is-the-unsafe-code">Where is the unsafe code?</a></h3>
+<p><strong>Location</strong>: <code>src/c_api.rs</code></p>
+<p><strong>Amount</strong>: ~60 lines out of 6,700+ (~0.9%)</p>
+<p><strong>Purpose</strong>: Only at FFI boundary for:</p>
+<ul>
+<li>Reading C strings (<code>CStr::from_ptr</code>)</li>
+<li>Writing to output pointers</li>
+<li>Converting between Rust and C types</li>
+</ul>
+<p>All unsafe code is:</p>
+<ul>
+<li>✅ Documented with safety contracts</li>
+<li>✅ Guarded by NULL checks</li>
+<li>✅ Minimal (single operations)</li>
+<li>✅ Tested thoroughly</li>
+</ul>
+<p>See <a href="./architecture.html#safety-boundaries">Architecture</a> for details.</p>
+<h3 id="can-malicious-input-crash-roup"><a class="header" href="#can-malicious-input-crash-roup">Can malicious input crash ROUP?</a></h3>
+<p><strong>No.</strong> Invalid input causes parse errors, not crashes.</p>
+<p><strong>Tested:</strong></p>
+<ul>
+<li>Fuzzing with random bytes</li>
+<li>NULL inputs</li>
+<li>Extremely long strings</li>
+<li>Malformed UTF-8</li>
+<li>Edge cases</li>
+</ul>
+<p>All result in safe error returns, never crashes.</p>
+<h3 id="is-roup-vulnerable-to-buffer-overflows"><a class="header" href="#is-roup-vulnerable-to-buffer-overflows">Is ROUP vulnerable to buffer overflows?</a></h3>
+<p><strong>No.</strong> Rust prevents buffer overflows at compile time.</p>
+<p>Even the C API is safe:</p>
+<ul>
+<li>Uses <code>CStr::from_ptr()</code> which validates null termination</li>
+<li>No manual pointer arithmetic</li>
+<li>No manual buffer copying</li>
+</ul>
+<hr />
+<h2 id="integration"><a class="header" href="#integration">Integration</a></h2>
+<h3 id="can-i-use-roup-in-a-c-project"><a class="header" href="#can-i-use-roup-in-a-c-project">Can I use ROUP in a C++ project?</a></h3>
+<p><strong>Yes!</strong> Use the C API with C++17 RAII wrappers:</p>
+<pre><code class="language-cpp">#include "roup_wrapper.hpp"
+
+roup::Directive dir("#pragma omp parallel");
+if (dir) {
+    std::cout &lt;&lt; "Parsed successfully!\n";
+}
+// Automatic cleanup
+</code></pre>
+<p>See <a href="./cpp-tutorial.html">C++ Tutorial</a> for details.</p>
+<h3 id="does-roup-work-with-cmake"><a class="header" href="#does-roup-work-with-cmake">Does ROUP work with CMake?</a></h3>
+<p><strong>Yes!</strong> Example:</p>
+<pre><code class="language-cmake">add_library(roup STATIC IMPORTED)
+set_target_properties(roup PROPERTIES
+    IMPORTED_LOCATION "/path/to/libroup.a"
+)
+
+target_link_libraries(myapp roup pthread dl m)
+</code></pre>
+<p>See <a href="./building.html#step-3-compile-your-c-program">Building Guide - C Integration</a> for full example.</p>
+<h3 id="can-i-statically-link-roup"><a class="header" href="#can-i-statically-link-roup">Can I statically link ROUP?</a></h3>
+<p><strong>Yes!</strong> Use <code>libroup.a</code>:</p>
+<pre><code class="language-bash">gcc myapp.c -L/path/to/target/release -lroup -lpthread -ldl -lm
+</code></pre>
+<p>The resulting binary has no runtime dependencies on ROUP.</p>
+<h3 id="does-roup-work-on-embedded-systems"><a class="header" href="#does-roup-work-on-embedded-systems">Does ROUP work on embedded systems?</a></h3>
+<p>It depends on the target:</p>
+<p><strong>Yes</strong> (if target supports):</p>
+<ul>
+<li>Rust standard library</li>
+<li>Dynamic memory allocation</li>
+<li>~500KB binary size</li>
+</ul>
+<p><strong>No</strong> (if target requires):</p>
+<ul>
+<li><code>no_std</code> Rust (no heap)</li>
+<li>&lt;100KB binary size</li>
+</ul>
+<p>For <code>no_std</code> support, open a <a href="https://github.com/ouankou/roup/issues">feature request</a>.</p>
+<hr />
+<h2 id="comparison-to-other-tools"><a class="header" href="#comparison-to-other-tools">Comparison to Other Tools</a></h2>
+<h3 id="roup-vs-libomptarget"><a class="header" href="#roup-vs-libomptarget">ROUP vs libomptarget?</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>ROUP</th><th>libomptarget</th></tr></thead><tbody>
+<tr><td><strong>Purpose</strong></td><td>Parsing only</td><td>Full OpenMP runtime</td></tr>
+<tr><td><strong>Size</strong></td><td>~500KB</td><td>~50MB+ (with LLVM)</td></tr>
+<tr><td><strong>Dependencies</strong></td><td>None</td><td>LLVM, Clang</td></tr>
+<tr><td><strong>Parse time</strong></td><td>~1µs</td><td>~100µs</td></tr>
+<tr><td><strong>API</strong></td><td>Simple</td><td>Complex</td></tr>
+<tr><td><strong>Use case</strong></td><td>Analysis tools</td><td>Compilers</td></tr>
+</tbody></table>
+</div>
+<p><strong>Use ROUP for:</strong> Static analysis, IDE plugins, documentation tools</p>
+<p><strong>Use libomptarget for:</strong> Compiling OpenMP code for execution</p>
+<h3 id="roup-vs-writing-a-custom-parser"><a class="header" href="#roup-vs-writing-a-custom-parser">ROUP vs writing a custom parser?</a></h3>
+<p><strong>ROUP advantages:</strong></p>
+<ul>
+<li>Already supports 120+ directives</li>
+<li>Tested with 342 tests</li>
+<li>Handles edge cases</li>
+<li>Active maintenance</li>
+<li>OpenMP spec compliance</li>
+</ul>
+<p><strong>Custom parser:</strong></p>
+<ul>
+<li>❌ Weeks/months of development</li>
+<li>❌ Easy to miss edge cases</li>
+<li>❌ Hard to maintain</li>
+<li>❌ Likely has bugs</li>
+</ul>
+<p><strong>Verdict:</strong> Use ROUP unless you have very specific needs.</p>
+<h3 id="roup-vs-regex"><a class="header" href="#roup-vs-regex">ROUP vs regex?</a></h3>
+<p><strong>Don't use regex for parsing OpenMP.</strong></p>
+<p>OpenMP syntax is too complex for regex:</p>
+<ul>
+<li>Nested parentheses</li>
+<li>Expression parsing</li>
+<li>Clause dependencies</li>
+<li>Context-sensitive syntax</li>
+</ul>
+<p>Regex will fail on edge cases and give incorrect results.</p>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="cannot-find--lroup-when-linking"><a class="header" href="#cannot-find--lroup-when-linking">"cannot find -lroup" when linking</a></h3>
+<p><strong>Problem:</strong> Linker can't find library.</p>
+<p><strong>Solution:</strong></p>
+<pre><code class="language-bash"># Check library exists
+ls target/release/libroup.*
+
+# Rebuild if needed
+cargo build --release
+
+# Use correct path
+gcc ... -L$(pwd)/target/release -lroup
+</code></pre>
+<h3 id="error-while-loading-shared-libraries-libroupso"><a class="header" href="#error-while-loading-shared-libraries-libroupso">"error while loading shared libraries: libroup.so"</a></h3>
+<p><strong>Problem:</strong> Runtime can't find dynamic library.</p>
+<p><strong>Solutions:</strong></p>
+<p><strong>Option 1 - rpath:</strong></p>
+<pre><code class="language-bash">gcc ... -Wl,-rpath,/path/to/target/release
+</code></pre>
+<p><strong>Option 2 - LD_LIBRARY_PATH:</strong></p>
+<pre><code class="language-bash">export LD_LIBRARY_PATH=/path/to/target/release:$LD_LIBRARY_PATH
+</code></pre>
+<p><strong>Option 3 - Static linking:</strong></p>
+<pre><code class="language-bash">gcc ... -L/path/to/target/release -lroup -lpthread -ldl -lm
+</code></pre>
+<h3 id="compilation-is-slow"><a class="header" href="#compilation-is-slow">Compilation is slow</a></h3>
+<p><strong>Solution:</strong></p>
+<pre><code class="language-bash"># Install faster linker
+cargo install lld
+export RUSTFLAGS="-C link-arg=-fuse-ld=lld"
+
+# Use sccache
+cargo install sccache
+export RUSTC_WRAPPER=sccache
+</code></pre>
+<h3 id="rust-version-too-old"><a class="header" href="#rust-version-too-old">Rust version too old</a></h3>
+<p><strong>Solution:</strong></p>
+<pre><code class="language-bash"># Update Rust
+rustup update stable
+
+# Check version (need 1.70+)
+rustc --version
+</code></pre>
+<hr />
+<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
+<h3 id="where-can-i-ask-questions"><a class="header" href="#where-can-i-ask-questions">Where can I ask questions?</a></h3>
+<ol>
+<li><strong>Search first</strong>: Check this FAQ and documentation</li>
+<li><strong>GitHub Discussions</strong>: <a href="https://github.com/ouankou/roup/discussions">Ask a question</a></li>
+<li><strong>GitHub Issues</strong>: <a href="https://github.com/ouankou/roup/issues">Report bugs</a></li>
+<li><strong>Email</strong>: <a href="mailto:support@ouankou.com">support@ouankou.com</a></li>
+</ol>
+<h3 id="how-do-i-report-a-bug"><a class="header" href="#how-do-i-report-a-bug">How do I report a bug?</a></h3>
+<p><a href="https://github.com/ouankou/roup/issues/new">Open an issue</a> with:</p>
+<ol>
+<li>Input directive that fails</li>
+<li>Expected behavior</li>
+<li>Actual behavior</li>
+<li>Environment (OS, Rust version, ROUP version)</li>
+<li>Minimal code to reproduce</li>
+</ol>
+<h3 id="how-do-i-request-a-feature"><a class="header" href="#how-do-i-request-a-feature">How do I request a feature?</a></h3>
+<p><a href="https://github.com/ouankou/roup/discussions">Start a discussion</a> explaining:</p>
+<ol>
+<li>What you want to do</li>
+<li>Why current API doesn't support it</li>
+<li>Proposed solution</li>
+<li>Use case</li>
+</ol>
+<hr />
+<h2 id="still-have-questions"><a class="header" href="#still-have-questions">Still have questions?</a></h2>
+<p>If your question isn't answered here:</p>
+<ol>
+<li>Check the <a href="https://roup.ouankou.com">full documentation</a></li>
+<li>Browse <a href="https://github.com/ouankou/roup/tree/main/examples">examples</a></li>
+<li>Search <a href="https://github.com/ouankou/roup/issues?q=is%3Aissue+is%3Aclosed">closed issues</a></li>
+<li>Ask on <a href="https://github.com/ouankou/roup/discussions">GitHub Discussions</a></li>
+</ol>
+<p><strong>We're here to help!</strong> 🚀</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="contributing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="contributing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

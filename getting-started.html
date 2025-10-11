@@ -244,54 +244,54 @@ fn main() {
 <p><strong>Next:</strong> See the <a href="./rust-tutorial.html">Rust Tutorial</a> for advanced usage.</p>
 <hr />
 <h2 id="quick-start-c"><a class="header" href="#quick-start-c">Quick Start: C</a></h2>
-<h3 id="1-include-the-header"><a class="header" href="#1-include-the-header">1. Include the Header</a></h3>
-<p>The C API is defined in <code>include/roup.h</code>:</p>
-<pre><code class="language-c">#include "include/roup.h"
-#include &lt;stdio.h&gt;
+<h3 id="1-write-your-program"><a class="header" href="#1-write-your-program">1. Write Your Program</a></h3>
+<p>The C API uses direct pointers (malloc/free pattern):</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include &lt;stdint.h&gt;
+
+// Forward declarations from libroup
+typedef struct OmpDirective OmpDirective;
+
+OmpDirective* roup_parse(const char* input);
+int32_t roup_directive_clause_count(const OmpDirective* dir);
+void roup_directive_free(OmpDirective* dir);
 
 int main() {
     // Parse a directive
-    Handle directive;
-    OmpStatus status = omp_parse_cstr(
-        "#pragma omp parallel num_threads(4)", 
-        OMP_LANG_C, 
-        &amp;directive
-    );
+    OmpDirective* directive = roup_parse("#pragma omp parallel num_threads(4)");
     
-    if (status != OMP_SUCCESS) {
-        fprintf(stderr, "Parse failed with status: %d\n", status);
+    if (!directive) {
+        fprintf(stderr, "Parse failed\n");
         return 1;
     }
     
-    // Query directive kind
-    int32_t kind;
-    omp_directive_kind_ptr(directive, &amp;kind);
-    printf("Directive kind: %d\n", kind);
-    
     // Query clause count
-    uintptr_t count;
-    omp_directive_clause_count_ptr(directive, &amp;count);
-    printf("Clause count: %zu\n", count);
+    int32_t count = roup_directive_clause_count(directive);
+    printf("Clause count: %d\n", count);
     
     // Clean up
-    omp_directive_free(directive);
+    roup_directive_free(directive);
     
     return 0;
 }
 </code></pre>
 <h3 id="2-compile"><a class="header" href="#2-compile">2. Compile</a></h3>
-<pre><code class="language-bash">clang example.c \
-  -I./include \
+<pre><code class="language-bash"># Build ROUP library first
+cargo build --release
+
+# Compile your C program
+clang example.c \
   -L./target/release \
   -lroup \
+  -lpthread -ldl -lm \
   -Wl,-rpath,./target/release \
   -o example
 </code></pre>
 <p><strong>On macOS:</strong></p>
 <pre><code class="language-bash">clang example.c \
-  -I./include \
   -L./target/release \
   -lroup \
+  -lpthread -ldl \
   -Wl,-rpath,@executable_path/../target/release \
   -o example
 </code></pre>
@@ -299,54 +299,49 @@ int main() {
 <pre><code class="language-bash">./example
 </code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Directive kind: 0
-Clause count: 1
+<pre><code>Clause count: 1
 </code></pre>
-<p><strong>Next:</strong> See the <a href="./c-tutorial.html">C Tutorial</a> for complete examples with error handling.</p>
+<p><strong>Next:</strong> See the <a href="./c-tutorial.html">C Tutorial</a> for complete examples with iteration and error handling.</p>
 <hr />
 <h2 id="quick-start-c-1"><a class="header" href="#quick-start-c-1">Quick Start: C++</a></h2>
 <h3 id="1-create-your-program"><a class="header" href="#1-create-your-program">1. Create Your Program</a></h3>
-<p>Modern C++17 with RAII wrappers (see <a href="./cpp-tutorial.html">C++ Tutorial</a> for full implementation):</p>
-<pre><code class="language-cpp">#include "include/roup.h"
-#include &lt;iostream&gt;
-#include &lt;memory&gt;
+<p>Modern C++17 with RAII wrappers:</p>
+<pre><code class="language-cpp">#include &lt;iostream&gt;
+#include &lt;cstdint&gt;
+
+// Forward declarations from libroup C API
+struct OmpDirective;
+extern "C" {
+    OmpDirective* roup_parse(const char* input);
+    int32_t roup_directive_clause_count(const OmpDirective* dir);
+    void roup_directive_free(OmpDirective* dir);
+}
 
 // Simple RAII wrapper
 class Directive {
-    Handle handle_;
+    OmpDirective* ptr_;
 public:
-    explicit Directive(const char* input) {
-        omp_parse_cstr(input, OMP_LANG_C, &amp;handle_);
-    }
+    explicit Directive(const char* input) 
+        : ptr_(roup_parse(input)) {}
     
     ~Directive() {
-        if (handle_ != INVALID_HANDLE) {
-            omp_directive_free(handle_);
-        }
+        if (ptr_) roup_directive_free(ptr_);
     }
     
     // Delete copy, allow move
     Directive(const Directive&amp;) = delete;
     Directive&amp; operator=(const Directive&amp;) = delete;
     Directive(Directive&amp;&amp; other) noexcept 
-        : handle_(other.handle_) {
-        other.handle_ = INVALID_HANDLE;
+        : ptr_(other.ptr_) {
+        other.ptr_ = nullptr;
     }
     
     bool valid() const { 
-        return handle_ != INVALID_HANDLE; 
+        return ptr_ != nullptr; 
     }
     
-    int32_t kind() const {
-        int32_t k = -1;
-        omp_directive_kind_ptr(handle_, &amp;k);
-        return k;
-    }
-    
-    size_t clause_count() const {
-        uintptr_t count = 0;
-        omp_directive_clause_count_ptr(handle_, &amp;count);
-        return count;
+    int clause_count() const {
+        return ptr_ ? roup_directive_clause_count(ptr_) : 0;
     }
 };
 
@@ -358,17 +353,20 @@ int main() {
         return 1;
     }
     
-    std::cout &lt;&lt; "Directive kind: " &lt;&lt; dir.kind() &lt;&lt; "\n";
     std::cout &lt;&lt; "Clause count: " &lt;&lt; dir.clause_count() &lt;&lt; "\n";
     
     return 0;
 }  // Automatic cleanup via RAII
 </code></pre>
 <h3 id="2-compile-1"><a class="header" href="#2-compile-1">2. Compile</a></h3>
-<pre><code class="language-bash">clang++ -std=c++17 example.cpp \
-  -I./include \
+<pre><code class="language-bash"># Build ROUP library first
+cargo build --release
+
+# Compile your C++ program
+clang++ -std=c++17 example.cpp \
   -L./target/release \
   -lroup \
+  -lpthread -ldl -lm \
   -Wl,-rpath,./target/release \
   -o example
 </code></pre>
@@ -376,39 +374,24 @@ int main() {
 <pre><code class="language-bash">./example
 </code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Directive kind: 28
-Clause count: 1
+<pre><code>Clause count: 1
 </code></pre>
 <p><strong>Next:</strong> See the <a href="./cpp-tutorial.html">C++ Tutorial</a> for a complete real-world example.</p>
 <hr />
-<h2 id="understanding-directive-kinds"><a class="header" href="#understanding-directive-kinds">Understanding Directive Kinds</a></h2>
-<p>The C/C++ API returns integer discriminants for directive kinds. Here are the most common ones:</p>
-<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Directive</th><th>Example</th></tr></thead><tbody>
-<tr><td>0</td><td><code>parallel</code></td><td><code>#pragma omp parallel</code></td></tr>
-<tr><td>1</td><td><code>for</code></td><td><code>#pragma omp for</code></td></tr>
-<tr><td>5</td><td><code>task</code></td><td><code>#pragma omp task</code></td></tr>
-<tr><td>15</td><td><code>target</code></td><td><code>#pragma omp target</code></td></tr>
-<tr><td>21</td><td><code>teams</code></td><td><code>#pragma omp teams</code></td></tr>
-<tr><td>28</td><td><code>parallel for</code></td><td><code>#pragma omp parallel for</code></td></tr>
-<tr><td>61</td><td><code>metadirective</code></td><td><code>#pragma omp metadirective</code></td></tr>
-</tbody></table>
-</div>
-<p><strong>See the complete enum mapping in the <a href="./api-reference.html#directive-kinds-directivekind-enum">API Reference</a>.</strong></p>
-<hr />
 <h2 id="whats-supported"><a class="header" href="#whats-supported">What's Supported?</a></h2>
-<h3 id="directives-74-total"><a class="header" href="#directives-74-total">Directives (74 total)</a></h3>
+<h3 id="directives-95-total"><a class="header" href="#directives-95-total">Directives (95 total)</a></h3>
 <p>✅ Parallelism: <code>parallel</code>, <code>for</code>, <code>sections</code>, <code>single</code>, <code>master</code><br />
 ✅ Tasking: <code>task</code>, <code>taskwait</code>, <code>taskgroup</code>, <code>taskloop</code><br />
 ✅ Device offloading: <code>target</code>, <code>teams</code>, <code>distribute</code><br />
 ✅ Synchronization: <code>barrier</code>, <code>critical</code>, <code>atomic</code><br />
 ✅ Advanced: <code>metadirective</code>, <code>declare variant</code>, <code>loop</code></p>
-<h3 id="clauses-92-total"><a class="header" href="#clauses-92-total">Clauses (92 total)</a></h3>
+<h3 id="clauses-91-total"><a class="header" href="#clauses-91-total">Clauses (91 total)</a></h3>
 <p>✅ Scheduling: <code>schedule</code>, <code>collapse</code>, <code>ordered</code><br />
 ✅ Data-sharing: <code>private</code>, <code>shared</code>, <code>firstprivate</code>, <code>lastprivate</code><br />
 ✅ Reductions: <code>reduction(+|-|*|&amp;|&amp;&amp;|min|max:vars)</code><br />
 ✅ Device clauses: <code>device</code>, <code>map</code>, <code>is_device_ptr</code><br />
 ✅ Control: <code>if</code>, <code>num_threads</code>, <code>default</code></p>
-<p><strong>For the complete support matrix, see <a href="./openmp-support.html">OpenMP Support</a></strong> (coming soon).</p>
+<p><strong>For the complete support matrix, see <a href="./openmp-support.html">OpenMP Support</a>.</strong></p>
 <hr />
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <h3 id="library-not-found-at-runtime"><a class="header" href="#library-not-found-at-runtime">Library Not Found at Runtime</a></h3>
@@ -417,28 +400,31 @@ Clause count: 1
 ./example
 </code></pre>
 <p>Or use <code>-Wl,-rpath</code> during compilation (recommended):</p>
-<pre><code class="language-bash">clang example.c -L./target/release -lroup -Wl,-rpath,$PWD/target/release
+<pre><code class="language-bash">clang example.c -L./target/release -lroup -lpthread -ldl -lm -Wl,-rpath,$PWD/target/release
 </code></pre>
 <p><strong>macOS:</strong></p>
 <pre><code class="language-bash">export DYLD_LIBRARY_PATH=$PWD/target/release:$DYLD_LIBRARY_PATH
 ./example
 </code></pre>
-<h3 id="parse-returns-invalid-handle"><a class="header" href="#parse-returns-invalid-handle">Parse Returns Invalid Handle</a></h3>
+<h3 id="parse-returns-null"><a class="header" href="#parse-returns-null">Parse Returns NULL</a></h3>
 <p>Check your OpenMP syntax:</p>
 <pre><code class="language-c">// ✅ Valid
-omp_parse_cstr("#pragma omp parallel", OMP_LANG_C, &amp;handle);
+OmpDirective* dir = roup_parse("#pragma omp parallel");
 
-// ✅ Valid - Fortran syntax
-omp_parse_cstr("!$omp parallel", OMP_LANG_FORTRAN, &amp;handle);
+// ✅ Valid - with clauses
+dir = roup_parse("#pragma omp parallel num_threads(4)");
 
 // ❌ Invalid - missing 'omp'
-omp_parse_cstr("#pragma parallel", OMP_LANG_C, &amp;handle);
+dir = roup_parse("#pragma parallel");  // Returns NULL
 </code></pre>
-<p>Always check the return status:</p>
-<pre><code class="language-c">OmpStatus status = omp_parse_cstr(input, OMP_LANG_C, &amp;handle);
-if (status != OMP_SUCCESS) {
-    fprintf(stderr, "Parse error: %d\n", status);
+<p>Always check for NULL:</p>
+<pre><code class="language-c">OmpDirective* dir = roup_parse(input);
+if (!dir) {
+    fprintf(stderr, "Parse error\n");
+    return 1;
 }
+// ... use dir ...
+roup_directive_free(dir);
 </code></pre>
 <h3 id="c-compilation-errors"><a class="header" href="#c-compilation-errors">C++ Compilation Errors</a></h3>
 <p>Make sure you're using C++17:</p>
@@ -478,15 +464,15 @@ cargo run
 </code></pre>
 <p><strong>C:</strong></p>
 <pre><code class="language-bash">cargo build --release
-clang example.c -I./include -L./target/release -lroup -Wl,-rpath,./target/release
+clang example.c -L./target/release -lroup -lpthread -ldl -lm -Wl,-rpath,./target/release
 ./example
 </code></pre>
 <p><strong>C++:</strong></p>
 <pre><code class="language-bash">cargo build --release
-clang++ -std=c++17 example.cpp -I./include -L./target/release -lroup -Wl,-rpath,./target/release
+clang++ -std=c++17 example.cpp -L./target/release -lroup -lpthread -ldl -lm -Wl,-rpath,./target/release
 ./example
 </code></pre>
-<p><strong>You're now ready to parse OpenMP directives!</strong> 🎉</p>
+<p><strong>You're ready to experiment with OpenMP parsing!</strong> 🎉</p>
 
                     </main>
 
@@ -496,7 +482,7 @@ clang++ -std=c++17 example.cpp -I./include -L./target/release -lroup -Wl,-rpath,
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="rust-tutorial.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="building.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -510,7 +496,7 @@ clang++ -std=c++17 example.cpp -I./include -L./target/release -lroup -Wl,-rpath,
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="rust-tutorial.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="building.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

@@ -760,44 +760,59 @@
 <a href=#760 id=760 data-nosnippet>760</a>/// ## Design Note:
 <a href=#761 id=761 data-nosnippet>761</a>/// Most clause data (schedule, reduction, default) are Copy types that don't
 <a href=#762 id=762 data-nosnippet>762</a>/// need cleanup. Only heap-allocated variable lists need explicit freeing.
-<a href=#763 id=763 data-nosnippet>763</a></span><span class="kw">fn </span>free_clause_data(clause: <span class="kw-2">&amp;</span>OmpClause) {
-<a href=#764 id=764 data-nosnippet>764</a>    <span class="kw">unsafe </span>{
-<a href=#765 id=765 data-nosnippet>765</a>        <span class="comment">// Free variable lists if present (private, shared, etc.)
-<a href=#766 id=766 data-nosnippet>766</a>        // Clause kinds 2-6 have variable lists
-<a href=#767 id=767 data-nosnippet>767</a>        </span><span class="kw">if </span>clause.kind &gt;= <span class="number">2 </span>&amp;&amp; clause.kind &lt;= <span class="number">6 </span>{
-<a href=#768 id=768 data-nosnippet>768</a>            <span class="kw">let </span>vars_ptr = clause.data.variables;
-<a href=#769 id=769 data-nosnippet>769</a>            <span class="kw">if </span>!vars_ptr.is_null() {
-<a href=#770 id=770 data-nosnippet>770</a>                roup_string_list_free(vars_ptr);
-<a href=#771 id=771 data-nosnippet>771</a>            }
-<a href=#772 id=772 data-nosnippet>772</a>        }
-<a href=#773 id=773 data-nosnippet>773</a>    }
-<a href=#774 id=774 data-nosnippet>774</a>}
-<a href=#775 id=775 data-nosnippet>775</a>
-<a href=#776 id=776 data-nosnippet>776</a><span class="comment">// ============================================================================
-<a href=#777 id=777 data-nosnippet>777</a>// END OF C API IMPLEMENTATION
-<a href=#778 id=778 data-nosnippet>778</a>// ============================================================================
-<a href=#779 id=779 data-nosnippet>779</a>//
-<a href=#780 id=780 data-nosnippet>780</a>// Summary: This C API provides a minimal unsafe FFI layer over safe Rust code.
-<a href=#781 id=781 data-nosnippet>781</a>//
-<a href=#782 id=782 data-nosnippet>782</a>// Total Safety Profile:
-<a href=#783 id=783 data-nosnippet>783</a>// - 18 unsafe blocks (~60 lines = 0.9% of file)
-<a href=#784 id=784 data-nosnippet>784</a>// - All unsafe confined to FFI boundary
-<a href=#785 id=785 data-nosnippet>785</a>// - Core parsing logic remains 100% safe Rust
-<a href=#786 id=786 data-nosnippet>786</a>//
-<a href=#787 id=787 data-nosnippet>787</a>// Design Principles Applied:
-<a href=#788 id=788 data-nosnippet>788</a>// 1. ✅ Minimal unsafe: Only at C boundary, not in business logic
-<a href=#789 id=789 data-nosnippet>789</a>// 2. ✅ Direct pointers: Simple, predictable, C-friendly
-<a href=#790 id=790 data-nosnippet>790</a>// 3. ✅ Caller responsibility: C manages memory lifetime explicitly
-<a href=#791 id=791 data-nosnippet>791</a>// 4. ✅ Fail-fast: NULL returns on any error
-<a href=#792 id=792 data-nosnippet>792</a>// 5. ✅ No hidden state: Stateless API, no global variables
-<a href=#793 id=793 data-nosnippet>793</a>//
-<a href=#794 id=794 data-nosnippet>794</a>// Why This Approach Works:
-<a href=#795 id=795 data-nosnippet>795</a>// - C programmers understand manual memory management
-<a href=#796 id=796 data-nosnippet>796</a>// - Performance: No overhead from handle tables or reference counting
-<a href=#797 id=797 data-nosnippet>797</a>// - Simplicity: Direct mapping between Rust types and C expectations
-<a href=#798 id=798 data-nosnippet>798</a>// - Safety: Core parser is safe Rust, only FFI layer has unsafe
-<a href=#799 id=799 data-nosnippet>799</a>//
-<a href=#800 id=800 data-nosnippet>800</a>// Future Considerations for v1.0.0:
-<a href=#801 id=801 data-nosnippet>801</a>// - Thread safety annotations (Rust types are Send/Sync, C must ensure too)
-<a href=#802 id=802 data-nosnippet>802</a>// - Comprehensive error reporting (currently just NULL on error)
-<a href=#803 id=803 data-nosnippet>803</a>// - Semantic validation beyond parsing (requires deeper OpenMP knowledge)</span></code></pre></div></section></main></body></html>
+<a href=#763 id=763 data-nosnippet>763</a>///
+<a href=#764 id=764 data-nosnippet>764</a>/// ## IMPORTANT: ClauseData is a C union!
+<a href=#765 id=765 data-nosnippet>765</a>/// The ClauseData union has 4 fields, but only ONE is active per clause:
+<a href=#766 id=766 data-nosnippet>766</a>///   - `variables: *mut OmpStringList` - used by kinds 2-5 (private/shared/firstprivate/lastprivate)
+<a href=#767 id=767 data-nosnippet>767</a>///   - `reduction: ReductionData` - used by kind 6 (reduction operator only, NO variables pointer)
+<a href=#768 id=768 data-nosnippet>768</a>///   - `schedule: ScheduleData` - used by kind 7 (schedule policy only)
+<a href=#769 id=769 data-nosnippet>769</a>///   - `default: i32` - used by other kinds
+<a href=#770 id=770 data-nosnippet>770</a>///
+<a href=#771 id=771 data-nosnippet>771</a>/// Reduction clauses (kind 6) do NOT use the `variables` field. Trying to free
+<a href=#772 id=772 data-nosnippet>772</a>/// clause.data.variables on a reduction clause would read garbage memory from the
+<a href=#773 id=773 data-nosnippet>773</a>/// wrong union variant (the bytes of ReductionData::operator interpreted as a pointer).
+<a href=#774 id=774 data-nosnippet>774</a></span><span class="kw">fn </span>free_clause_data(clause: <span class="kw-2">&amp;</span>OmpClause) {
+<a href=#775 id=775 data-nosnippet>775</a>    <span class="kw">unsafe </span>{
+<a href=#776 id=776 data-nosnippet>776</a>        <span class="comment">// Free variable lists if present
+<a href=#777 id=777 data-nosnippet>777</a>        // Clause kinds with variable lists (see convert_clause):
+<a href=#778 id=778 data-nosnippet>778</a>        //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
+<a href=#779 id=779 data-nosnippet>779</a>        // Other kinds use different union fields:
+<a href=#780 id=780 data-nosnippet>780</a>        //   6 = reduction (uses .reduction field, NOT .variables)
+<a href=#781 id=781 data-nosnippet>781</a>        //   7 = schedule (uses .schedule field, NOT .variables)
+<a href=#782 id=782 data-nosnippet>782</a>        </span><span class="kw">if </span>clause.kind &gt;= <span class="number">2 </span>&amp;&amp; clause.kind &lt;= <span class="number">5 </span>{
+<a href=#783 id=783 data-nosnippet>783</a>            <span class="kw">let </span>vars_ptr = clause.data.variables;
+<a href=#784 id=784 data-nosnippet>784</a>            <span class="kw">if </span>!vars_ptr.is_null() {
+<a href=#785 id=785 data-nosnippet>785</a>                roup_string_list_free(vars_ptr);
+<a href=#786 id=786 data-nosnippet>786</a>            }
+<a href=#787 id=787 data-nosnippet>787</a>        }
+<a href=#788 id=788 data-nosnippet>788</a>    }
+<a href=#789 id=789 data-nosnippet>789</a>}
+<a href=#790 id=790 data-nosnippet>790</a>
+<a href=#791 id=791 data-nosnippet>791</a><span class="comment">// ============================================================================
+<a href=#792 id=792 data-nosnippet>792</a>// END OF C API IMPLEMENTATION
+<a href=#793 id=793 data-nosnippet>793</a>// ============================================================================
+<a href=#794 id=794 data-nosnippet>794</a>//
+<a href=#795 id=795 data-nosnippet>795</a>// Summary: This C API provides a minimal unsafe FFI layer over safe Rust code.
+<a href=#796 id=796 data-nosnippet>796</a>//
+<a href=#797 id=797 data-nosnippet>797</a>// Total Safety Profile:
+<a href=#798 id=798 data-nosnippet>798</a>// - 18 unsafe blocks (~60 lines = 0.9% of file)
+<a href=#799 id=799 data-nosnippet>799</a>// - All unsafe confined to FFI boundary
+<a href=#800 id=800 data-nosnippet>800</a>// - Core parsing logic remains 100% safe Rust
+<a href=#801 id=801 data-nosnippet>801</a>//
+<a href=#802 id=802 data-nosnippet>802</a>// Design Principles Applied:
+<a href=#803 id=803 data-nosnippet>803</a>// 1. ✅ Minimal unsafe: Only at C boundary, not in business logic
+<a href=#804 id=804 data-nosnippet>804</a>// 2. ✅ Direct pointers: Simple, predictable, C-friendly
+<a href=#805 id=805 data-nosnippet>805</a>// 3. ✅ Caller responsibility: C manages memory lifetime explicitly
+<a href=#806 id=806 data-nosnippet>806</a>// 4. ✅ Fail-fast: NULL returns on any error
+<a href=#807 id=807 data-nosnippet>807</a>// 5. ✅ No hidden state: Stateless API, no global variables
+<a href=#808 id=808 data-nosnippet>808</a>//
+<a href=#809 id=809 data-nosnippet>809</a>// Why This Approach Works:
+<a href=#810 id=810 data-nosnippet>810</a>// - C programmers understand manual memory management
+<a href=#811 id=811 data-nosnippet>811</a>// - Performance: No overhead from handle tables or reference counting
+<a href=#812 id=812 data-nosnippet>812</a>// - Simplicity: Direct mapping between Rust types and C expectations
+<a href=#813 id=813 data-nosnippet>813</a>// - Safety: Core parser is safe Rust, only FFI layer has unsafe
+<a href=#814 id=814 data-nosnippet>814</a>//
+<a href=#815 id=815 data-nosnippet>815</a>// Future Considerations for v1.0.0:
+<a href=#816 id=816 data-nosnippet>816</a>// - Thread safety annotations (Rust types are Send/Sync, C must ensure too)
+<a href=#817 id=817 data-nosnippet>817</a>// - Comprehensive error reporting (currently just NULL on error)
+<a href=#818 id=818 data-nosnippet>818</a>// - Semantic validation beyond parsing (requires deeper OpenMP knowledge)</span></code></pre></div></section></main></body></html>
