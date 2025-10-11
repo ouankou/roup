@@ -23,6 +23,8 @@
 
 use super::registry::{insert, with_resource, Cursor, Resource};
 use super::types::{Handle, OmpStatus, INVALID_HANDLE};
+
+#[cfg(test)]
 use crate::ir::DirectiveKind;
 
 /// Get the kind of a directive

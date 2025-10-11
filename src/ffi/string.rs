@@ -27,7 +27,10 @@
 //! 4. **Resource Management**: Explicit allocation/deallocation pattern
 
 use super::registry::{insert, remove, with_resource, with_resource_mut, ByteString, Resource};
-use super::types::{Handle, OmpStatus, INVALID_HANDLE};
+use super::types::{Handle, OmpStatus};
+
+#[cfg(test)]
+use super::types::INVALID_HANDLE;
 
 /// Create a new empty string
 ///

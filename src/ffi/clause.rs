@@ -21,10 +21,10 @@
 
 use super::registry::{insert, with_resource, Resource};
 use super::types::{Handle, OmpStatus, INVALID_HANDLE};
-use crate::ir::{
-    ClauseData, DefaultKind, DependType, LinearModifier, MapType, ProcBind, ReductionOperator,
-    ScheduleKind, ScheduleModifier,
-};
+use crate::ir::ClauseData;
+
+#[cfg(test)]
+use crate::ir::{DefaultKind, ReductionOperator, ScheduleKind};
 
 /// Clause type discriminant for C API
 ///
@@ -545,7 +545,6 @@ pub extern "C" fn omp_clause_bare_name(clause_handle: Handle) -> Handle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ffi::directive::omp_directive_clauses_cursor;
     use crate::ffi::parse::{omp_directive_free, omp_parse, omp_take_last_parse_result};
     use crate::ffi::registry::REGISTRY;
     use crate::ffi::string::{omp_str_free, omp_str_new, omp_str_push_byte, omp_str_validate_utf8};
