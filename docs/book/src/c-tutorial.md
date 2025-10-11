@@ -15,7 +15,7 @@ Before starting, ensure you have:
 - ROUP library compiled (see [Building Guide](./building.md))
 - Basic understanding of malloc/free patterns
 
-**Example code**: See `examples/c/tutorial_basic.c` for a complete working example (433 lines).
+**Example code**: See `examples/c/tutorial_basic.c` for a complete working example.
 
 ---
 

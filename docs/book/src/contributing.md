@@ -540,6 +540,8 @@ cargo flamegraph --bin roup
 
 Email security issues to: [security@ouankou.com](mailto:security@ouankou.com)
 
+> This email address is actively monitored by the ROUP maintainers.
+
 Include:
 - Description of vulnerability
 - Steps to reproduce
