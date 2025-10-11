@@ -218,7 +218,7 @@ The C API focuses on the most common clauses for simplicity:
 - `firstprivate`, `lastprivate`, `reduction`
 - `schedule`, `collapse`, `ordered`, `nowait`, `default`
 
-This covers 95% of real-world use cases. If you need all 92+ clauses, use the Rust API.
+This covers 95% of real-world use cases. The complete Rust parser supports all 91 clauses from OpenMP 3.0-6.0 (see [Architecture](./architecture.md) for details).
 
 ### What's the clause kind mapping?
 
