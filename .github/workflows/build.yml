@@ -61,8 +61,16 @@ jobs:
         run: |
           cargo build --release
           cd examples/c
-          clang -o basic_parse basic_parse.c -I../../include -L../../target/release -lroup
-          clang -o tutorial_basic tutorial_basic.c -I../../include -L../../target/release -lroup
+          make clean
+          make BUILD_TYPE=release all
+          cd ../..
+        shell: bash
+
+      - name: Run C API examples
+        if: runner.os == 'Linux'
+        run: |
+          cd examples/c
+          make BUILD_TYPE=release run-all
           cd ../..
         shell: bash
 
@@ -70,6 +78,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           cd examples/cpp
-          clang++ -std=c++17 -o tutorial_basic tutorial_basic.cpp -I../../include -L../../target/release -lroup
+          if [ -f Makefile ]; then
+            make clean
+            make all
+          else
+            echo "No C++ examples Makefile found yet"
+          fi
           cd ../..
         shell: bash

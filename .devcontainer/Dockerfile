@@ -29,6 +29,8 @@ RUN set -eux \
         sudo \
         wget \
         software-properties-common \
+        gdb \
+        valgrind \
     && rm -rf /var/lib/apt/lists/*
 
 # Install GitHub CLI
