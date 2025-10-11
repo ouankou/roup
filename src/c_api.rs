@@ -760,12 +760,25 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
 /// ## Design Note:
 /// Most clause data (schedule, reduction, default) are Copy types that don't
 /// need cleanup. Only heap-allocated variable lists need explicit freeing.
+///
+/// ## IMPORTANT: ClauseData is a C union!
+/// The ClauseData union has 4 fields, but only ONE is active per clause:
+///   - `variables: *mut OmpStringList` - used by kinds 2-5 (private/shared/firstprivate/lastprivate)
+///   - `reduction: ReductionData` - used by kind 6 (reduction operator only, NO variables pointer)
+///   - `schedule: ScheduleData` - used by kind 7 (schedule policy only)
+///   - `default: i32` - used by other kinds
+///
+/// Reduction clauses (kind 6) do NOT use the `variables` field. Trying to free
+/// clause.data.variables on a reduction clause would read garbage memory from the
+/// wrong union variant (the bytes of ReductionData::operator interpreted as a pointer).
 fn free_clause_data(clause: &OmpClause) {
     unsafe {
         // Free variable lists if present
         // Clause kinds with variable lists (see convert_clause):
         //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
-        // Other kinds use different data (reduction uses ReductionData, schedule uses ScheduleData)
+        // Other kinds use different union fields:
+        //   6 = reduction (uses .reduction field, NOT .variables)
+        //   7 = schedule (uses .schedule field, NOT .variables)
         if clause.kind >= 2 && clause.kind <= 5 {
             let vars_ptr = clause.data.variables;
             if !vars_ptr.is_null() {
