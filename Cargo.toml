@@ -12,6 +12,10 @@ edition = "2021"
 # Version 8.0.0 uses semantic versioning
 nom = "8.0.0"
 
+# FFI layer dependencies (100% safe Rust)
+once_cell = "1"     # Lazy static initialization
+parking_lot = "0.12" # Faster Mutex than std
+
 # Learning Rust: Binary Targets
 # ==============================
 # [[bin]] sections define executable programs
