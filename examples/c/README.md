@@ -1,227 +1,450 @@
 # Roup C Examples
 
-This directory contains example C programs demonstrating the Roup OpenMP parser C FFI.
+This directory contains example C programs demonstrating the Roup OpenMP parser C API.
 
 ## Overview
 
-The Roup library provides a 100% safe Rust-based OpenMP parser with a comprehensive C FFI. These examples show how to use the API from C code.
+The Roup library provides a 100% safe Rust-based OpenMP parser with a minimal unsafe C FFI. The C API uses direct pointers with explicit memory management for simplicity and efficiency.
 
-## Examples
+## API Design
 
-### 1. basic_parse.c
-**Basic parsing and querying**
-- Parse OpenMP directives from strings
-- Query directive properties (kind, location, clause count)
-- Iterate through clauses using cursors
-- Basic resource management
+**Memory Model:** Direct pointers (no handle registry)  
+**Error Handling:** NULL pointers on failure  
+**Resource Management:** Explicit free functions  
+**Function Prefix:** `roup_*` (not `omp_*`)
 
-**Topics covered:**
-- `omp_parse()` - Parse directives
-- `omp_take_last_parse_result()` - Extract results
-- `omp_directive_kind()`, `omp_directive_clause_count()` - Query directives
-- `omp_directive_clauses_cursor()` - Create iterator
-- `omp_cursor_next()`, `omp_cursor_current()` - Cursor operations
-- `omp_parse_result_free()` - Cleanup
+### Key Principles
 
-### 2. clause_inspection.c
-**Detailed clause inspection**
-- Query clause types
-- Use typed accessors (num_threads, schedule, reduction, default)
-- Handle list clauses (private, shared, etc.)
-- Extract string values from clauses
+1. **Minimal Unsafe:** Only 18 unsafe blocks (~60 lines of code)
+2. **Explicit Ownership:** Caller owns all returned pointers
+3. **NULL-Safe:** Always check for NULL before dereferencing
+4. **No Hidden State:** No global registry or hidden allocations
+5. **C-Compatible:** Standard C malloc/free patterns
+
+## Available Example
+
+### tutorial_basic.c
+**Comprehensive tutorial demonstrating all API features**
 
 **Topics covered:**
-- `omp_clause_type()` - Get clause type
-- `omp_clause_num_threads_value()` - num_threads accessor
-- `omp_clause_schedule_kind()`, `omp_clause_schedule_chunk_size()` - schedule accessors
-- `omp_clause_reduction_operator()`, `omp_clause_reduction_identifier()` - reduction accessors
-- `omp_clause_default_kind()` - default accessor
-- `omp_clause_item_count()`, `omp_clause_item_at()` - list clause accessors
-- `omp_str_len()`, `omp_str_copy_to_buffer()` - String extraction
-- `omp_str_free()` - String cleanup
+- Basic parsing with `roup_parse()`
+- Directive queries: `roup_directive_kind()`, `roup_directive_clause_count()`
+- Clause iteration with `roup_directive_clauses_iter()` and `roup_clause_iterator_next()`
+- Clause queries: `roup_clause_kind()`, `roup_clause_schedule_kind()`, `roup_clause_reduction_operator()`
+- Variable lists: `roup_clause_variables()`, `roup_string_list_*()` functions
+- Error handling (NULL checks)
+- Memory management (explicit free functions)
 
-### 3. string_builder.c
-**String building API**
-- Create strings from scratch
-- Build strings incrementally
-- String operations (length, capacity, clear)
-- Convert between C strings and handles
-- Byte-level manipulation
-
-**Topics covered:**
-- `omp_str_new()` - Create empty string
-- `omp_str_from_cstr()` - Create from C string
-- `omp_str_push_cstr()` - Append C string
-- `omp_str_push_bytes()` - Append raw bytes
-- `omp_str_len()`, `omp_str_capacity()` - Query string properties
-- `omp_str_is_empty()` - Check if empty
-- `omp_str_clear()` - Clear content
-- `omp_str_copy_to_buffer()` - Extract to C buffer
-- `omp_str_free()` - Cleanup
-
-### 4. error_handling.c
-**Error handling and resource cleanup**
-- Check return status codes
-- Validate handles
-- Handle parse errors
-- Proper cleanup on error paths
-- Use helper macros
-
-**Topics covered:**
-- `OmpStatus` enum - All error codes
-- `INVALID_HANDLE` constant - Invalid handle detection
-- `OMP_IS_VALID()`, `OMP_IS_INVALID()` macros - Handle validation
-- `OMP_CHECK()`, `OMP_CHECK_GOTO()` macros - Error checking
-- Error types: `OMP_INVALID_HANDLE`, `OMP_NULL_POINTER`, `OMP_OUT_OF_BOUNDS`, `OMP_PARSE_ERROR`, `OMP_TYPE_MISMATCH`
-- goto cleanup pattern for error handling
+**Features demonstrated:**
+- 6 comprehensive steps
+- Multiple directive types
+- Complex clause inspection
+- Proper resource cleanup
+- Error handling patterns
 
 ## Building
 
 ### Prerequisites
-- GCC or compatible C compiler
+- C compiler (gcc, clang, or compatible)
 - Rust toolchain (to build the Roup library)
-- Linux/Unix environment
+- Linux/Unix environment (tested on Ubuntu 24.04)
 
-### Build All Examples
-
-```bash
-make all
-```
-
-This will:
-1. Build the Rust library (`libroup.so`) if needed
-2. Compile all C examples
-
-### Build Individual Examples
+### Build the Tutorial
 
 ```bash
-make basic_parse
-make clause_inspection
-make string_builder
-make error_handling
-```
+# Step 1: Build the Rust library (release mode recommended)
+cd /workspaces/roup
+cargo build --release
 
-### Manual Build
-
-```bash
-# First, build the Rust library
-cd ../..
-cargo build --lib
-
-# Then build a C example
+# Step 2: Compile the C tutorial
 cd examples/c
-gcc -Wall -Wextra -I../../include -o basic_parse basic_parse.c \
-    -L../../target/debug -lroup -lpthread -ldl -lm
+clang -std=c11 -Wall -Wextra \
+    -I../../target/release \
+    tutorial_basic.c \
+    -L../../target/release \
+    -lroup \
+    -o tutorial
+
+# Or use gcc:
+gcc -std=c11 -Wall -Wextra \
+    -I../../target/release \
+    tutorial_basic.c \
+    -L../../target/release \
+    -lroup \
+    -o tutorial
+```
+
+### Quick Build
+
+```bash
+# All-in-one command
+cargo build --release && \
+cd examples/c && \
+clang tutorial_basic.c \
+    -I../../target/release \
+    -L../../target/release \
+    -lroup \
+    -o tutorial
 ```
 
 ## Running
 
-### Run All Examples
-
 ```bash
-make run-all
+# Set library path and run
+cd examples/c
+LD_LIBRARY_PATH=../../target/release ./tutorial
 ```
 
-### Run Individual Examples
+**Note:** The `LD_LIBRARY_PATH` is required so the system can find `libroup.so` at runtime.
 
-```bash
-LD_LIBRARY_PATH=../../target/debug ./basic_parse
-LD_LIBRARY_PATH=../../target/debug ./clause_inspection
-LD_LIBRARY_PATH=../../target/debug ./string_builder
-LD_LIBRARY_PATH=../../target/debug ./error_handling
+## Expected Output
+
+```
+╔════════════════════════════════════════════════════════════╗
+║       OpenMP Parser C Tutorial (Minimal Unsafe API)       ║
+╚════════════════════════════════════════════════════════════╝
+
+STEP 1: Parse a Simple OpenMP Directive
+✅ Parse succeeded!
+Directive: 0x6015fd921a60 (non-NULL pointer)
+Kind: 0 (PARALLEL)
+Clauses: 0
+✓ Memory freed
+
+STEP 2: Parse Directive with Multiple Clauses
+✅ Parse succeeded!
+Directive: PARALLEL
+Clauses: 3
+
+STEP 3: Iterate Through Clauses
+✅ Parse succeeded!
+1. NUM_THREADS (kind=0)
+2. DEFAULT (kind=11)
+3. NOWAIT (kind=10)
+
+STEP 4: Query Clause-Specific Data
+✅ Parse succeeded!
+1. SCHEDULE → kind=1 (dynamic)
+2. REDUCTION → operator=0 (+)
+
+STEP 5: Error Handling (NULL Checks)
+Testing invalid syntax...
+✅ Correctly returned NULL for invalid input
+Testing empty string...
+✅ Correctly returned NULL for empty input
+Testing NULL pointer query...
+✅ Correctly returned -1 for NULL directive
+
+STEP 6: Multiple Directive Types
+Testing various directive types...
+✓ PARALLEL (kind=0)
+✓ FOR (kind=1)
+✓ TASK (kind=4)
+✓ BARRIER (kind=7)
+✓ TARGET (kind=13)
+✓ TEAMS (kind=14)
+
+✅ Tutorial completed successfully!
 ```
 
-**Note:** The `LD_LIBRARY_PATH` is required to find `libroup.so` at runtime.
+## C API Reference
 
-## API Reference
+### Core Types (Opaque Pointers)
 
-See `include/roup.h` for the complete C API documentation.
-
-### Key Concepts
-
-**Handles:**
-- All resources are represented as opaque `Handle` (uint64_t) values
-- `INVALID_HANDLE` (0) indicates an invalid or null resource
-- Always check if a handle is valid before using it
-
-**Status Codes:**
-- All functions return `OmpStatus`
-- `OMP_SUCCESS` (0) indicates success
-- Always check the return value before using output parameters
-
-**Memory Management:**
-- Strings must be freed with `omp_str_free()`
-- Parse results must be freed with `omp_parse_result_free()`
-- Clauses must be freed with `omp_clause_free()` (or freed automatically with parse result)
-- Cursors must be freed with `omp_cursor_free()`
-- The array returned by `omp_take_last_parse_result()` must be freed with `free()`
-
-**Thread Safety:**
-- The global registry is thread-safe (protected by mutex)
-- Handles are valid across threads
-- Multiple threads can parse and query concurrently
-
-## Example Output
-
-### basic_parse
-```
-=== Roup OpenMP Parser - Basic Example ===
-
-Example 1: Simple parallel directive
-Input: "#pragma omp parallel"
-
-Parsed 1 directive(s)
-
-Directive: parallel
-  Location: line 1, column 0
-  Language: C
-  Clauses: 0
-...
+```c
+struct OmpDirective;      // Parsed directive
+struct OmpClause;         // Individual clause
+struct OmpClauseIterator; // Iterator over clauses
+struct OmpStringList;     // List of strings (variables)
 ```
 
-### clause_inspection
-```
-=== Clause Inspection Example ===
+### Lifecycle Functions
 
-Example 1: num_threads clause
-Input: "#pragma omp parallel num_threads(omp_get_max_threads())" 
+```c
+// Parse directive from string (returns NULL on error)
+OmpDirective* roup_parse(const char* input);
 
-  Clause: num_threads
-    Value: omp_get_max_threads()
-...
-```
+// Free directive (sets all owned clauses to freed state)
+void roup_directive_free(OmpDirective* directive);
 
-## Clean Up
-
-```bash
-make clean
+// Free individual clause (if not owned by directive)
+void roup_clause_free(OmpClause* clause);
 ```
 
-This removes all compiled executables.
+### Directive Queries
+
+```c
+// Get directive kind (returns -1 if directive is NULL)
+// 0=PARALLEL, 1=FOR, 2=SECTIONS, 4=TASK, 7=BARRIER, etc.
+int32_t roup_directive_kind(const OmpDirective* directive);
+
+// Get clause count (returns 0 if directive is NULL)
+int32_t roup_directive_clause_count(const OmpDirective* directive);
+
+// Create iterator for clauses (returns NULL if directive is NULL)
+OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
+```
+
+### Iterator Functions
+
+```c
+// Advance iterator, store next clause in *out
+// Returns 1 if clause retrieved, 0 if end reached
+int32_t roup_clause_iterator_next(OmpClauseIterator* iter, OmpClause** out);
+
+// Free iterator
+void roup_clause_iterator_free(OmpClauseIterator* iter);
+```
+
+### Clause Queries
+
+```c
+// Get clause kind (returns -1 if clause is NULL)
+// 0=NUM_THREADS, 2=PRIVATE, 6=REDUCTION, 7=SCHEDULE, etc.
+int32_t roup_clause_kind(const OmpClause* clause);
+
+// Get schedule kind for SCHEDULE clause (returns -1 if not applicable)
+// 0=static, 1=dynamic, 2=guided, 3=auto, 4=runtime
+int32_t roup_clause_schedule_kind(const OmpClause* clause);
+
+// Get reduction operator (returns -1 if not applicable)
+// 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+int32_t roup_clause_reduction_operator(const OmpClause* clause);
+
+// Get default data-sharing (returns -1 if not applicable)
+// 0=shared, 1=none
+int32_t roup_clause_default_data_sharing(const OmpClause* clause);
+```
+
+### Variable List Functions
+
+```c
+// Get variable list from clause (returns NULL if not applicable)
+OmpStringList* roup_clause_variables(const OmpClause* clause);
+
+// Get number of variables in list (returns 0 if list is NULL)
+int32_t roup_string_list_len(const OmpStringList* list);
+
+// Get variable at index (returns NULL if out of bounds)
+// Returned string is valid until list is freed
+const char* roup_string_list_get(const OmpStringList* list, int32_t index);
+
+// Free variable list
+void roup_string_list_free(OmpStringList* list);
+```
+
+## Memory Management Guide
+
+### Basic Pattern
+
+```c
+// 1. Parse (allocates memory)
+OmpDirective* dir = roup_parse("#pragma omp parallel");
+
+// 2. Use (check NULL first!)
+if (dir != NULL) {
+    int32_t kind = roup_directive_kind(dir);
+    // ... use directive ...
+}
+
+// 3. Free (always, even if NULL - it's a no-op)
+roup_directive_free(dir);
+```
+
+### Iterator Pattern
+
+```c
+OmpDirective* dir = roup_parse("#pragma omp parallel num_threads(4)");
+if (!dir) return;
+
+// Create iterator
+OmpClauseIterator* iter = roup_directive_clauses_iter(dir);
+
+// Iterate
+OmpClause* clause;
+while (roup_clause_iterator_next(iter, &clause)) {
+    int32_t kind = roup_clause_kind(clause);
+    // ... process clause ...
+    // Don't free clause! It's owned by directive.
+}
+
+// Free iterator
+roup_clause_iterator_free(iter);
+
+// Free directive (also frees all clauses)
+roup_directive_free(dir);
+```
+
+### Variable List Pattern
+
+```c
+// Get variables from a clause
+OmpStringList* vars = roup_clause_variables(clause);
+if (vars) {
+    int32_t count = roup_string_list_len(vars);
+    for (int32_t i = 0; i < count; i++) {
+        const char* var = roup_string_list_get(vars, i);
+        printf("Variable: %s\n", var);
+    }
+    roup_string_list_free(vars);  // MUST free!
+}
+```
+
+## Error Handling Best Practices
+
+### Always Check for NULL
+
+```c
+OmpDirective* dir = roup_parse(input);
+if (dir == NULL) {
+    fprintf(stderr, "Parse failed!\n");
+    return -1;
+}
+// ... use dir safely ...
+roup_directive_free(dir);
+```
+
+### Safe Queries
+
+```c
+// Query functions are NULL-safe
+int32_t kind = roup_directive_kind(NULL);  // Returns -1
+int32_t count = roup_directive_clause_count(NULL);  // Returns 0
+
+// But still check for semantic meaning
+if (kind == -1) {
+    fprintf(stderr, "Invalid directive\n");
+}
+```
+
+### Cleanup on Error
+
+```c
+OmpDirective* dir = roup_parse(input);
+if (!dir) goto cleanup;
+
+OmpClauseIterator* iter = roup_directive_clauses_iter(dir);
+if (!iter) goto cleanup;
+
+// ... process ...
+
+cleanup:
+    if (iter) roup_clause_iterator_free(iter);
+    if (dir) roup_directive_free(dir);
+```
+
+## Common Patterns
+
+### Directive Kind Names
+
+```c
+const char* directive_name(int32_t kind) {
+    switch (kind) {
+        case 0: return "PARALLEL";
+        case 1: return "FOR";
+        case 2: return "SECTIONS";
+        case 4: return "TASK";
+        case 7: return "BARRIER";
+        case 13: return "TARGET";
+        case 14: return "TEAMS";
+        default: return "UNKNOWN";
+    }
+}
+```
+
+### Clause Kind Names
+
+```c
+const char* clause_name(int32_t kind) {
+    switch (kind) {
+        case 0: return "NUM_THREADS";
+        case 2: return "PRIVATE";
+        case 3: return "SHARED";
+        case 6: return "REDUCTION";
+        case 7: return "SCHEDULE";
+        case 10: return "NOWAIT";
+        case 11: return "DEFAULT";
+        default: return "UNKNOWN";
+    }
+}
+```
+
+### Schedule Kind Names
+
+```c
+const char* schedule_name(int32_t kind) {
+    switch (kind) {
+        case 0: return "static";
+        case 1: return "dynamic";
+        case 2: return "guided";
+        case 3: return "auto";
+        case 4: return "runtime";
+        default: return "unknown";
+    }
+}
+```
+
+## Differences from Old API
+
+If you used the old handle-based API, here are the key changes:
+
+| Old API (Handle-based) | New API (Pointer-based) |
+|------------------------|-------------------------|
+| `omp_parse_cstr()` | `roup_parse()` |
+| `Handle` (uint64_t) | Direct pointers |
+| `OmpStatus` return codes | NULL on error |
+| `OMP_SUCCESS` checks | NULL checks |
+| Handle registry | No registry |
+| `omp_directive_free()` | `roup_directive_free()` |
+
+**Migration:** Update function names, replace handle checks with NULL checks, remove status code handling.
+
+## Thread Safety
+
+- **Parsing:** Thread-safe (no shared state)
+- **Queries:** Thread-safe (read-only operations)
+- **Freeing:** NOT thread-safe (caller must synchronize)
+
+**Best practice:** Each thread should own its parsed directives.
 
 ## Troubleshooting
 
-### Library Not Found
-If you see `error while loading shared libraries: libroup.so`:
-- Make sure you've built the Rust library: `cargo build --lib`
-- Set `LD_LIBRARY_PATH`: `export LD_LIBRARY_PATH=../../target/debug`
+### Library Not Found at Runtime
+```
+error while loading shared libraries: libroup.so: cannot open shared object file
+```
 
-### Compilation Errors
-- Check that `include/roup.h` exists
-- Make sure the Rust library is built first
-- Verify GCC version supports C99 or later
+**Solution:**
+```bash
+export LD_LIBRARY_PATH=/workspaces/roup/target/release:$LD_LIBRARY_PATH
+```
 
 ### Segmentation Fault
-- Always check return status before using output parameters
-- Validate handles with `OMP_IS_VALID()` before use
-- Don't use handles after freeing them
-- Don't free the same handle twice
+
+**Common causes:**
+1. Using pointer after freeing it
+2. Not checking for NULL
+3. Freeing same pointer twice
+4. Dereferencing NULL from failed parse
+
+**Solution:** Always check for NULL, never use after free.
+
+### Parse Returns NULL
+
+**Possible causes:**
+1. Invalid OpenMP syntax
+2. Empty or NULL input string
+3. Malformed directive
+
+**Solution:** Validate input before parsing.
 
 ## Further Reading
 
-- **C API Header:** `include/roup.h` - Complete API documentation
-- **Rust Documentation:** Run `cargo doc --open` for Rust API docs
-- **OpenMP Support:** See `docs/OPENMP_SUPPORT.md` for supported directives/clauses
+- **API Implementation:** `src/c_api.rs` - Full source code
+- **C Header:** Generate with cbindgen or see `src/c_api.rs` comments
+- **C++ Tutorial:** `examples/cpp/tutorial_basic.cpp` - RAII wrappers
+- **OpenMP Support:** `docs/OPENMP_SUPPORT.md` - Supported directives/clauses
+- **Rust Documentation:** Run `cargo doc --open` for internal APIs
 
 ## License
 

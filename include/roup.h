@@ -317,251 +317,150 @@ typedef enum {
 } ReductionOperator;
 
 /* ============================================================================
- * String API (10 functions)
+ * Parser API
  * ========================================================================= */
 
 /**
- * @brief Create a new empty string builder
- * @param[out] out_handle Handle to the created string (INVALID_HANDLE on error)
- * @return OMP_SUCCESS or error code
- * 
- * Example:
- *   Handle str;
- *   if (omp_str_new(&str) == OMP_SUCCESS) {
- *       // Use str...
- *       omp_str_free(str);
- *   }
- */
-OmpStatus omp_str_new(Handle *out_handle);
-
-/**
- * @brief Create a string from a C string
- * @param[in] c_str Null-terminated C string
- * @param[out] out_handle Handle to the created string
- * @return OMP_SUCCESS, OMP_NULL_POINTER, or OMP_INVALID_UTF8
- */
-OmpStatus omp_str_from_cstr(const char *c_str, Handle *out_handle);
-
-/**
- * @brief Append bytes to a string
- * @param[in] handle String handle
- * @param[in] data Bytes to append
- * @param[in] len Number of bytes
- * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_INVALID_UTF8
- */
-OmpStatus omp_str_push_bytes(Handle handle, const uint8_t *data, uintptr_t len);
-
-/**
- * @brief Append a C string to a string
- * @param[in] handle String handle
- * @param[in] c_str Null-terminated C string to append
- * @return OMP_SUCCESS, OMP_INVALID_HANDLE, OMP_NULL_POINTER, or OMP_INVALID_UTF8
- */
-OmpStatus omp_str_push_cstr(Handle handle, const char *c_str);
-
-/**
- * @brief Get the length of a string in bytes
- * @param[in] handle String handle
- * @param[out] out_len Length in bytes
- * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
- */
-OmpStatus omp_str_len(Handle handle, uintptr_t *out_len);
-
-/**
- * @brief Get the capacity of a string in bytes
- * @param[in] handle String handle
- * @param[out] out_capacity Capacity in bytes
- * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
- */
-OmpStatus omp_str_capacity(Handle handle, uintptr_t *out_capacity);
-
-/**
- * @brief Copy string contents to a C buffer
- * @param[in] handle String handle
- * @param[out] buffer Output buffer (must have space for len + 1 bytes)
- * @param[in] buffer_size Size of output buffer
- * @param[out] out_len Number of bytes written (excluding null terminator)
- * @return OMP_SUCCESS, OMP_INVALID_HANDLE, OMP_NULL_POINTER, or OMP_OUT_OF_BOUNDS
- * 
- * The output buffer will be null-terminated. Use omp_str_len() to determine
- * the required buffer size.
- */
-OmpStatus omp_str_copy_to_buffer(Handle handle, char *buffer, uintptr_t buffer_size, uintptr_t *out_len);
-
-/**
- * @brief Clear a string (length becomes 0, capacity unchanged)
- * @param[in] handle String handle
- * @return OMP_SUCCESS or OMP_INVALID_HANDLE
- */
-OmpStatus omp_str_clear(Handle handle);
-
-/**
- * @brief Check if a string is empty
- * @param[in] handle String handle
- * @param[out] out_is_empty true if empty, false otherwise
- * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
- */
-OmpStatus omp_str_is_empty(Handle handle, bool *out_is_empty);
-
-/**
- * @brief Free a string and remove from registry
- * @param[in] handle String handle
- * @return OMP_SUCCESS or OMP_INVALID_HANDLE
- * 
- * After calling this function, the handle becomes invalid.
- */
-OmpStatus omp_str_free(Handle handle);
-
-/* ============================================================================
- * Parser API (3 functions)
- * ========================================================================= */
-
-/**
- * @brief Parse OpenMP directives from input text
- * @param[in] input Input text containing OpenMP directives
+ * @brief Parse an OpenMP directive from a C string (RECOMMENDED API)
+ * @param[in] input OpenMP directive string (e.g., "#pragma omp parallel")
  * @param[in] lang Programming language (C or Fortran)
- * @param[out] out_handle Handle to parse result (array of directives)
- * @return OMP_SUCCESS, OMP_NULL_POINTER, OMP_INVALID_UTF8, or OMP_PARSE_ERROR
+ * @param[out] out_handle Handle to parsed directive
+ * @return OMP_SUCCESS, OMP_PARSE_ERROR, OMP_NULL_POINTER, or OMP_INVALID_UTF8
  * 
- * The parse result contains an array of directive handles. Use
- * omp_take_last_parse_result() to extract them.
+ * This is the recommended C API that accepts string literals directly.
+ * Returns a single directive handle that can be queried and must be freed.
+ * 
+ * Safety Contract (C caller must ensure):
+ * - input must be a valid, null-terminated C string
+ * - input must remain valid for the duration of this call
+ * - out_handle must be a valid pointer to writable memory
  * 
  * Example:
- *   Handle result;
- *   if (omp_parse("#pragma omp parallel num_threads(4)", OMP_LANG_C, &result) == OMP_SUCCESS) {
- *       Handle *directives;
- *       uintptr_t count;
- *       omp_take_last_parse_result(&directives, &count);
- *       // Use directives...
- *       omp_parse_result_free(result);
+ *   uint64_t directive;
+ *   if (omp_parse_cstr("#pragma omp parallel num_threads(4)", OMP_LANG_C, &directive) == OMP_SUCCESS) {
+ *       // Query directive...
+ *       omp_directive_free(directive);
  *   }
  */
-OmpStatus omp_parse(const char *input, Language lang, Handle *out_handle);
+OmpStatus omp_parse_cstr(const char *input, Language lang, Handle *out_handle);
 
 /**
- * @brief Extract directive handles from last parse result
- * @param[out] out_directives Pointer to array of directive handles (caller must free)
- * @param[out] out_count Number of directives in array
- * @return OMP_SUCCESS, OMP_NULL_POINTER, or OMP_EMPTY_RESULT
+ * @brief Get the last parse result (for advanced/handle-based API)
+ * @return Directive handle from last successful parse, or 0 if parse failed
  * 
- * This function returns a heap-allocated array of handles. The caller must
- * free this array with free() when done. Each directive handle must be
- * individually freed with omp_directive_free() (if needed) or will be cleaned
- * up when the parse result is freed.
+ * This function retrieves the directive handle from the most recent parse
+ * operation. Each thread has its own result storage. Mainly used with the
+ * handle-based string API (omp_str_new/omp_str_push_byte).
+ * 
+ * For most C code, use omp_parse_cstr() instead.
  */
-OmpStatus omp_take_last_parse_result(Handle **out_directives, uintptr_t *out_count);
+Handle omp_take_last_parse_result(void);
 
 /**
- * @brief Free a parse result and all associated directives
- * @param[in] handle Parse result handle
- * @return OMP_SUCCESS or OMP_INVALID_HANDLE
+ * @brief Free a directive AST
+ * @param[in] handle Directive handle
+ * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_TYPE_MISMATCH
  */
-OmpStatus omp_parse_result_free(Handle handle);
+OmpStatus omp_directive_free(Handle handle);
 
 /* ============================================================================
- * Directive Query API (14 functions)
+ * Directive Query API
  * ========================================================================= */
 
 /**
- * @brief Get the kind of a directive
+ * @brief Get the kind of a directive (returns integer)
+ * @param[in] handle Directive handle
+ * @return DirectiveKind discriminant (0-255) or -1 on error
+ * 
+ * Note: For error handling, use omp_directive_kind_ptr() instead.
+ */
+int32_t omp_directive_kind(Handle handle);
+
+/**
+ * @brief Get the kind of a directive (pointer-based, RECOMMENDED)
  * @param[in] handle Directive handle
  * @param[out] out_kind Directive kind
  * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
  */
-OmpStatus omp_directive_kind(Handle handle, DirectiveKind *out_kind);
+OmpStatus omp_directive_kind_ptr(Handle handle, int32_t *out_kind);
 
 /**
- * @brief Get the number of clauses in a directive
+ * @brief Get the number of clauses in a directive (returns count)
+ * @param[in] handle Directive handle
+ * @return Number of clauses, or 0 on error
+ */
+uintptr_t omp_directive_clause_count(Handle handle);
+
+/**
+ * @brief Get the number of clauses in a directive (pointer-based, RECOMMENDED)
  * @param[in] handle Directive handle
  * @param[out] out_count Number of clauses
  * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
  */
-OmpStatus omp_directive_clause_count(Handle handle, uintptr_t *out_count);
+OmpStatus omp_directive_clause_count_ptr(Handle handle, uintptr_t *out_count);
 
 /**
- * @brief Get the source line number of a directive
+ * @brief Get the source line number (returns line)
+ * @param[in] handle Directive handle
+ * @return Line number (1-indexed) or 0 on error
+ */
+uint32_t omp_directive_line(Handle handle);
+
+/**
+ * @brief Get the source line number (pointer-based, RECOMMENDED)
  * @param[in] handle Directive handle
  * @param[out] out_line Line number (1-indexed)
  * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
  */
-OmpStatus omp_directive_line(Handle handle, uintptr_t *out_line);
+OmpStatus omp_directive_line_ptr(Handle handle, uint32_t *out_line);
 
 /**
- * @brief Get the source column number of a directive
+ * @brief Get the source column number (returns column)
+ * @param[in] handle Directive handle
+ * @return Column number (0-indexed) or 0 on error
+ */
+uint32_t omp_directive_column(Handle handle);
+
+/**
+ * @brief Get the source column number (pointer-based, RECOMMENDED)
  * @param[in] handle Directive handle
  * @param[out] out_column Column number (0-indexed)
  * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
  */
-OmpStatus omp_directive_column(Handle handle, uintptr_t *out_column);
+OmpStatus omp_directive_column_ptr(Handle handle, uint32_t *out_column);
 
 /**
- * @brief Get the programming language of a directive
+ * @brief Get the programming language (returns language)
+ * @param[in] handle Directive handle
+ * @return Language discriminant or -1 on error
+ */
+int32_t omp_directive_language(Handle handle);
+
+/**
+ * @brief Get the programming language (pointer-based, RECOMMENDED)
  * @param[in] handle Directive handle
  * @param[out] out_lang Language (C or Fortran)
  * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
  */
-OmpStatus omp_directive_language(Handle handle, Language *out_lang);
+OmpStatus omp_directive_language_ptr(Handle handle, int32_t *out_lang);
 
 /**
- * @brief Create a cursor for iterating over directive clauses
+ * @brief Create a cursor for iterating over directive clauses (returns handle)
+ * @param[in] handle Directive handle
+ * @return Cursor handle, or INVALID_HANDLE on error
+ */
+Handle omp_directive_clauses_cursor(Handle handle);
+
+/**
+ * @brief Create a cursor for iterating over directive clauses (pointer-based, RECOMMENDED)
  * @param[in] handle Directive handle
  * @param[out] out_cursor Cursor handle
  * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
  * 
  * Cursors provide an iterator pattern for traversing clauses.
- * Use omp_cursor_next() to advance and omp_cursor_current() to get the
- * current clause. Free with omp_cursor_free() when done.
+ * Use omp_cursor_next() to advance. Free with omp_cursor_free() when done.
  */
-OmpStatus omp_directive_clauses_cursor(Handle handle, Handle *out_cursor);
-
-/**
- * @brief Move cursor to next clause
- * @param[in] handle Cursor handle
- * @return OMP_SUCCESS or OMP_INVALID_HANDLE
- * 
- * Advances the cursor position. Use omp_cursor_is_done() to check if
- * the cursor has reached the end.
- */
-OmpStatus omp_cursor_next(Handle handle);
-
-/**
- * @brief Get the current clause from cursor
- * @param[in] handle Cursor handle
- * @param[out] out_clause Clause handle (INVALID_HANDLE if cursor is done)
- * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
- */
-OmpStatus omp_cursor_current(Handle handle, Handle *out_clause);
-
-/**
- * @brief Check if cursor has reached the end
- * @param[in] handle Cursor handle
- * @param[out] out_is_done true if done, false otherwise
- * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
- */
-OmpStatus omp_cursor_is_done(Handle handle, bool *out_is_done);
-
-/**
- * @brief Reset cursor to beginning
- * @param[in] handle Cursor handle
- * @return OMP_SUCCESS or OMP_INVALID_HANDLE
- */
-OmpStatus omp_cursor_reset(Handle handle);
-
-/**
- * @brief Get the total number of clauses in cursor
- * @param[in] handle Cursor handle
- * @param[out] out_total Total number of clauses
- * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
- */
-OmpStatus omp_cursor_total(Handle handle, uintptr_t *out_total);
-
-/**
- * @brief Get the current position in cursor
- * @param[in] handle Cursor handle
- * @param[out] out_position Current position (0-indexed)
- * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
- */
-OmpStatus omp_cursor_position(Handle handle, uintptr_t *out_position);
+OmpStatus omp_directive_clauses_cursor_ptr(Handle handle, Handle *out_cursor);
 
 /**
  * @brief Free a cursor
@@ -571,9 +470,137 @@ OmpStatus omp_cursor_position(Handle handle, uintptr_t *out_position);
 OmpStatus omp_cursor_free(Handle handle);
 
 /**
- * @brief Free a directive (usually not needed - freed with parse result)
- * @param[in] handle Directive handle
+ * @brief Check if cursor has more items (returns boolean)
+ * @param[in] handle Cursor handle
+ * @return 1 if has next, 0 if done or error
+ */
+int32_t omp_cursor_has_next(Handle handle);
+
+/**
+ * @brief Check if cursor has more items (pointer-based, RECOMMENDED)
+ * @param[in] handle Cursor handle
+ * @param[out] out_has_next 1 if has next, 0 if done
+ * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
+ */
+OmpStatus omp_cursor_has_next_ptr(Handle handle, int32_t *out_has_next);
+
+/**
+ * @brief Get cursor position (returns position)
+ * @param[in] handle Cursor handle
+ * @return Current position or 0 on error
+ */
+uintptr_t omp_cursor_position(Handle handle);
+
+/**
+ * @brief Get cursor position (pointer-based, RECOMMENDED)
+ * @param[in] handle Cursor handle
+ * @param[out] out_pos Current position
+ * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
+ */
+OmpStatus omp_cursor_position_ptr(Handle handle, uintptr_t *out_pos);
+
+/**
+ * @brief Move cursor to next clause
+ * @param[in] handle Cursor handle
+ * @return OMP_SUCCESS or OMP_OUT_OF_BOUNDS if already at end
+ */
+OmpStatus omp_cursor_next(Handle handle);
+
+/**
+ * @brief Reset cursor to beginning
+ * @param[in] handle Cursor handle
  * @return OMP_SUCCESS or OMP_INVALID_HANDLE
+ */
+OmpStatus omp_cursor_reset(Handle handle);
+
+/**
+ * @brief Get total count of items in cursor (returns count)
+ * @param[in] handle Cursor handle
+ * @return Total count or 0 on error
+ */
+uintptr_t omp_cursor_count(Handle handle);
+
+/**
+ * @brief Get total count of items in cursor (pointer-based, RECOMMENDED)
+ * @param[in] handle Cursor handle
+ * @param[out] out_total Total count
+ * @return OMP_SUCCESS, OMP_INVALID_HANDLE, or OMP_NULL_POINTER
+ */
+OmpStatus omp_cursor_total_ptr(Handle handle, uintptr_t *out_total);
+
+/* ============================================================================
+ * String API (Handle-Based) - For Advanced Use
+ * ========================================================================= */
+
+/**
+ * @brief Create a new empty string
+ * @return String handle (never 0)
+ * 
+ * Note: For most C code, use omp_parse_cstr() instead of building strings manually.
+ */
+Handle omp_str_new(void);
+
+/**
+ * @brief Free a string
+ * @param[in] handle String handle
+ * @return OMP_SUCCESS or OMP_INVALID_HANDLE
+ */
+OmpStatus omp_str_free(Handle handle);
+
+/**
+ * @brief Clear a string (remove all bytes)
+ * @param[in] handle String handle
+ * @return OMP_SUCCESS or OMP_INVALID_HANDLE
+ */
+OmpStatus omp_str_clear(Handle handle);
+
+/**
+ * @brief Append a byte to a string
+ * @param[in] handle String handle
+ * @param[in] byte Byte to append
+ * @return OMP_SUCCESS or OMP_INVALID_HANDLE
+ */
+OmpStatus omp_str_push_byte(Handle handle, uint8_t byte);
+
+/**
+ * @brief Get the length of a string in bytes
+ * @param[in] handle String handle
+ * @return Length in bytes, or 0 if invalid handle
+ */
+uintptr_t omp_str_len(Handle handle);
+
+/**
+ * @brief Get a byte at specific index
+ * @param[in] handle String handle
+ * @param[in] index Byte index
+ * @return Byte value (0-255) or -1 on error
+ */
+int32_t omp_str_get_byte(Handle handle, uintptr_t index);
+
+/**
+ * @brief Check if string is valid UTF-8
+ * @param[in] handle String handle
+ * @return OMP_SUCCESS if valid UTF-8, OMP_INVALID_UTF8 otherwise
+ */
+OmpStatus omp_str_validate_utf8(Handle handle);
+
+/* ============================================================================
+ * Deprecated/Removed Functions
+ * ========================================================================= */
+
+/**
+ * The following functions from earlier versions are no longer available:
+ * - OmpStatus omp_parse(const char*, Language, Handle*) - Use omp_parse_cstr() instead
+ * - OmpStatus omp_take_last_parse_result(Handle**, uintptr_t*) - Use Handle omp_take_last_parse_result(void) instead
+ * - OmpStatus omp_parse_result_free(Handle) - Use omp_directive_free() instead
+ * - omp_directive_kind() with pointer - Use omp_directive_kind_ptr() instead
+ * - omp_directive_clause_count() with pointer - Use omp_directive_clause_count_ptr() instead
+ * - omp_directive_line() with pointer - Use omp_directive_line_ptr() instead
+ * - omp_directive_column() with pointer - Use omp_directive_column_ptr() instead
+ * - omp_directive_language() with pointer - Use omp_directive_language_ptr() instead
+ * - omp_directive_clauses_cursor() with pointer - Use omp_directive_clauses_cursor_ptr() instead
+ * - omp_cursor_current() - Iteration is done with omp_cursor_next() and omp_cursor_has_next()
+ * - omp_cursor_is_done() with pointer - Use !omp_cursor_has_next() instead
  */
 OmpStatus omp_directive_free(Handle handle);
 

@@ -23,11 +23,14 @@
 // - `lexer`: Tokenization using nom parser combinators
 // - `parser`: Directive and clause parsing infrastructure
 // - `ir`: Intermediate representation (semantic layer)
-// - `ffi`: Foreign function interface (C API, 100% safe Rust)
+// - `c_api`: C FFI with minimal unsafe code (production API)
 //
 // Each module teaches different Rust concepts while building a working parser.
 
-pub mod ffi;
+pub mod c_api; // Minimal unsafe C FFI (production API)
 pub mod ir;
 pub mod lexer;
 pub mod parser;
+
+// Re-export C API for convenience
+pub use c_api::*;
