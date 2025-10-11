@@ -1,2 +1,10 @@
 /target
 Cargo.lock
+
+# Compiled binaries
+test_c_api
+examples/c/basic_parse
+examples/c/tutorial
+examples/c/tutorial_basic
+examples/cpp/tutorial_basic
+examples/cpp/tutorial_cpp

@@ -58,13 +58,13 @@ use crate::parser::{parse_omp_directive, Clause, ClauseKind};
 // Without `#[repr(C)]`, passing these to C would cause undefined behavior!
 
 /// Opaque directive type (C-compatible)
-/// 
+///
 /// Represents a parsed OpenMP directive with its clauses.
 /// C sees this as an opaque pointer - internal structure is hidden.
 #[repr(C)]
 pub struct OmpDirective {
-    name: *const c_char,      // Directive name (e.g., "parallel")
-    clauses: Vec<OmpClause>,  // Associated clauses
+    name: *const c_char,     // Directive name (e.g., "parallel")
+    clauses: Vec<OmpClause>, // Associated clauses
 }
 
 /// Opaque clause type (C-compatible)
@@ -73,8 +73,8 @@ pub struct OmpDirective {
 /// Uses tagged union pattern for clause-specific data.
 #[repr(C)]
 pub struct OmpClause {
-    kind: i32,          // Clause type (num_threads=0, schedule=7, etc.)
-    data: ClauseData,   // Clause-specific data (union)
+    kind: i32,        // Clause type (num_threads=0, schedule=7, etc.)
+    data: ClauseData, // Clause-specific data (union)
 }
 
 /// Clause-specific data stored in a C union
@@ -96,14 +96,14 @@ union ClauseData {
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct ScheduleData {
-    kind: i32,  // 0=static, 1=dynamic, 2=guided, 3=auto, 4=runtime
+    kind: i32, // 0=static, 1=dynamic, 2=guided, 3=auto, 4=runtime
 }
 
 /// Reduction clause data (operator and variables)
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct ReductionData {
-    operator: i32,  // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+    operator: i32, // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
 }
 
 /// Iterator over clauses
@@ -112,8 +112,8 @@ struct ReductionData {
 /// Holds raw pointers to avoid ownership issues at FFI boundary.
 #[repr(C)]
 pub struct OmpClauseIterator {
-    clauses: Vec<*const OmpClause>,  // Pointers to clauses
-    index: usize,                     // Current position
+    clauses: Vec<*const OmpClause>, // Pointers to clauses
+    index: usize,                   // Current position
 }
 
 /// List of strings (for variable names in clauses)
@@ -121,7 +121,7 @@ pub struct OmpClauseIterator {
 /// Used for private, shared, reduction variable lists.
 #[repr(C)]
 pub struct OmpStringList {
-    items: Vec<*const c_char>,  // NULL-terminated C strings
+    items: Vec<*const c_char>, // NULL-terminated C strings
 }
 
 // ============================================================================
