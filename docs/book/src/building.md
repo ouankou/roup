@@ -473,8 +473,9 @@ sudo ldconfig
 # Update Rust toolchain
 rustup update stable
 
-# Verify version (need 1.70+)
+# Verify version
 rustc --version
+# Ensure your Rust version is at least 1.70.0
 ```
 
 ### Windows: "VCRUNTIME140.dll missing"

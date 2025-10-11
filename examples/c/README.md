@@ -15,7 +15,7 @@ The Roup library provides a 100% safe Rust-based OpenMP parser with a minimal un
 
 ### Key Principles
 
-1. **Minimal Unsafe:** Only 18 unsafe blocks (~60 lines of code)
+1. **Minimal Unsafe:** Only ~60 lines of unsafe code at FFI boundary
 2. **Explicit Ownership:** Caller owns all returned pointers
 3. **NULL-Safe:** Always check for NULL before dereferencing
 4. **No Hidden State:** No global registry or hidden allocations

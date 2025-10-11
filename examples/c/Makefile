@@ -5,12 +5,12 @@
 
 # Configuration
 CC = gcc
-CFLAGS = -Wall -Wextra -I../../include
+CFLAGS = -Wall -Wextra -std=c11
 LDFLAGS = -L../../target/debug -lroup -lpthread -ldl -lm
 RUST_LIB = ../../target/debug/libroup.so
 
 # Targets
-EXAMPLES = basic_parse clause_inspection string_builder error_handling
+EXAMPLES = basic_parse tutorial_basic
 
 .PHONY: all clean run-all help
 
@@ -27,15 +27,7 @@ basic_parse: basic_parse.c $(RUST_LIB)
 	@echo "Building $@..."
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
-clause_inspection: clause_inspection.c $(RUST_LIB)
-	@echo "Building $@..."
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-
-string_builder: string_builder.c $(RUST_LIB)
-	@echo "Building $@..."
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-
-error_handling: error_handling.c $(RUST_LIB)
+tutorial_basic: tutorial_basic.c $(RUST_LIB)
 	@echo "Building $@..."
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
@@ -47,19 +39,9 @@ run-all: all
 	@LD_LIBRARY_PATH=../../target/debug ./basic_parse
 	@echo ""
 	@echo "=========================================="
-	@echo "Running clause_inspection:"
+	@echo "Running tutorial_basic:"
 	@echo "=========================================="
-	@LD_LIBRARY_PATH=../../target/debug ./clause_inspection
-	@echo ""
-	@echo "=========================================="
-	@echo "Running string_builder:"
-	@echo "=========================================="
-	@LD_LIBRARY_PATH=../../target/debug ./string_builder
-	@echo ""
-	@echo "=========================================="
-	@echo "Running error_handling:"
-	@echo "=========================================="
-	@LD_LIBRARY_PATH=../../target/debug ./error_handling
+	@LD_LIBRARY_PATH=../../target/debug ./tutorial_basic
 
 # Clean build artifacts
 clean:
@@ -77,9 +59,8 @@ help:
 	@echo ""
 	@echo "Individual examples:"
 	@echo "  make basic_parse         - Basic parsing and querying"
-	@echo "  make clause_inspection   - Detailed clause inspection"
-	@echo "  make string_builder      - String building API"
-	@echo "  make error_handling      - Error handling patterns"
+	@echo "  make tutorial_basic      - Complete tutorial with all API features"
 	@echo ""
 	@echo "To run an individual example:"
 	@echo "  LD_LIBRARY_PATH=../../target/debug ./basic_parse"
+	@echo "  LD_LIBRARY_PATH=../../target/debug ./tutorial_basic"
