@@ -54,7 +54,7 @@ cargo build --release
 
 ## Step 1: Understanding the ROUP C API
 
-ROUP exports a minimal C API with 18 functions. Here are the key ones for our tool:
+ROUP exports a minimal C API with 16 functions. Here are the key ones for our tool:
 
 ### Lifecycle Functions
 ```c

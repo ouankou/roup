@@ -536,11 +536,8 @@ cargo flamegraph --bin roup
 
 ### Reporting Security Issues
 
-**DO NOT** open public issues for security vulnerabilities.
-
-Email security issues to: [security@ouankou.com](mailto:security@ouankou.com)
-
-> This email address is actively monitored by the ROUP maintainers.
+Please report security vulnerabilities by opening a GitHub issue at:
+[https://github.com/ouankou/roup/issues](https://github.com/ouankou/roup/issues)
 
 Include:
 - Description of vulnerability
