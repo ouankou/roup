@@ -29,7 +29,7 @@ cargo build --release
 ## Features
 
 - ✅ **Multi-Language Support:** Rust, C, and C++ APIs
-- ✅ **OpenMP 6.0:** 120+ directives, 92+ clauses
+- ✅ **OpenMP 3.0-6.0:** 95 directives, 91 clauses
 - ✅ **Safe by Default:** 99.1% safe Rust code
 - ✅ **Production Ready:** 342 tests, zero warnings
 - ✅ **Modern C++:** C++17 RAII wrappers
@@ -166,8 +166,8 @@ cargo doc --no-deps --open
 
 ROUP supports **OpenMP 3.0 through 6.0** with comprehensive coverage:
 
-- **120+ directives**: `parallel`, `for`, `task`, `target`, `teams`, `metadirective`, and more
-- **92+ clauses**: `private`, `reduction`, `schedule`, `map`, `depend`, and many others
+- **95 directives**: `parallel`, `for`, `task`, `target`, `teams`, `metadirective`, and more
+- **91 clauses**: `private`, `reduction`, `schedule`, `map`, `depend`, and many others
 - **Version tracking**: Know which OpenMP version introduced each feature
 
 See the [OpenMP Support Matrix](https://roup.ouankou.com/openmp-support.html) for complete details.
@@ -181,8 +181,8 @@ src/
 ├── lexer.rs            - Tokenizer using nom
 └── parser/             - Parser modules
     ├── mod.rs          - Parser entry points
-    ├── clause.rs       - Clause parsing (92+ types)
-    ├── directive.rs    - Directive parsing (120+ types)
+    ├── clause.rs       - Clause parsing (91 types)
+    ├── directive.rs    - Directive parsing (95 types)
     └── openmp.rs       - OpenMP-specific definitions
 examples/
 ├── c/                  - C examples (tutorial_basic.c)

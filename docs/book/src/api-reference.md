@@ -39,7 +39,7 @@ The complete Rust API documentation is auto-generated from the source code using
 
 ## C API Reference
 
-ROUP exports 16 C functions for FFI integration, providing a minimal unsafe pointer-based API. All functions use direct C pointers (`*mut OmpDirective`, `*mut OmpClause`) following a standard malloc/free pattern.
+ROUP exports 16 C functions for FFI integration, providing a minimal C API with unsafe pointer operations only at the FFI boundary. All functions use direct C pointers (`*mut OmpDirective`, `*mut OmpClause`) following a standard malloc/free pattern.
 
 **Source**: `src/c_api.rs` (~60 lines of unsafe code at FFI boundary, ~0.9% of file)
 

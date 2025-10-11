@@ -42,8 +42,8 @@ ROUP is a production-ready parser for OpenMP directives, written in safe Rust wi
 
 ### 📚 Comprehensive OpenMP Support
 
-- **120+ directives** - From `parallel` to `metadirective`
-- **92+ clauses** - Complete OpenMP 3.0 through 6.0 coverage
+- **95 directives** - From `parallel` to `metadirective`
+- **91 clauses** - Extensive OpenMP 3.0 through 6.0 coverage
 - **Version tracking** - Know which OpenMP version introduced each feature
 - **Spec compliant** - Follows official OpenMP specifications
 

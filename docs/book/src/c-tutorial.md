@@ -174,7 +174,7 @@ Directive kind: 28
 Clause count: 1
 ```
 
-> **Note**: Directive kind is an integer from the parser's internal registry. For practical use, you typically care more about the clauses than the exact directive kind.
+> **Note**: Directive kind is an integer from the parser's internal registry. For practical use, you typically care more about the clauses than the exact directive kind. The kind value comes from the order in which directives were registered in `src/parser/openmp.rs` - these internal IDs are not part of the stable API and may change between versions.
 
 ---
 
