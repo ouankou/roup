@@ -1,5 +1,146 @@
 # Release Notes
 
+## Version 0.3.0 (October 11, 2025)
+
+Major documentation release with comprehensive tutorials, guides, and critical bug fixes.
+
+### 🚨 Experimental Status
+
+**IMPORTANT:** ROUP is now explicitly marked as experimental and not production-ready.
+- APIs may change before v1.0
+- Use for research, education, and prototyping
+- See [FAQ](https://roup.ouankou.com/faq.html) for details
+
+### 📚 Complete Documentation Website
+
+**New mdBook Website:** [roup.ouankou.com](https://roup.ouankou.com)
+
+**New Pages (6 major guides):**
+- **[Getting Started](https://roup.ouankou.com/getting-started.html)** - Quick start for Rust, C, and C++
+- **[C Tutorial](https://roup.ouankou.com/c-tutorial.html)** - Complete C API guide (682 lines)
+- **[Building Guide](https://roup.ouankou.com/building.html)** - Cross-platform build instructions (594 lines)
+- **[Architecture](https://roup.ouankou.com/architecture.html)** - Internal design documentation (806 lines)
+- **[Contributing](https://roup.ouankou.com/contributing.html)** - Developer guide (652 lines)
+- **[FAQ](https://roup.ouanoku.com/faq.html)** - Common questions and answers (687 lines)
+
+**Enhanced Pages:**
+- **[Introduction](https://roup.ouankou.com/intro.md)** - Expanded from 153 to 394 lines
+- **[API Reference](https://roup.ouankou.com/api-reference.html)** - Fixed clause mappings, updated function count
+- **[OpenMP Support](https://roup.ouankou.com/openmp-support.html)** - Accurate directive/clause counts
+
+### 🐛 Critical Bug Fixes
+
+**C API Memory Corruption (src/c_api.rs):**
+- **Fixed:** Memory corruption in `free_clause_data` function
+- **Issue:** Incorrectly freeing reduction clauses (kind 6) which use `ReductionData`, not `variables` pointer
+- **Impact:** Caused segfaults when parsing directives with reduction clauses
+- **Solution:** Changed range from `2-6` to `2-5` (only private/shared/firstprivate/lastprivate have variable lists)
+- **Verification:** All 352 tests pass, C examples work correctly, no memory leaks
+
+**Detailed Union Documentation:**
+- Added comprehensive comments explaining `ClauseData` union behavior
+- Clarified which clause kinds use which union fields
+
+### ✅ Testing & CI Improvements
+
+**Test Count:** 352 tests (was 342)
+- 239 unit tests
+- 51 integration tests  
+- 62 doc tests
+
+**C/C++ Example Testing:**
+- CI now builds and runs C examples on Linux
+- Added `gdb` and `valgrind` to devcontainer for debugging
+- Enhanced Makefile with `BUILD_TYPE` variable (debug|release)
+
+**Working Examples:**
+- `examples/c/basic_parse.c` - Minimal parsing example
+- `examples/c/tutorial_basic.c` - Comprehensive 6-step tutorial
+
+### 📊 Accurate Statistics
+
+**OpenMP Support:**
+- **95 directives** (not 120+ as previously claimed)
+- **91 clauses** (accurate count)
+- OpenMP 3.0-6.0 coverage
+
+**Code Safety:**
+- **99.1% safe Rust** (~60 lines of unsafe in FFI boundary)
+- **16 C FFI functions** (accurate count)
+
+### 🗑️ Cleanup
+
+**Removed Obsolete Files (20 files, -6,572 lines):**
+- `include/roup.h` - Old handle-based header (766 lines)
+- `examples/c/clause_inspection.c` - Used deleted header (333 lines)
+- `examples/c/error_handling.c` - Used deleted header (309 lines)
+- `examples/c/string_builder.c` - Used deleted header (202 lines)
+- 15 redundant documentation files in `docs/` directory
+- `test_c_api.c` from root directory
+
+**Documentation Philosophy:**
+- Single source of truth (mdBook website)
+- No redundant documentation
+- Cross-reference instead of duplicate
+
+### 📝 Documentation Corrections
+
+**Getting Started:**
+- Completely rewrote C and C++ quick-start sections
+- Removed ALL references to deleted `include/roup.h`
+- Updated to pointer-based API (`roup_parse()`, `OmpDirective*`, etc.)
+- Fixed compile commands with required libraries (`-lpthread -ldl -lm`)
+
+**All Pages:**
+- Experimental warnings added throughout
+- Production-ready claims removed
+- Test counts updated to 352
+- Directive/clause counts corrected
+
+### 🔧 AGENTS.md Policies
+
+**Added Documentation Policies:**
+- Single source of truth philosophy
+- No redundant documentation
+- C FFI API architecture notes (pointer-based, not handle-based)
+
+**Code Quality Requirements:**
+- Warning-free builds mandatory
+- All commits must pass tests
+- Documentation must stay synchronized
+
+### 🔄 Migration Guide
+
+No breaking API changes in this release. All changes are additive (documentation) or bug fixes.
+
+**If upgrading from 0.2.0:**
+- ✅ No code changes required
+- ✅ C API unchanged (still 16 functions)
+- ✅ Reduction clause bug fix is transparent
+- ⚠️ Be aware: Project is now explicitly experimental
+
+### 📦 Installation
+
+**Rust:**
+```toml
+[dependencies]
+roup = "0.3"
+```
+
+**C/C++:**
+```bash
+cargo build --release
+# Link against target/release/libroup.{a,so,dylib}
+```
+
+See [Getting Started](https://roup.ouankou.com/getting-started.html) for details.
+
+### 🙏 Acknowledgments
+
+Thanks to all reviewers who provided feedback on the documentation and caught issues during the PR review process.
+
+---
+
 ## Version 0.2.0 (October 11, 2025)
 
 Initial release with minimal unsafe C API for OpenMP parsing.
