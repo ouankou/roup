@@ -549,6 +549,7 @@ mod tests {
     use crate::ffi::parse::{omp_directive_free, omp_parse, omp_take_last_parse_result};
     use crate::ffi::registry::REGISTRY;
     use crate::ffi::string::{omp_str_free, omp_str_new, omp_str_push_byte, omp_str_validate_utf8};
+    use serial_test::serial;
 
     fn cleanup() {
         REGISTRY.lock().clear();
@@ -571,6 +572,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_clause_at_and_type() {
         cleanup();
 
@@ -585,6 +587,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_clause_at_out_of_bounds() {
         cleanup();
 
@@ -596,6 +599,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_num_threads_value() {
         cleanup();
 
@@ -614,6 +618,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_reduction_operator() {
         cleanup();
 
@@ -628,6 +633,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_schedule_kind() {
         cleanup();
 
@@ -646,6 +652,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_default_kind() {
         cleanup();
 
@@ -660,6 +667,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_clause_item_count_and_access() {
         cleanup();
 
@@ -687,6 +695,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_multiple_clauses() {
         cleanup();
 
@@ -704,6 +713,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_clause_free() {
         cleanup();
 
@@ -717,6 +727,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_invalid_clause_handle() {
         cleanup();
 
@@ -727,6 +738,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_wrong_type_accessors() {
         cleanup();
 
@@ -743,6 +755,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     #[ignore = "Hangs due to nowait clause not being properly recognized"]
     fn test_bare_clause() {
         cleanup();
@@ -761,6 +774,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_complex_directive() {
         cleanup();
 
@@ -788,6 +802,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_all_clause_types() {
         cleanup();
 
@@ -829,6 +844,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_concurrent_clause_access() {
         use std::sync::Arc;
         use std::thread;

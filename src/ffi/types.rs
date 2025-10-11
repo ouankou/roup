@@ -65,8 +65,10 @@ pub fn is_valid_handle(h: Handle) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial(ffi)]
     fn test_status_is_ok() {
         assert!(OmpStatus::Ok.is_ok());
         assert!(!OmpStatus::NotFound.is_ok());
@@ -74,6 +76,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_status_is_err() {
         assert!(!OmpStatus::Ok.is_err());
         assert!(OmpStatus::NotFound.is_err());
@@ -81,6 +84,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_status_discriminants() {
         // Ensure discriminants are stable for C ABI
         assert_eq!(OmpStatus::Ok as u32, 0);
@@ -92,6 +96,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_invalid_handle() {
         assert_eq!(INVALID_HANDLE, 0);
         assert!(!is_valid_handle(INVALID_HANDLE));
@@ -100,6 +105,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_status_size() {
         // Status is repr(C) so size depends on platform C enum size
         // Typically 4 bytes on most platforms
@@ -107,6 +113,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_handle_size() {
         // Handle is exactly 64 bits
         assert_eq!(std::mem::size_of::<Handle>(), 8);

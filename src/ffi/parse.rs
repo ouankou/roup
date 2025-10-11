@@ -280,6 +280,7 @@ mod tests {
     use super::*;
     use crate::ffi::registry::REGISTRY;
     use crate::ffi::string::{omp_str_free, omp_str_new, omp_str_push_byte};
+    use serial_test::serial;
 
     fn cleanup() {
         REGISTRY.lock().clear();
@@ -294,6 +295,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_simple_parallel() {
         cleanup();
 
@@ -311,6 +313,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_parallel_with_clauses() {
         cleanup();
 
@@ -328,6 +331,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_for_with_schedule() {
         cleanup();
 
@@ -345,6 +349,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_invalid_syntax() {
         cleanup();
 
@@ -361,6 +366,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_invalid_handle() {
         cleanup();
 
@@ -371,6 +377,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_invalid_utf8() {
         cleanup();
 
@@ -386,6 +393,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_directive_free() {
         cleanup();
 
@@ -402,12 +410,14 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_directive_free_invalid_handle() {
         cleanup();
         assert_eq!(omp_directive_free(INVALID_HANDLE), OmpStatus::NotFound);
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_multiple_directives() {
         cleanup();
 
@@ -447,6 +457,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_complex_directive() {
         cleanup();
 
@@ -466,6 +477,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_empty_string() {
         cleanup();
 
@@ -478,6 +490,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_concurrent() {
         use std::sync::Arc;
         use std::thread;
@@ -518,6 +531,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_take_result_clears() {
         cleanup();
 
@@ -536,6 +550,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_parse_reuse_string() {
         cleanup();
 

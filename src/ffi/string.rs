@@ -284,15 +284,19 @@ pub(crate) fn create_string_from_str(s: &str) -> Handle {
 // ============================================================================
 
 #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::ffi::registry::REGISTRY;
+    use serial_test::serial;
 
     fn cleanup() {
         REGISTRY.lock().clear();
     }
 
     #[test]
+    #[serial(ffi)]
+    #[serial(ffi)]
     fn test_str_new() {
         cleanup();
         let h = omp_str_new();
@@ -303,6 +307,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_free() {
         cleanup();
         let h = omp_str_new();
@@ -311,6 +316,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_push_byte() {
         cleanup();
         let h = omp_str_new();
@@ -321,6 +327,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_get_byte() {
         cleanup();
         let h = omp_str_new();
@@ -337,6 +344,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_clear() {
         cleanup();
         let h = omp_str_new();
@@ -352,6 +360,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_validate_utf8_valid() {
         cleanup();
         let h = omp_str_new();
@@ -363,6 +372,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_validate_utf8_invalid() {
         cleanup();
         let h = omp_str_new();
@@ -374,6 +384,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_empty() {
         cleanup();
         let h = omp_str_new();
@@ -384,6 +395,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_reserve_and_capacity() {
         cleanup();
         let h = omp_str_new();
@@ -397,6 +409,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_operations_on_invalid_handle() {
         cleanup();
         let invalid = INVALID_HANDLE;
@@ -411,6 +424,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_large_string() {
         cleanup();
         let h = omp_str_new();
@@ -431,6 +445,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_unicode() {
         cleanup();
         let h = omp_str_new();
@@ -448,6 +463,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_concurrent_create() {
         use std::sync::Arc;
         use std::thread;
@@ -493,6 +509,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_multiple_instances() {
         cleanup();
 
@@ -518,6 +535,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_reuse_handle_after_free() {
         cleanup();
 
@@ -531,6 +549,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_empty_utf8_validation() {
         cleanup();
         let h = omp_str_new();
@@ -539,6 +558,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_boundary_bytes() {
         cleanup();
         let h = omp_str_new();
@@ -559,6 +579,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_str_clear_preserves_capacity() {
         cleanup();
         let h = omp_str_new();

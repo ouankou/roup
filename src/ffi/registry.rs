@@ -275,8 +275,10 @@ pub fn contains(handle: Handle) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial(ffi)]
     fn test_byte_string_new() {
         let s = ByteString::new();
         assert!(s.is_empty());
@@ -284,6 +286,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_byte_string_push() {
         let mut s = ByteString::new();
         s.push(b'a');
@@ -294,6 +297,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_byte_string_get() {
         let mut s = ByteString::new();
         s.push(b'x');
@@ -304,6 +308,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_byte_string_clear() {
         let mut s = ByteString::new();
         s.push(b'a');
@@ -312,6 +317,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_byte_string_to_str_valid() {
         let mut s = ByteString::new();
         for &b in b"hello" {
@@ -321,6 +327,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_byte_string_to_str_invalid() {
         let mut s = ByteString::new();
         s.push(0xFF); // Invalid UTF-8
@@ -328,6 +335,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_byte_string_to_string_lossy() {
         let mut s = ByteString::new();
         s.push(b'H');
@@ -339,6 +347,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_new() {
         let cursor = Cursor::new(vec![1, 2, 3]);
         assert_eq!(cursor.items, vec![1, 2, 3]);
@@ -347,6 +356,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_next() {
         let mut cursor = Cursor::new(vec![10, 20, 30]);
         assert_eq!(cursor.next(), Some(10));
@@ -356,6 +366,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_is_done() {
         let mut cursor = Cursor::new(vec![1, 2]);
         assert!(!cursor.is_done());
@@ -366,6 +377,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_reset() {
         let mut cursor = Cursor::new(vec![1, 2, 3]);
         cursor.next();
@@ -376,6 +388,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_remaining() {
         let mut cursor = Cursor::new(vec![1, 2, 3, 4]);
         assert_eq!(cursor.remaining(), 4);
@@ -389,6 +402,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_registry_new() {
         let reg = Registry::new();
         assert!(reg.is_empty());
@@ -396,6 +410,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_registry_allocate_handle() {
         let mut reg = Registry::new();
         let h1 = reg.allocate_handle();
@@ -406,6 +421,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_registry_insert_and_get() {
         let mut reg = Registry::new();
         let s = ByteString::from_bytes(b"test");
@@ -421,6 +437,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_registry_get_mut() {
         let mut reg = Registry::new();
         let s = ByteString::new();
@@ -437,6 +454,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_registry_remove() {
         let mut reg = Registry::new();
         let s = ByteString::from_bytes(b"temp");
@@ -450,6 +468,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_registry_remove_nonexistent() {
         let mut reg = Registry::new();
         let removed = reg.remove(999);
@@ -457,6 +476,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_registry_multiple_resources() {
         let mut reg = Registry::new();
         let h1 = reg.insert(Resource::String(ByteString::from_bytes(b"one")));
@@ -470,6 +490,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_global_registry_insert() {
         // Clean up first
         REGISTRY.lock().clear();
@@ -483,6 +504,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_global_registry_with_resource() {
         REGISTRY.lock().clear();
 
@@ -500,6 +522,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_global_registry_with_resource_mut() {
         REGISTRY.lock().clear();
 
@@ -524,6 +547,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_global_registry_remove() {
         REGISTRY.lock().clear();
 
@@ -536,6 +560,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_handle_wraparound() {
         let mut reg = Registry::new();
         reg.next_handle = u64::MAX - 1;
@@ -552,6 +577,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_concurrent_access() {
         use std::sync::Arc;
         use std::thread;
@@ -592,6 +618,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_double_free_prevention() {
         REGISTRY.lock().clear();
 
@@ -604,6 +631,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_invalid_handle_operations() {
         assert!(!contains(INVALID_HANDLE));
         assert!(with_resource(INVALID_HANDLE, |_| ()).is_none());

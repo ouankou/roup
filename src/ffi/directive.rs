@@ -373,6 +373,7 @@ mod tests {
     use crate::ffi::registry::REGISTRY;
     use crate::ffi::string::{omp_str_free, omp_str_new, omp_str_push_byte};
     use crate::ir::Language;
+    use serial_test::serial;
 
     fn cleanup() {
         REGISTRY.lock().clear();
@@ -395,6 +396,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_directive_kind() {
         cleanup();
 
@@ -412,6 +414,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_directive_kind_invalid_handle() {
         cleanup();
         assert_eq!(omp_directive_kind(INVALID_HANDLE), -1);
@@ -419,6 +422,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_clause_count() {
         cleanup();
 
@@ -436,12 +440,14 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_clause_count_invalid_handle() {
         cleanup();
         assert_eq!(omp_directive_clause_count(INVALID_HANDLE), 0);
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_directive_location() {
         cleanup();
 
@@ -452,6 +458,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_directive_location_invalid_handle() {
         cleanup();
         assert_eq!(omp_directive_line(INVALID_HANDLE), 0);
@@ -459,6 +466,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_directive_language() {
         cleanup();
 
@@ -468,12 +476,14 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_directive_language_invalid_handle() {
         cleanup();
         assert_eq!(omp_directive_language(INVALID_HANDLE), -1);
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_clauses_cursor() {
         cleanup();
 
@@ -490,6 +500,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_iteration() {
         cleanup();
 
@@ -518,6 +529,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_reset() {
         cleanup();
 
@@ -538,6 +550,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_empty() {
         cleanup();
 
@@ -553,6 +566,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_free() {
         cleanup();
 
@@ -566,6 +580,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_invalid_handle() {
         cleanup();
 
@@ -578,6 +593,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_all_directive_kinds() {
         cleanup();
 
@@ -607,6 +623,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_multiple_cursors() {
         cleanup();
 
@@ -630,6 +647,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_cursor_concurrent() {
         use std::sync::Arc;
         use std::thread;
@@ -659,6 +677,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(ffi)]
     fn test_directive_query_combined() {
         cleanup();
 
