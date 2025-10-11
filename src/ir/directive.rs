@@ -586,7 +586,7 @@ pub struct DirectiveIR<'a> {
 
     /// Semantic clause data
     ///
-    /// Using `Box<[T]>` instead of `Vec<T>` for the final representation:
+    /// Using `Box<[ClauseData<'a>]>` instead of `Vec<ClauseData<'a>>` for the final representation:
     /// - Smaller size (one pointer vs three)
     /// - Signals immutability (can't grow)
     /// - Saves memory (no unused capacity)

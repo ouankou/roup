@@ -112,46 +112,102 @@ void roup_string_list_free(OmpStringList* list);
 
 ### Mapping Tables
 
-#### Directive Kinds
+> **Important:** These values match the exact FFI enum discriminants in `include/roup.h`. Use these when decoding return values from `roup_directive_kind()`, `roup_clause_type()`, etc.
 
-| Value | Directive |
-|-------|-----------|
-| 0 | `parallel` |
-| 1 | `for` |
-| 2 | `sections` |
-| 3 | `single` |
-| 4 | `task` |
-| 5 | `master` |
-| 6 | `critical` |
-| 7 | `barrier` |
-| 8 | `taskwait` |
-| 9 | `taskgroup` |
-| 10 | `atomic` |
-| 11 | `flush` |
-| 12 | `ordered` |
-| 13 | `target` |
-| 14 | `teams` |
-| 15 | `distribute` |
-| 16 | `metadirective` |
+#### Directive Kinds (DirectiveKind enum)
 
-#### Clause Kinds
+| Value | Directive | Value | Directive |
+|-------|-----------|-------|-----------|
+| 0 | `parallel` | 37 | `teams_distribute` |
+| 1 | `for` | 38 | `teams_distribute_simd` |
+| 2 | `sections` | 39 | `target_teams_distribute` |
+| 3 | `section` | 40 | `target_teams_distribute_simd` |
+| 4 | `single` | 41 | `distribute_parallel_for` |
+| 5 | `task` | 42 | `distribute_parallel_for_simd` |
+| 6 | `master` | 43 | `distribute_simd` |
+| 7 | `critical` | 44 | `parallel_for_simd` |
+| 8 | `barrier` | 45 | `taskloop_simd` |
+| 9 | `taskwait` | 46 | `master_taskloop_simd` |
+| 10 | `taskgroup` | 47 | `parallel_master_taskloop_simd` |
+| 11 | `atomic` | 48 | `target_parallel_for_simd` |
+| 12 | `flush` | 49 | `teams_distribute_parallel_for` |
+| 13 | `ordered` | 50 | `teams_distribute_parallel_for_simd` |
+| 14 | `simd` | 51 | `target_teams_distribute_parallel_for` |
+| 15 | `target` | 52 | `target_teams_distribute_parallel_for_simd` |
+| 16 | `target_data` | 53 | `loop` |
+| 17 | `target_enter_data` | 54 | `parallel_loop` |
+| 18 | `target_exit_data` | 55 | `teams_loop` |
+| 19 | `target_update` | 56 | `target_loop` |
+| 20 | `declare_target` | 57 | `target_parallel_loop` |
+| 21 | `teams` | 58 | `target_teams_loop` |
+| 22 | `distribute` | 59 | `masked` |
+| 23 | `declare_simd` | 60 | `scope` |
+| 24 | `declare_reduction` | 61 | `metadirective` |
+| 25 | `taskloop` | 62 | `declare_variant` |
+| 26 | `cancel` | 63 | `requires` |
+| 27 | `cancellation_point` | 64 | `assume` |
+| 28 | `parallel_for` | 65 | `nothing` |
+| 29 | `parallel_sections` | 66 | `error` |
+| 30 | `parallel_master` | 67 | `scan` |
+| 31 | `master_taskloop` | 68 | `depobj` |
+| 32 | `parallel_master_taskloop` | 69 | `tile` |
+| 33 | `target_parallel` | 70 | `unroll` |
+| 34 | `target_parallel_for` | 71 | `allocate` |
+| 35 | `target_simd` | 72 | `threadprivate` |
+| 36 | `target_teams` | 73 | `declare_mapper` |
 
-| Value | Clause |
-|-------|--------|
-| 0 | `num_threads` |
-| 1 | `if` |
-| 2 | `private` |
-| 3 | `shared` |
-| 4 | `firstprivate` |
-| 5 | `lastprivate` |
-| 6 | `reduction` |
-| 7 | `schedule` |
-| 8 | `collapse` |
-| 9 | `ordered` |
-| 10 | `nowait` |
-| 11 | `default` |
+#### Clause Kinds (ClauseType enum)
 
-#### Schedule Kinds
+| Value | Clause | Value | Clause |
+|-------|--------|-------|--------|
+| 0 | `if` | 46 | `detach` |
+| 1 | `num_threads` | 47 | `affinity` |
+| 2 | `default` | 48 | `bind` |
+| 3 | `private` | 49 | `filter` |
+| 4 | `firstprivate` | 50 | `allocate` |
+| 5 | `lastprivate` | 51 | `allocator` |
+| 6 | `shared` | 52 | `uses_allocators` |
+| 7 | `reduction` | 53 | `inclusive` |
+| 8 | `copyin` | 54 | `exclusive` |
+| 9 | `copyprivate` | 55 | `when` |
+| 10 | `schedule` | 56 | `match` |
+| 11 | `ordered` | 57 | `at` |
+| 12 | `nowait` | 58 | `severity` |
+| 13 | `collapse` | 59 | `message` |
+| 14 | `untied` | 60 | `novariants` |
+| 15 | `final` | 61 | `nocontext` |
+| 16 | `mergeable` | 62 | `adjust_args` |
+| 17 | `depend` | 63 | `append_args` |
+| 18 | `priority` | 64 | `full` |
+| 19 | `grainsize` | 65 | `partial` |
+| 20 | `num_tasks` | 66 | `sizes` |
+| 21 | `nogroup` | 67 | `holds` |
+| 22 | `threads` | 68 | `absent` |
+| 23 | `simd` | 69 | `contains` |
+| 24 | `aligned` | 70 | `atomic_default_mem_order` |
+| 25 | `linear` | 71 | `dynamic_allocators` |
+| 26 | `uniform` | 72 | `reverse_offload` |
+| 27 | `inbranch` | 73 | `unified_address` |
+| 28 | `notinbranch` | 74 | `unified_shared_memory` |
+| 29 | `safelen` | 75 | `compare` |
+| 30 | `simdlen` | 76 | `fail` |
+| 31 | `device` | 77 | `seq_cst` |
+| 32 | `map` | 78 | `acq_rel` |
+| 33 | `num_teams` | 79 | `release` |
+| 34 | `thread_limit` | 80 | `acquire` |
+| 35 | `dist_schedule` | 81 | `relaxed` |
+| 36 | `proc_bind` | 82 | `hint` |
+| 37 | `defaultmap` | 83 | `update` |
+| 38 | `to` | 84 | `capture` |
+| 39 | `from` | 85 | `read` |
+| 40 | `use_device_ptr` | 86 | `write` |
+| 41 | `is_device_ptr` | 87 | `init` |
+| 42 | `link` | 88 | `use_device_addr` |
+| 43 | `nontemporal` | 89 | `has_device_addr` |
+| 44 | `order` | 90 | `enter` |
+| 45 | `destroy` | 91 | `doacross` |
+
+#### Schedule Kinds (ScheduleKind enum)
 
 | Value | Schedule |
 |-------|----------|
@@ -161,13 +217,22 @@ void roup_string_list_free(OmpStringList* list);
 | 3 | `auto` |
 | 4 | `runtime` |
 
-#### Reduction Operators
+#### Default Kinds (DefaultKind enum)
+
+| Value | Default |
+|-------|---------|
+| 0 | `shared` |
+| 1 | `none` |
+| 2 | `private` |
+| 3 | `firstprivate` |
+
+#### Reduction Operators (ReductionOperator enum)
 
 | Value | Operator |
 |-------|----------|
-| 0 | `+` (sum) |
-| 1 | `-` (subtraction) |
-| 2 | `*` (product) |
+| 0 | `+` (add) |
+| 1 | `*` (multiply) |
+| 2 | `-` (subtract) |
 | 3 | `&` (bitwise AND) |
 | 4 | `|` (bitwise OR) |
 | 5 | `^` (bitwise XOR) |
@@ -175,6 +240,7 @@ void roup_string_list_free(OmpStringList* list);
 | 7 | `||` (logical OR) |
 | 8 | `min` (minimum) |
 | 9 | `max` (maximum) |
+| 10 | `custom` (user-defined) |
 
 ---
 
