@@ -5,12 +5,21 @@
 # Getting Started
 
 - [Getting Started](./getting-started.md)
+- [Building Guide](./building.md)
 
 # Tutorials
 
 - [Rust Tutorial](./rust-tutorial.md)
-- [C++ Tutorial: Building a Real Application](./cpp-tutorial.md)
+- [C Tutorial](./c-tutorial.md)
+- [C++ Tutorial](./cpp-tutorial.md)
 
-# API Reference
+# Reference
 
-- [API Documentation](./api-reference.md)
+- [API Reference](./api-reference.md)
+- [OpenMP Support Matrix](./openmp-support.md)
+
+# Developer Guide
+
+- [Architecture](./architecture.md)
+- [Contributing](./contributing.md)
+- [FAQ](./faq.md)

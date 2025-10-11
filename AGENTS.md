@@ -69,3 +69,8 @@
   - Update RELEASE_NOTES.md for user-facing changes
   - Regenerate rustdoc if public APIs modified
   - Verify all documentation builds successfully
+- **Check README.md after every change**: Ensure the main README.md and any sub-project READMEs don't conflict with new changes
+  - If API changes, update README examples
+  - If features added/removed, update README feature list
+  - If build process changes, update README installation/build instructions
+  - Keep README in sync with docs/book/src/ website content
