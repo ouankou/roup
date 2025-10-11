@@ -236,7 +236,7 @@ See [API Reference](./api-reference.md#clause-kinds-integer-discriminants) for d
 
 ### Is there a Python binding?
 
-Not yet, but it's planned! Track [issue #42](https://github.com/ouankou/roup/issues/42).
+Not yet, but it's planned! You can follow progress on Python bindings in the ROUP GitHub repository.
 
 In the meantime, you can use the C API via `ctypes` or `cffi`.
 

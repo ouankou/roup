@@ -58,7 +58,7 @@ cargo build --release
 | **C** | Pointer-based (malloc/free) | [C Tutorial](https://roup.ouankou.com/c-tutorial.html) |
 | **C++** | C++17 RAII wrappers | [C++ Tutorial](https://roup.ouankou.com/cpp-tutorial.html) |
 
-**Examples:** See [`examples/c/tutorial_basic.c`](examples/c/tutorial_basic.c) (433 lines) and [`examples/cpp/`](examples/cpp/) directory.
+**Examples:** See [`examples/c/tutorial_basic.c`](examples/c/tutorial_basic.c) and [`examples/cpp/`](examples/cpp/) directory.
 
 ## Quick Examples
 
