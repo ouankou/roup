@@ -64,11 +64,13 @@
 //! - `clause`: Clause query functions
 //! - `cursor`: Iterator pattern implementation
 
+pub mod parse;
 pub mod registry;
 pub mod string;
 pub mod types;
 
 // Re-export main types
+pub use parse::*;
 pub use registry::Registry;
 pub use string::*;
 pub use types::*;
