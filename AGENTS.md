@@ -1,5 +1,33 @@
 # Agent Instructions
 
+## Documentation Philosophy
+
+**IMPORTANT**: ROUP maintains a **single source of truth** for all documentation. Avoid redundancy.
+
+- **No redundant docs**: If the same information exists in multiple places, consolidate it
+- **Single canonical location**: Each piece of information should have ONE authoritative source
+- **Cross-reference, don't duplicate**: Link to the canonical source instead of copying content
+- **Assume no redundancy**: If you see a doc/README that seems redundant, it likely is - check if it can be deleted
+
+**Documentation Hierarchy**:
+1. **mdBook website** (`docs/book/src/`) - Primary user-facing documentation
+2. **README.md** - Brief project intro with links to website
+3. **API docs** (rustdoc) - Generated from source code
+4. **Examples** - Working code in `examples/`
+5. **Source comments** - Implementation details in code
+
+**DO NOT**:
+- ❌ Create duplicate guides (e.g., both `docs/QUICK_START.md` and `docs/book/src/getting-started.md`)
+- ❌ Copy content between files - use links instead
+- ❌ Maintain multiple versions of the same tutorial
+- ❌ Keep historical/planning docs after completion (delete them)
+
+**DO**:
+- ✅ Consolidate overlapping documentation
+- ✅ Use `[See Building Guide](./building.md)` instead of duplicating build instructions
+- ✅ Delete planning docs, status files, and completed task lists
+- ✅ Keep examples up-to-date with current API
+
 ## C FFI API Architecture
 
 **IMPORTANT**: ROUP uses a **minimal unsafe pointer-based C API**, NOT a handle-based approach.
