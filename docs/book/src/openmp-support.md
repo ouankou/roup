@@ -348,7 +348,7 @@ ROUP focuses on **directive parsing**, not runtime semantics. The following are 
 | **Lexer** | ✅ Complete | Handles C/C++/Fortran syntax |
 | **Parser** | ✅ Complete | nom-based combinator parser |
 | **IR (Intermediate Representation)** | ✅ Complete | Type-safe Rust AST |
-| **C FFI** | ✅ Complete | Handle-based API (18 functions) |
+| **C FFI** | ✅ Complete | Pointer-based API (16 functions) |
 | **Fortran support** | ✅ Complete | All comment styles |
 | **Error messages** | ✅ Complete | Descriptive parse errors |
 | **Round-trip** | ✅ Complete | IR → String preservation |
