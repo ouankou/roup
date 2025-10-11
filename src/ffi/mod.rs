@@ -65,8 +65,10 @@
 //! - `cursor`: Iterator pattern implementation
 
 pub mod registry;
+pub mod string;
 pub mod types;
 
 // Re-export main types
 pub use registry::Registry;
+pub use string::*;
 pub use types::*;
