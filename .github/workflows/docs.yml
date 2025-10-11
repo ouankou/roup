@@ -16,6 +16,9 @@ on:
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write  # Required for peaceiris/actions-gh-pages to push to gh-pages branch
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
