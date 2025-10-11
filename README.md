@@ -3,8 +3,11 @@
 **Safe, fast, and comprehensive OpenMP directive parsing**
 
 [![Docs](https://img.shields.io/badge/docs-roup.ouankou.com-blue)](https://roup.ouankou.com)
-[![Tests](https://img.shields.io/badge/tests-342%20passing-green)](https://github.com/ouankou/roup)
+[![Tests](https://img.shields.io/badge/tests-352%20passing-green)](https://github.com/ouankou/roup)
 [![Safety](https://img.shields.io/badge/unsafe-0.9%25-yellow)](https://roup.ouankou.com/architecture.html#safety-boundaries)
+[![Status](https://img.shields.io/badge/status-experimental-orange)](https://github.com/ouankou/roup)
+
+> **⚠️ Experimental**: ROUP is under active development and not production-ready. APIs may change. Use for research and experimentation.
 
 ---
 
@@ -31,7 +34,7 @@ cargo build --release
 - ✅ **Multi-Language Support:** Rust, C, and C++ APIs
 - ✅ **OpenMP 3.0-6.0:** 95 directives, 91 clauses
 - ✅ **Safe by Default:** 99.1% safe Rust code
-- ✅ **Production Ready:** 342 tests, zero warnings
+- ✅ **Experimental:** 352 tests, active development
 - ✅ **Modern C++:** C++17 RAII wrappers
 - ✅ **Well Documented:** [Comprehensive website](https://roup.ouankou.com)
 
@@ -153,7 +156,7 @@ g++ -std=c++17 example.cpp -L./target/release -lroup -lpthread -ldl -lm -o examp
 # Build library
 cargo build --release
 
-# Run all tests (342 tests)
+# Run all tests (352 tests)
 cargo test
 
 # Build documentation
@@ -228,7 +231,7 @@ ROUP is written in **99.1% safe Rust** with minimal unsafe code (~60 lines).
 cargo test
 
 # Expected output:
-# test result: ok. 342 passed; 0 failed
+# test result: ok. 352 passed; 0 failed
 ```
 
 **Test Coverage:**

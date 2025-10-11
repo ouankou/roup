@@ -378,13 +378,13 @@ ROUP will be updated as new OpenMP versions are released.
 
 ## Summary
 
-**ROUP provides complete OpenMP 6.0 support:**
+**ROUP provides OpenMP 3.0-6.0 parsing support:**
 
-- ✅ **120+ directives** (all core, combined, and meta-directives)
-- ✅ **92 clause types** (data-sharing, control, device, SIMD, sync, etc.)
+- ✅ **95 directives** (core, combined, and meta-directives)
+- ✅ **91 clause types** (data-sharing, control, device, SIMD, sync, etc.)
 - ✅ **C/C++/Fortran** syntax support
-- ✅ **355 automated tests** (100% directive/clause coverage)
+- ✅ **352 automated tests** (comprehensive directive/clause coverage)
 - ✅ **Type-safe Rust API** + **C FFI**
 - ✅ **Latest spec** (OpenMP 6.0, 2024)
 
-**Ready for production use in static analysis, tooling, and research.** 🚀
+**⚠️ Experimental - for research, education, and prototype tooling. Not yet production-ready.** 🧪

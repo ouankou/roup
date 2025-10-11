@@ -88,40 +88,36 @@ cargo run
 
 ## Quick Start: C
 
-### 1. Include the Header
+### 1. Write Your Program
 
-The C API is defined in `include/roup.h`:
+The C API uses direct pointers (malloc/free pattern):
 
 ```c
-#include "include/roup.h"
 #include <stdio.h>
+#include <stdint.h>
+
+// Forward declarations from libroup
+typedef struct OmpDirective OmpDirective;
+
+OmpDirective* roup_parse(const char* input);
+int32_t roup_directive_clause_count(const OmpDirective* dir);
+void roup_directive_free(OmpDirective* dir);
 
 int main() {
     // Parse a directive
-    Handle directive;
-    OmpStatus status = omp_parse_cstr(
-        "#pragma omp parallel num_threads(4)", 
-        OMP_LANG_C, 
-        &directive
-    );
+    OmpDirective* directive = roup_parse("#pragma omp parallel num_threads(4)");
     
-    if (status != OMP_SUCCESS) {
-        fprintf(stderr, "Parse failed with status: %d\n", status);
+    if (!directive) {
+        fprintf(stderr, "Parse failed\n");
         return 1;
     }
     
-    // Query directive kind
-    int32_t kind;
-    omp_directive_kind_ptr(directive, &kind);
-    printf("Directive kind: %d\n", kind);
-    
     // Query clause count
-    uintptr_t count;
-    omp_directive_clause_count_ptr(directive, &count);
-    printf("Clause count: %zu\n", count);
+    int32_t count = roup_directive_clause_count(directive);
+    printf("Clause count: %d\n", count);
     
     // Clean up
-    omp_directive_free(directive);
+    roup_directive_free(directive);
     
     return 0;
 }
@@ -130,10 +126,14 @@ int main() {
 ### 2. Compile
 
 ```bash
+# Build ROUP library first
+cargo build --release
+
+# Compile your C program
 clang example.c \
-  -I./include \
   -L./target/release \
   -lroup \
+  -lpthread -ldl -lm \
   -Wl,-rpath,./target/release \
   -o example
 ```
@@ -141,9 +141,9 @@ clang example.c \
 **On macOS:**
 ```bash
 clang example.c \
-  -I./include \
   -L./target/release \
   -lroup \
+  -lpthread -ldl \
   -Wl,-rpath,@executable_path/../target/release \
   -o example
 ```
@@ -156,11 +156,10 @@ clang example.c \
 
 **Output:**
 ```
-Directive kind: 0
 Clause count: 1
 ```
 
-**Next:** See the [C Tutorial](./c-tutorial.md) for complete examples with error handling.
+**Next:** See the [C Tutorial](./c-tutorial.md) for complete examples with iteration and error handling.
 
 ---
 
@@ -168,49 +167,45 @@ Clause count: 1
 
 ### 1. Create Your Program
 
-Modern C++17 with RAII wrappers (see [C++ Tutorial](./cpp-tutorial.md) for full implementation):
+Modern C++17 with RAII wrappers:
 
 ```cpp
-#include "include/roup.h"
 #include <iostream>
-#include <memory>
+#include <cstdint>
+
+// Forward declarations from libroup C API
+struct OmpDirective;
+extern "C" {
+    OmpDirective* roup_parse(const char* input);
+    int32_t roup_directive_clause_count(const OmpDirective* dir);
+    void roup_directive_free(OmpDirective* dir);
+}
 
 // Simple RAII wrapper
 class Directive {
-    Handle handle_;
+    OmpDirective* ptr_;
 public:
-    explicit Directive(const char* input) {
-        omp_parse_cstr(input, OMP_LANG_C, &handle_);
-    }
+    explicit Directive(const char* input) 
+        : ptr_(roup_parse(input)) {}
     
     ~Directive() {
-        if (handle_ != INVALID_HANDLE) {
-            omp_directive_free(handle_);
-        }
+        if (ptr_) roup_directive_free(ptr_);
     }
     
     // Delete copy, allow move
     Directive(const Directive&) = delete;
     Directive& operator=(const Directive&) = delete;
     Directive(Directive&& other) noexcept 
-        : handle_(other.handle_) {
-        other.handle_ = INVALID_HANDLE;
+        : ptr_(other.ptr_) {
+        other.ptr_ = nullptr;
     }
     
     bool valid() const { 
-        return handle_ != INVALID_HANDLE; 
+        return ptr_ != nullptr; 
     }
     
-    int32_t kind() const {
-        int32_t k = -1;
-        omp_directive_kind_ptr(handle_, &k);
-        return k;
-    }
-    
-    size_t clause_count() const {
-        uintptr_t count = 0;
-        omp_directive_clause_count_ptr(handle_, &count);
-        return count;
+    int clause_count() const {
+        return ptr_ ? roup_directive_clause_count(ptr_) : 0;
     }
 };
 
@@ -222,7 +217,6 @@ int main() {
         return 1;
     }
     
-    std::cout << "Directive kind: " << dir.kind() << "\n";
     std::cout << "Clause count: " << dir.clause_count() << "\n";
     
     return 0;
@@ -232,10 +226,14 @@ int main() {
 ### 2. Compile
 
 ```bash
+# Build ROUP library first
+cargo build --release
+
+# Compile your C++ program
 clang++ -std=c++17 example.cpp \
-  -I./include \
   -L./target/release \
   -lroup \
+  -lpthread -ldl -lm \
   -Wl,-rpath,./target/release \
   -o example
 ```
@@ -248,7 +246,6 @@ clang++ -std=c++17 example.cpp \
 
 **Output:**
 ```
-Directive kind: 28
 Clause count: 1
 ```
 
@@ -256,41 +253,23 @@ Clause count: 1
 
 ---
 
-## Understanding Directive Kinds
-
-The C/C++ API returns integer discriminants for directive kinds. Here are the most common ones:
-
-| Value | Directive | Example |
-|-------|-----------|---------|
-| 0 | `parallel` | `#pragma omp parallel` |
-| 1 | `for` | `#pragma omp for` |
-| 5 | `task` | `#pragma omp task` |
-| 15 | `target` | `#pragma omp target` |
-| 21 | `teams` | `#pragma omp teams` |
-| 28 | `parallel for` | `#pragma omp parallel for` |
-| 61 | `metadirective` | `#pragma omp metadirective` |
-
-**See the complete enum mapping in the [API Reference](./api-reference.md#directive-kinds-directivekind-enum).**
-
----
-
 ## What's Supported?
 
-### Directives (74 total)
+### Directives (95 total)
 ✅ Parallelism: `parallel`, `for`, `sections`, `single`, `master`  
 ✅ Tasking: `task`, `taskwait`, `taskgroup`, `taskloop`  
 ✅ Device offloading: `target`, `teams`, `distribute`  
 ✅ Synchronization: `barrier`, `critical`, `atomic`  
 ✅ Advanced: `metadirective`, `declare variant`, `loop`  
 
-### Clauses (92 total)
+### Clauses (91 total)
 ✅ Scheduling: `schedule`, `collapse`, `ordered`  
 ✅ Data-sharing: `private`, `shared`, `firstprivate`, `lastprivate`  
 ✅ Reductions: `reduction(+|-|*|&|&&|min|max:vars)`  
 ✅ Device clauses: `device`, `map`, `is_device_ptr`  
 ✅ Control: `if`, `num_threads`, `default`  
 
-**For the complete support matrix, see [OpenMP Support](./openmp-support.md)** (coming soon).
+**For the complete support matrix, see [OpenMP Support](./openmp-support.md).**
 
 ---
 
@@ -306,7 +285,7 @@ export LD_LIBRARY_PATH=$PWD/target/release:$LD_LIBRARY_PATH
 
 Or use `-Wl,-rpath` during compilation (recommended):
 ```bash
-clang example.c -L./target/release -lroup -Wl,-rpath,$PWD/target/release
+clang example.c -L./target/release -lroup -lpthread -ldl -lm -Wl,-rpath,$PWD/target/release
 ```
 
 **macOS:**
@@ -315,27 +294,30 @@ export DYLD_LIBRARY_PATH=$PWD/target/release:$DYLD_LIBRARY_PATH
 ./example
 ```
 
-### Parse Returns Invalid Handle
+### Parse Returns NULL
 
 Check your OpenMP syntax:
 
 ```c
 // ✅ Valid
-omp_parse_cstr("#pragma omp parallel", OMP_LANG_C, &handle);
+OmpDirective* dir = roup_parse("#pragma omp parallel");
 
-// ✅ Valid - Fortran syntax
-omp_parse_cstr("!$omp parallel", OMP_LANG_FORTRAN, &handle);
+// ✅ Valid - with clauses
+dir = roup_parse("#pragma omp parallel num_threads(4)");
 
 // ❌ Invalid - missing 'omp'
-omp_parse_cstr("#pragma parallel", OMP_LANG_C, &handle);
+dir = roup_parse("#pragma parallel");  // Returns NULL
 ```
 
-Always check the return status:
+Always check for NULL:
 ```c
-OmpStatus status = omp_parse_cstr(input, OMP_LANG_C, &handle);
-if (status != OMP_SUCCESS) {
-    fprintf(stderr, "Parse error: %d\n", status);
+OmpDirective* dir = roup_parse(input);
+if (!dir) {
+    fprintf(stderr, "Parse error\n");
+    return 1;
 }
+// ... use dir ...
+roup_directive_free(dir);
 ```
 
 ### C++ Compilation Errors
@@ -384,15 +366,15 @@ cargo run
 **C:**
 ```bash
 cargo build --release
-clang example.c -I./include -L./target/release -lroup -Wl,-rpath,./target/release
+clang example.c -L./target/release -lroup -lpthread -ldl -lm -Wl,-rpath,./target/release
 ./example
 ```
 
 **C++:**
 ```bash
 cargo build --release
-clang++ -std=c++17 example.cpp -I./include -L./target/release -lroup -Wl,-rpath,./target/release
+clang++ -std=c++17 example.cpp -L./target/release -lroup -lpthread -ldl -lm -Wl,-rpath,./target/release
 ./example
 ```
 
-**You're now ready to parse OpenMP directives!** 🎉
+**You're ready to experiment with OpenMP parsing!** 🎉

@@ -14,12 +14,14 @@
 
 ## What is ROUP?
 
-ROUP is a production-ready parser for OpenMP directives, written in safe Rust with C and C++ APIs. Parse OpenMP pragmas like `#pragma omp parallel for` into structured data that your tools can analyze, transform, and process.
+ROUP is an **experimental** parser for OpenMP directives, written in safe Rust with C and C++ APIs. Parse OpenMP pragmas like `#pragma omp parallel for` into structured data that your tools can analyze, transform, and process.
+
+> **⚠️ Experimental Status**: ROUP is under active development and not yet production-ready. APIs may change, and some OpenMP features are still being implemented. Use in research and experimental projects.
 
 **Perfect for:**
-- 🔧 **Compiler developers** - Integrate OpenMP parsing into your compiler
-- 🔍 **Analysis tools** - Build linters, formatters, and code analyzers  
-- 🎓 **Researchers** - Study parallelization patterns in real code
+- 🔧 **Compiler research** - Experiment with OpenMP parsing in compilers
+- 🔍 **Analysis prototypes** - Build experimental linters and analyzers  
+- 🎓 **Researchers** - Study parallelization patterns and test new ideas
 - 📚 **Educators** - Teaching tool for parallel programming concepts
 
 ---
@@ -592,9 +594,9 @@ Test categories:
 
 ## Getting Started
 
-Ready to use ROUP in your project? Check out our tutorials:
+Want to experiment with ROUP? Check out our tutorials:
 
-- **[C++ Tutorial](./cpp-tutorial.md)** - Build a real application with C++17
+- **[C++ Tutorial](./cpp-tutorial.md)** - Build an experimental application with C++17
 - **[Rust API Docs](./api-reference.md)** - Complete API reference
 
 Or jump straight to the code:

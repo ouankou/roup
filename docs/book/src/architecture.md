@@ -76,7 +76,7 @@ pub enum Token<'a> {
 - **Zero-copy**: Works directly on input &str, no allocations
 - **Composable**: Small parsers combine into larger ones
 - **Error-rich**: Detailed error messages with position
-- **Battle-tested**: Used in production parsers worldwide
+- **Well-established**: Widely used parser combinator library
 
 **Example Lexer Function:**
 
@@ -772,15 +772,21 @@ See [AGENTS.md - C FFI API Architecture](https://github.com/ouankou/roup/blob/ma
 
 ### Stability Guarantees
 
-**Stable**:
-- Rust public API (`parse()` function signature)
+**⚠️ Pre-1.0 Experimental Status:**
+
+ROUP is under active development. While we aim for stability, **all APIs may change** before v1.0.
+
+**More stable** (unlikely to change much):
+- Core parsing functionality (`parse()` pattern)
 - C FFI function signatures (16 functions)
 - IR structure (major fields)
 
-**Unstable** (may change):
-- Internal parser implementation
-- Lexer token types
+**Less stable** (may change between versions):
+- Internal parser implementation details
+- Lexer token types and error structures
 - Error message formatting
+- Clause/directive kind integer values
+- Specific API details and return types
 
 ---
 
