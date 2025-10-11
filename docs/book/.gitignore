@@ -1,0 +1,7 @@
+# mdBook output
+book/
+
+# Backup files
+*.bak
+*.swp
+*~
