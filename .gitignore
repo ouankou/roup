@@ -1,8 +1,7 @@
 /target
 Cargo.lock
 
-# Compiled binaries
-test_c_api
+# Compiled binaries from examples
 examples/c/basic_parse
 examples/c/tutorial
 examples/c/tutorial_basic
