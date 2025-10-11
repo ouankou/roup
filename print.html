@@ -389,6 +389,963 @@ int main() {
 <h2 id="license"><a class="header" href="#license">License</a></h2>
 <p>ROUP is open source under the <strong>MIT License</strong>.</p>
 <p><strong>Copyright © 2024-2025 Anjia Wang</strong></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="getting-started-1"><a class="header" href="#getting-started-1">Getting Started</a></h1>
+<p>Get up and running with ROUP in 5 minutes. This guide covers installation, basic usage, and your first OpenMP parse for <strong>Rust</strong>, <strong>C</strong>, and <strong>C++</strong>.</p>
+<hr />
+<h2 id="installation"><a class="header" href="#installation">Installation</a></h2>
+<h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>
+<ul>
+<li><strong>Rust</strong> 1.70+ (<a href="https://rustup.rs/">Install Rust</a>)</li>
+<li><strong>C/C++ Compiler</strong>: Clang 10+ or GCC 9+ (for C/C++ usage)</li>
+</ul>
+<h3 id="build-roup"><a class="header" href="#build-roup">Build ROUP</a></h3>
+<pre><code class="language-bash">git clone https://github.com/ouankou/roup.git
+cd roup
+cargo build --release
+</code></pre>
+<p>This creates the library at:</p>
+<ul>
+<li><strong>Linux</strong>: <code>target/release/libroup.so</code></li>
+<li><strong>macOS</strong>: <code>target/release/libroup.dylib</code></li>
+<li><strong>Windows</strong>: <code>target/release/roup.dll</code></li>
+</ul>
+<hr />
+<h2 id="quick-start-rust"><a class="header" href="#quick-start-rust">Quick Start: Rust</a></h2>
+<h3 id="1-add-dependency"><a class="header" href="#1-add-dependency">1. Add Dependency</a></h3>
+<p>Add to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+roup = "0.2"
+</code></pre>
+<p>Or use the git version:</p>
+<pre><code class="language-toml">[dependencies]
+roup = { git = "https://github.com/ouankou/roup.git" }
+</code></pre>
+<h3 id="2-parse-your-first-directive"><a class="header" href="#2-parse-your-first-directive">2. Parse Your First Directive</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel for num_threads(4)";
+    
+    match parse_openmp_directive(input, Language::C) {
+        Ok(directive) =&gt; {
+            println!("✓ Successfully parsed: {:?}", directive.kind);
+            println!("  Clauses: {}", directive.clauses.len());
+            
+            for clause in &amp;directive.clauses {
+                println!("  - {:?}", clause);
+            }
+        }
+        Err(e) =&gt; {
+            eprintln!("✗ Parse error: {}", e);
+        }
+    }
+}</code></pre>
+<h3 id="3-run"><a class="header" href="#3-run">3. Run</a></h3>
+<pre><code class="language-bash">cargo run
+</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>✓ Successfully parsed: ParallelFor
+  Clauses: 1
+  - NumThreads(Expr { value: "4", .. })
+</code></pre>
+<p><strong>Next:</strong> See the <a href="./rust-tutorial.html">Rust Tutorial</a> for advanced usage.</p>
+<hr />
+<h2 id="quick-start-c"><a class="header" href="#quick-start-c">Quick Start: C</a></h2>
+<h3 id="1-include-the-header"><a class="header" href="#1-include-the-header">1. Include the Header</a></h3>
+<p>The C API is defined in <code>include/roup.h</code>:</p>
+<pre><code class="language-c">#include "include/roup.h"
+#include &lt;stdio.h&gt;
+
+int main() {
+    // Parse a directive
+    Handle directive;
+    OmpStatus status = omp_parse_cstr(
+        "#pragma omp parallel num_threads(4)", 
+        OMP_LANG_C, 
+        &amp;directive
+    );
+    
+    if (status != OMP_SUCCESS) {
+        fprintf(stderr, "Parse failed with status: %d\n", status);
+        return 1;
+    }
+    
+    // Query directive kind
+    int32_t kind;
+    omp_directive_kind_ptr(directive, &amp;kind);
+    printf("Directive kind: %d\n", kind);
+    
+    // Query clause count
+    uintptr_t count;
+    omp_directive_clause_count_ptr(directive, &amp;count);
+    printf("Clause count: %zu\n", count);
+    
+    // Clean up
+    omp_directive_free(directive);
+    
+    return 0;
+}
+</code></pre>
+<h3 id="2-compile"><a class="header" href="#2-compile">2. Compile</a></h3>
+<pre><code class="language-bash">clang example.c \
+  -I./include \
+  -L./target/release \
+  -lroup \
+  -Wl,-rpath,./target/release \
+  -o example
+</code></pre>
+<p><strong>On macOS:</strong></p>
+<pre><code class="language-bash">clang example.c \
+  -I./include \
+  -L./target/release \
+  -lroup \
+  -Wl,-rpath,@executable_path/../target/release \
+  -o example
+</code></pre>
+<h3 id="3-run-1"><a class="header" href="#3-run-1">3. Run</a></h3>
+<pre><code class="language-bash">./example
+</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Directive kind: 0
+Clause count: 1
+</code></pre>
+<p><strong>Next:</strong> See the <a href="./c-tutorial.html">C Tutorial</a> for complete examples with error handling.</p>
+<hr />
+<h2 id="quick-start-c-1"><a class="header" href="#quick-start-c-1">Quick Start: C++</a></h2>
+<h3 id="1-create-your-program"><a class="header" href="#1-create-your-program">1. Create Your Program</a></h3>
+<p>Modern C++17 with RAII wrappers (see <a href="./cpp-tutorial.html">C++ Tutorial</a> for full implementation):</p>
+<pre><code class="language-cpp">#include "include/roup.h"
+#include &lt;iostream&gt;
+#include &lt;memory&gt;
+
+// Simple RAII wrapper
+class Directive {
+    Handle handle_;
+public:
+    explicit Directive(const char* input) {
+        omp_parse_cstr(input, OMP_LANG_C, &amp;handle_);
+    }
+    
+    ~Directive() {
+        if (handle_ != INVALID_HANDLE) {
+            omp_directive_free(handle_);
+        }
+    }
+    
+    // Delete copy, allow move
+    Directive(const Directive&amp;) = delete;
+    Directive&amp; operator=(const Directive&amp;) = delete;
+    Directive(Directive&amp;&amp; other) noexcept 
+        : handle_(other.handle_) {
+        other.handle_ = INVALID_HANDLE;
+    }
+    
+    bool valid() const { 
+        return handle_ != INVALID_HANDLE; 
+    }
+    
+    int32_t kind() const {
+        int32_t k = -1;
+        omp_directive_kind_ptr(handle_, &amp;k);
+        return k;
+    }
+    
+    size_t clause_count() const {
+        uintptr_t count = 0;
+        omp_directive_clause_count_ptr(handle_, &amp;count);
+        return count;
+    }
+};
+
+int main() {
+    Directive dir("#pragma omp parallel for num_threads(4)");
+    
+    if (!dir.valid()) {
+        std::cerr &lt;&lt; "Parse failed\n";
+        return 1;
+    }
+    
+    std::cout &lt;&lt; "Directive kind: " &lt;&lt; dir.kind() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Clause count: " &lt;&lt; dir.clause_count() &lt;&lt; "\n";
+    
+    return 0;
+}  // Automatic cleanup via RAII
+</code></pre>
+<h3 id="2-compile-1"><a class="header" href="#2-compile-1">2. Compile</a></h3>
+<pre><code class="language-bash">clang++ -std=c++17 example.cpp \
+  -I./include \
+  -L./target/release \
+  -lroup \
+  -Wl,-rpath,./target/release \
+  -o example
+</code></pre>
+<h3 id="3-run-2"><a class="header" href="#3-run-2">3. Run</a></h3>
+<pre><code class="language-bash">./example
+</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Directive kind: 28
+Clause count: 1
+</code></pre>
+<p><strong>Next:</strong> See the <a href="./cpp-tutorial.html">C++ Tutorial</a> for a complete real-world example.</p>
+<hr />
+<h2 id="understanding-directive-kinds"><a class="header" href="#understanding-directive-kinds">Understanding Directive Kinds</a></h2>
+<p>The C/C++ API returns integer discriminants for directive kinds. Here are the most common ones:</p>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Directive</th><th>Example</th></tr></thead><tbody>
+<tr><td>0</td><td><code>parallel</code></td><td><code>#pragma omp parallel</code></td></tr>
+<tr><td>1</td><td><code>for</code></td><td><code>#pragma omp for</code></td></tr>
+<tr><td>5</td><td><code>task</code></td><td><code>#pragma omp task</code></td></tr>
+<tr><td>15</td><td><code>target</code></td><td><code>#pragma omp target</code></td></tr>
+<tr><td>21</td><td><code>teams</code></td><td><code>#pragma omp teams</code></td></tr>
+<tr><td>28</td><td><code>parallel for</code></td><td><code>#pragma omp parallel for</code></td></tr>
+<tr><td>61</td><td><code>metadirective</code></td><td><code>#pragma omp metadirective</code></td></tr>
+</tbody></table>
+</div>
+<p><strong>See the complete enum mapping in the <a href="./api-reference.html#directive-kinds-directivekind-enum">API Reference</a>.</strong></p>
+<hr />
+<h2 id="whats-supported"><a class="header" href="#whats-supported">What's Supported?</a></h2>
+<h3 id="directives-74-total"><a class="header" href="#directives-74-total">Directives (74 total)</a></h3>
+<p>✅ Parallelism: <code>parallel</code>, <code>for</code>, <code>sections</code>, <code>single</code>, <code>master</code><br />
+✅ Tasking: <code>task</code>, <code>taskwait</code>, <code>taskgroup</code>, <code>taskloop</code><br />
+✅ Device offloading: <code>target</code>, <code>teams</code>, <code>distribute</code><br />
+✅ Synchronization: <code>barrier</code>, <code>critical</code>, <code>atomic</code><br />
+✅ Advanced: <code>metadirective</code>, <code>declare variant</code>, <code>loop</code></p>
+<h3 id="clauses-92-total"><a class="header" href="#clauses-92-total">Clauses (92 total)</a></h3>
+<p>✅ Scheduling: <code>schedule</code>, <code>collapse</code>, <code>ordered</code><br />
+✅ Data-sharing: <code>private</code>, <code>shared</code>, <code>firstprivate</code>, <code>lastprivate</code><br />
+✅ Reductions: <code>reduction(+|-|*|&amp;|&amp;&amp;|min|max:vars)</code><br />
+✅ Device clauses: <code>device</code>, <code>map</code>, <code>is_device_ptr</code><br />
+✅ Control: <code>if</code>, <code>num_threads</code>, <code>default</code></p>
+<p><strong>For the complete support matrix, see <a href="./openmp-support.html">OpenMP Support</a></strong> (coming soon).</p>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="library-not-found-at-runtime"><a class="header" href="#library-not-found-at-runtime">Library Not Found at Runtime</a></h3>
+<p><strong>Linux:</strong></p>
+<pre><code class="language-bash">export LD_LIBRARY_PATH=$PWD/target/release:$LD_LIBRARY_PATH
+./example
+</code></pre>
+<p>Or use <code>-Wl,-rpath</code> during compilation (recommended):</p>
+<pre><code class="language-bash">clang example.c -L./target/release -lroup -Wl,-rpath,$PWD/target/release
+</code></pre>
+<p><strong>macOS:</strong></p>
+<pre><code class="language-bash">export DYLD_LIBRARY_PATH=$PWD/target/release:$DYLD_LIBRARY_PATH
+./example
+</code></pre>
+<h3 id="parse-returns-invalid-handle"><a class="header" href="#parse-returns-invalid-handle">Parse Returns Invalid Handle</a></h3>
+<p>Check your OpenMP syntax:</p>
+<pre><code class="language-c">// ✅ Valid
+omp_parse_cstr("#pragma omp parallel", OMP_LANG_C, &amp;handle);
+
+// ✅ Valid - Fortran syntax
+omp_parse_cstr("!$omp parallel", OMP_LANG_FORTRAN, &amp;handle);
+
+// ❌ Invalid - missing 'omp'
+omp_parse_cstr("#pragma parallel", OMP_LANG_C, &amp;handle);
+</code></pre>
+<p>Always check the return status:</p>
+<pre><code class="language-c">OmpStatus status = omp_parse_cstr(input, OMP_LANG_C, &amp;handle);
+if (status != OMP_SUCCESS) {
+    fprintf(stderr, "Parse error: %d\n", status);
+}
+</code></pre>
+<h3 id="c-compilation-errors"><a class="header" href="#c-compilation-errors">C++ Compilation Errors</a></h3>
+<p>Make sure you're using C++17:</p>
+<pre><code class="language-bash"># ✅ Correct
+clang++ -std=c++17 example.cpp ...
+
+# ❌ Wrong - C++11 lacks required features
+clang++ -std=c++11 example.cpp ...
+</code></pre>
+<hr />
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<h3 id="learn-more"><a class="header" href="#learn-more">Learn More</a></h3>
+<ul>
+<li><strong><a href="./rust-tutorial.html">Rust Tutorial</a></strong> - Idiomatic Rust patterns (coming soon)</li>
+<li><strong><a href="./c-tutorial.html">C Tutorial</a></strong> - Complete C examples (coming soon)</li>
+<li><strong><a href="./cpp-tutorial.html">C++ Tutorial</a></strong> - Real-world application</li>
+<li><strong><a href="./api-reference.html">API Reference</a></strong> - Complete C/Rust API docs</li>
+</ul>
+<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
+<ul>
+<li><code>examples/c/</code> - 5 complete C examples</li>
+<li><code>examples/cpp/</code> - 3 complete C++ examples with RAII</li>
+</ul>
+<h3 id="advanced-topics"><a class="header" href="#advanced-topics">Advanced Topics</a></h3>
+<ul>
+<li>Error handling strategies</li>
+<li>Iterator patterns for clauses</li>
+<li>Thread safety considerations</li>
+<li>Performance optimization</li>
+</ul>
+<hr />
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p><strong>Rust:</strong></p>
+<pre><code class="language-bash">cargo add roup
+# Write code, then:
+cargo run
+</code></pre>
+<p><strong>C:</strong></p>
+<pre><code class="language-bash">cargo build --release
+clang example.c -I./include -L./target/release -lroup -Wl,-rpath,./target/release
+./example
+</code></pre>
+<p><strong>C++:</strong></p>
+<pre><code class="language-bash">cargo build --release
+clang++ -std=c++17 example.cpp -I./include -L./target/release -lroup -Wl,-rpath,./target/release
+./example
+</code></pre>
+<p><strong>You're now ready to parse OpenMP directives!</strong> 🎉</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="rust-tutorial"><a class="header" href="#rust-tutorial">Rust Tutorial</a></h1>
+<p>Learn idiomatic Rust patterns for parsing and querying OpenMP directives with ROUP.</p>
+<hr />
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>This tutorial covers:</p>
+<ol>
+<li><a href="rust-tutorial.html#basic-parsing">Basic Parsing</a> - Parse your first directive</li>
+<li><a href="rust-tutorial.html#error-handling">Error Handling</a> - Robust error handling patterns</li>
+<li><a href="rust-tutorial.html#querying-directives">Querying Directives</a> - Extract directive information</li>
+<li><a href="rust-tutorial.html#working-with-clauses">Working with Clauses</a> - Iterate and pattern match clauses</li>
+<li><a href="rust-tutorial.html#advanced-patterns">Advanced Patterns</a> - Real-world usage patterns</li>
+<li><a href="rust-tutorial.html#testing">Testing</a> - Writing tests for your parser integration</li>
+</ol>
+<hr />
+<h2 id="basic-parsing"><a class="header" href="#basic-parsing">Basic Parsing</a></h2>
+<h3 id="your-first-parse"><a class="header" href="#your-first-parse">Your First Parse</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel";
+    
+    match parse_openmp_directive(input, Language::C) {
+        Ok(directive) =&gt; {
+            println!("Successfully parsed: {:?}", directive.kind);
+        }
+        Err(e) =&gt; {
+            eprintln!("Parse error: {}", e);
+        }
+    }
+}</code></pre>
+<h3 id="parse-with-clauses"><a class="header" href="#parse-with-clauses">Parse with Clauses</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel for num_threads(4) private(x, y)";
+    
+    match parse_openmp_directive(input, Language::C) {
+        Ok(directive) =&gt; {
+            println!("Directive: {:?}", directive.kind);
+            println!("Clauses: {}", directive.clauses.len());
+            
+            for (i, clause) in directive.clauses.iter().enumerate() {
+                println!("  Clause {}: {:?}", i + 1, clause);
+            }
+        }
+        Err(e) =&gt; {
+            eprintln!("Failed to parse: {}", e);
+        }
+    }
+}</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Directive: ParallelFor
+Clauses: 2
+  Clause 1: NumThreads(Expr { value: "4", .. })
+  Clause 2: Private { items: ["x", "y"], .. }
+</code></pre>
+<hr />
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="basic-error-handling"><a class="header" href="#basic-error-handling">Basic Error Handling</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn parse_directive(input: &amp;str) -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let directive = parse_openmp_directive(input, Language::C)?;
+    
+    println!("Parsed: {:?}", directive.kind);
+    println!("Location: line {}, column {}", 
+             directive.location.line, 
+             directive.location.column);
+    
+    Ok(())
+}
+
+fn main() {
+    let inputs = vec![
+        "#pragma omp parallel",
+        "#pragma omp for schedule(static)",
+        "#pragma omp invalid",  // This will fail
+    ];
+    
+    for input in inputs {
+        match parse_directive(input) {
+            Ok(()) =&gt; println!("✓ Success: {}", input),
+            Err(e) =&gt; eprintln!("✗ Error: {} - {}", input, e),
+        }
+    }
+}</code></pre>
+<h3 id="custom-error-type"><a class="header" href="#custom-error-type">Custom Error Type</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+use std::fmt;
+
+#[derive(Debug)]
+enum OpenMPError {
+    ParseError(String),
+    UnsupportedDirective(String),
+    MissingRequiredClause(String),
+}
+
+impl fmt::Display for OpenMPError {
+    fn fmt(&amp;self, f: &amp;mut fmt::Formatter) -&gt; fmt::Result {
+        match self {
+            OpenMPError::ParseError(msg) =&gt; write!(f, "Parse error: {}", msg),
+            OpenMPError::UnsupportedDirective(kind) =&gt; {
+                write!(f, "Unsupported directive: {}", kind)
+            }
+            OpenMPError::MissingRequiredClause(clause) =&gt; {
+                write!(f, "Missing required clause: {}", clause)
+            }
+        }
+    }
+}
+
+impl std::error::Error for OpenMPError {}
+
+fn validate_parallel_directive(input: &amp;str) -&gt; Result&lt;(), OpenMPError&gt; {
+    let directive = parse_openmp_directive(input, Language::C)
+        .map_err(|e| OpenMPError::ParseError(e.to_string()))?;
+    
+    if !directive.kind.is_parallel() {
+        return Err(OpenMPError::UnsupportedDirective(
+            format!("{:?}", directive.kind)
+        ));
+    }
+    
+    // Check for required clauses (example: must have num_threads)
+    let has_num_threads = directive.clauses.iter()
+        .any(|c| c.is_num_threads());
+    
+    if !has_num_threads {
+        return Err(OpenMPError::MissingRequiredClause("num_threads".into()));
+    }
+    
+    Ok(())
+}
+
+fn main() {
+    match validate_parallel_directive("#pragma omp parallel num_threads(4)") {
+        Ok(()) =&gt; println!("✓ Valid parallel directive"),
+        Err(e) =&gt; eprintln!("✗ {}", e),
+    }
+}</code></pre>
+<hr />
+<h2 id="querying-directives"><a class="header" href="#querying-directives">Querying Directives</a></h2>
+<h3 id="check-directive-kind"><a class="header" href="#check-directive-kind">Check Directive Kind</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::DirectiveKind;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel for";
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    
+    // Pattern match on kind
+    match directive.kind {
+        DirectiveKind::Parallel =&gt; println!("This is a parallel directive"),
+        DirectiveKind::For =&gt; println!("This is a for directive"),
+        DirectiveKind::ParallelFor =&gt; println!("This is a combined parallel for"),
+        DirectiveKind::Target =&gt; println!("This is a target directive"),
+        _ =&gt; println!("Other directive type"),
+    }
+    
+    // Or use helper methods
+    if directive.kind.is_parallel() {
+        println!("Contains parallel semantics");
+    }
+    
+    if directive.kind.is_worksharing() {
+        println!("Is a worksharing construct");
+    }
+}</code></pre>
+<h3 id="extract-source-location"><a class="header" href="#extract-source-location">Extract Source Location</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel";
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    
+    println!("Directive found at:");
+    println!("  Line: {}", directive.location.line);
+    println!("  Column: {}", directive.location.column);
+    println!("  Language: {:?}", directive.language);
+}</code></pre>
+<hr />
+<h2 id="working-with-clauses"><a class="header" href="#working-with-clauses">Working with Clauses</a></h2>
+<h3 id="iterate-over-clauses"><a class="header" href="#iterate-over-clauses">Iterate Over Clauses</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel num_threads(8) default(shared) private(x)";
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    
+    println!("Found {} clauses:", directive.clauses.len());
+    
+    for clause in &amp;directive.clauses {
+        println!("  - {:?}", clause);
+    }
+}</code></pre>
+<h3 id="pattern-match-on-clauses"><a class="header" href="#pattern-match-on-clauses">Pattern Match on Clauses</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::ClauseData;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel num_threads(4) default(shared) private(x, y)";
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    
+    for clause in &amp;directive.clauses {
+        match clause {
+            ClauseData::NumThreads(expr) =&gt; {
+                println!("Thread count: {}", expr.value);
+            }
+            ClauseData::Default(kind) =&gt; {
+                println!("Default sharing: {:?}", kind);
+            }
+            ClauseData::Private { items, .. } =&gt; {
+                println!("Private variables: {:?}", items);
+            }
+            ClauseData::Shared { items, .. } =&gt; {
+                println!("Shared variables: {:?}", items);
+            }
+            ClauseData::Reduction { operator, items, .. } =&gt; {
+                println!("Reduction: {:?} on {:?}", operator, items);
+            }
+            _ =&gt; {
+                println!("Other clause: {:?}", clause);
+            }
+        }
+    }
+}</code></pre>
+<h3 id="find-specific-clauses"><a class="header" href="#find-specific-clauses">Find Specific Clauses</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::ClauseData;
+use roup::lexer::Language;
+
+fn get_thread_count(input: &amp;str) -&gt; Option&lt;String&gt; {
+    let directive = parse_openmp_directive(input, Language::C).ok()?;
+    
+    directive.clauses.iter()
+        .find_map(|clause| {
+            if let ClauseData::NumThreads(expr) = clause {
+                Some(expr.value.to_string())
+            } else {
+                None
+            }
+        })
+}
+
+fn get_private_vars(input: &amp;str) -&gt; Vec&lt;String&gt; {
+    let directive = parse_openmp_directive(input, Language::C)
+        .ok()
+        .unwrap_or_default();
+    
+    directive.clauses.iter()
+        .filter_map(|clause| {
+            if let ClauseData::Private { items, .. } = clause {
+                Some(items.iter().map(|s| s.to_string()).collect())
+            } else {
+                None
+            }
+        })
+        .flatten()
+        .collect()
+}
+
+fn main() {
+    let input = "#pragma omp parallel num_threads(8) private(x, y, z)";
+    
+    if let Some(count) = get_thread_count(input) {
+        println!("Thread count: {}", count);
+    }
+    
+    let vars = get_private_vars(input);
+    println!("Private variables: {:?}", vars);
+}</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Thread count: 8
+Private variables: ["x", "y", "z"]
+</code></pre>
+<hr />
+<h2 id="advanced-patterns"><a class="header" href="#advanced-patterns">Advanced Patterns</a></h2>
+<h3 id="parse-multiple-directives"><a class="header" href="#parse-multiple-directives">Parse Multiple Directives</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::DirectiveIR;
+use roup::lexer::Language;
+
+fn parse_file_directives(source: &amp;str) -&gt; Vec&lt;DirectiveIR&gt; {
+    source.lines()
+        .filter(|line| line.trim().starts_with("#pragma omp"))
+        .filter_map(|line| {
+            parse_openmp_directive(line, Language::C).ok()
+        })
+        .collect()
+}
+
+fn main() {
+    let source = r#"
+    #pragma omp parallel num_threads(4)
+    for (int i = 0; i &lt; n; i++) {
+        #pragma omp task
+        process(i);
+    }
+    #pragma omp taskwait
+    "#;
+    
+    let directives = parse_file_directives(source);
+    
+    println!("Found {} OpenMP directives:", directives.len());
+    for (i, dir) in directives.iter().enumerate() {
+        println!("  {}. {:?} at line {}", 
+                 i + 1, dir.kind, dir.location.line);
+    }
+}</code></pre>
+<h3 id="directive-analysis"><a class="header" href="#directive-analysis">Directive Analysis</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::{DirectiveIR, ClauseData};
+use roup::lexer::Language;
+
+struct DirectiveStats {
+    total_clauses: usize,
+    has_data_sharing: bool,
+    has_scheduling: bool,
+    has_reduction: bool,
+    thread_count: Option&lt;String&gt;,
+}
+
+impl DirectiveStats {
+    fn analyze(directive: &amp;DirectiveIR) -&gt; Self {
+        let total_clauses = directive.clauses.len();
+        
+        let mut has_data_sharing = false;
+        let mut has_scheduling = false;
+        let mut has_reduction = false;
+        let mut thread_count = None;
+        
+        for clause in &amp;directive.clauses {
+            match clause {
+                ClauseData::Private { .. } | 
+                ClauseData::Shared { .. } |
+                ClauseData::Firstprivate { .. } |
+                ClauseData::Lastprivate { .. } =&gt; {
+                    has_data_sharing = true;
+                }
+                ClauseData::Schedule { .. } =&gt; {
+                    has_scheduling = true;
+                }
+                ClauseData::Reduction { .. } =&gt; {
+                    has_reduction = true;
+                }
+                ClauseData::NumThreads(expr) =&gt; {
+                    thread_count = Some(expr.value.to_string());
+                }
+                _ =&gt; {}
+            }
+        }
+        
+        Self {
+            total_clauses,
+            has_data_sharing,
+            has_scheduling,
+            has_reduction,
+            thread_count,
+        }
+    }
+}
+
+fn main() {
+    let input = "#pragma omp parallel for num_threads(4) \
+                 schedule(static) private(x) reduction(+:sum)";
+    
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    let stats = DirectiveStats::analyze(&amp;directive);
+    
+    println!("Directive Analysis:");
+    println!("  Total clauses: {}", stats.total_clauses);
+    println!("  Has data-sharing: {}", stats.has_data_sharing);
+    println!("  Has scheduling: {}", stats.has_scheduling);
+    println!("  Has reduction: {}", stats.has_reduction);
+    if let Some(count) = stats.thread_count {
+        println!("  Thread count: {}", count);
+    }
+}</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Directive Analysis:
+  Total clauses: 4
+  Has data-sharing: true
+  Has scheduling: true
+  Has reduction: true
+  Thread count: 4
+</code></pre>
+<h3 id="building-a-directive-validator"><a class="header" href="#building-a-directive-validator">Building a Directive Validator</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::{DirectiveIR, DirectiveKind, ClauseData};
+use roup::lexer::Language;
+
+struct ValidationRule {
+    name: &amp;'static str,
+    check: fn(&amp;DirectiveIR) -&gt; bool,
+}
+
+fn validate_directive(directive: &amp;DirectiveIR, rules: &amp;[ValidationRule]) -&gt; Vec&lt;String&gt; {
+    rules.iter()
+        .filter(|rule| !(rule.check)(directive))
+        .map(|rule| rule.name.to_string())
+        .collect()
+}
+
+fn main() {
+    let rules = vec![
+        ValidationRule {
+            name: "Parallel regions should specify thread count",
+            check: |dir| {
+                !dir.kind.is_parallel() || 
+                dir.clauses.iter().any(|c| matches!(c, ClauseData::NumThreads(_)))
+            },
+        },
+        ValidationRule {
+            name: "For loops with reduction should have schedule clause",
+            check: |dir| {
+                let has_reduction = dir.clauses.iter()
+                    .any(|c| matches!(c, ClauseData::Reduction { .. }));
+                let has_schedule = dir.clauses.iter()
+                    .any(|c| matches!(c, ClauseData::Schedule { .. }));
+                
+                !has_reduction || has_schedule
+            },
+        },
+    ];
+    
+    let input = "#pragma omp parallel";  // Missing num_threads
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    
+    let violations = validate_directive(&amp;directive, &amp;rules);
+    
+    if violations.is_empty() {
+        println!("✓ All validation rules passed");
+    } else {
+        println!("✗ Validation warnings:");
+        for violation in violations {
+            println!("  - {}", violation);
+        }
+    }
+}</code></pre>
+<hr />
+<h2 id="testing-1"><a class="header" href="#testing-1">Testing</a></h2>
+<h3 id="unit-testing"><a class="header" href="#unit-testing">Unit Testing</a></h3>
+<pre><code class="language-rust">#[cfg(test)]
+mod tests {
+    use roup::parser::openmp::parse_openmp_directive;
+    use roup::ir::DirectiveKind;
+    use roup::lexer::Language;
+    
+    #[test]
+    fn test_parse_parallel() {
+        let input = "#pragma omp parallel";
+        let result = parse_openmp_directive(input, Language::C);
+        
+        assert!(result.is_ok());
+        let directive = result.unwrap();
+        assert_eq!(directive.kind, DirectiveKind::Parallel);
+        assert_eq!(directive.clauses.len(), 0);
+    }
+    
+    #[test]
+    fn test_parse_with_clauses() {
+        let input = "#pragma omp parallel num_threads(4)";
+        let directive = parse_openmp_directive(input, Language::C).unwrap();
+        
+        assert_eq!(directive.kind, DirectiveKind::Parallel);
+        assert_eq!(directive.clauses.len(), 1);
+    }
+    
+    #[test]
+    fn test_invalid_directive() {
+        let input = "#pragma omp invalid_directive";
+        let result = parse_openmp_directive(input, Language::C);
+        
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_fortran_syntax() {
+        let input = "!$omp parallel";
+        let result = parse_openmp_directive(input, Language::Fortran);
+        
+        assert!(result.is_ok());
+        let directive = result.unwrap();
+        assert_eq!(directive.kind, DirectiveKind::Parallel);
+    }
+}</code></pre>
+<h3 id="integration-testing"><a class="header" href="#integration-testing">Integration Testing</a></h3>
+<pre><code class="language-rust">#[cfg(test)]
+mod integration_tests {
+    use roup::parser::openmp::parse_openmp_directive;
+    use roup::ir::ClauseData;
+    use roup::lexer::Language;
+    
+    #[test]
+    fn test_complete_parsing_pipeline() {
+        let inputs = vec![
+            "#pragma omp parallel",
+            "#pragma omp for schedule(static)",
+            "#pragma omp parallel for num_threads(8) private(x)",
+            "#pragma omp task depend(in: x) priority(10)",
+        ];
+        
+        for input in inputs {
+            let result = parse_openmp_directive(input, Language::C);
+            assert!(result.is_ok(), "Failed to parse: {}", input);
+            
+            let directive = result.unwrap();
+            assert!(directive.kind.is_valid());
+            
+            // Verify round-trip
+            let output = directive.to_string();
+            assert!(!output.is_empty());
+        }
+    }
+    
+    #[test]
+    fn test_clause_extraction() {
+        let input = "#pragma omp parallel for \
+                     num_threads(4) \
+                     schedule(dynamic, 100) \
+                     private(i, j) \
+                     reduction(+:sum)";
+        
+        let directive = parse_openmp_directive(input, Language::C).unwrap();
+        
+        // Count clause types
+        let mut num_threads_count = 0;
+        let mut schedule_count = 0;
+        let mut private_count = 0;
+        let mut reduction_count = 0;
+        
+        for clause in &amp;directive.clauses {
+            match clause {
+                ClauseData::NumThreads(_) =&gt; num_threads_count += 1,
+                ClauseData::Schedule { .. } =&gt; schedule_count += 1,
+                ClauseData::Private { .. } =&gt; private_count += 1,
+                ClauseData::Reduction { .. } =&gt; reduction_count += 1,
+                _ =&gt; {}
+            }
+        }
+        
+        assert_eq!(num_threads_count, 1);
+        assert_eq!(schedule_count, 1);
+        assert_eq!(private_count, 1);
+        assert_eq!(reduction_count, 1);
+    }
+}</code></pre>
+<hr />
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-always-handle-errors"><a class="header" href="#1-always-handle-errors">1. Always Handle Errors</a></h3>
+<pre><code class="language-rust">// ❌ Bad - unwrap can panic
+let directive = parse_openmp_directive(input, Language::C).unwrap();
+
+// ✅ Good - explicit error handling
+match parse_openmp_directive(input, Language::C) {
+    Ok(directive) =&gt; { /* use directive */ }
+    Err(e) =&gt; { /* handle error */ }
+}</code></pre>
+<h3 id="2-use-pattern-matching"><a class="header" href="#2-use-pattern-matching">2. Use Pattern Matching</a></h3>
+<pre><code class="language-rust">// ❌ Bad - lots of if-let chains
+for clause in &amp;directive.clauses {
+    if let ClauseData::NumThreads(expr) = clause {
+        // ...
+    } else if let ClauseData::Private { items, .. } = clause {
+        // ...
+    }
+}
+
+// ✅ Good - clean match expression
+for clause in &amp;directive.clauses {
+    match clause {
+        ClauseData::NumThreads(expr) =&gt; { /* ... */ }
+        ClauseData::Private { items, .. } =&gt; { /* ... */ }
+        _ =&gt; {}
+    }
+}</code></pre>
+<h3 id="3-leverage-iterator-combinators"><a class="header" href="#3-leverage-iterator-combinators">3. Leverage Iterator Combinators</a></h3>
+<pre><code class="language-rust">// ❌ Bad - manual iteration
+let mut has_reduction = false;
+for clause in &amp;directive.clauses {
+    if matches!(clause, ClauseData::Reduction { .. }) {
+        has_reduction = true;
+        break;
+    }
+}
+
+// ✅ Good - iterator method
+let has_reduction = directive.clauses.iter()
+    .any(|c| matches!(c, ClauseData::Reduction { .. }));</code></pre>
+<h3 id="4-create-helper-functions"><a class="header" href="#4-create-helper-functions">4. Create Helper Functions</a></h3>
+<pre><code class="language-rust">// Reusable helper
+fn has_clause&lt;F&gt;(directive: &amp;DirectiveIR, predicate: F) -&gt; bool
+where
+    F: Fn(&amp;ClauseData) -&gt; bool,
+{
+    directive.clauses.iter().any(predicate)
+}
+
+// Usage
+if has_clause(&amp;directive, |c| matches!(c, ClauseData::NumThreads(_))) {
+    println!("Has num_threads clause");
+}</code></pre>
+<hr />
+<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
+<ul>
+<li><strong><a href="./c-tutorial.html">C Tutorial</a></strong> - Learn the C FFI API</li>
+<li><strong><a href="./cpp-tutorial.html">C++ Tutorial</a></strong> - Build a real-world application</li>
+<li><strong><a href="./api-reference.html">API Reference</a></strong> - Complete Rust API documentation</li>
+<li><strong>Examples</strong> - Check out <code>tests/</code> directory for 355+ test cases</li>
+</ul>
+<hr />
+<h2 id="summary-1"><a class="header" href="#summary-1">Summary</a></h2>
+<p><strong>Key Takeaways:</strong></p>
+<ol>
+<li>Use <code>parse_openmp_directive()</code> for parsing</li>
+<li>Handle errors with <code>Result</code> types</li>
+<li>Pattern match on <code>DirectiveKind</code> and <code>ClauseData</code></li>
+<li>Use iterators for clause analysis</li>
+<li>Write tests for your integration code</li>
+</ol>
+<p><strong>Common Patterns:</strong></p>
+<pre><code class="language-rust">// Parse
+let directive = parse_openmp_directive(input, Language::C)?;
+
+// Check kind
+if directive.kind.is_parallel() { /* ... */ }
+
+// Find clause
+let num_threads = directive.clauses.iter()
+    .find_map(|c| match c {
+        ClauseData::NumThreads(expr) =&gt; Some(expr.value.clone()),
+        _ =&gt; None,
+    });
+
+// Analyze all clauses
+for clause in &amp;directive.clauses {
+    match clause {
+        ClauseData::Private { items, .. } =&gt; { /* ... */ }
+        ClauseData::Shared { items, .. } =&gt; { /* ... */ }
+        _ =&gt; {}
+    }
+}</code></pre>
+<p><strong>Happy parsing!</strong> 🦀</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="c-tutorial-building-a-real-application"><a class="header" href="#c-tutorial-building-a-real-application">C++ Tutorial: Building a Real Application</a></h1>
 <p>This tutorial shows how to integrate ROUP into a <strong>real C++ application</strong> using modern C++17 features.</p>
 <p>We'll build an <strong>OpenMP pragma analyzer</strong> - a tool that reads C/C++ source files, extracts OpenMP directives, and reports statistics.</p>
@@ -417,7 +1374,7 @@ Summary:
   Most common: parallel (2 occurrences)
 </code></pre>
 <hr />
-<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<h2 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h2>
 <ul>
 <li><strong>C++ Compiler:</strong> clang++ or g++ with C++17 support</li>
 <li><strong>ROUP Library:</strong> Built and installed (see below)</li>
@@ -964,7 +1921,7 @@ Total parse time: ~2.5 milliseconds
 Throughput: ~200,000 directives/second
 </code></pre>
 <hr />
-<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h2 id="troubleshooting-1"><a class="header" href="#troubleshooting-1">Troubleshooting</a></h2>
 <h3 id="issue-undefined-reference-to-roup_parse"><a class="header" href="#issue-undefined-reference-to-roup_parse">Issue: <code>undefined reference to roup_parse</code></a></h3>
 <p><strong>Solution:</strong> Make sure library path is correct:</p>
 <pre><code class="language-bash">clang++ ... -L./target/release -lroup -Wl,-rpath,./target/release
@@ -977,7 +1934,7 @@ Throughput: ~200,000 directives/second
 <p><strong>Cause:</strong> ROUP currently supports C/C++ syntax (<code>#pragma omp</code>), not Fortran (<code>!$omp</code>).</p>
 <p><strong>Solution:</strong> Ensure input starts with <code>#pragma omp</code>.</p>
 <hr />
-<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
 <ul>
 <li><strong>Explore the Rust API</strong> - See <a href="./api-reference.html">API Reference</a></li>
 <li><strong>Check out more examples</strong> - <a href="https://github.com/ouankou/roup/tree/main/examples">GitHub repository</a></li>
@@ -1265,7 +2222,7 @@ if (dir) {
 <li>Exception-safe - cleanup happens even with exceptions</li>
 </ul>
 <hr />
-<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h2 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h2>
 <h3 id="rust-1"><a class="header" href="#rust-1">Rust</a></h3>
 <pre><code class="language-rust">match parse(input) {
     Ok(directive) =&gt; { /* use directive */ },

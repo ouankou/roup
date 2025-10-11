@@ -1,0 +1,887 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Rust Tutorial - ROUP Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ROUP Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/rust-tutorial.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="rust-tutorial"><a class="header" href="#rust-tutorial">Rust Tutorial</a></h1>
+<p>Learn idiomatic Rust patterns for parsing and querying OpenMP directives with ROUP.</p>
+<hr />
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>This tutorial covers:</p>
+<ol>
+<li><a href="#basic-parsing">Basic Parsing</a> - Parse your first directive</li>
+<li><a href="#error-handling">Error Handling</a> - Robust error handling patterns</li>
+<li><a href="#querying-directives">Querying Directives</a> - Extract directive information</li>
+<li><a href="#working-with-clauses">Working with Clauses</a> - Iterate and pattern match clauses</li>
+<li><a href="#advanced-patterns">Advanced Patterns</a> - Real-world usage patterns</li>
+<li><a href="#testing">Testing</a> - Writing tests for your parser integration</li>
+</ol>
+<hr />
+<h2 id="basic-parsing"><a class="header" href="#basic-parsing">Basic Parsing</a></h2>
+<h3 id="your-first-parse"><a class="header" href="#your-first-parse">Your First Parse</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel";
+    
+    match parse_openmp_directive(input, Language::C) {
+        Ok(directive) =&gt; {
+            println!("Successfully parsed: {:?}", directive.kind);
+        }
+        Err(e) =&gt; {
+            eprintln!("Parse error: {}", e);
+        }
+    }
+}</code></pre>
+<h3 id="parse-with-clauses"><a class="header" href="#parse-with-clauses">Parse with Clauses</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel for num_threads(4) private(x, y)";
+    
+    match parse_openmp_directive(input, Language::C) {
+        Ok(directive) =&gt; {
+            println!("Directive: {:?}", directive.kind);
+            println!("Clauses: {}", directive.clauses.len());
+            
+            for (i, clause) in directive.clauses.iter().enumerate() {
+                println!("  Clause {}: {:?}", i + 1, clause);
+            }
+        }
+        Err(e) =&gt; {
+            eprintln!("Failed to parse: {}", e);
+        }
+    }
+}</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Directive: ParallelFor
+Clauses: 2
+  Clause 1: NumThreads(Expr { value: "4", .. })
+  Clause 2: Private { items: ["x", "y"], .. }
+</code></pre>
+<hr />
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<h3 id="basic-error-handling"><a class="header" href="#basic-error-handling">Basic Error Handling</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn parse_directive(input: &amp;str) -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let directive = parse_openmp_directive(input, Language::C)?;
+    
+    println!("Parsed: {:?}", directive.kind);
+    println!("Location: line {}, column {}", 
+             directive.location.line, 
+             directive.location.column);
+    
+    Ok(())
+}
+
+fn main() {
+    let inputs = vec![
+        "#pragma omp parallel",
+        "#pragma omp for schedule(static)",
+        "#pragma omp invalid",  // This will fail
+    ];
+    
+    for input in inputs {
+        match parse_directive(input) {
+            Ok(()) =&gt; println!("✓ Success: {}", input),
+            Err(e) =&gt; eprintln!("✗ Error: {} - {}", input, e),
+        }
+    }
+}</code></pre>
+<h3 id="custom-error-type"><a class="header" href="#custom-error-type">Custom Error Type</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+use std::fmt;
+
+#[derive(Debug)]
+enum OpenMPError {
+    ParseError(String),
+    UnsupportedDirective(String),
+    MissingRequiredClause(String),
+}
+
+impl fmt::Display for OpenMPError {
+    fn fmt(&amp;self, f: &amp;mut fmt::Formatter) -&gt; fmt::Result {
+        match self {
+            OpenMPError::ParseError(msg) =&gt; write!(f, "Parse error: {}", msg),
+            OpenMPError::UnsupportedDirective(kind) =&gt; {
+                write!(f, "Unsupported directive: {}", kind)
+            }
+            OpenMPError::MissingRequiredClause(clause) =&gt; {
+                write!(f, "Missing required clause: {}", clause)
+            }
+        }
+    }
+}
+
+impl std::error::Error for OpenMPError {}
+
+fn validate_parallel_directive(input: &amp;str) -&gt; Result&lt;(), OpenMPError&gt; {
+    let directive = parse_openmp_directive(input, Language::C)
+        .map_err(|e| OpenMPError::ParseError(e.to_string()))?;
+    
+    if !directive.kind.is_parallel() {
+        return Err(OpenMPError::UnsupportedDirective(
+            format!("{:?}", directive.kind)
+        ));
+    }
+    
+    // Check for required clauses (example: must have num_threads)
+    let has_num_threads = directive.clauses.iter()
+        .any(|c| c.is_num_threads());
+    
+    if !has_num_threads {
+        return Err(OpenMPError::MissingRequiredClause("num_threads".into()));
+    }
+    
+    Ok(())
+}
+
+fn main() {
+    match validate_parallel_directive("#pragma omp parallel num_threads(4)") {
+        Ok(()) =&gt; println!("✓ Valid parallel directive"),
+        Err(e) =&gt; eprintln!("✗ {}", e),
+    }
+}</code></pre>
+<hr />
+<h2 id="querying-directives"><a class="header" href="#querying-directives">Querying Directives</a></h2>
+<h3 id="check-directive-kind"><a class="header" href="#check-directive-kind">Check Directive Kind</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::DirectiveKind;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel for";
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    
+    // Pattern match on kind
+    match directive.kind {
+        DirectiveKind::Parallel =&gt; println!("This is a parallel directive"),
+        DirectiveKind::For =&gt; println!("This is a for directive"),
+        DirectiveKind::ParallelFor =&gt; println!("This is a combined parallel for"),
+        DirectiveKind::Target =&gt; println!("This is a target directive"),
+        _ =&gt; println!("Other directive type"),
+    }
+    
+    // Or use helper methods
+    if directive.kind.is_parallel() {
+        println!("Contains parallel semantics");
+    }
+    
+    if directive.kind.is_worksharing() {
+        println!("Is a worksharing construct");
+    }
+}</code></pre>
+<h3 id="extract-source-location"><a class="header" href="#extract-source-location">Extract Source Location</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel";
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    
+    println!("Directive found at:");
+    println!("  Line: {}", directive.location.line);
+    println!("  Column: {}", directive.location.column);
+    println!("  Language: {:?}", directive.language);
+}</code></pre>
+<hr />
+<h2 id="working-with-clauses"><a class="header" href="#working-with-clauses">Working with Clauses</a></h2>
+<h3 id="iterate-over-clauses"><a class="header" href="#iterate-over-clauses">Iterate Over Clauses</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel num_threads(8) default(shared) private(x)";
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    
+    println!("Found {} clauses:", directive.clauses.len());
+    
+    for clause in &amp;directive.clauses {
+        println!("  - {:?}", clause);
+    }
+}</code></pre>
+<h3 id="pattern-match-on-clauses"><a class="header" href="#pattern-match-on-clauses">Pattern Match on Clauses</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::ClauseData;
+use roup::lexer::Language;
+
+fn main() {
+    let input = "#pragma omp parallel num_threads(4) default(shared) private(x, y)";
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    
+    for clause in &amp;directive.clauses {
+        match clause {
+            ClauseData::NumThreads(expr) =&gt; {
+                println!("Thread count: {}", expr.value);
+            }
+            ClauseData::Default(kind) =&gt; {
+                println!("Default sharing: {:?}", kind);
+            }
+            ClauseData::Private { items, .. } =&gt; {
+                println!("Private variables: {:?}", items);
+            }
+            ClauseData::Shared { items, .. } =&gt; {
+                println!("Shared variables: {:?}", items);
+            }
+            ClauseData::Reduction { operator, items, .. } =&gt; {
+                println!("Reduction: {:?} on {:?}", operator, items);
+            }
+            _ =&gt; {
+                println!("Other clause: {:?}", clause);
+            }
+        }
+    }
+}</code></pre>
+<h3 id="find-specific-clauses"><a class="header" href="#find-specific-clauses">Find Specific Clauses</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::ClauseData;
+use roup::lexer::Language;
+
+fn get_thread_count(input: &amp;str) -&gt; Option&lt;String&gt; {
+    let directive = parse_openmp_directive(input, Language::C).ok()?;
+    
+    directive.clauses.iter()
+        .find_map(|clause| {
+            if let ClauseData::NumThreads(expr) = clause {
+                Some(expr.value.to_string())
+            } else {
+                None
+            }
+        })
+}
+
+fn get_private_vars(input: &amp;str) -&gt; Vec&lt;String&gt; {
+    let directive = parse_openmp_directive(input, Language::C)
+        .ok()
+        .unwrap_or_default();
+    
+    directive.clauses.iter()
+        .filter_map(|clause| {
+            if let ClauseData::Private { items, .. } = clause {
+                Some(items.iter().map(|s| s.to_string()).collect())
+            } else {
+                None
+            }
+        })
+        .flatten()
+        .collect()
+}
+
+fn main() {
+    let input = "#pragma omp parallel num_threads(8) private(x, y, z)";
+    
+    if let Some(count) = get_thread_count(input) {
+        println!("Thread count: {}", count);
+    }
+    
+    let vars = get_private_vars(input);
+    println!("Private variables: {:?}", vars);
+}</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Thread count: 8
+Private variables: ["x", "y", "z"]
+</code></pre>
+<hr />
+<h2 id="advanced-patterns"><a class="header" href="#advanced-patterns">Advanced Patterns</a></h2>
+<h3 id="parse-multiple-directives"><a class="header" href="#parse-multiple-directives">Parse Multiple Directives</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::DirectiveIR;
+use roup::lexer::Language;
+
+fn parse_file_directives(source: &amp;str) -&gt; Vec&lt;DirectiveIR&gt; {
+    source.lines()
+        .filter(|line| line.trim().starts_with("#pragma omp"))
+        .filter_map(|line| {
+            parse_openmp_directive(line, Language::C).ok()
+        })
+        .collect()
+}
+
+fn main() {
+    let source = r#"
+    #pragma omp parallel num_threads(4)
+    for (int i = 0; i &lt; n; i++) {
+        #pragma omp task
+        process(i);
+    }
+    #pragma omp taskwait
+    "#;
+    
+    let directives = parse_file_directives(source);
+    
+    println!("Found {} OpenMP directives:", directives.len());
+    for (i, dir) in directives.iter().enumerate() {
+        println!("  {}. {:?} at line {}", 
+                 i + 1, dir.kind, dir.location.line);
+    }
+}</code></pre>
+<h3 id="directive-analysis"><a class="header" href="#directive-analysis">Directive Analysis</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::{DirectiveIR, ClauseData};
+use roup::lexer::Language;
+
+struct DirectiveStats {
+    total_clauses: usize,
+    has_data_sharing: bool,
+    has_scheduling: bool,
+    has_reduction: bool,
+    thread_count: Option&lt;String&gt;,
+}
+
+impl DirectiveStats {
+    fn analyze(directive: &amp;DirectiveIR) -&gt; Self {
+        let total_clauses = directive.clauses.len();
+        
+        let mut has_data_sharing = false;
+        let mut has_scheduling = false;
+        let mut has_reduction = false;
+        let mut thread_count = None;
+        
+        for clause in &amp;directive.clauses {
+            match clause {
+                ClauseData::Private { .. } | 
+                ClauseData::Shared { .. } |
+                ClauseData::Firstprivate { .. } |
+                ClauseData::Lastprivate { .. } =&gt; {
+                    has_data_sharing = true;
+                }
+                ClauseData::Schedule { .. } =&gt; {
+                    has_scheduling = true;
+                }
+                ClauseData::Reduction { .. } =&gt; {
+                    has_reduction = true;
+                }
+                ClauseData::NumThreads(expr) =&gt; {
+                    thread_count = Some(expr.value.to_string());
+                }
+                _ =&gt; {}
+            }
+        }
+        
+        Self {
+            total_clauses,
+            has_data_sharing,
+            has_scheduling,
+            has_reduction,
+            thread_count,
+        }
+    }
+}
+
+fn main() {
+    let input = "#pragma omp parallel for num_threads(4) \
+                 schedule(static) private(x) reduction(+:sum)";
+    
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    let stats = DirectiveStats::analyze(&amp;directive);
+    
+    println!("Directive Analysis:");
+    println!("  Total clauses: {}", stats.total_clauses);
+    println!("  Has data-sharing: {}", stats.has_data_sharing);
+    println!("  Has scheduling: {}", stats.has_scheduling);
+    println!("  Has reduction: {}", stats.has_reduction);
+    if let Some(count) = stats.thread_count {
+        println!("  Thread count: {}", count);
+    }
+}</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code>Directive Analysis:
+  Total clauses: 4
+  Has data-sharing: true
+  Has scheduling: true
+  Has reduction: true
+  Thread count: 4
+</code></pre>
+<h3 id="building-a-directive-validator"><a class="header" href="#building-a-directive-validator">Building a Directive Validator</a></h3>
+<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+use roup::ir::{DirectiveIR, DirectiveKind, ClauseData};
+use roup::lexer::Language;
+
+struct ValidationRule {
+    name: &amp;'static str,
+    check: fn(&amp;DirectiveIR) -&gt; bool,
+}
+
+fn validate_directive(directive: &amp;DirectiveIR, rules: &amp;[ValidationRule]) -&gt; Vec&lt;String&gt; {
+    rules.iter()
+        .filter(|rule| !(rule.check)(directive))
+        .map(|rule| rule.name.to_string())
+        .collect()
+}
+
+fn main() {
+    let rules = vec![
+        ValidationRule {
+            name: "Parallel regions should specify thread count",
+            check: |dir| {
+                !dir.kind.is_parallel() || 
+                dir.clauses.iter().any(|c| matches!(c, ClauseData::NumThreads(_)))
+            },
+        },
+        ValidationRule {
+            name: "For loops with reduction should have schedule clause",
+            check: |dir| {
+                let has_reduction = dir.clauses.iter()
+                    .any(|c| matches!(c, ClauseData::Reduction { .. }));
+                let has_schedule = dir.clauses.iter()
+                    .any(|c| matches!(c, ClauseData::Schedule { .. }));
+                
+                !has_reduction || has_schedule
+            },
+        },
+    ];
+    
+    let input = "#pragma omp parallel";  // Missing num_threads
+    let directive = parse_openmp_directive(input, Language::C).unwrap();
+    
+    let violations = validate_directive(&amp;directive, &amp;rules);
+    
+    if violations.is_empty() {
+        println!("✓ All validation rules passed");
+    } else {
+        println!("✗ Validation warnings:");
+        for violation in violations {
+            println!("  - {}", violation);
+        }
+    }
+}</code></pre>
+<hr />
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<h3 id="unit-testing"><a class="header" href="#unit-testing">Unit Testing</a></h3>
+<pre><code class="language-rust">#[cfg(test)]
+mod tests {
+    use roup::parser::openmp::parse_openmp_directive;
+    use roup::ir::DirectiveKind;
+    use roup::lexer::Language;
+    
+    #[test]
+    fn test_parse_parallel() {
+        let input = "#pragma omp parallel";
+        let result = parse_openmp_directive(input, Language::C);
+        
+        assert!(result.is_ok());
+        let directive = result.unwrap();
+        assert_eq!(directive.kind, DirectiveKind::Parallel);
+        assert_eq!(directive.clauses.len(), 0);
+    }
+    
+    #[test]
+    fn test_parse_with_clauses() {
+        let input = "#pragma omp parallel num_threads(4)";
+        let directive = parse_openmp_directive(input, Language::C).unwrap();
+        
+        assert_eq!(directive.kind, DirectiveKind::Parallel);
+        assert_eq!(directive.clauses.len(), 1);
+    }
+    
+    #[test]
+    fn test_invalid_directive() {
+        let input = "#pragma omp invalid_directive";
+        let result = parse_openmp_directive(input, Language::C);
+        
+        assert!(result.is_err());
+    }
+    
+    #[test]
+    fn test_fortran_syntax() {
+        let input = "!$omp parallel";
+        let result = parse_openmp_directive(input, Language::Fortran);
+        
+        assert!(result.is_ok());
+        let directive = result.unwrap();
+        assert_eq!(directive.kind, DirectiveKind::Parallel);
+    }
+}</code></pre>
+<h3 id="integration-testing"><a class="header" href="#integration-testing">Integration Testing</a></h3>
+<pre><code class="language-rust">#[cfg(test)]
+mod integration_tests {
+    use roup::parser::openmp::parse_openmp_directive;
+    use roup::ir::ClauseData;
+    use roup::lexer::Language;
+    
+    #[test]
+    fn test_complete_parsing_pipeline() {
+        let inputs = vec![
+            "#pragma omp parallel",
+            "#pragma omp for schedule(static)",
+            "#pragma omp parallel for num_threads(8) private(x)",
+            "#pragma omp task depend(in: x) priority(10)",
+        ];
+        
+        for input in inputs {
+            let result = parse_openmp_directive(input, Language::C);
+            assert!(result.is_ok(), "Failed to parse: {}", input);
+            
+            let directive = result.unwrap();
+            assert!(directive.kind.is_valid());
+            
+            // Verify round-trip
+            let output = directive.to_string();
+            assert!(!output.is_empty());
+        }
+    }
+    
+    #[test]
+    fn test_clause_extraction() {
+        let input = "#pragma omp parallel for \
+                     num_threads(4) \
+                     schedule(dynamic, 100) \
+                     private(i, j) \
+                     reduction(+:sum)";
+        
+        let directive = parse_openmp_directive(input, Language::C).unwrap();
+        
+        // Count clause types
+        let mut num_threads_count = 0;
+        let mut schedule_count = 0;
+        let mut private_count = 0;
+        let mut reduction_count = 0;
+        
+        for clause in &amp;directive.clauses {
+            match clause {
+                ClauseData::NumThreads(_) =&gt; num_threads_count += 1,
+                ClauseData::Schedule { .. } =&gt; schedule_count += 1,
+                ClauseData::Private { .. } =&gt; private_count += 1,
+                ClauseData::Reduction { .. } =&gt; reduction_count += 1,
+                _ =&gt; {}
+            }
+        }
+        
+        assert_eq!(num_threads_count, 1);
+        assert_eq!(schedule_count, 1);
+        assert_eq!(private_count, 1);
+        assert_eq!(reduction_count, 1);
+    }
+}</code></pre>
+<hr />
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-always-handle-errors"><a class="header" href="#1-always-handle-errors">1. Always Handle Errors</a></h3>
+<pre><code class="language-rust">// ❌ Bad - unwrap can panic
+let directive = parse_openmp_directive(input, Language::C).unwrap();
+
+// ✅ Good - explicit error handling
+match parse_openmp_directive(input, Language::C) {
+    Ok(directive) =&gt; { /* use directive */ }
+    Err(e) =&gt; { /* handle error */ }
+}</code></pre>
+<h3 id="2-use-pattern-matching"><a class="header" href="#2-use-pattern-matching">2. Use Pattern Matching</a></h3>
+<pre><code class="language-rust">// ❌ Bad - lots of if-let chains
+for clause in &amp;directive.clauses {
+    if let ClauseData::NumThreads(expr) = clause {
+        // ...
+    } else if let ClauseData::Private { items, .. } = clause {
+        // ...
+    }
+}
+
+// ✅ Good - clean match expression
+for clause in &amp;directive.clauses {
+    match clause {
+        ClauseData::NumThreads(expr) =&gt; { /* ... */ }
+        ClauseData::Private { items, .. } =&gt; { /* ... */ }
+        _ =&gt; {}
+    }
+}</code></pre>
+<h3 id="3-leverage-iterator-combinators"><a class="header" href="#3-leverage-iterator-combinators">3. Leverage Iterator Combinators</a></h3>
+<pre><code class="language-rust">// ❌ Bad - manual iteration
+let mut has_reduction = false;
+for clause in &amp;directive.clauses {
+    if matches!(clause, ClauseData::Reduction { .. }) {
+        has_reduction = true;
+        break;
+    }
+}
+
+// ✅ Good - iterator method
+let has_reduction = directive.clauses.iter()
+    .any(|c| matches!(c, ClauseData::Reduction { .. }));</code></pre>
+<h3 id="4-create-helper-functions"><a class="header" href="#4-create-helper-functions">4. Create Helper Functions</a></h3>
+<pre><code class="language-rust">// Reusable helper
+fn has_clause&lt;F&gt;(directive: &amp;DirectiveIR, predicate: F) -&gt; bool
+where
+    F: Fn(&amp;ClauseData) -&gt; bool,
+{
+    directive.clauses.iter().any(predicate)
+}
+
+// Usage
+if has_clause(&amp;directive, |c| matches!(c, ClauseData::NumThreads(_))) {
+    println!("Has num_threads clause");
+}</code></pre>
+<hr />
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li><strong><a href="./c-tutorial.html">C Tutorial</a></strong> - Learn the C FFI API</li>
+<li><strong><a href="./cpp-tutorial.html">C++ Tutorial</a></strong> - Build a real-world application</li>
+<li><strong><a href="./api-reference.html">API Reference</a></strong> - Complete Rust API documentation</li>
+<li><strong>Examples</strong> - Check out <code>tests/</code> directory for 355+ test cases</li>
+</ul>
+<hr />
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p><strong>Key Takeaways:</strong></p>
+<ol>
+<li>Use <code>parse_openmp_directive()</code> for parsing</li>
+<li>Handle errors with <code>Result</code> types</li>
+<li>Pattern match on <code>DirectiveKind</code> and <code>ClauseData</code></li>
+<li>Use iterators for clause analysis</li>
+<li>Write tests for your integration code</li>
+</ol>
+<p><strong>Common Patterns:</strong></p>
+<pre><code class="language-rust">// Parse
+let directive = parse_openmp_directive(input, Language::C)?;
+
+// Check kind
+if directive.kind.is_parallel() { /* ... */ }
+
+// Find clause
+let num_threads = directive.clauses.iter()
+    .find_map(|c| match c {
+        ClauseData::NumThreads(expr) =&gt; Some(expr.value.clone()),
+        _ =&gt; None,
+    });
+
+// Analyze all clauses
+for clause in &amp;directive.clauses {
+    match clause {
+        ClauseData::Private { items, .. } =&gt; { /* ... */ }
+        ClauseData::Shared { items, .. } =&gt; { /* ... */ }
+        _ =&gt; {}
+    }
+}</code></pre>
+<p><strong>Happy parsing!</strong> 🦀</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="getting-started.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="cpp-tutorial.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="getting-started.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="cpp-tutorial.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
