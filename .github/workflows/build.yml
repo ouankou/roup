@@ -57,21 +57,19 @@ jobs:
         run: cargo test --verbose
 
       - name: Build C API examples
+        if: runner.os == 'Linux'
         run: |
           cargo build --release
-          if [ "$RUNNER_OS" != "Windows" ]; then
-            cd examples/c
-            clang -o basic_parse basic_parse.c -I../../include -L../../target/release -lroup
-            clang -o tutorial_basic tutorial_basic.c -I../../include -L../../target/release -lroup
-            cd ../..
-          fi
+          cd examples/c
+          clang -o basic_parse basic_parse.c -I../../include -L../../target/release -lroup
+          clang -o tutorial_basic tutorial_basic.c -I../../include -L../../target/release -lroup
+          cd ../..
         shell: bash
 
       - name: Build C++ examples
+        if: runner.os == 'Linux'
         run: |
-          if [ "$RUNNER_OS" != "Windows" ]; then
-            cd examples/cpp
-            clang++ -std=c++17 -o tutorial_basic tutorial_basic.cpp -I../../include -L../../target/release -lroup
-            cd ../..
-          fi
+          cd examples/cpp
+          clang++ -std=c++17 -o tutorial_basic tutorial_basic.cpp -I../../include -L../../target/release -lroup
+          cd ../..
         shell: bash
