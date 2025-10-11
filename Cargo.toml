@@ -20,6 +20,12 @@ parking_lot = "0.12" # Faster Mutex than std
 # Test-only dependencies
 serial_test = "3.0" # Serialize tests that share global state
 
+[lib]
+# Library configuration for FFI
+# cdylib = C-compatible dynamic library for FFI
+# rlib = Rust library for Rust code
+crate-type = ["cdylib", "rlib"]
+
 # Learning Rust: Binary Targets
 # ==============================
 # [[bin]] sections define executable programs
