@@ -78,19 +78,22 @@ impl DirectiveRegistry {
     }
 
     pub fn with_case_insensitive(mut self, enabled: bool) -> Self {
-        self.case_insensitive = enabled;
-        // Rebuild normalized maps if enabling case-insensitive mode
-        if enabled && self.normalized_rules.is_empty() {
-            self.normalized_rules = self
-                .rules
-                .iter()
-                .map(|(k, v)| (k.to_lowercase(), *v))
-                .collect();
-            self.normalized_prefixes = self.prefixes.iter().map(|p| p.to_lowercase()).collect();
-        } else if !enabled {
-            // Clear normalized maps if disabling case-insensitive mode
-            self.normalized_rules.clear();
-            self.normalized_prefixes.clear();
+        // Only rebuild maps if the case sensitivity setting actually changes
+        if self.case_insensitive != enabled {
+            self.case_insensitive = enabled;
+            if enabled {
+                // Rebuild normalized maps when enabling case-insensitive mode
+                self.normalized_rules = self
+                    .rules
+                    .iter()
+                    .map(|(k, v)| (k.to_lowercase(), *v))
+                    .collect();
+                self.normalized_prefixes = self.prefixes.iter().map(|p| p.to_lowercase()).collect();
+            } else {
+                // Clear normalized maps when disabling case-insensitive mode
+                self.normalized_rules.clear();
+                self.normalized_prefixes.clear();
+            }
         }
         self
     }

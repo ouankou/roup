@@ -83,17 +83,20 @@ impl ClauseRegistry {
     }
 
     pub fn with_case_insensitive(mut self, enabled: bool) -> Self {
-        self.case_insensitive = enabled;
-        // Rebuild normalized map if enabling case-insensitive mode
-        if enabled && self.normalized_rules.is_empty() {
-            self.normalized_rules = self
-                .rules
-                .iter()
-                .map(|(k, v)| (k.to_lowercase(), *v))
-                .collect();
-        } else if !enabled {
-            // Clear normalized map if disabling case-insensitive mode
-            self.normalized_rules.clear();
+        // Only rebuild map if the case sensitivity setting actually changes
+        if self.case_insensitive != enabled {
+            self.case_insensitive = enabled;
+            if enabled {
+                // Rebuild normalized map when enabling case-insensitive mode
+                self.normalized_rules = self
+                    .rules
+                    .iter()
+                    .map(|(k, v)| (k.to_lowercase(), *v))
+                    .collect();
+            } else {
+                // Clear normalized map when disabling case-insensitive mode
+                self.normalized_rules.clear();
+            }
         }
         self
     }
