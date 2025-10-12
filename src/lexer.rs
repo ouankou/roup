@@ -22,6 +22,23 @@ use nom::IResult;
 /// nom::bytes::complete::take_while1 - matches while predicate is true
 use nom::bytes::complete::{tag, take_while1};
 
+/// Language format for parsing
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Language {
+    /// C/C++ language with #pragma omp
+    C,
+    /// Fortran free-form with !$OMP sentinel
+    FortranFree,
+    /// Fortran fixed-form with !$OMP or C$OMP in columns 1-6
+    FortranFixed,
+}
+
+impl Default for Language {
+    fn default() -> Self {
+        Language::C
+    }
+}
+
 /// Check if a character is valid in an identifier
 ///
 /// Learning Rust: Closures and Function Pointers
@@ -30,6 +47,11 @@ use nom::bytes::complete::{tag, take_while1};
 /// take_while1 accepts: fn(char) -> bool
 pub fn is_identifier_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
+}
+
+/// Normalize Fortran identifier to lowercase for case-insensitive matching
+pub fn normalize_fortran_identifier(s: &str) -> String {
+    s.to_lowercase()
 }
 
 /// Parse "#pragma" keyword
@@ -47,6 +69,82 @@ pub fn lex_pragma(input: &str) -> IResult<&str, &str> {
 pub fn lex_omp(input: &str) -> IResult<&str, &str> {
     tag("omp")(input)
 }
+
+/// Parse Fortran free-form sentinel "!$OMP" (case-insensitive)
+///
+/// Supports leading whitespace before the sentinel (common for indented code):
+/// - "!$OMP PARALLEL" -> matches
+/// - "    !$OMP PARALLEL" -> matches (leading spaces consumed)
+/// - "  \t!$OMP DO" -> matches (mixed whitespace consumed)
+pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
+    // Skip optional leading whitespace (common in indented Fortran code)
+    let (after_space, _) = skip_space_and_comments(input)?;
+
+    // Optimize: check only first 5 characters instead of entire input
+    let matches = after_space
+        .get(..5)
+        .map_or(false, |s| s.eq_ignore_ascii_case("!$omp"));
+
+    if matches {
+        Ok((&after_space[5..], &after_space[..5]))
+    } else {
+        Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        )))
+    }
+}
+
+/// Parse Fortran fixed-form sentinel "!$OMP" or "C$OMP" in columns 1-6 (case-insensitive)
+///
+/// Supports leading whitespace before the sentinel:
+/// - "!$OMP PARALLEL" -> matches
+/// - "    !$OMP PARALLEL" -> matches (leading spaces consumed)
+/// - "C$OMP DO" -> matches
+/// - "*$OMP END PARALLEL" -> matches
+pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
+    // Skip optional leading whitespace (common in indented Fortran code)
+    let (after_space, _) = skip_space_and_comments(input)?;
+
+    // Optimize: check only first 5 characters instead of entire input
+    let first_5 = after_space.get(..5);
+    let matches = first_5.map_or(false, |s| {
+        s.eq_ignore_ascii_case("!$omp")
+            || s.eq_ignore_ascii_case("c$omp")
+            || s.eq_ignore_ascii_case("*$omp")
+    });
+
+    if matches {
+        Ok((&after_space[5..], &after_space[..5]))
+    } else {
+        Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        )))
+    }
+}
+
+// ============================================================================
+// Fortran Continuation Lines - NOT SUPPORTED BY DESIGN
+// ============================================================================
+//
+// ROUP does NOT support multi-line Fortran directives with continuation (&).
+//
+// Example of UNSUPPORTED input:
+//     !$OMP PARALLEL DO &
+//     !$OMP   PRIVATE(I,J)
+//
+// Design Decision:
+// - Continuation handling requires stateful multi-line parsing
+// - Users must provide complete single-line directives
+// - Applies to BOTH C and Fortran (no multi-line #pragma either)
+//
+// Workaround:
+// - Preprocess multi-line directives into single lines before calling parse()
+// - Example: "!$OMP PARALLEL DO PRIVATE(I,J)" (all on one line)
+//
+// See: src/parser/mod.rs Parser::parse() for rationale
+// ============================================================================
 
 /// Parse an identifier (directive or clause name)
 ///
@@ -226,5 +324,40 @@ mod tests {
 
         let result = skip_space1_and_comments(" has_space");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parses_fortran_free_sentinel() {
+        let (rest, matched) = lex_fortran_free_sentinel("!$OMP parallel").unwrap();
+        assert_eq!(matched, "!$OMP");
+        assert_eq!(rest, " parallel");
+
+        // Case-insensitive
+        let (rest, matched) = lex_fortran_free_sentinel("!$omp PARALLEL").unwrap();
+        assert_eq!(matched, "!$omp");
+        assert_eq!(rest, " PARALLEL");
+    }
+
+    #[test]
+    fn parses_fortran_fixed_sentinel() {
+        let (rest, matched) = lex_fortran_fixed_sentinel("!$OMP parallel").unwrap();
+        assert_eq!(matched, "!$OMP");
+        assert_eq!(rest, " parallel");
+
+        let (rest, matched) = lex_fortran_fixed_sentinel("C$OMP parallel").unwrap();
+        assert_eq!(matched, "C$OMP");
+        assert_eq!(rest, " parallel");
+
+        // Case-insensitive
+        let (rest, matched) = lex_fortran_fixed_sentinel("c$omp PARALLEL").unwrap();
+        assert_eq!(matched, "c$omp");
+        assert_eq!(rest, " PARALLEL");
+    }
+
+    #[test]
+    fn normalizes_fortran_identifiers() {
+        assert_eq!(normalize_fortran_identifier("PARALLEL"), "parallel");
+        assert_eq!(normalize_fortran_identifier("Private"), "private");
+        assert_eq!(normalize_fortran_identifier("num_threads"), "num_threads");
     }
 }

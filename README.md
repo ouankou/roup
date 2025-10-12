@@ -31,10 +31,10 @@ cargo build --release
 
 ## Features
 
-- ✅ **Multi-Language Support:** Rust, C, and C++ APIs
+- ✅ **Multi-Language Support:** Rust, C, C++, and Fortran (experimental)
 - ✅ **OpenMP 3.0-6.0:** 95 directives, 91 clauses
 - ✅ **Safe by Default:** 99.1% safe Rust code
-- ✅ **Experimental:** 352 tests, active development
+- ✅ **Experimental:** 352+ tests, active development
 - ✅ **Modern C++:** C++17 RAII wrappers
 - ✅ **Well Documented:** [Comprehensive website](https://roup.ouankou.com)
 - 🔄 **ompparser Compatible:** Drop-in replacement layer ([see below](#ompparser-compatibility))
@@ -48,6 +48,7 @@ cargo build --release
 - [Rust Tutorial](https://roup.ouankou.com/rust-tutorial.html) - Complete Rust guide
 - [C Tutorial](https://roup.ouankou.com/c-tutorial.html) - C API with examples
 - [C++ Tutorial](https://roup.ouankou.com/cpp-tutorial.html) - C++17 RAII wrappers
+- [Fortran Tutorial](https://roup.ouankou.com/fortran-tutorial.html) - Fortran API (⚠️ experimental)
 - [Building Guide](https://roup.ouankou.com/building.html) - Build for any platform
 - [API Reference](https://roup.ouankou.com/api-reference.html) - Complete API docs
 - [Architecture](https://roup.ouankou.com/architecture.html) - Internal design
@@ -56,13 +57,14 @@ cargo build --release
 
 ## Language Support
 
-| Language | API Style | Documentation |
-|----------|-----------|---------------|
-| **Rust** | Idiomatic Rust | [Rust Tutorial](https://roup.ouankou.com/rust-tutorial.html) |
-| **C** | Pointer-based (malloc/free) | [C Tutorial](https://roup.ouankou.com/c-tutorial.html) |
-| **C++** | C++17 RAII wrappers | [C++ Tutorial](https://roup.ouankou.com/cpp-tutorial.html) |
+| Language | API Style | Documentation | Status |
+|----------|-----------|---------------|--------|
+| **Rust** | Idiomatic Rust | [Rust Tutorial](https://roup.ouankou.com/rust-tutorial.html) | ✅ Stable |
+| **C** | Pointer-based (malloc/free) | [C Tutorial](https://roup.ouankou.com/c-tutorial.html) | ✅ Stable |
+| **C++** | C++17 RAII wrappers | [C++ Tutorial](https://roup.ouankou.com/cpp-tutorial.html) | ✅ Stable |
+| **Fortran** | C interop (iso_c_binding) | [Fortran Tutorial](https://roup.ouankou.com/fortran-tutorial.html) | ⚠️ Experimental |
 
-**Examples:** See [`examples/c/tutorial_basic.c`](examples/c/tutorial_basic.c) and [`examples/cpp/`](examples/cpp/) directory.
+**Examples:** See [`examples/c/tutorial_basic.c`](examples/c/tutorial_basic.c), [`examples/cpp/`](examples/cpp/), and [`examples/fortran/`](examples/fortran/) directories.
 
 ## Quick Examples
 

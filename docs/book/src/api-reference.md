@@ -235,10 +235,13 @@ if (dir) {
 ## Error Handling
 
 ### Rust
-```rust
-match parse(input) {
-    Ok(directive) => { /* use directive */ },
-    Err(e) => eprintln!("Parse error: {}", e),
+```rust,ignore
+use roup::parser::openmp;
+
+let parser = openmp::parser();
+match parser.parse(input) {
+    Ok((_, directive)) => { /* use directive */ },
+    Err(e) => eprintln!("Parse error: {:?}", e),
 }
 ```
 

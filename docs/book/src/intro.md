@@ -51,11 +51,12 @@ ROUP is an **experimental** parser for OpenMP directives, written in safe Rust w
 
 ### 🔌 Multi-Language APIs
 
-| Language | API Style | Memory Management |
-|----------|-----------|-------------------|
-| **Rust** | Native | Automatic (ownership) |
-| **C** | Pointer-based | Manual (malloc/free pattern) |
-| **C++** | RAII wrappers | Automatic (destructors) |
+| Language | API Style | Memory Management | Status |
+|----------|-----------|-------------------|--------|
+| **Rust** | Native | Automatic (ownership) | ✅ Stable |
+| **C** | Pointer-based | Manual (malloc/free pattern) | ✅ Stable |
+| **C++** | RAII wrappers | Automatic (destructors) | ✅ Stable |
+| **Fortran** | C interop | Manual (via iso_c_binding) | ⚠️ Experimental |
 
 ---
 
@@ -64,10 +65,17 @@ ROUP is an **experimental** parser for OpenMP directives, written in safe Rust w
 ### Parse in 3 Lines (Rust)
 
 ```rust
-use roup::parser::parse;
+use roup::parser::openmp;
 
-let directive = parse("#pragma omp parallel for num_threads(4)").unwrap();
+let parser = openmp::parser();
+let (_, directive) = parser.parse("#pragma omp parallel for num_threads(4)").unwrap();
+// Access directive information
+println!("Directive: {}", directive.name);  // Output: Directive: parallel for
 println!("Found {} clauses", directive.clauses.len());  // Output: Found 1 clauses
+// Iterate through clauses
+for clause in &directive.clauses {
+    println!("  Clause: {}", clause.name);  // Output:   Clause: num_threads
+}
 ```
 
 ### Parse in C
@@ -84,6 +92,14 @@ roup_directive_free(dir);
 roup::Directive dir("#pragma omp parallel for num_threads(4)");
 std::cout << "Clauses: " << dir.clause_count() << "\n";
 // Automatic cleanup!
+```
+
+### Parse Fortran (Experimental)
+
+```fortran
+! Free-form Fortran
+directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &
+                                          ROUP_LANG_FORTRAN_FREE)
 ```
 
 [See full examples →](./getting-started.md)
@@ -183,7 +199,7 @@ std::cout << "Clauses: " << dir.clause_count() << "\n";
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────┐
 │   Your Application                  │
 ├─────────────────────────────────────┤
@@ -418,15 +434,16 @@ Copyright © 2024-2025 Anjia Wang
 
 ### Rust
 ```rust
-use roup::parser::parse;
+use roup::parser::openmp;
 
+let parser = openmp::parser();
 let input = "#pragma omp parallel for num_threads(4) private(i)";
-match parse(input) {
-    Ok(directive) => {
+match parser.parse(input) {
+    Ok((_, directive)) => {
         println!("Directive: {:?}", directive.kind);
         println!("Clauses: {}", directive.clauses.len());
     }
-    Err(e) => eprintln!("Parse error: {}", e),
+    Err(e) => eprintln!("Parse error: {:?}", e),
 }
 ```
 
@@ -489,7 +506,7 @@ int main() {
 
 ROUP uses a clean, modular architecture:
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │         Application Layer               │
 │  (Your compiler/tool/analyzer)          │

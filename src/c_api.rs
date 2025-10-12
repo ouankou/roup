@@ -18,6 +18,25 @@
 //! - **Isolated** only at FFI boundary, never in business logic
 //! - **Auditable**: ~0.9% of file (60 unsafe lines / 632 total)
 //!
+//! ## Case-Insensitive Matching: String Allocation Tradeoff
+//!
+//! Functions `directive_name_to_kind()` and `convert_clause()` allocate a String
+//! for case-insensitive matching (Fortran uses uppercase, C uses lowercase).
+//!
+//! **Why not optimize with `eq_ignore_ascii_case()`?**
+//! - Constants generator (`src/constants_gen.rs`) requires `match` expressions
+//! - Parser uses syn crate to extract directive/clause mappings from AST
+//! - Cannot parse if-else chains → must use `match normalized_name.as_str()`
+//! - String allocation is necessary for match arm patterns
+//!
+//! **Is this a performance issue?**
+//! - No: These functions are called once per directive/clause at API boundary
+//! - Typical usage: Parse a few dozen directives in an entire program
+//! - String allocation cost is negligible compared to parsing overhead
+//!
+//! **Future optimization path**: Update `constants_gen.rs` to parse if-else chains,
+//! then use `eq_ignore_ascii_case()` without allocations.
+//!
 //! ## Learning Rust: Why Unsafe is Needed at FFI Boundary
 //!
 //! 1. **C strings** → Rust strings: `CStr::from_ptr()` requires unsafe
@@ -40,7 +59,21 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
-use crate::parser::{parse_omp_directive, Clause, ClauseKind};
+use crate::lexer::Language;
+use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
+
+// ============================================================================
+// Language Constants for Fortran Support
+// ============================================================================
+
+/// C language (default) - uses #pragma omp
+pub const ROUP_LANG_C: i32 = 0;
+
+/// Fortran free-form - uses !$OMP sentinel
+pub const ROUP_LANG_FORTRAN_FREE: i32 = 1;
+
+/// Fortran fixed-form - uses !$OMP or C$OMP in columns 1-6
+pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 
 // ============================================================================
 // Constants Documentation
@@ -236,6 +269,93 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
 
         // Box is dropped here, freeing memory
     }
+}
+
+/// Parse an OpenMP directive with explicit language specification.
+///
+/// ## Parameters
+/// - `input`: Null-terminated string containing the directive
+/// - `language`: Language format (ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE, ROUP_LANG_FORTRAN_FIXED)
+///
+/// ## Returns
+/// - Pointer to `OmpDirective` on success
+/// - `NULL` on error:
+///   - `input` is NULL
+///   - `language` is not a valid ROUP_LANG_* constant
+///   - `input` contains invalid UTF-8
+///   - Parse error (invalid OpenMP directive syntax)
+///
+/// ## Error Handling
+/// This function returns `NULL` for all error conditions without detailed error codes.
+/// There is no way to distinguish between different error types (invalid language,
+/// NULL input, UTF-8 error, or parse failure) from the return value alone.
+///
+/// Callers should:
+/// - Validate `language` parameter before calling (use only ROUP_LANG_* constants)
+/// - Ensure `input` is non-NULL and valid UTF-8
+/// - Verify directive syntax is correct
+/// - For debugging, enable logging or use a separate validation layer
+///
+/// For a version with detailed error codes, consider using the Rust API directly.
+///
+/// ## Example (Fortran free-form)
+/// ```c
+/// OmpDirective* dir = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", ROUP_LANG_FORTRAN_FREE);
+/// if (dir) {
+///     // Use directive
+///     roup_directive_free(dir);
+/// } else {
+///     // Handle error: NULL, invalid language, invalid UTF-8, or parse failure
+///     fprintf(stderr, "Failed to parse directive\n");
+/// }
+/// ```
+#[no_mangle]
+pub extern "C" fn roup_parse_with_language(
+    input: *const c_char,
+    language: i32,
+) -> *mut OmpDirective {
+    // NULL check
+    if input.is_null() {
+        return ptr::null_mut();
+    }
+
+    // Convert language code to Language enum using explicit constants
+    // Return NULL for invalid language values
+    let lang = match language {
+        ROUP_LANG_C => Language::C,
+        ROUP_LANG_FORTRAN_FREE => Language::FortranFree,
+        ROUP_LANG_FORTRAN_FIXED => Language::FortranFixed,
+        _ => return ptr::null_mut(), // Invalid language value
+    };
+
+    // UNSAFE BLOCK: Convert C string to Rust &str
+    let c_str = unsafe { CStr::from_ptr(input) };
+
+    let rust_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return ptr::null_mut(),
+    };
+
+    // Create parser with specified language
+    let parser = openmp::parser().with_language(lang);
+
+    // Parse using language-aware parser
+    let directive = match parser.parse(rust_str) {
+        Ok((_, dir)) => dir,
+        Err(_) => return ptr::null_mut(),
+    };
+
+    // Convert to C-compatible format
+    let c_directive = OmpDirective {
+        name: allocate_c_string(directive.name),
+        clauses: directive
+            .clauses
+            .into_iter()
+            .map(|c| convert_clause(&c))
+            .collect(),
+    };
+
+    Box::into_raw(Box::new(c_directive))
 }
 
 /// Free a clause.
@@ -569,7 +689,14 @@ fn allocate_c_string(s: &str) -> *const c_char {
 /// - 5 = lastprivate    - 11 = default
 /// - 999 = unknown
 fn convert_clause(clause: &Clause) -> OmpClause {
-    let (kind, data) = match clause.name {
+    // Normalize clause name to lowercase for case-insensitive matching
+    // (Fortran clauses are uppercase, C clauses are lowercase)
+    // Note: One String allocation per clause is acceptable at C API boundary.
+    // Alternative (build-time constant map) requires updating constants_gen.rs
+    // to parse if-else chains instead of match expressions.
+    let normalized_name = clause.name.to_ascii_lowercase();
+
+    let (kind, data) = match normalized_name.as_str() {
         "num_threads" => (0, ClauseData { default: 0 }),
         "if" => (1, ClauseData { default: 0 }),
         "private" => (
@@ -648,6 +775,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 fn parse_reduction_operator(clause: &Clause) -> i32 {
     // Look for operator in clause kind
     if let ClauseKind::Parenthesized(args) = clause.kind {
+        // Operators (+, -, *, etc.) are ASCII symbols - no case conversion needed
         if args.contains('+') && !args.contains("++") {
             return 0; // Plus
         } else if args.contains('-') && !args.contains("--") {
@@ -664,9 +792,13 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
             return 6; // LogicalAnd
         } else if args.contains("||") {
             return 7; // LogicalOr
-        } else if args.contains("min") {
+        }
+
+        // For text keywords (min, max), normalize once for case-insensitive comparison
+        let args_lower = args.to_ascii_lowercase();
+        if args_lower.contains("min") {
             return 8; // Min
-        } else if args.contains("max") {
+        } else if args_lower.contains("max") {
             return 9; // Max
         }
     }
@@ -686,15 +818,17 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
 /// - 4 = runtime  (OMP_SCHEDULE environment variable)
 fn parse_schedule_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(args) = clause.kind {
-        if args.contains("static") {
+        // Case-insensitive keyword matching without String allocation
+        // Check common case variants (lowercase, uppercase, title case)
+        if args.contains("static") || args.contains("STATIC") || args.contains("Static") {
             return 0;
-        } else if args.contains("dynamic") {
+        } else if args.contains("dynamic") || args.contains("DYNAMIC") || args.contains("Dynamic") {
             return 1;
-        } else if args.contains("guided") {
+        } else if args.contains("guided") || args.contains("GUIDED") || args.contains("Guided") {
             return 2;
-        } else if args.contains("auto") {
+        } else if args.contains("auto") || args.contains("AUTO") || args.contains("Auto") {
             return 3;
-        } else if args.contains("runtime") {
+        } else if args.contains("runtime") || args.contains("RUNTIME") || args.contains("Runtime") {
             return 4;
         }
     }
@@ -711,9 +845,11 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
 /// - 1 = none   (must explicitly declare all variables)
 fn parse_default_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(args) = clause.kind {
-        if args.contains("shared") {
+        // Case-insensitive keyword matching without String allocation
+        // Check common case variants (lowercase, uppercase, title case)
+        if args.contains("shared") || args.contains("SHARED") || args.contains("Shared") {
             return 0;
-        } else if args.contains("none") {
+        } else if args.contains("none") || args.contains("NONE") || args.contains("None") {
             return 1;
         }
     }
@@ -744,11 +880,33 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
         let c_str = CStr::from_ptr(name);
         let name_str = c_str.to_str().unwrap_or("");
 
-        match name_str {
+        // Case-insensitive directive name matching via to_lowercase()
+        // Note: This allocates a String. While eq_ignore_ascii_case() would be more efficient,
+        // the build system's constant parser requires a match expression with string literals.
+        // The performance impact is negligible for the C API boundary.
+        //
+        // Fortran DO variants map to same codes as their C FOR equivalents:
+        // - "do" -> 1 (same as "for")
+        // - "parallel do" -> 0 (same as "parallel for")
+        // - "distribute parallel do" -> 15 (same as "distribute parallel for")
+        // - "target parallel do" -> 13 (same as "target parallel for")
+        // etc.
+        match name_str.to_lowercase().as_str() {
+            // Parallel directives (kind 0)
             "parallel" => 0,
-            "parallel for" => 0, // Composite: treat as parallel
+            "parallel for" => 0,
+            "parallel do" => 0, // Fortran variant
+            "parallel for simd" => 0,
+            "parallel do simd" => 0, // Fortran variant
             "parallel sections" => 0,
+
+            // For/Do directives (kind 1)
             "for" => 1,
+            "do" => 1, // Fortran variant
+            "for simd" => 1,
+            "do simd" => 1, // Fortran variant
+
+            // Other basic directives
             "sections" => 2,
             "single" => 3,
             "task" => 4,
@@ -760,13 +918,42 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
             "atomic" => 10,
             "flush" => 11,
             "ordered" => 12,
+
+            // Target directives (kind 13)
             "target" => 13,
-            "target teams" => 13, // Composite: treat as target
+            "target teams" => 13,
+            "target parallel" => 13,
+            "target parallel for" => 13,
+            "target parallel do" => 13, // Fortran variant
+            "target parallel for simd" => 13,
+            "target parallel do simd" => 13, // Fortran variant
+            "target teams distribute" => 13,
+            "target teams distribute parallel for" => 13,
+            "target teams distribute parallel do" => 13, // Fortran variant
+            "target teams distribute parallel for simd" => 13,
+            "target teams distribute parallel do simd" => 13, // Fortran variant
+
+            // Teams directives (kind 14)
             "teams" => 14,
-            "teams distribute" => 14, // Composite: treat as teams
+            "teams distribute" => 14,
+            "teams distribute parallel for" => 14,
+            "teams distribute parallel do" => 14, // Fortran variant
+            "teams distribute parallel for simd" => 14,
+            "teams distribute parallel do simd" => 14, // Fortran variant
+
+            // Distribute directives (kind 15)
             "distribute" => 15,
+            "distribute parallel for" => 15,
+            "distribute parallel do" => 15, // Fortran variant
+            "distribute parallel for simd" => 15,
+            "distribute parallel do simd" => 15, // Fortran variant
+            "distribute simd" => 15,
+
+            // Metadirective (kind 16)
             "metadirective" => 16,
-            _ => 999, // Unknown
+
+            // Unknown directive
+            _ => 999,
         }
     }
 }
@@ -836,3 +1023,328 @@ fn free_clause_data(clause: &OmpClause) {
 // - Thread safety annotations (Rust types are Send/Sync, C must ensure too)
 // - Comprehensive error reporting (currently just NULL on error)
 // - Semantic validation beyond parsing (requires deeper OpenMP knowledge)
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fortran_directive_name_normalization() {
+        // Test that uppercase Fortran directive names are properly normalized
+        // This ensures C API can handle both C (lowercase) and Fortran (uppercase) directives
+
+        // Test basic Fortran PARALLEL directive
+        let fortran_input = CString::new("!$OMP PARALLEL").unwrap();
+        let directive = roup_parse_with_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(
+            !directive.is_null(),
+            "Failed to parse Fortran PARALLEL directive"
+        );
+
+        let kind = roup_directive_kind(directive);
+        assert_eq!(
+            kind, 0,
+            "PARALLEL directive should have kind 0, got {}",
+            kind
+        );
+
+        roup_directive_free(directive);
+
+        // Test Fortran DO directive (equivalent to C FOR)
+        let fortran_do = CString::new("!$OMP DO").unwrap();
+        let directive = roup_parse_with_language(fortran_do.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse Fortran DO directive");
+
+        let kind = roup_directive_kind(directive);
+        assert_eq!(
+            kind, 1,
+            "DO directive should have kind 1 (same as FOR), got {}",
+            kind
+        );
+
+        roup_directive_free(directive);
+
+        // Test compound Fortran PARALLEL DO directive
+        let fortran_parallel_do = CString::new("!$OMP PARALLEL DO").unwrap();
+        let directive =
+            roup_parse_with_language(fortran_parallel_do.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(
+            !directive.is_null(),
+            "Failed to parse Fortran PARALLEL DO directive"
+        );
+
+        let kind = roup_directive_kind(directive);
+        assert_eq!(
+            kind, 0,
+            "PARALLEL DO directive should have kind 0 (composite), got {}",
+            kind
+        );
+
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn test_fortran_clause_name_normalization() {
+        // Test that uppercase Fortran clause names are properly normalized
+        // This ensures convert_clause() can handle both C and Fortran syntax
+
+        // Test Fortran PRIVATE clause
+        let fortran_input = CString::new("!$OMP PARALLEL PRIVATE(A,B)").unwrap();
+        let directive = roup_parse_with_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(
+            !directive.is_null(),
+            "Failed to parse Fortran directive with PRIVATE clause"
+        );
+
+        let clause_count = roup_directive_clause_count(directive);
+        assert_eq!(
+            clause_count, 1,
+            "Should have 1 clause, got {}",
+            clause_count
+        );
+
+        // Use iterator to get first clause
+        let iter = roup_directive_clauses_iter(directive);
+        assert!(!iter.is_null(), "Failed to create clause iterator");
+
+        let mut clause: *const OmpClause = ptr::null();
+        let has_clause = roup_clause_iterator_next(iter, &mut clause);
+        assert_eq!(has_clause, 1, "Should have a clause");
+        assert!(!clause.is_null(), "Clause pointer should not be null");
+
+        let clause_kind = roup_clause_kind(clause);
+        assert_eq!(
+            clause_kind, 2,
+            "PRIVATE clause should have kind 2, got {}",
+            clause_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+
+        // Test Fortran REDUCTION clause
+        let fortran_reduction = CString::new("!$OMP DO REDUCTION(+:SUM)").unwrap();
+        let directive =
+            roup_parse_with_language(fortran_reduction.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(
+            !directive.is_null(),
+            "Failed to parse Fortran DO with REDUCTION clause"
+        );
+
+        let clause_count = roup_directive_clause_count(directive);
+        assert_eq!(
+            clause_count, 1,
+            "Should have 1 clause, got {}",
+            clause_count
+        );
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        let has_clause = roup_clause_iterator_next(iter, &mut clause);
+        assert_eq!(has_clause, 1, "Should have a clause");
+
+        let clause_kind = roup_clause_kind(clause);
+        assert_eq!(
+            clause_kind, 6,
+            "REDUCTION clause should have kind 6, got {}",
+            clause_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+
+        // Test Fortran SCHEDULE clause
+        let fortran_schedule = CString::new("!$OMP DO SCHEDULE(DYNAMIC)").unwrap();
+        let directive = roup_parse_with_language(fortran_schedule.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(
+            !directive.is_null(),
+            "Failed to parse Fortran DO with SCHEDULE clause"
+        );
+
+        let clause_count = roup_directive_clause_count(directive);
+        assert_eq!(
+            clause_count, 1,
+            "Should have 1 clause, got {}",
+            clause_count
+        );
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        let has_clause = roup_clause_iterator_next(iter, &mut clause);
+        assert_eq!(has_clause, 1, "Should have a clause");
+
+        let clause_kind = roup_clause_kind(clause);
+        assert_eq!(
+            clause_kind, 7,
+            "SCHEDULE clause should have kind 7, got {}",
+            clause_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn test_case_insensitive_matching() {
+        // Verify that both lowercase and uppercase inputs work correctly
+
+        // C-style lowercase
+        let c_input = CString::new("#pragma omp parallel for").unwrap();
+        let c_directive = roup_parse(c_input.as_ptr());
+        assert!(!c_directive.is_null());
+        let c_kind = roup_directive_kind(c_directive);
+
+        // Fortran-style uppercase
+        let fortran_input = CString::new("!$OMP PARALLEL DO").unwrap();
+        let fortran_directive =
+            roup_parse_with_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!fortran_directive.is_null());
+        let fortran_kind = roup_directive_kind(fortran_directive);
+
+        // Both should map to same kind (0 for parallel/composite)
+        assert_eq!(
+            c_kind, fortran_kind,
+            "C 'parallel for' and Fortran 'PARALLEL DO' should have same kind"
+        );
+
+        roup_directive_free(c_directive);
+        roup_directive_free(fortran_directive);
+    }
+
+    #[test]
+    fn test_fortran_schedule_clause_case_insensitive() {
+        // Test that SCHEDULE clause arguments are case-insensitive
+        // Fortran: !$OMP DO SCHEDULE(DYNAMIC) should work same as C: schedule(dynamic)
+
+        // Test uppercase DYNAMIC
+        let fortran_dynamic = CString::new("!$OMP DO SCHEDULE(DYNAMIC)").unwrap();
+        let directive = roup_parse_with_language(fortran_dynamic.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse SCHEDULE(DYNAMIC)");
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        let has_clause = roup_clause_iterator_next(iter, &mut clause);
+        assert_eq!(has_clause, 1, "Should have schedule clause");
+
+        let schedule_kind = roup_clause_schedule_kind(clause);
+        assert_eq!(
+            schedule_kind, 1,
+            "SCHEDULE(DYNAMIC) should have kind 1 (dynamic), got {}",
+            schedule_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+
+        // Test uppercase GUIDED
+        let fortran_guided = CString::new("!$OMP DO SCHEDULE(GUIDED, 10)").unwrap();
+        let directive = roup_parse_with_language(fortran_guided.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse SCHEDULE(GUIDED)");
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        roup_clause_iterator_next(iter, &mut clause);
+
+        let schedule_kind = roup_clause_schedule_kind(clause);
+        assert_eq!(
+            schedule_kind, 2,
+            "SCHEDULE(GUIDED) should have kind 2, got {}",
+            schedule_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn test_fortran_default_clause_case_insensitive() {
+        // Test that DEFAULT clause arguments are case-insensitive
+        // Fortran: !$OMP PARALLEL DEFAULT(NONE) should work same as C: default(none)
+
+        // Test uppercase NONE
+        let fortran_none = CString::new("!$OMP PARALLEL DEFAULT(NONE)").unwrap();
+        let directive = roup_parse_with_language(fortran_none.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse DEFAULT(NONE)");
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        let has_clause = roup_clause_iterator_next(iter, &mut clause);
+        assert_eq!(has_clause, 1, "Should have default clause");
+
+        let default_kind = roup_clause_default_data_sharing(clause);
+        assert_eq!(
+            default_kind, 1,
+            "DEFAULT(NONE) should have kind 1 (none), got {}",
+            default_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+
+        // Test uppercase SHARED (verify it still works)
+        let fortran_shared = CString::new("!$OMP PARALLEL DEFAULT(SHARED)").unwrap();
+        let directive = roup_parse_with_language(fortran_shared.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse DEFAULT(SHARED)");
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        roup_clause_iterator_next(iter, &mut clause);
+
+        let default_kind = roup_clause_default_data_sharing(clause);
+        assert_eq!(
+            default_kind, 0,
+            "DEFAULT(SHARED) should have kind 0, got {}",
+            default_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn test_fortran_reduction_clause_case_insensitive() {
+        // Test that REDUCTION clause operators work with uppercase (e.g., MIN, MAX)
+
+        // Test uppercase MIN
+        let fortran_min = CString::new("!$OMP PARALLEL REDUCTION(MIN:X)").unwrap();
+        let directive = roup_parse_with_language(fortran_min.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse REDUCTION(MIN:X)");
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        let has_clause = roup_clause_iterator_next(iter, &mut clause);
+        assert_eq!(has_clause, 1, "Should have reduction clause");
+
+        let reduction_op = roup_clause_reduction_operator(clause);
+        assert_eq!(
+            reduction_op, 8,
+            "REDUCTION(MIN:X) should have operator 8 (min), got {}",
+            reduction_op
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+
+        // Test uppercase MAX
+        let fortran_max = CString::new("!$OMP DO REDUCTION(MAX:RESULT)").unwrap();
+        let directive = roup_parse_with_language(fortran_max.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(
+            !directive.is_null(),
+            "Failed to parse REDUCTION(MAX:RESULT)"
+        );
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        roup_clause_iterator_next(iter, &mut clause);
+
+        let reduction_op = roup_clause_reduction_operator(clause);
+        assert_eq!(
+            reduction_op, 9,
+            "REDUCTION(MAX:RESULT) should have operator 9 (max), got {}",
+            reduction_op
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+    }
+}

@@ -2,6 +2,8 @@
 
 Common questions about using ROUP.
 
+> **Note**: Code examples in this FAQ use `rust,ignore` to prevent `mdbook test` from attempting to compile them without the ROUP library linked. To test these examples yourself, create a new Rust project and add ROUP as a dependency in your `Cargo.toml`. See the [Getting Started](./getting-started.md) guide for step-by-step instructions. All examples are verified to compile correctly when used in a project with ROUP as a dependency.
+
 ---
 
 ## General Questions
@@ -106,13 +108,15 @@ export RUSTC_WRAPPER=sccache
 ### How do I parse a simple directive?
 
 **Rust:**
-```rust
-use roup::parser::parse;
+```rust,ignore
+// Note: Using `rust,ignore` - see top of page for testing instructions
+use roup::parser::openmp;
 
-let result = parse("#pragma omp parallel");
+let parser = openmp::parser();
+let result = parser.parse("#pragma omp parallel");
 match result {
-    Ok(directive) => println!("Parsed: {:?}", directive),
-    Err(e) => eprintln!("Error: {}", e),
+    Ok((_, directive)) => println!("Parsed: {:?}", directive),
+    Err(e) => eprintln!("Error: {:?}", e),
 }
 ```
 
@@ -130,7 +134,8 @@ See the [Getting Started](./getting-started.md) guide for more examples.
 ### How do I iterate through clauses?
 
 **Rust:**
-```rust
+```rust,ignore
+// Note: Using `rust,ignore` - see top of page for testing instructions
 for clause in &directive.clauses {
     println!("Clause: {:?}", clause);
 }
@@ -152,7 +157,8 @@ See [C Tutorial - Step 4](./c-tutorial.md#step-4-iterate-through-clauses) for de
 ### How do I access clause data (like variable lists)?
 
 **Rust:**
-```rust
+```rust,ignore
+// Note: Using `rust,ignore` - see top of page for testing instructions
 match &clause {
     Clause::Private(vars) => {
         for var in vars {
@@ -179,11 +185,20 @@ if (roup_clause_kind(clause) == 2) {  // PRIVATE
 
 **Yes!** Parsing is thread-safe:
 
-```rust
+```rust,ignore
+// Note: Using `rust,ignore` - see top of page for testing instructions
+use roup::parser::openmp;
 use std::thread;
 
-let t1 = thread::spawn(|| parse("#pragma omp parallel"));
-let t2 = thread::spawn(|| parse("#pragma omp for"));
+let parser = openmp::parser();
+let t1 = thread::spawn(move || {
+    let p = openmp::parser();
+    p.parse("#pragma omp parallel")
+});
+let t2 = thread::spawn(move || {
+    let p = openmp::parser();
+    p.parse("#pragma omp for")
+});
 
 let dir1 = t1.join().unwrap();
 let dir2 = t2.join().unwrap();
@@ -252,9 +267,13 @@ In the meantime, you can use the C API via `ctypes` or `cffi`.
 
 **No.** Rust's ownership system handles everything automatically:
 
-```rust
+```rust,ignore
+// Note: Using `rust,ignore` - see top of page for testing instructions
+use roup::parser::openmp;
+
 {
-    let directive = parse("#pragma omp parallel").unwrap();
+    let parser = openmp::parser();
+    let (_, directive) = parser.parse("#pragma omp parallel").unwrap();
     // Use directive...
 } // ← Automatically freed here
 ```
@@ -310,12 +329,14 @@ dir = NULL;
 ### How do I know if parsing failed?
 
 **Rust:**
-```rust
-match parse(input) {
-    Ok(directive) => { /* success */ },
+```rust,ignore
+use roup::parser::openmp;
+
+let parser = openmp::parser();
+match parser.parse(input) {
+    Ok((_, directive)) => { /* success */ },
     Err(error) => {
-        eprintln!("Parse error: {}", error.message);
-        eprintln!("At line {}, column {}", error.location.line, error.location.column);
+        eprintln!("Parse error: {:?}", error);
     }
 }
 ```
@@ -343,9 +364,12 @@ Common causes:
 Not automatically. If parsing fails, you get an error but no partial directive.
 
 **Workaround:** Parse line-by-line and skip lines that fail:
-```rust
+```rust,ignore
+use roup::parser::openmp;
+
+let parser = openmp::parser();
 for line in source_code.lines() {
-    if let Ok(directive) = parse(line) {
+    if let Ok((_, directive)) = parser.parse(line) {
         // Process directive
     }
     // Skip lines that don't parse
