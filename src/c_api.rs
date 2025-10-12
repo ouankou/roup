@@ -759,25 +759,28 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 fn parse_reduction_operator(clause: &Clause) -> i32 {
     // Look for operator in clause kind
     if let ClauseKind::Parenthesized(args) = clause.kind {
-        if args.contains('+') && !args.contains("++") {
+        // Normalize to lowercase for case-insensitive comparison (Fortran uses uppercase)
+        let args_lower = args.to_ascii_lowercase();
+
+        if args_lower.contains('+') && !args_lower.contains("++") {
             return 0; // Plus
-        } else if args.contains('-') && !args.contains("--") {
+        } else if args_lower.contains('-') && !args_lower.contains("--") {
             return 1; // Minus
-        } else if args.contains('*') {
+        } else if args_lower.contains('*') {
             return 2; // Times
-        } else if args.contains('&') && !args.contains("&&") {
+        } else if args_lower.contains('&') && !args_lower.contains("&&") {
             return 3; // BitwiseAnd
-        } else if args.contains('|') && !args.contains("||") {
+        } else if args_lower.contains('|') && !args_lower.contains("||") {
             return 4; // BitwiseOr
-        } else if args.contains('^') {
+        } else if args_lower.contains('^') {
             return 5; // BitwiseXor
-        } else if args.contains("&&") {
+        } else if args_lower.contains("&&") {
             return 6; // LogicalAnd
-        } else if args.contains("||") {
+        } else if args_lower.contains("||") {
             return 7; // LogicalOr
-        } else if args.contains("min") {
+        } else if args_lower.contains("min") {
             return 8; // Min
-        } else if args.contains("max") {
+        } else if args_lower.contains("max") {
             return 9; // Max
         }
     }
@@ -797,15 +800,18 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
 /// - 4 = runtime  (OMP_SCHEDULE environment variable)
 fn parse_schedule_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(args) = clause.kind {
-        if args.contains("static") {
+        // Normalize to lowercase for case-insensitive comparison (Fortran uses uppercase)
+        let args_lower = args.to_ascii_lowercase();
+
+        if args_lower.contains("static") {
             return 0;
-        } else if args.contains("dynamic") {
+        } else if args_lower.contains("dynamic") {
             return 1;
-        } else if args.contains("guided") {
+        } else if args_lower.contains("guided") {
             return 2;
-        } else if args.contains("auto") {
+        } else if args_lower.contains("auto") {
             return 3;
-        } else if args.contains("runtime") {
+        } else if args_lower.contains("runtime") {
             return 4;
         }
     }
@@ -822,9 +828,12 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
 /// - 1 = none   (must explicitly declare all variables)
 fn parse_default_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(args) = clause.kind {
-        if args.contains("shared") {
+        // Normalize to lowercase for case-insensitive comparison (Fortran uses uppercase)
+        let args_lower = args.to_ascii_lowercase();
+
+        if args_lower.contains("shared") {
             return 0;
-        } else if args.contains("none") {
+        } else if args_lower.contains("none") {
             return 1;
         }
     }
@@ -1158,5 +1167,142 @@ mod tests {
 
         roup_directive_free(c_directive);
         roup_directive_free(fortran_directive);
+    }
+
+    #[test]
+    fn test_fortran_schedule_clause_case_insensitive() {
+        // Test that SCHEDULE clause arguments are case-insensitive
+        // Fortran: !$OMP DO SCHEDULE(DYNAMIC) should work same as C: schedule(dynamic)
+
+        // Test uppercase DYNAMIC
+        let fortran_dynamic = CString::new("!$OMP DO SCHEDULE(DYNAMIC)").unwrap();
+        let directive = roup_parse_with_language(fortran_dynamic.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse SCHEDULE(DYNAMIC)");
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        let has_clause = roup_clause_iterator_next(iter, &mut clause);
+        assert_eq!(has_clause, 1, "Should have schedule clause");
+
+        let schedule_kind = roup_clause_schedule_kind(clause);
+        assert_eq!(
+            schedule_kind, 1,
+            "SCHEDULE(DYNAMIC) should have kind 1 (dynamic), got {}",
+            schedule_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+
+        // Test uppercase GUIDED
+        let fortran_guided = CString::new("!$OMP DO SCHEDULE(GUIDED, 10)").unwrap();
+        let directive = roup_parse_with_language(fortran_guided.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse SCHEDULE(GUIDED)");
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        roup_clause_iterator_next(iter, &mut clause);
+
+        let schedule_kind = roup_clause_schedule_kind(clause);
+        assert_eq!(
+            schedule_kind, 2,
+            "SCHEDULE(GUIDED) should have kind 2, got {}",
+            schedule_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn test_fortran_default_clause_case_insensitive() {
+        // Test that DEFAULT clause arguments are case-insensitive
+        // Fortran: !$OMP PARALLEL DEFAULT(NONE) should work same as C: default(none)
+
+        // Test uppercase NONE
+        let fortran_none = CString::new("!$OMP PARALLEL DEFAULT(NONE)").unwrap();
+        let directive = roup_parse_with_language(fortran_none.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse DEFAULT(NONE)");
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        let has_clause = roup_clause_iterator_next(iter, &mut clause);
+        assert_eq!(has_clause, 1, "Should have default clause");
+
+        let default_kind = roup_clause_default_data_sharing(clause);
+        assert_eq!(
+            default_kind, 1,
+            "DEFAULT(NONE) should have kind 1 (none), got {}",
+            default_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+
+        // Test uppercase SHARED (verify it still works)
+        let fortran_shared = CString::new("!$OMP PARALLEL DEFAULT(SHARED)").unwrap();
+        let directive = roup_parse_with_language(fortran_shared.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse DEFAULT(SHARED)");
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        roup_clause_iterator_next(iter, &mut clause);
+
+        let default_kind = roup_clause_default_data_sharing(clause);
+        assert_eq!(
+            default_kind, 0,
+            "DEFAULT(SHARED) should have kind 0, got {}",
+            default_kind
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn test_fortran_reduction_clause_case_insensitive() {
+        // Test that REDUCTION clause operators work with uppercase (e.g., MIN, MAX)
+
+        // Test uppercase MIN
+        let fortran_min = CString::new("!$OMP PARALLEL REDUCTION(MIN:X)").unwrap();
+        let directive = roup_parse_with_language(fortran_min.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null(), "Failed to parse REDUCTION(MIN:X)");
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        let has_clause = roup_clause_iterator_next(iter, &mut clause);
+        assert_eq!(has_clause, 1, "Should have reduction clause");
+
+        let reduction_op = roup_clause_reduction_operator(clause);
+        assert_eq!(
+            reduction_op, 8,
+            "REDUCTION(MIN:X) should have operator 8 (min), got {}",
+            reduction_op
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+
+        // Test uppercase MAX
+        let fortran_max = CString::new("!$OMP DO REDUCTION(MAX:RESULT)").unwrap();
+        let directive = roup_parse_with_language(fortran_max.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(
+            !directive.is_null(),
+            "Failed to parse REDUCTION(MAX:RESULT)"
+        );
+
+        let iter = roup_directive_clauses_iter(directive);
+        let mut clause: *const OmpClause = ptr::null();
+        roup_clause_iterator_next(iter, &mut clause);
+
+        let reduction_op = roup_clause_reduction_operator(clause);
+        assert_eq!(
+            reduction_op, 9,
+            "REDUCTION(MAX:RESULT) should have operator 9 (max), got {}",
+            reduction_op
+        );
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
     }
 }
