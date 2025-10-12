@@ -305,8 +305,20 @@ my_program: my_program.f90
 
 ⚠️ **Current limitations in experimental Fortran support:**
 
-1. **End Directives**: `!$OMP END PARALLEL` and similar end directives may not parse correctly
-2. **Continuation Lines**: Line continuation with `&` is not fully implemented
+1. **Single-Line Input Only**: ROUP requires complete directives on a single line
+   - **Not supported**: Multi-line directives with `&` continuation
+     ```fortran
+     !$OMP PARALLEL DO &
+     !$OMP   PRIVATE(I,J)
+     ```
+   - **Workaround**: Provide complete directive on one line:
+     ```fortran
+     !$OMP PARALLEL DO PRIVATE(I,J)
+     ```
+   - **Rationale**: This is an architectural design constraint that applies to both C and Fortran. Users must preprocess multi-line directives into single lines before passing to ROUP.
+
+2. **End Directives**: `!$OMP END PARALLEL` and similar end directives may not parse correctly
+
 3. **Array Sections**: Complex array section syntax may have issues
 4. **Fixed-Form Column Rules**: Strict column 1-6 sentinel placement not enforced
 5. **Fortran-Specific Directives**: Some Fortran-only directives (e.g., `WORKSHARE`) may not be registered

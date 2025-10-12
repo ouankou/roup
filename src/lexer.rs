@@ -124,18 +124,27 @@ pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
     }
 }
 
-/// Parse Fortran continuation line (& at end of line)
-pub fn lex_fortran_continuation(input: &str) -> IResult<&str, &str> {
-    let trimmed = input.trim_end();
-    if trimmed.ends_with('&') {
-        Ok((&input[trimmed.len()..], &trimmed[..trimmed.len() - 1]))
-    } else {
-        Err(nom::Err::Error(nom::error::Error::new(
-            input,
-            nom::error::ErrorKind::Tag,
-        )))
-    }
-}
+// ============================================================================
+// Fortran Continuation Lines - NOT SUPPORTED BY DESIGN
+// ============================================================================
+//
+// ROUP does NOT support multi-line Fortran directives with continuation (&).
+//
+// Example of UNSUPPORTED input:
+//     !$OMP PARALLEL DO &
+//     !$OMP   PRIVATE(I,J)
+//
+// Design Decision:
+// - Continuation handling requires stateful multi-line parsing
+// - Users must provide complete single-line directives
+// - Applies to BOTH C and Fortran (no multi-line #pragma either)
+//
+// Workaround:
+// - Preprocess multi-line directives into single lines before calling parse()
+// - Example: "!$OMP PARALLEL DO PRIVATE(I,J)" (all on one line)
+//
+// See: src/parser/mod.rs Parser::parse() for rationale
+// ============================================================================
 
 /// Parse an identifier (directive or clause name)
 ///
@@ -343,16 +352,6 @@ mod tests {
         let (rest, matched) = lex_fortran_fixed_sentinel("c$omp PARALLEL").unwrap();
         assert_eq!(matched, "c$omp");
         assert_eq!(rest, " PARALLEL");
-    }
-
-    #[test]
-    fn parses_fortran_continuation() {
-        let (rest, matched) = lex_fortran_continuation("parallel &").unwrap();
-        assert_eq!(matched, "parallel ");
-        assert_eq!(rest, "");
-
-        let (_rest, matched) = lex_fortran_continuation("num_threads(4) &  ").unwrap();
-        assert_eq!(matched, "num_threads(4) ");
     }
 
     #[test]
