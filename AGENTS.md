@@ -118,6 +118,44 @@
 - ✅ Report what each method found (or didn't find)
 - ✅ Persist until comments are located
 
+### Addressing Review Comments - MANDATORY Verification
+
+**CRITICAL**: Before committing changes to address review comments, you MUST verify EVERY SINGLE comment is fully addressed.
+
+**Pre-Commit Review Comment Checklist**:
+
+1. **List ALL review comments** - Create a complete checklist:
+   - Extract every review comment found (from all 5 methods above)
+   - Number each comment for tracking
+   - Include both code review comments AND general issue comments
+
+2. **Address EVERY comment** - No exceptions:
+   - Go through the list one by one
+   - Implement the requested change or provide clear explanation why not
+   - Mark each as addressed in your checklist
+
+3. **Double-check completeness** - BEFORE committing:
+   - Review your checklist: Are ALL items checked off?
+   - Re-read each original comment: Did you actually do what was requested?
+   - Verify no comments were missed or partially addressed
+
+4. **Commit only when 100% complete**:
+   - ✅ Every single feedback item addressed
+   - ✅ All changes tested and working
+   - ✅ No "TODO" or "will fix later" items remaining
+
+**DO NOT**:
+- ❌ Commit partial fixes with some comments unaddressed
+- ❌ Skip "minor" comments thinking they don't matter
+- ❌ Assume you addressed everything without explicit verification
+- ❌ Leave any feedback item for "later" or "next commit"
+
+**DO**:
+- ✅ Create explicit checklist of ALL comments before starting
+- ✅ Verify each item is addressed before marking complete
+- ✅ Re-read original comments to ensure full compliance
+- ✅ Commit only when 100% of feedback is addressed
+
 ## Code Quality
 
 **CRITICAL PRE-COMMIT REQUIREMENTS - MUST BE DONE EVERY TIME**:
