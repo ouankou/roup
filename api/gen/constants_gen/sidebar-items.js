@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FNV_OFFSET_BASIS","FNV_PRIME","UNKNOWN_KIND"],"fn":["calculate_checksum","extract_checksum_from_header","find_matches_in_expr","find_matches_in_stmts","generate_header","normalize_constant_name","parse_clause_arm","parse_clause_mappings","parse_directive_arm","parse_directive_mappings"]};

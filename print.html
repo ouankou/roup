@@ -3273,6 +3273,198 @@ make  # Builds all examples
 ./omp_analyzer ../../tests/data/sample.c
 </code></pre>
 <p>Happy parsing! 🚀</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="ompparser-compatibility-layer"><a class="header" href="#ompparser-compatibility-layer">ompparser Compatibility Layer</a></h1>
+<p>⚠️ <strong>Experimental Feature</strong> - This compatibility layer is under active development.</p>
+<p>ROUP provides a drop-in compatibility layer for projects using <a href="https://github.com/ouankou/ompparser">ompparser</a>, allowing you to switch to ROUP's expected-to-be faster, safer Rust-based parser without changing your code.</p>
+<h2 id="what-is-it"><a class="header" href="#what-is-it">What is it?</a></h2>
+<p>A compatibility layer that provides:</p>
+<ul>
+<li><strong>Same API</strong> as ompparser - no code changes needed</li>
+<li><strong>Drop-in replacement</strong> via <code>libompparser.so</code></li>
+<li><strong>ROUP backend</strong> - expected-to-be faster, safer parsing in Rust</li>
+<li><strong>Reuses ompparser methods</strong> - toString(), generateDOT(), etc. (zero duplication)</li>
+</ul>
+<h2 id="quick-start-1"><a class="header" href="#quick-start-1">Quick Start</a></h2>
+<h3 id="one-command-build"><a class="header" href="#one-command-build">One-Command Build</a></h3>
+<pre><code class="language-bash">cd compat/ompparser
+./BUILD.sh
+</code></pre>
+<p>The script will:</p>
+<ol>
+<li>Check prerequisites (git, cmake, gcc, cargo)</li>
+<li>Initialize ompparser submodule</li>
+<li>Build ROUP core library</li>
+<li>Build <code>libompparser.so</code> (size varies by build configuration)</li>
+<li>Run all 46 tests</li>
+</ol>
+<h3 id="manual-build"><a class="header" href="#manual-build">Manual Build</a></h3>
+<pre><code class="language-bash"># 1. Initialize ompparser submodule
+git submodule update --init --recursive
+
+# 2. Build ROUP core
+cd /path/to/roup
+cargo build --release
+
+# 3. Build compatibility layer
+cd compat/ompparser
+mkdir -p build &amp;&amp; cd build
+cmake ..
+make
+
+# 4. Run tests
+ctest --output-on-failure
+</code></pre>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<h3 id="drop-in-replacement"><a class="header" href="#drop-in-replacement">Drop-in Replacement</a></h3>
+<p>Install system-wide and use exactly like original ompparser:</p>
+<pre><code class="language-bash"># Install
+cd compat/ompparser/build
+sudo make install
+sudo ldconfig
+
+# Use (unchanged!)
+g++ mycompiler.cpp -lompparser -o mycompiler
+</code></pre>
+<h3 id="code-example"><a class="header" href="#code-example">Code Example</a></h3>
+<p>Your existing ompparser code works without changes:</p>
+<pre><code class="language-cpp">#include &lt;OpenMPIR.h&gt;
+#include &lt;iostream&gt;
+
+int main() {
+    // Parse OpenMP directive
+    OpenMPDirective* dir = parseOpenMP("omp parallel num_threads(4)", nullptr);
+    
+    if (dir) {
+        // Use ompparser methods (all work!)
+        std::cout &lt;&lt; "Kind: " &lt;&lt; dir-&gt;getKind() &lt;&lt; std::endl;
+        std::cout &lt;&lt; "String: " &lt;&lt; dir-&gt;toString() &lt;&lt; std::endl;
+        
+        // Access clauses
+        auto* clauses = dir-&gt;getAllClauses();
+        std::cout &lt;&lt; "Clauses: " &lt;&lt; clauses-&gt;size() &lt;&lt; std::endl;
+        
+        delete dir;
+    }
+    
+    return 0;
+}
+</code></pre>
+<h3 id="cmake-integration"><a class="header" href="#cmake-integration">CMake Integration</a></h3>
+<p><strong>Option 1: pkg-config</strong></p>
+<pre><code class="language-cmake">find_package(PkgConfig REQUIRED)
+pkg_check_modules(OMPPARSER REQUIRED ompparser)
+
+target_link_libraries(your_app ${OMPPARSER_LIBRARIES})
+target_include_directories(your_app PRIVATE ${OMPPARSER_INCLUDE_DIRS})
+</code></pre>
+<p><strong>Option 2: Direct linking</strong></p>
+<pre><code class="language-cmake">target_link_libraries(your_app
+    ${PATH_TO_ROUP}/compat/ompparser/build/libompparser.so
+)
+</code></pre>
+<h2 id="whats-included"><a class="header" href="#whats-included">What's Included</a></h2>
+<h3 id="libompparserso"><a class="header" href="#libompparserso">libompparser.so</a></h3>
+<p>Single self-contained library with:</p>
+<ul>
+<li><strong>ROUP parser</strong> (statically embedded) - Rust-based, safe parsing</li>
+<li><strong>ompparser methods</strong> - toString, generateDOT, etc.</li>
+<li><strong>Compatibility wrapper</strong> - Seamless integration layer</li>
+<li><strong>Self-contained</strong> - No libroup.so dependency (system libs via libc)</li>
+</ul>
+<h3 id="comprehensive-testing"><a class="header" href="#comprehensive-testing">Comprehensive Testing</a></h3>
+<p>46 tests covering:</p>
+<ul>
+<li><strong>Basic directives</strong>: parallel, for, sections, single, task, barrier, taskwait, critical, master</li>
+<li><strong>Clauses</strong>: num_threads, private, shared, reduction, schedule, if, nowait, etc.</li>
+<li><strong>String generation</strong>: toString(), generatePragmaString()</li>
+<li><strong>Error handling</strong>: null input, invalid directives, malformed pragmas</li>
+<li><strong>Memory management</strong>: allocations, deletion, reuse</li>
+<li><strong>Language modes</strong>: C, C++, Fortran via setLang()</li>
+</ul>
+<p>Run tests:</p>
+<pre><code class="language-bash">cd compat/ompparser/build
+ctest --output-on-failure
+</code></pre>
+<h2 id="architecture-2"><a class="header" href="#architecture-2">Architecture</a></h2>
+<pre><code></code></pre>
+<p>Your Application (OpenMP directives to parse)
+↓
+compat_impl.cpp (~190 lines) - Minimal wrapper
+↓
+ROUP C API (roup_parse, roup_directive_kind, etc.)
+↓
+ROUP Rust Parser (safe parser core)
+↓
+Returns: OpenMPDirective with ompparser methods</p>
+<pre><code>
+**Key Design**:
+- Reuses 90% of ompparser code (no duplication)
+- Git submodule approach - automatic ompparser upgrades
+- Minimal unsafe code (~60 lines, 0.9%), all at FFI boundary
+
+## Known Limitations
+
+### 1. Combined Directives ⚠️
+
+Combined directives like `parallel for` are currently parsed as the first directive only.
+
+**Example**:
+```cpp
+parseOpenMP("omp parallel for", nullptr)
+// Returns: OMPD_parallel (should be OMPD_parallel_for)
+</code></pre>
+<p><strong>Status</strong>: ROUP core limitation, tracked for future improvement.</p>
+<p><strong>Workaround</strong>: Tests document expected behavior with clear warnings.</p>
+<h3 id="2-clause-parameters-"><a class="header" href="#2-clause-parameters-">2. Clause Parameters 🔄</a></h3>
+<p>Basic clause detection works, but parameter extraction not yet implemented.</p>
+<p><strong>Example</strong>:</p>
+<pre><code class="language-cpp">parseOpenMP("omp parallel num_threads(4)", nullptr)
+// Detects: num_threads clause ✅
+// Extracts "4": ❌ (TODO)
+</code></pre>
+<p><strong>Status</strong>: Planned wrapper enhancement using ROUP's clause expression API.</p>
+<h2 id="documentation"><a class="header" href="#documentation">Documentation</a></h2>
+<p>Complete documentation in <code>compat/ompparser/</code>:</p>
+<ul>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/USER_GUIDE.md">USER_GUIDE.md</a></strong> - 800-line tutorial with 6 code examples</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/TEST_RESULTS.md">TEST_RESULTS.md</a></strong> - Full test coverage report</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/IMPLEMENTATION_STATUS.md">IMPLEMENTATION_STATUS.md</a></strong> - Implementation details</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/DROP_IN_REPLACEMENT.md">DROP_IN_REPLACEMENT.md</a></strong> - Strategy explanation</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/REUSE_STRATEGY.md">REUSE_STRATEGY.md</a></strong> - Why reuse ompparser code</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/UPGRADE_EXAMPLE.md">UPGRADE_EXAMPLE.md</a></strong> - Submodule upgrade benefits</li>
+</ul>
+<h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
+<ul>
+<li><strong>Rust toolchain</strong> (for ROUP core)</li>
+<li><strong>CMake 3.10+</strong></li>
+<li><strong>C++11 compiler</strong> (gcc/clang)</li>
+<li><strong>Git</strong> (for submodule management)</li>
+</ul>
+<h2 id="cicd"><a class="header" href="#cicd">CI/CD</a></h2>
+<p>The compatibility layer is tested automatically via GitHub Actions (<code>.github/workflows/build.yml</code>):</p>
+<pre><code class="language-yaml">- Tests ROUP core (always)
+- Tests compat layer (if submodule initialized)
+- Verifies library builds successfully
+- Validates drop-in functionality
+- Checks constants synchronization (checksum validation)
+</code></pre>
+<h2 id="faq"><a class="header" href="#faq">FAQ</a></h2>
+<p><strong>Q: Do I need to change my code?</strong><br />
+A: No! It's a drop-in replacement with the same API.</p>
+<p><strong>Q: What if I don't need compat layer?</strong><br />
+A: ROUP works perfectly standalone. The compat layer is optional.</p>
+<p><strong>Q: How do I get ompparser upgrades?</strong><br />
+A: <code>git submodule update --remote</code> pulls latest ompparser automatically.</p>
+<p><strong>Q: What about performance?</strong><br />
+A: ROUP is expected to be faster than original ompparser due to Rust optimizations.</p>
+<p><strong>Q: Is it stable?</strong><br />
+A: ⚠️ Experimental stage - thoroughly tested (46 tests) but under active development.</p>
+<h2 id="support"><a class="header" href="#support">Support</a></h2>
+<ul>
+<li><strong>Issues</strong>: <a href="https://github.com/ouankou/roup/issues">GitHub Issues</a></li>
+<li><strong>Discussions</strong>: <a href="https://github.com/ouankou/roup/discussions">GitHub Discussions</a></li>
+<li><strong>Email</strong>: See <a href="./contributing.html">Contributing Guide</a></li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h1>
 <p>ROUP provides comprehensive APIs for Rust, C, and C++.</p>
 <hr />
@@ -3871,7 +4063,7 @@ end do
 <li>✅ <strong>Latest spec</strong> (OpenMP 6.0, 2024)</li>
 </ul>
 <p><strong>⚠️ Experimental - for research, education, and prototype tooling. Not yet production-ready.</strong> 🧪</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="architecture-2"><a class="header" href="#architecture-2">Architecture</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="architecture-3"><a class="header" href="#architecture-3">Architecture</a></h1>
 <p>This document explains ROUP's internal design, from lexical analysis to the C FFI boundary.</p>
 <hr />
 <h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>

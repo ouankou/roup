@@ -1,0 +1,428 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>ompparser Compatibility - ROUP Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ROUP Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/ompparser-compat.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="ompparser-compatibility-layer"><a class="header" href="#ompparser-compatibility-layer">ompparser Compatibility Layer</a></h1>
+<p>⚠️ <strong>Experimental Feature</strong> - This compatibility layer is under active development.</p>
+<p>ROUP provides a drop-in compatibility layer for projects using <a href="https://github.com/ouankou/ompparser">ompparser</a>, allowing you to switch to ROUP's expected-to-be faster, safer Rust-based parser without changing your code.</p>
+<h2 id="what-is-it"><a class="header" href="#what-is-it">What is it?</a></h2>
+<p>A compatibility layer that provides:</p>
+<ul>
+<li><strong>Same API</strong> as ompparser - no code changes needed</li>
+<li><strong>Drop-in replacement</strong> via <code>libompparser.so</code></li>
+<li><strong>ROUP backend</strong> - expected-to-be faster, safer parsing in Rust</li>
+<li><strong>Reuses ompparser methods</strong> - toString(), generateDOT(), etc. (zero duplication)</li>
+</ul>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="one-command-build"><a class="header" href="#one-command-build">One-Command Build</a></h3>
+<pre><code class="language-bash">cd compat/ompparser
+./BUILD.sh
+</code></pre>
+<p>The script will:</p>
+<ol>
+<li>Check prerequisites (git, cmake, gcc, cargo)</li>
+<li>Initialize ompparser submodule</li>
+<li>Build ROUP core library</li>
+<li>Build <code>libompparser.so</code> (size varies by build configuration)</li>
+<li>Run all 46 tests</li>
+</ol>
+<h3 id="manual-build"><a class="header" href="#manual-build">Manual Build</a></h3>
+<pre><code class="language-bash"># 1. Initialize ompparser submodule
+git submodule update --init --recursive
+
+# 2. Build ROUP core
+cd /path/to/roup
+cargo build --release
+
+# 3. Build compatibility layer
+cd compat/ompparser
+mkdir -p build &amp;&amp; cd build
+cmake ..
+make
+
+# 4. Run tests
+ctest --output-on-failure
+</code></pre>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<h3 id="drop-in-replacement"><a class="header" href="#drop-in-replacement">Drop-in Replacement</a></h3>
+<p>Install system-wide and use exactly like original ompparser:</p>
+<pre><code class="language-bash"># Install
+cd compat/ompparser/build
+sudo make install
+sudo ldconfig
+
+# Use (unchanged!)
+g++ mycompiler.cpp -lompparser -o mycompiler
+</code></pre>
+<h3 id="code-example"><a class="header" href="#code-example">Code Example</a></h3>
+<p>Your existing ompparser code works without changes:</p>
+<pre><code class="language-cpp">#include &lt;OpenMPIR.h&gt;
+#include &lt;iostream&gt;
+
+int main() {
+    // Parse OpenMP directive
+    OpenMPDirective* dir = parseOpenMP("omp parallel num_threads(4)", nullptr);
+    
+    if (dir) {
+        // Use ompparser methods (all work!)
+        std::cout &lt;&lt; "Kind: " &lt;&lt; dir-&gt;getKind() &lt;&lt; std::endl;
+        std::cout &lt;&lt; "String: " &lt;&lt; dir-&gt;toString() &lt;&lt; std::endl;
+        
+        // Access clauses
+        auto* clauses = dir-&gt;getAllClauses();
+        std::cout &lt;&lt; "Clauses: " &lt;&lt; clauses-&gt;size() &lt;&lt; std::endl;
+        
+        delete dir;
+    }
+    
+    return 0;
+}
+</code></pre>
+<h3 id="cmake-integration"><a class="header" href="#cmake-integration">CMake Integration</a></h3>
+<p><strong>Option 1: pkg-config</strong></p>
+<pre><code class="language-cmake">find_package(PkgConfig REQUIRED)
+pkg_check_modules(OMPPARSER REQUIRED ompparser)
+
+target_link_libraries(your_app ${OMPPARSER_LIBRARIES})
+target_include_directories(your_app PRIVATE ${OMPPARSER_INCLUDE_DIRS})
+</code></pre>
+<p><strong>Option 2: Direct linking</strong></p>
+<pre><code class="language-cmake">target_link_libraries(your_app
+    ${PATH_TO_ROUP}/compat/ompparser/build/libompparser.so
+)
+</code></pre>
+<h2 id="whats-included"><a class="header" href="#whats-included">What's Included</a></h2>
+<h3 id="libompparserso"><a class="header" href="#libompparserso">libompparser.so</a></h3>
+<p>Single self-contained library with:</p>
+<ul>
+<li><strong>ROUP parser</strong> (statically embedded) - Rust-based, safe parsing</li>
+<li><strong>ompparser methods</strong> - toString, generateDOT, etc.</li>
+<li><strong>Compatibility wrapper</strong> - Seamless integration layer</li>
+<li><strong>Self-contained</strong> - No libroup.so dependency (system libs via libc)</li>
+</ul>
+<h3 id="comprehensive-testing"><a class="header" href="#comprehensive-testing">Comprehensive Testing</a></h3>
+<p>46 tests covering:</p>
+<ul>
+<li><strong>Basic directives</strong>: parallel, for, sections, single, task, barrier, taskwait, critical, master</li>
+<li><strong>Clauses</strong>: num_threads, private, shared, reduction, schedule, if, nowait, etc.</li>
+<li><strong>String generation</strong>: toString(), generatePragmaString()</li>
+<li><strong>Error handling</strong>: null input, invalid directives, malformed pragmas</li>
+<li><strong>Memory management</strong>: allocations, deletion, reuse</li>
+<li><strong>Language modes</strong>: C, C++, Fortran via setLang()</li>
+</ul>
+<p>Run tests:</p>
+<pre><code class="language-bash">cd compat/ompparser/build
+ctest --output-on-failure
+</code></pre>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<pre><code></code></pre>
+<p>Your Application (OpenMP directives to parse)
+↓
+compat_impl.cpp (~190 lines) - Minimal wrapper
+↓
+ROUP C API (roup_parse, roup_directive_kind, etc.)
+↓
+ROUP Rust Parser (safe parser core)
+↓
+Returns: OpenMPDirective with ompparser methods</p>
+<pre><code>
+**Key Design**:
+- Reuses 90% of ompparser code (no duplication)
+- Git submodule approach - automatic ompparser upgrades
+- Minimal unsafe code (~60 lines, 0.9%), all at FFI boundary
+
+## Known Limitations
+
+### 1. Combined Directives ⚠️
+
+Combined directives like `parallel for` are currently parsed as the first directive only.
+
+**Example**:
+```cpp
+parseOpenMP("omp parallel for", nullptr)
+// Returns: OMPD_parallel (should be OMPD_parallel_for)
+</code></pre>
+<p><strong>Status</strong>: ROUP core limitation, tracked for future improvement.</p>
+<p><strong>Workaround</strong>: Tests document expected behavior with clear warnings.</p>
+<h3 id="2-clause-parameters-"><a class="header" href="#2-clause-parameters-">2. Clause Parameters 🔄</a></h3>
+<p>Basic clause detection works, but parameter extraction not yet implemented.</p>
+<p><strong>Example</strong>:</p>
+<pre><code class="language-cpp">parseOpenMP("omp parallel num_threads(4)", nullptr)
+// Detects: num_threads clause ✅
+// Extracts "4": ❌ (TODO)
+</code></pre>
+<p><strong>Status</strong>: Planned wrapper enhancement using ROUP's clause expression API.</p>
+<h2 id="documentation"><a class="header" href="#documentation">Documentation</a></h2>
+<p>Complete documentation in <code>compat/ompparser/</code>:</p>
+<ul>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/USER_GUIDE.md">USER_GUIDE.md</a></strong> - 800-line tutorial with 6 code examples</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/TEST_RESULTS.md">TEST_RESULTS.md</a></strong> - Full test coverage report</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/IMPLEMENTATION_STATUS.md">IMPLEMENTATION_STATUS.md</a></strong> - Implementation details</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/DROP_IN_REPLACEMENT.md">DROP_IN_REPLACEMENT.md</a></strong> - Strategy explanation</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/REUSE_STRATEGY.md">REUSE_STRATEGY.md</a></strong> - Why reuse ompparser code</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/UPGRADE_EXAMPLE.md">UPGRADE_EXAMPLE.md</a></strong> - Submodule upgrade benefits</li>
+</ul>
+<h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
+<ul>
+<li><strong>Rust toolchain</strong> (for ROUP core)</li>
+<li><strong>CMake 3.10+</strong></li>
+<li><strong>C++11 compiler</strong> (gcc/clang)</li>
+<li><strong>Git</strong> (for submodule management)</li>
+</ul>
+<h2 id="cicd"><a class="header" href="#cicd">CI/CD</a></h2>
+<p>The compatibility layer is tested automatically via GitHub Actions (<code>.github/workflows/build.yml</code>):</p>
+<pre><code class="language-yaml">- Tests ROUP core (always)
+- Tests compat layer (if submodule initialized)
+- Verifies library builds successfully
+- Validates drop-in functionality
+- Checks constants synchronization (checksum validation)
+</code></pre>
+<h2 id="faq"><a class="header" href="#faq">FAQ</a></h2>
+<p><strong>Q: Do I need to change my code?</strong><br />
+A: No! It's a drop-in replacement with the same API.</p>
+<p><strong>Q: What if I don't need compat layer?</strong><br />
+A: ROUP works perfectly standalone. The compat layer is optional.</p>
+<p><strong>Q: How do I get ompparser upgrades?</strong><br />
+A: <code>git submodule update --remote</code> pulls latest ompparser automatically.</p>
+<p><strong>Q: What about performance?</strong><br />
+A: ROUP is expected to be faster than original ompparser due to Rust optimizations.</p>
+<p><strong>Q: Is it stable?</strong><br />
+A: ⚠️ Experimental stage - thoroughly tested (46 tests) but under active development.</p>
+<h2 id="support"><a class="header" href="#support">Support</a></h2>
+<ul>
+<li><strong>Issues</strong>: <a href="https://github.com/ouankou/roup/issues">GitHub Issues</a></li>
+<li><strong>Discussions</strong>: <a href="https://github.com/ouankou/roup/discussions">GitHub Discussions</a></li>
+<li><strong>Email</strong>: See <a href="./contributing.html">Contributing Guide</a></li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="cpp-tutorial.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="api-reference.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="cpp-tutorial.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="api-reference.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
