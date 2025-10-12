@@ -116,8 +116,9 @@ impl DirectiveRegistry {
         // Use efficient lookup based on case sensitivity mode
         let rule = if self.case_insensitive {
             // One String allocation for normalization, then O(1) map lookup
-            // Future optimization: use unicase crate or custom Eq/Hash impl for
-            // case-insensitive HashMap keys without allocations per lookup
+            // Known optimization opportunity: Use unicase crate or custom Eq/Hash impl for
+            // case-insensitive HashMap keys to eliminate allocations per lookup.
+            // Current approach is simple and correct; optimization deferred for development phase.
             let normalized_name = name.to_lowercase();
             self.normalized_rules
                 .get(&normalized_name)
