@@ -5,12 +5,13 @@ pub mod openmp;
 pub use clause::{Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, ClauseRule};
 pub use directive::{Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule};
 
-use super::lexer;
+use super::lexer::{self, Language};
 use nom::{IResult, Parser as _};
 
 pub struct Parser {
     clause_registry: ClauseRegistry,
     directive_registry: DirectiveRegistry,
+    language: Language,
 }
 
 impl Parser {
@@ -18,17 +19,54 @@ impl Parser {
         Self {
             clause_registry,
             directive_registry,
+            language: Language::default(),
         }
     }
 
+    pub fn with_language(mut self, language: Language) -> Self {
+        self.language = language;
+        
+        // Enable case-insensitive matching for Fortran
+        match language {
+            Language::FortranFree | Language::FortranFixed => {
+                self.directive_registry = self.directive_registry.with_case_insensitive(true);
+                self.clause_registry = self.clause_registry.with_case_insensitive(true);
+            }
+            Language::C => {}
+        }
+        
+        self
+    }
+
     pub fn parse<'a>(&self, input: &'a str) -> IResult<&'a str, Directive<'a>> {
-        let (input, _) = (
-            lexer::lex_pragma,
-            lexer::skip_space1_and_comments,
-            lexer::lex_omp,
-            lexer::skip_space1_and_comments,
-        )
-            .parse(input)?;
+        let input = match self.language {
+            Language::C => {
+                let (input, _) = (
+                    lexer::lex_pragma,
+                    lexer::skip_space1_and_comments,
+                    lexer::lex_omp,
+                    lexer::skip_space1_and_comments,
+                )
+                    .parse(input)?;
+                input
+            }
+            Language::FortranFree => {
+                let (input, _) = (
+                    lexer::lex_fortran_free_sentinel,
+                    lexer::skip_space1_and_comments,
+                )
+                    .parse(input)?;
+                input
+            }
+            Language::FortranFixed => {
+                let (input, _) = (
+                    lexer::lex_fortran_fixed_sentinel,
+                    lexer::skip_space1_and_comments,
+                )
+                    .parse(input)?;
+                input
+            }
+        };
         self.directive_registry.parse(input, &self.clause_registry)
     }
 }

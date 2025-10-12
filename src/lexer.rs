@@ -22,6 +22,23 @@ use nom::IResult;
 /// nom::bytes::complete::take_while1 - matches while predicate is true
 use nom::bytes::complete::{tag, take_while1};
 
+/// Language format for parsing
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Language {
+    /// C/C++ language with #pragma omp
+    C,
+    /// Fortran free-form with !$OMP sentinel
+    FortranFree,
+    /// Fortran fixed-form with !$OMP or C$OMP in columns 1-6
+    FortranFixed,
+}
+
+impl Default for Language {
+    fn default() -> Self {
+        Language::C
+    }
+}
+
 /// Check if a character is valid in an identifier
 ///
 /// Learning Rust: Closures and Function Pointers
@@ -30,6 +47,16 @@ use nom::bytes::complete::{tag, take_while1};
 /// take_while1 accepts: fn(char) -> bool
 pub fn is_identifier_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
+}
+
+/// Check if a character is valid in a Fortran identifier (case-insensitive)
+pub fn is_fortran_identifier_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// Normalize Fortran identifier to lowercase for case-insensitive matching
+pub fn normalize_fortran_identifier(s: &str) -> String {
+    s.to_lowercase()
 }
 
 /// Parse "#pragma" keyword
@@ -46,6 +73,45 @@ pub fn lex_pragma(input: &str) -> IResult<&str, &str> {
 /// Parse "omp" keyword
 pub fn lex_omp(input: &str) -> IResult<&str, &str> {
     tag("omp")(input)
+}
+
+/// Parse Fortran free-form sentinel "!$OMP" (case-insensitive)
+pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
+    let input_lower = input.to_lowercase();
+    if input_lower.starts_with("!$omp") {
+        Ok((&input[5..], &input[..5]))
+    } else {
+        Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        )))
+    }
+}
+
+/// Parse Fortran fixed-form sentinel "!$OMP" or "C$OMP" in columns 1-6 (case-insensitive)
+pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
+    let input_lower = input.to_lowercase();
+    if input_lower.starts_with("!$omp") || input_lower.starts_with("c$omp") {
+        Ok((&input[5..], &input[..5]))
+    } else {
+        Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        )))
+    }
+}
+
+/// Parse Fortran continuation line (& at end of line)
+pub fn lex_fortran_continuation(input: &str) -> IResult<&str, &str> {
+    let trimmed = input.trim_end();
+    if trimmed.ends_with('&') {
+        Ok((&input[trimmed.len()..], &trimmed[..trimmed.len() - 1]))
+    } else {
+        Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        )))
+    }
 }
 
 /// Parse an identifier (directive or clause name)
@@ -226,5 +292,50 @@ mod tests {
 
         let result = skip_space1_and_comments(" has_space");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parses_fortran_free_sentinel() {
+        let (rest, matched) = lex_fortran_free_sentinel("!$OMP parallel").unwrap();
+        assert_eq!(matched, "!$OMP");
+        assert_eq!(rest, " parallel");
+
+        // Case-insensitive
+        let (rest, matched) = lex_fortran_free_sentinel("!$omp PARALLEL").unwrap();
+        assert_eq!(matched, "!$omp");
+        assert_eq!(rest, " PARALLEL");
+    }
+
+    #[test]
+    fn parses_fortran_fixed_sentinel() {
+        let (rest, matched) = lex_fortran_fixed_sentinel("!$OMP parallel").unwrap();
+        assert_eq!(matched, "!$OMP");
+        assert_eq!(rest, " parallel");
+
+        let (rest, matched) = lex_fortran_fixed_sentinel("C$OMP parallel").unwrap();
+        assert_eq!(matched, "C$OMP");
+        assert_eq!(rest, " parallel");
+
+        // Case-insensitive
+        let (rest, matched) = lex_fortran_fixed_sentinel("c$omp PARALLEL").unwrap();
+        assert_eq!(matched, "c$omp");
+        assert_eq!(rest, " PARALLEL");
+    }
+
+    #[test]
+    fn parses_fortran_continuation() {
+        let (rest, matched) = lex_fortran_continuation("parallel &").unwrap();
+        assert_eq!(matched, "parallel ");
+        assert_eq!(rest, "");
+
+        let (_rest, matched) = lex_fortran_continuation("num_threads(4) &  ").unwrap();
+        assert_eq!(matched, "num_threads(4) ");
+    }
+
+    #[test]
+    fn normalizes_fortran_identifiers() {
+        assert_eq!(normalize_fortran_identifier("PARALLEL"), "parallel");
+        assert_eq!(normalize_fortran_identifier("Private"), "private");
+        assert_eq!(normalize_fortran_identifier("num_threads"), "num_threads");
     }
 }

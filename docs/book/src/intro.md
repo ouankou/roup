@@ -51,11 +51,12 @@ ROUP is an **experimental** parser for OpenMP directives, written in safe Rust w
 
 ### 🔌 Multi-Language APIs
 
-| Language | API Style | Memory Management |
-|----------|-----------|-------------------|
-| **Rust** | Native | Automatic (ownership) |
-| **C** | Pointer-based | Manual (malloc/free pattern) |
-| **C++** | RAII wrappers | Automatic (destructors) |
+| Language | API Style | Memory Management | Status |
+|----------|-----------|-------------------|--------|
+| **Rust** | Native | Automatic (ownership) | ✅ Stable |
+| **C** | Pointer-based | Manual (malloc/free pattern) | ✅ Stable |
+| **C++** | RAII wrappers | Automatic (destructors) | ✅ Stable |
+| **Fortran** | C interop | Manual (via iso_c_binding) | ⚠️ Experimental |
 
 ---
 
@@ -84,6 +85,14 @@ roup_directive_free(dir);
 roup::Directive dir("#pragma omp parallel for num_threads(4)");
 std::cout << "Clauses: " << dir.clause_count() << "\n";
 // Automatic cleanup!
+```
+
+### Parse Fortran (Experimental)
+
+```fortran
+! Free-form Fortran
+directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &
+                                          ROUP_LANG_FORTRAN_FREE)
 ```
 
 [See full examples →](./getting-started.md)

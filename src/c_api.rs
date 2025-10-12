@@ -40,7 +40,21 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
-use crate::parser::{parse_omp_directive, Clause, ClauseKind};
+use crate::lexer::Language;
+use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
+
+// ============================================================================
+// Language Constants for Fortran Support
+// ============================================================================
+
+/// C language (default) - uses #pragma omp
+pub const ROUP_LANG_C: i32 = 0;
+
+/// Fortran free-form - uses !$OMP sentinel
+pub const ROUP_LANG_FORTRAN_FREE: i32 = 1;
+
+/// Fortran fixed-form - uses !$OMP or C$OMP in columns 1-6
+pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 
 // ============================================================================
 // Constants Documentation
@@ -236,6 +250,68 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
 
         // Box is dropped here, freeing memory
     }
+}
+
+/// Parse an OpenMP directive with explicit language specification.
+///
+/// ## Parameters
+/// - `input`: Null-terminated string containing the directive
+/// - `language`: Language format (ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE, ROUP_LANG_FORTRAN_FIXED)
+///
+/// ## Returns
+/// - Pointer to `OmpDirective` on success
+/// - NULL on parse error or invalid input
+///
+/// ## Example (Fortran free-form)
+/// ```c
+/// OmpDirective* dir = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", ROUP_LANG_FORTRAN_FREE);
+/// if (dir) {
+///     // Use directive
+///     roup_directive_free(dir);
+/// }
+/// ```
+#[no_mangle]
+pub extern "C" fn roup_parse_with_language(input: *const c_char, language: i32) -> *mut OmpDirective {
+    // NULL check
+    if input.is_null() {
+        return ptr::null_mut();
+    }
+
+    // Convert language code to Language enum
+    let lang = match language {
+        1 => Language::FortranFree,
+        2 => Language::FortranFixed,
+        _ => Language::C, // Default to C for invalid values
+    };
+
+    // UNSAFE BLOCK: Convert C string to Rust &str
+    let c_str = unsafe { CStr::from_ptr(input) };
+
+    let rust_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return ptr::null_mut(),
+    };
+
+    // Create parser with specified language
+    let parser = openmp::parser().with_language(lang);
+    
+    // Parse using language-aware parser
+    let directive = match parser.parse(rust_str) {
+        Ok((_, dir)) => dir,
+        Err(_) => return ptr::null_mut(),
+    };
+
+    // Convert to C-compatible format
+    let c_directive = OmpDirective {
+        name: allocate_c_string(directive.name),
+        clauses: directive
+            .clauses
+            .into_iter()
+            .map(|c| convert_clause(&c))
+            .collect(),
+    };
+
+    Box::into_raw(Box::new(c_directive))
 }
 
 /// Free a clause.

@@ -30,6 +30,14 @@ extern "C" {
 #define ROUP_CONSTANTS_CHECKSUM 0xF824DCF393ADA836
 
 // ============================================================================
+// Language Format Constants
+// ============================================================================
+// Language format for roup_parse_with_language()
+#define ROUP_LANG_C                         0  // C/C++ (#pragma omp)
+#define ROUP_LANG_FORTRAN_FREE              1  // Fortran free-form (!$OMP)
+#define ROUP_LANG_FORTRAN_FIXED             2  // Fortran fixed-form (!$OMP or C$OMP)
+
+// ============================================================================
 // Directive Kind Constants
 // ============================================================================
 // Auto-generated from src/c_api.rs:directive_name_to_kind()
