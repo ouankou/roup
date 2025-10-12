@@ -776,7 +776,6 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
     // Look for operator in clause kind
     if let ClauseKind::Parenthesized(args) = clause.kind {
         // Operators (+, -, *, etc.) are ASCII symbols - no case conversion needed
-        // For text keywords (min, max), check both lowercase and uppercase variants
         if args.contains('+') && !args.contains("++") {
             return 0; // Plus
         } else if args.contains('-') && !args.contains("--") {
@@ -793,10 +792,14 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
             return 6; // LogicalAnd
         } else if args.contains("||") {
             return 7; // LogicalOr
-        } else if args.contains("min") || args.contains("MIN") || args.contains("Min") {
-            return 8; // Min (case-insensitive without allocation)
-        } else if args.contains("max") || args.contains("MAX") || args.contains("Max") {
-            return 9; // Max (case-insensitive without allocation)
+        }
+
+        // For text keywords (min, max), normalize once for case-insensitive comparison
+        let args_lower = args.to_ascii_lowercase();
+        if args_lower.contains("min") {
+            return 8; // Min
+        } else if args_lower.contains("max") {
+            return 9; // Max
         }
     }
     0 // Default to plus

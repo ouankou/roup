@@ -109,6 +109,7 @@ export RUSTC_WRAPPER=sccache
 
 **Rust:**
 ```rust,ignore
+// Note: Using `rust,ignore` - see top of page for testing instructions
 use roup::parser::openmp;
 
 let parser = openmp::parser();
@@ -134,6 +135,7 @@ See the [Getting Started](./getting-started.md) guide for more examples.
 
 **Rust:**
 ```rust,ignore
+// Note: Using `rust,ignore` - see top of page for testing instructions
 for clause in &directive.clauses {
     println!("Clause: {:?}", clause);
 }
@@ -156,6 +158,7 @@ See [C Tutorial - Step 4](./c-tutorial.md#step-4-iterate-through-clauses) for de
 
 **Rust:**
 ```rust,ignore
+// Note: Using `rust,ignore` - see top of page for testing instructions
 match &clause {
     Clause::Private(vars) => {
         for var in vars {
@@ -183,6 +186,7 @@ if (roup_clause_kind(clause) == 2) {  // PRIVATE
 **Yes!** Parsing is thread-safe:
 
 ```rust,ignore
+// Note: Using `rust,ignore` - see top of page for testing instructions
 use roup::parser::openmp;
 use std::thread;
 
@@ -264,6 +268,7 @@ In the meantime, you can use the C API via `ctypes` or `cffi`.
 **No.** Rust's ownership system handles everything automatically:
 
 ```rust,ignore
+// Note: Using `rust,ignore` - see top of page for testing instructions
 use roup::parser::openmp;
 
 {

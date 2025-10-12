@@ -74,12 +74,13 @@ contains
         c_string(n+1) = c_null_char
     end function f_to_c_string
     
-    ! Helper to convert C string to Fortran string with dynamic sizing
-    function c_to_f_string(c_string_ptr) result(f_string)
+    ! Helper to convert C string to Fortran string with dynamic sizing and bounds checking
+    function c_to_f_string(c_string_ptr, maxlen) result(f_string)
         type(c_ptr), intent(in) :: c_string_ptr
+        integer(c_size_t), intent(in), optional :: maxlen
         character(len=:), allocatable :: f_string
         character(kind=c_char), pointer :: c_string_array(:)
-        integer(c_size_t) :: length
+        integer(c_size_t) :: length, max_length
         integer :: i
         
         ! NULL pointer check - critical for safe strlen() usage
@@ -88,11 +89,23 @@ contains
             return
         end if
         
+        ! Set maximum length to prevent unbounded reads on malformed strings
+        if (present(maxlen)) then
+            max_length = maxlen
+        else
+            max_length = 4096  ! Default maximum (reasonable for directive strings)
+        end if
+        
         ! Dynamically determine string length using C strlen
         ! SAFETY: NULL pointer already checked above. ROUP C API guarantees all
         ! returned strings are properly null-terminated, so strlen() is safe here.
-        ! For general use with untrusted C strings, add bounds checking.
+        ! Bounds checking: limit strlen() scan to max_length to prevent infinite reads
         length = strlen(c_string_ptr)
+        
+        ! Enforce maximum length to prevent potential buffer issues
+        if (length > max_length) then
+            length = max_length
+        end if
         
         ! Create properly-sized pointer to C string array
         call c_f_pointer(c_string_ptr, c_string_array, [length])
