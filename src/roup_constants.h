@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of 0 directives + 12 clauses = 0x16DB8BDED9C3A9B9
+// Auto-generated checksum: FNV-1a hash of 17 directives + 12 clauses = 0xF824DCF393ADA836
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x16DB8BDED9C3A9B9
+#define ROUP_CONSTANTS_CHECKSUM 0xF824DCF393ADA836
 
 // ============================================================================
 // Language Format Constants
@@ -42,6 +42,23 @@ extern "C" {
 // ============================================================================
 // Auto-generated from src/c_api.rs:directive_name_to_kind()
 
+#define ROUP_DIRECTIVE_PARALLEL             0
+#define ROUP_DIRECTIVE_FOR                  1
+#define ROUP_DIRECTIVE_SECTIONS             2
+#define ROUP_DIRECTIVE_SINGLE               3
+#define ROUP_DIRECTIVE_TASK                 4
+#define ROUP_DIRECTIVE_MASTER               5
+#define ROUP_DIRECTIVE_CRITICAL             6
+#define ROUP_DIRECTIVE_BARRIER              7
+#define ROUP_DIRECTIVE_TASKWAIT             8
+#define ROUP_DIRECTIVE_TASKGROUP            9
+#define ROUP_DIRECTIVE_ATOMIC               10
+#define ROUP_DIRECTIVE_FLUSH                11
+#define ROUP_DIRECTIVE_ORDERED              12
+#define ROUP_DIRECTIVE_TARGET               13
+#define ROUP_DIRECTIVE_TEAMS                14
+#define ROUP_DIRECTIVE_DISTRIBUTE           15
+#define ROUP_DIRECTIVE_METADIRECTIVE        16
 #define ROUP_DIRECTIVE_UNKNOWN       999
 
 

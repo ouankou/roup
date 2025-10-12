@@ -880,52 +880,35 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
         let c_str = CStr::from_ptr(name);
         let name_str = c_str.to_str().unwrap_or("");
 
-        // Case-insensitive directive name matching without String allocation
-        // Use eq_ignore_ascii_case for better performance at C API boundary
-        if name_str.eq_ignore_ascii_case("parallel")
-            || name_str.eq_ignore_ascii_case("parallel for")
-            || name_str.eq_ignore_ascii_case("parallel do")
-            || name_str.eq_ignore_ascii_case("parallel sections")
-        {
-            return 0;
-        } else if name_str.eq_ignore_ascii_case("for") || name_str.eq_ignore_ascii_case("do") {
-            return 1;
-        } else if name_str.eq_ignore_ascii_case("sections") {
-            return 2;
-        } else if name_str.eq_ignore_ascii_case("single") {
-            return 3;
-        } else if name_str.eq_ignore_ascii_case("task") {
-            return 4;
-        } else if name_str.eq_ignore_ascii_case("master") {
-            return 5;
-        } else if name_str.eq_ignore_ascii_case("critical") {
-            return 6;
-        } else if name_str.eq_ignore_ascii_case("barrier") {
-            return 7;
-        } else if name_str.eq_ignore_ascii_case("taskwait") {
-            return 8;
-        } else if name_str.eq_ignore_ascii_case("taskgroup") {
-            return 9;
-        } else if name_str.eq_ignore_ascii_case("atomic") {
-            return 10;
-        } else if name_str.eq_ignore_ascii_case("flush") {
-            return 11;
-        } else if name_str.eq_ignore_ascii_case("ordered") {
-            return 12;
-        } else if name_str.eq_ignore_ascii_case("target")
-            || name_str.eq_ignore_ascii_case("target teams")
-        {
-            return 13;
-        } else if name_str.eq_ignore_ascii_case("teams")
-            || name_str.eq_ignore_ascii_case("teams distribute")
-        {
-            return 14;
-        } else if name_str.eq_ignore_ascii_case("distribute") {
-            return 15;
-        } else if name_str.eq_ignore_ascii_case("metadirective") {
-            return 16;
-        } else {
-            return 999; // Unknown
+        // Case-insensitive directive name matching via to_lowercase()
+        // Note: This allocates a String. While eq_ignore_ascii_case() would be more efficient,
+        // the build system's constant parser requires a match expression with string literals.
+        // The performance impact is negligible for the C API boundary.
+        match name_str.to_lowercase().as_str() {
+            "parallel" => 0,
+            "parallel for" => 0,
+            "parallel do" => 0,
+            "parallel sections" => 0,
+            "for" => 1,
+            "do" => 1,
+            "sections" => 2,
+            "single" => 3,
+            "task" => 4,
+            "master" => 5,
+            "critical" => 6,
+            "barrier" => 7,
+            "taskwait" => 8,
+            "taskgroup" => 9,
+            "atomic" => 10,
+            "flush" => 11,
+            "ordered" => 12,
+            "target" => 13,
+            "target teams" => 13,
+            "teams" => 14,
+            "teams distribute" => 14,
+            "distribute" => 15,
+            "metadirective" => 16,
+            _ => 999,
         }
     }
 }

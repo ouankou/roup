@@ -27,12 +27,10 @@ impl Parser {
         self.language = language;
 
         // Enable case-insensitive matching for Fortran
-        match language {
-            Language::FortranFree | Language::FortranFixed => {
-                self.directive_registry = self.directive_registry.with_case_insensitive(true);
-                self.clause_registry = self.clause_registry.with_case_insensitive(true);
-            }
-            Language::C => {}
+        // C language uses default case-sensitive matching (no changes needed)
+        if matches!(language, Language::FortranFree | Language::FortranFixed) {
+            self.directive_registry = self.directive_registry.with_case_insensitive(true);
+            self.clause_registry = self.clause_registry.with_case_insensitive(true);
         }
 
         self
