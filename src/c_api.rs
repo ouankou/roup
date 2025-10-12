@@ -672,7 +672,9 @@ fn allocate_c_string(s: &str) -> *const c_char {
 fn convert_clause(clause: &Clause) -> OmpClause {
     // Normalize clause name to lowercase for case-insensitive matching
     // (Fortran clauses are uppercase, C clauses are lowercase)
-    // Note: Uses one String allocation per clause - acceptable for API boundary
+    // Note: One String allocation per clause is acceptable at C API boundary.
+    // Alternative (build-time constant map) requires updating constants_gen.rs
+    // to parse if-else chains instead of match expressions.
     let normalized_name = clause.name.to_ascii_lowercase();
 
     let (kind, data) = match normalized_name.as_str() {
@@ -861,7 +863,9 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
 
         // Normalize to lowercase for case-insensitive matching
         // (Fortran directives are uppercase, C directives are lowercase)
-        // Note: Uses one String allocation - acceptable for API boundary
+        // Note: One String allocation per call is acceptable at C API boundary.
+        // Alternative (build-time constant map) requires updating constants_gen.rs
+        // to parse if-else chains instead of match expressions.
         let normalized_name = name_str.to_ascii_lowercase();
 
         match normalized_name.as_str() {
