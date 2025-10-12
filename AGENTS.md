@@ -83,3 +83,101 @@
   - If features added/removed, update README feature list
   - If build process changes, update README installation/build instructions
   - Keep README in sync with docs/book/src/ website content
+
+## Pull Request & Git Workflow
+
+- **PR Commit History**: When merging a PR, maintain a clean, logical commit history:
+  - **Option 1 (Preferred for small changes)**: Squash all commits into a single logical commit with comprehensive message
+  - **Option 2 (For larger features)**: Rewrite history to organize commits into several logical units (e.g., "feat: core implementation", "test: add test suite", "docs: add documentation")
+  - **Avoid**: Keeping intermediate "fix typo", "address review comments", "WIP" commits in main branch history
+  - Use interactive rebase (`git rebase -i`) to reorganize commits before merging
+  - Each final commit should:
+    - Be self-contained and functional
+    - Have a clear, descriptive commit message following conventional commits format
+    - Pass all tests independently
+- **Commit Message Format**:
+  ```
+  <type>: <subject>
+  
+  <body>
+  
+  <footer>
+  ```
+  - Types: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`
+  - Subject: Concise summary (50 chars or less)
+  - Body: Detailed explanation of changes, motivation, and impact
+  - Footer: Breaking changes, issue references
+
+## Testing Requirements
+
+**IMPORTANT**: ROUP has TWO critical components that BOTH require comprehensive testing:
+
+### 1. Rust Core Library Testing
+
+- **Location**: `tests/*.rs`, `src/*/tests`, inline `#[cfg(test)]` modules
+- **Coverage areas**:
+  - Lexer: Token parsing, sentinel detection, whitespace handling
+  - Parser: Directive/clause parsing, error handling, edge cases
+  - IR: Semantic validation, type checking, conversions
+  - C API: FFI boundary, NULL handling, memory safety
+- **Required tests for new features**:
+  - Unit tests for individual functions/modules
+  - Integration tests for end-to-end parsing
+  - Edge cases: malformed input, boundary conditions, empty/null inputs
+  - Regression tests for bug fixes
+- **Test organization**:
+  - Prefer `tests/*.rs` for integration tests
+  - Use inline `#[cfg(test)]` for unit tests near implementation
+  - Name tests descriptively: `parses_fortran_parallel_directive`
+
+### 2. ompparser Compatibility Layer Testing
+
+**CRITICAL**: The ompparser compatibility layer (`compat/ompparser/`) is a **first-class feature**, not an afterthought.
+
+- **Location**: `compat/ompparser/tests/*.cpp`
+- **Purpose**: Drop-in replacement for existing ompparser users
+- **Coverage requirements**:
+  - **All Rust features** must have equivalent ompparser compat tests
+  - Test ompparser API functions match original ompparser behavior
+  - Verify enum mappings (OpenMPDirectiveKind, OpenMPClauseKind)
+  - Test memory management (allocation/deallocation)
+  - Validate return values and error conditions
+- **When adding new features**:
+  1. ✅ Add Rust tests (`tests/*.rs`)
+  2. ✅ Add ompparser compat tests (`compat/ompparser/tests/*.cpp`)
+  3. ✅ Update compat layer implementation if needed (`compat/ompparser/src/compat_impl.cpp`)
+  4. ✅ Document compat layer changes in `compat/ompparser/README.md`
+- **Test execution**:
+  ```bash
+  # Rust tests
+  cargo test
+  
+  # ompparser compat tests
+  cd compat/ompparser/build
+  make test  # or ctest
+  ```
+
+### Testing Checklist for New Features
+
+When implementing new features (e.g., Fortran support, new directives):
+
+- [ ] Rust unit tests added
+- [ ] Rust integration tests added
+- [ ] ompparser compat tests added (if feature exposed via compat layer)
+- [ ] All tests pass: `cargo test`
+- [ ] All compat tests pass: `cd compat/ompparser/build && make test`
+- [ ] Test coverage includes edge cases
+- [ ] Tests documented with clear descriptions
+- [ ] Regression tests for any bug fixes
+
+**DO NOT**:
+- ❌ Implement features only in Rust without compat layer support
+- ❌ Skip ompparser compat tests for "Rust-only" features
+- ❌ Merge PRs without testing both components
+- ❌ Assume compat layer "just works" without explicit testing
+
+**DO**:
+- ✅ Treat ompparser compat layer as equal priority to Rust core
+- ✅ Test both components for every feature
+- ✅ Keep compat layer tests in sync with Rust tests
+- ✅ Document compat layer behavior and limitations
