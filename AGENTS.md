@@ -59,9 +59,63 @@
 
 ## Code Quality
 
+**CRITICAL PRE-COMMIT REQUIREMENTS - MUST BE DONE EVERY TIME**:
+
+### Before EVERY Commit (No Exceptions)
+
+**1. Code Formatting - MANDATORY**:
+```bash
+# Rust code - ALWAYS run before committing
+cargo fmt
+
+# Verify formatting is correct
+cargo fmt --check
+
+# C/C++ code (if modified) - use clang-format
+clang-format -i compat/ompparser/**/*.cpp
+clang-format -i compat/ompparser/**/*.h
+clang-format -i examples/c/**/*.c
+
+# Fortran code (if modified) - use fprettify or similar
+# (if available in your environment)
+```
+
+**2. Run All Tests - MANDATORY**:
+```bash
+# Run all Rust tests
+cargo test
+
+# Run all ompparser compat tests (if modified)
+cd compat/ompparser/build && make test
+```
+
+**3. Address ALL Warnings and Failures - MANDATORY**:
+- ✅ **FIX IMMEDIATELY**: Never commit with warnings or failures
+- ✅ **FIX PROPERLY**: No hardcoded fixes, no workarounds
+- ✅ **NO DEFERRING**: Don't say "TODO", "pending", "later"
+- ✅ **RESOLVE RIGHT AWAY**: Fix the root cause, not symptoms
+
+**Why This Matters**:
+- CI will fail if formatting is incorrect
+- Tests catch regressions before they reach production
+- Warnings indicate potential bugs or code smells
+- Clean commits make reviews easier and faster
+
+### Pre-Commit Checklist (Every Single Commit)
+
+- [ ] `cargo fmt` executed successfully
+- [ ] `cargo fmt --check` passes (no diff)
+- [ ] `cargo test` passes (all tests green)
+- [ ] `cargo build` completes with zero warnings
+- [ ] All modified C/C++/Fortran code formatted
+- [ ] No compiler warnings of any kind
+- [ ] No test failures of any kind
+- [ ] All issues resolved (not deferred)
+
+### General Code Quality Guidelines
+
 - Consult the latest official OpenMP specification when making changes related to OpenMP parsing or documentation to ensure accuracy.
 - Unsafe code is permitted ONLY at the FFI boundary in `src/c_api.rs`; all business logic must be safe Rust.
-- Run `cargo fmt` (or `rustfmt`) to maintain consistent Rust formatting before submitting changes.
 - **Always ensure warning-free builds**: All commits must pass without warnings:
   - `cargo fmt -- --check` - No formatting issues
   - `cargo build` - No compilation warnings
