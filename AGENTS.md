@@ -451,15 +451,79 @@ All documentation tools are pre-installed and ready to use.
 
 ## Pull Request & Git Workflow
 
-- **PR Commit History**: When merging a PR, maintain a clean, logical commit history:
-  - **Option 1 (Preferred for small changes)**: Squash all commits into a single logical commit with comprehensive message
-  - **Option 2 (For larger features)**: Rewrite history to organize commits into several logical units (e.g., "feat: core implementation", "test: add test suite", "docs: add documentation")
-  - **Avoid**: Keeping intermediate "fix typo", "address review comments", "WIP" commits in main branch history
-  - Use interactive rebase (`git rebase -i`) to reorganize commits before merging
-  - Each final commit should:
-    - Be self-contained and functional
-    - Have a clear, descriptive commit message following conventional commits format
-    - Pass all tests independently
+- **PR Commit History - CRITICAL WORKFLOW**: When merging a PR, you MUST rewrite/reorganize commits in the PR branch FIRST, then merge the clean PR to main. **DO NOT use GitHub's squash-and-merge button** (it concatenates all commit messages into a mess).
+
+  **Correct Workflow**:
+  1. **Rewrite PR commits** using interactive rebase on the PR branch
+  2. **Force push** the rewritten PR branch
+  3. **Verify** the clean history on GitHub PR page
+  4. **Merge** the rewritten PR to main (regular merge, not squash)
+
+  **Option 1 (Preferred for cohesive features)**: Squash all commits into 1 commit with comprehensive message
+  
+  Example: PR with 30 commits implementing Fortran support
+  ```bash
+  # On PR branch (e.g., fortran-support)
+  git rebase -i main
+  # In editor: squash all 30 commits into 1
+  # Write NEW comprehensive commit message (not concatenated old messages)
+  
+  # Force push rewritten PR
+  git push --force-with-lease origin fortran-support
+  
+  # Now PR has 1 clean commit - merge it to main
+  gh pr merge 20 --merge  # Regular merge (NOT --squash)
+  ```
+  
+  **Result**: Main branch gets 1 commit with comprehensive message like:
+  ```
+  feat: Add comprehensive Fortran OpenMP support (experimental)
+  
+  Implements full Fortran parsing support for OpenMP directives:
+  - Free-form (!$OMP) and fixed-form (C$OMP) sentinels
+  - Case-insensitive directive/clause matching
+  - Language-aware parser with Fortran DO/FOR equivalence
+  - Complete C API integration with Fortran examples
+  - 29 comprehensive test cases, all passing
+  
+  This expands ROUP's language coverage beyond C/C++ to support
+  scientific computing workflows using Fortran+OpenMP.
+  ```
+  
+  **Option 2 (For multi-component features)**: Reorganize into logical commits
+  
+  Example: PR with 30 commits, reorganize into 5 logical components
+  ```bash
+  # On PR branch
+  git rebase -i main
+  # In editor: reorganize 30 commits into 5 logical groups:
+  #   1. feat: core lexer/parser implementation
+  #   2. feat: C API extensions for Fortran
+  #   3. test: comprehensive test suite
+  #   4. docs: tutorials and examples
+  #   5. chore: infrastructure and tooling
+  
+  # Force push rewritten PR
+  git push --force-with-lease origin fortran-support
+  
+  # Now PR has 5 clean commits - merge to main
+  gh pr merge 20 --merge  # Regular merge (NOT --squash)
+  ```
+  
+  **Result**: Main branch gets 5 logical commits, each self-contained and well-documented.
+
+  **What to Avoid**:
+  - ❌ **GitHub squash-and-merge button** - creates messy concatenated commit messages
+  - ❌ Keeping intermediate "fix typo", "address review comments", "WIP" commits
+  - ❌ Merging PR without rewriting commits first
+  - ❌ Using `git merge --squash` locally (same problem as GitHub button)
+
+  **Requirements for Each Final Commit**:
+  - Self-contained and functional
+  - Clear, descriptive commit message following conventional commits format
+  - Passes all tests independently
+  - Has comprehensive commit body explaining motivation and impact
+
 - **Commit Message Format**:
   ```
   <type>: <subject>
