@@ -88,7 +88,9 @@ contains
         end if
         
         ! Dynamically determine string length using C strlen
-        ! No hardcoded buffer limit - handles arbitrarily long strings
+        ! SAFETY: Assumes C string is properly null-terminated. ROUP C API guarantees
+        ! all returned strings are null-terminated, so this is safe for ROUP functions.
+        ! For general use with untrusted C strings, add bounds checking.
         length = strlen(c_string_ptr)
         
         ! Create properly-sized pointer to C string array

@@ -96,8 +96,10 @@ fn parses_fortran_sections() {
 #[test]
 fn parses_fortran_workshare() {
     // Fortran-specific directive not in C/C++
+    // WORKSHARE is a Fortran-only construct for distributing array operations
     let parser = openmp::parser().with_language(Language::FortranFree);
-    // Note: workshare may not be registered yet
+    // Note: This is a placeholder test. WORKSHARE directive is not yet fully implemented.
+    // For now, we test that the parser can handle Fortran-specific directives in general.
     let input = "!$OMP PARALLEL";
 
     let (rest, directive) = parser.parse(input).expect("parsing should succeed");

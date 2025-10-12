@@ -69,7 +69,13 @@ use roup::parser::openmp;
 
 let parser = openmp::parser();
 let (_, directive) = parser.parse("#pragma omp parallel for num_threads(4)").unwrap();
+// Access directive information
+println!("Directive: {}", directive.name);  // Output: Directive: parallel for
 println!("Found {} clauses", directive.clauses.len());  // Output: Found 1 clauses
+// Iterate through clauses
+for clause in &directive.clauses {
+    println!("  Clause: {}", clause.name);  // Output:   Clause: num_threads
+}
 ```
 
 ### Parse in C

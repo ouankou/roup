@@ -9,8 +9,8 @@ program basic_parse_example
     
     ! Example OpenMP directives in Fortran free-form
     character(len=100) :: directive1 = "!$OMP PARALLEL PRIVATE(X)"
-    character(len=100) :: directive2 = "!$OMP FOR SCHEDULE(STATIC, 10)"
-    character(len=100) :: directive3 = "!$OMP PARALLEL FOR REDUCTION(+:SUM)"
+    character(len=100) :: directive2 = "!$OMP DO SCHEDULE(STATIC, 10)"
+    character(len=100) :: directive3 = "!$OMP PARALLEL DO REDUCTION(+:SUM)"
     
     print *, "ROUP Fortran OpenMP Parser - Basic Example"
     print *, "==========================================="
