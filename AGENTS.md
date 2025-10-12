@@ -57,6 +57,67 @@
 - ✅ Reference `examples/c/tutorial_basic.c` for correct usage patterns
 - ✅ Check `src/c_api.rs` for the source of truth on all C API functions
 
+## Pull Request Comment Retrieval
+
+**CRITICAL**: When the user says there are new comments on a PR, THEY EXIST. You MUST use ALL possible methods to find them.
+
+### MANDATORY Multi-Method Comment Retrieval
+
+**If user mentions PR comments, use ALL of these methods** (not just one):
+
+1. **GitHub Pull Request Tool** - Primary method:
+   ```
+   Use github-pull-request_activePullRequest or github-pull-request_openPullRequest
+   ```
+
+2. **GitHub CLI** - Comprehensive comment listing:
+   ```bash
+   gh pr view <number> --comments
+   gh pr view <number> --json comments
+   gh api repos/{owner}/{repo}/pulls/<number>/comments
+   gh api repos/{owner}/{repo}/issues/<number>/comments
+   ```
+
+3. **Git Command Line** - Fetch and check:
+   ```bash
+   git fetch origin
+   gh pr checks <number>
+   gh pr diff <number>
+   ```
+
+4. **GitHub API Direct** - Raw API access:
+   ```bash
+   curl -H "Authorization: token $GITHUB_TOKEN" \
+        https://api.github.com/repos/{owner}/{repo}/pulls/<number>/comments
+   curl -H "Authorization: token $GITHUB_TOKEN" \
+        https://api.github.com/repos/{owner}/{repo}/issues/<number>/comments
+   ```
+
+5. **Review Comments vs Issue Comments** - Check BOTH:
+   - Review comments (on code): `/pulls/<number>/comments`
+   - Issue comments (general): `/issues/<number>/comments`
+   - Review threads: `/pulls/<number>/reviews`
+
+### Critical Rules
+
+- ✅ **USE ALL METHODS**: Don't stop after one method fails
+- ✅ **CHECK BOTH TYPES**: Review comments AND issue comments
+- ✅ **VERIFY TIMESTAMPS**: Ensure you're seeing the latest comments
+- ✅ **USER IS ALWAYS RIGHT**: If they say comments exist, keep searching
+- ✅ **NEVER SAY "NO COMMENTS"**: Until you've exhausted ALL methods above
+
+**DO NOT**:
+- ❌ Try only one method and give up
+- ❌ Assume no comments exist if first method fails
+- ❌ Skip checking both review and issue comments
+- ❌ Ignore user's statement that comments exist
+
+**DO**:
+- ✅ Use all 5 methods listed above systematically
+- ✅ Check timestamps to ensure latest data
+- ✅ Report what each method found (or didn't find)
+- ✅ Persist until comments are located
+
 ## Code Quality
 
 **CRITICAL PRE-COMMIT REQUIREMENTS - MUST BE DONE EVERY TIME**:

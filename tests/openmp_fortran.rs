@@ -1,7 +1,7 @@
 /// Comprehensive Fortran OpenMP directive parsing tests
 /// Tests both free-form and fixed-form Fortran syntax
 use roup::lexer::Language;
-use roup::parser::{openmp, ClauseKind};
+use roup::parser::openmp;
 
 #[test]
 fn parses_fortran_free_form_parallel() {
