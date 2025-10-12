@@ -116,8 +116,8 @@ program tutorial_basic
     
     ! Example Fortran free-form directives
     character(len=200) :: example1 = "!$OMP PARALLEL PRIVATE(A,B) NUM_THREADS(4)"
-    character(len=200) :: example2 = "!$OMP FOR SCHEDULE(DYNAMIC) REDUCTION(+:SUM)"
-    character(len=200) :: example3 = "!$OMP PARALLEL FOR PRIVATE(I,J)"
+    character(len=200) :: example2 = "!$OMP DO SCHEDULE(DYNAMIC) REDUCTION(+:SUM)"
+    character(len=200) :: example3 = "!$OMP PARALLEL DO PRIVATE(I,J)"
     
     print *, "==============================================="
     print *, "ROUP Fortran Tutorial - Basic Parsing"
@@ -143,8 +143,8 @@ program tutorial_basic
     end if
     print *, ""
     
-    ! Example 2: Parse FOR directive
-    print *, "Example 2: Parsing Fortran FOR directive"
+    ! Example 2: Parse DO directive
+    print *, "Example 2: Parsing Fortran DO directive"
     print *, "Input: ", trim(example2)
     
     directive_ptr = parse_fortran_directive(trim(example2))
@@ -162,8 +162,8 @@ program tutorial_basic
     end if
     print *, ""
     
-    ! Example 3: Parse compound PARALLEL FOR directive
-    print *, "Example 3: Parsing compound PARALLEL FOR directive"
+    ! Example 3: Parse compound PARALLEL DO directive
+    print *, "Example 3: Parsing compound PARALLEL DO directive"
     print *, "Input: ", trim(example3)
     
     directive_ptr = parse_fortran_directive(trim(example3))
