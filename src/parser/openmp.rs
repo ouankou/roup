@@ -164,13 +164,14 @@ openmp_directives! {
     Depobj => "depobj",
     Dispatch => "dispatch",
     Distribute => "distribute",
-    DistributeParallelDo => "distribute parallel do",  // Fortran variant
-    DistributeParallelDoSimd => "distribute parallel do simd",  // Fortran variant
     DistributeParallelFor => "distribute parallel for",
     DistributeParallelForSimd => "distribute parallel for simd",
     DistributeParallelLoop => "distribute parallel loop",
     DistributeParallelLoopSimd => "distribute parallel loop simd",
     DistributeSimd => "distribute simd",
+    // --- Fortran variants ---
+    DistributeParallelDo => "distribute parallel do",  // Fortran variant
+    DistributeParallelDoSimd => "distribute parallel do simd",  // Fortran variant
     Do => "do",  // Fortran equivalent of FOR
     DoSimd => "do simd",  // Fortran equivalent of FOR SIMD
     EndDeclareTarget => "end declare target",
