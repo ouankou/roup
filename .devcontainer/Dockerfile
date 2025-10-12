@@ -68,6 +68,8 @@ RUN if [ "${INSTALL_RUST}" = "true" ]; then \
         sudo -u vscode bash -lc "curl -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION}"; \
         # Use the user's cargo environment to install components
         sudo -u vscode bash -lc "export PATH=\"$HOME/.cargo/bin:$PATH\"; rustup default ${RUST_VERSION}; rustup component add rust-src rustfmt clippy || true"; \
+        # Install mdbook for documentation generation
+        sudo -u vscode bash -lc "export PATH=\"$HOME/.cargo/bin:$PATH\"; cargo install mdbook"; \
         rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*; \
     else \
         echo "Skipping Rust installation (INSTALL_RUST=${INSTALL_RUST})"; \

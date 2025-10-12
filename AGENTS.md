@@ -67,7 +67,88 @@
   - `cargo build` - No compilation warnings
   - `cargo doc --no-deps` - No rustdoc warnings
   - `cargo test` - All tests pass
-  - `mdbook build docs/book` - No documentation warnings (if applicable)
+  - `mdbook build docs/book` - No mdbook documentation warnings
+  - `mdbook test docs/book` - All code examples in documentation work
+
+## Documentation Generation & Testing
+
+**IMPORTANT**: Documentation is a first-class deliverable. All documentation must build cleanly and examples must work.
+
+### Required Documentation Tests
+
+Before committing documentation changes, run ALL of these:
+
+```bash
+# 1. Build API documentation (rustdoc)
+cargo doc --no-deps
+# Check for warnings - output should be clean
+
+# 2. Build mdBook documentation
+mdbook build docs/book
+# Check for warnings - should complete without errors
+
+# 3. Test code examples in mdBook
+mdbook test docs/book
+# All Rust code examples in markdown must compile and run
+
+# 4. Verify examples compile
+cargo build --examples
+# All example programs must build successfully
+
+# 5. Check documentation links
+# Manually verify cross-references work in generated docs
+```
+
+### Documentation Quality Checklist
+
+When adding or modifying documentation:
+
+- [ ] All code examples tested and working
+- [ ] rustdoc builds without warnings (`cargo doc --no-deps`)
+- [ ] mdBook builds without warnings (`mdbook build docs/book`)
+- [ ] Code examples in tutorials pass (`mdbook test docs/book`)
+- [ ] All examples/ programs compile (`cargo build --examples`)
+- [ ] Cross-references and links verified
+- [ ] API changes reflected in tutorials
+- [ ] SUMMARY.md updated if new pages added
+- [ ] Experimental status markers added where appropriate
+
+### Common Documentation Issues
+
+**Broken Code Examples**:
+- ❌ Code in markdown that doesn't compile
+- ❌ Using outdated API in examples
+- ❌ Missing imports in code snippets
+- ✅ Test all examples with `mdbook test`
+- ✅ Use `rust,ignore` for pseudo-code only
+
+**Stale Documentation**:
+- ❌ Tutorial shows old API that was changed
+- ❌ README examples use deprecated functions
+- ✅ Update docs/ when changing public APIs
+- ✅ Keep examples/ in sync with current API
+
+**Missing Markdown Formatting**:
+- ❌ Broken links to other pages
+- ❌ Incorrect code fence language tags
+- ✅ Use correct relative paths: `./building.md` not `building.md`
+- ✅ Tag code blocks: ```rust, ```c, ```fortran, ```bash
+
+### mdBook Configuration
+
+The documentation is in `docs/book/`:
+- `book.toml` - mdBook configuration
+- `src/SUMMARY.md` - Table of contents (update when adding pages)
+- `src/*.md` - Documentation pages
+
+### Tools Available in Devcontainer
+
+The devcontainer includes:
+- `mdbook` - Documentation generator (auto-installed)
+- `cargo doc` - Rust API documentation
+- `rustdoc` - Documentation testing for Rust code
+
+All documentation tools are pre-installed and ready to use.
 
 ## Documentation Maintenance
 
