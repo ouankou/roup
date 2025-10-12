@@ -71,7 +71,7 @@ impl ClauseRule {
 
 pub struct ClauseRegistry {
     rules: HashMap<&'static str, ClauseRule>,
-    /// Normalized lowercase map for case-insensitive lookups (built at construction)
+    /// Normalized lowercase map for case-insensitive lookups (built only when case-insensitive mode is enabled)
     normalized_rules: HashMap<String, ClauseRule>,
     default_rule: ClauseRule,
     case_insensitive: bool,
@@ -117,13 +117,9 @@ impl ClauseRegistry {
 
         // Use efficient lookup based on case sensitivity mode
         let rule = if self.case_insensitive {
-            // One String allocation for normalization, then O(1) map lookup
-            // Known optimization opportunity: Use unicase crate or custom Eq/Hash impl for
-            // case-insensitive HashMap keys to eliminate allocations per lookup.
-            // Current approach is simple and correct; optimization deferred for development phase.
-            let normalized_name = name.to_lowercase();
+            // TODO: Optimize case-insensitive HashMap key lookup to eliminate allocations
             self.normalized_rules
-                .get(&normalized_name)
+                .get(&name.to_ascii_lowercase())
                 .copied()
                 .unwrap_or(self.default_rule)
         } else {

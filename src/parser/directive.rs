@@ -63,10 +63,10 @@ impl DirectiveRule {
 
 pub struct DirectiveRegistry {
     rules: HashMap<&'static str, DirectiveRule>,
-    /// Normalized lowercase map for case-insensitive lookups (built at construction)
+    /// Normalized lowercase map for case-insensitive lookups (built when case-insensitive mode enabled)
     normalized_rules: HashMap<String, DirectiveRule>,
     prefixes: HashSet<String>,
-    /// Normalized lowercase prefixes for case-insensitive lookups (built at construction)
+    /// Normalized lowercase prefixes for case-insensitive lookups (built when case-insensitive mode enabled)
     normalized_prefixes: HashSet<String>,
     default_rule: DirectiveRule,
     case_insensitive: bool,
@@ -115,10 +115,7 @@ impl DirectiveRegistry {
     ) -> IResult<&'a str, Directive<'a>> {
         // Use efficient lookup based on case sensitivity mode
         let rule = if self.case_insensitive {
-            // One String allocation for normalization, then O(1) map lookup
-            // Known optimization opportunity: Use unicase crate or custom Eq/Hash impl for
-            // case-insensitive HashMap keys to eliminate allocations per lookup.
-            // Current approach is simple and correct; optimization deferred for development phase.
+            // TODO: Optimize case-insensitive HashMap key lookup to eliminate allocations
             let normalized_name = name.to_lowercase();
             self.normalized_rules
                 .get(&normalized_name)
