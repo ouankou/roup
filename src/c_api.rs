@@ -268,8 +268,16 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
 ///
 /// ## Error Handling
 /// This function returns `NULL` for all error conditions without detailed error codes.
-/// Callers should check for NULL and handle errors appropriately.
-/// For debugging, use a valid language constant and well-formed directive string.
+/// There is no way to distinguish between different error types (invalid language,
+/// NULL input, UTF-8 error, or parse failure) from the return value alone.
+///
+/// Callers should:
+/// - Validate `language` parameter before calling (use only ROUP_LANG_* constants)
+/// - Ensure `input` is non-NULL and valid UTF-8
+/// - Verify directive syntax is correct
+/// - For debugging, enable logging or use a separate validation layer
+///
+/// For a version with detailed error codes, consider using the Rust API directly.
 ///
 /// ## Example (Fortran free-form)
 /// ```c

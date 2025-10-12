@@ -59,27 +59,27 @@ fn parses_fortran_fixed_form_with_c_sentinel() {
 #[test]
 fn parses_fortran_do_directive() {
     let parser = openmp::parser().with_language(Language::FortranFree);
-    // In Fortran, DO is equivalent to FOR in C
-    let input = "!$OMP FOR PRIVATE(I) SCHEDULE(STATIC)";
+    // Fortran uses DO (equivalent to FOR in C/C++)
+    let input = "!$OMP DO PRIVATE(I) SCHEDULE(STATIC)";
 
     let (rest, directive) = parser.parse(input).expect("parsing should succeed");
 
     assert_eq!(rest, "");
-    assert_eq!(directive.name.to_lowercase(), "for");
+    assert_eq!(directive.name.to_lowercase(), "do");
     assert_eq!(directive.clauses.len(), 2);
 }
 
 #[test]
 fn parses_fortran_parallel_do() {
     let parser = openmp::parser().with_language(Language::FortranFree);
-    // In Fortran, PARALLEL DO is equivalent to PARALLEL FOR in C
-    let input = "!$OMP PARALLEL FOR PRIVATE(I,J) REDUCTION(+:SUM)";
+    // Fortran uses PARALLEL DO (equivalent to PARALLEL FOR in C/C++)
+    let input = "!$OMP PARALLEL DO PRIVATE(I,J) REDUCTION(+:SUM)";
 
     let (rest, directive) = parser.parse(input).expect("parsing should succeed");
 
     assert_eq!(rest, "");
-    // Should parse as "parallel for"
-    assert!(directive.name.to_lowercase().contains("parallel"));
+    // Should parse as "parallel do"
+    assert_eq!(directive.name.to_lowercase(), "parallel do");
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn parses_fortran_barrier() {
 #[test]
 fn parses_fortran_atomic() {
     let parser = openmp::parser().with_language(Language::FortranFree);
-    // "atomic update" is a compound directive
+    // "atomic update" is a single directive with a variant specifier (not a compound directive)
     let input = "!$OMP ATOMIC UPDATE";
 
     let (rest, directive) = parser.parse(input).expect("parsing should succeed");

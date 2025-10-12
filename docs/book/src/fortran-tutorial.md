@@ -40,6 +40,36 @@ C$OMP END DO
 C$OMP END PARALLEL
 ```
 
+## Fortran-Specific Directives
+
+ROUP supports Fortran-specific directive syntax, including the Fortran `DO` construct which is equivalent to C/C++ `FOR`:
+
+### DO Directive (Fortran)
+
+```fortran
+!$OMP DO PRIVATE(I) SCHEDULE(STATIC)
+    do i = 1, n
+        ! Loop body
+    end do
+!$OMP END DO
+```
+
+### PARALLEL DO (Fortran)
+
+```fortran
+!$OMP PARALLEL DO PRIVATE(I) REDUCTION(+:SUM)
+    do i = 1, n
+        sum = sum + a(i)
+    end do
+!$OMP END PARALLEL DO
+```
+
+**Note**: ROUP recognizes both Fortran syntax (`DO`) and C syntax (`FOR`) for compatibility:
+- `!$OMP DO` → Fortran-specific (preferred for Fortran code)
+- `!$OMP FOR` → C/C++ syntax (also works in Fortran mode)
+- `!$OMP PARALLEL DO` → Fortran-specific
+- `!$OMP PARALLEL FOR` → C/C++ syntax (also works in Fortran mode)
+
 ## Language Constants
 
 ROUP provides language format constants for Fortran parsing:
@@ -296,8 +326,8 @@ If parsing fails:
 
 Some directives may not be in the registry. Check:
 
-- Is the directive name correct? (Use `FOR` not `DO` for work-sharing)
-- Is it a composite directive? (Use `PARALLEL FOR` not `PARALLEL` + `FOR`)
+- Is the directive name correct? (Fortran supports both `DO` and `FOR` syntax)
+- Is it a composite directive? (Use `PARALLEL DO` not `PARALLEL` + `DO`)
 
 ## API Reference
 

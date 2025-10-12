@@ -118,7 +118,8 @@ impl ClauseRegistry {
         // Use efficient lookup based on case sensitivity mode
         let rule = if self.case_insensitive {
             // One String allocation for normalization, then O(1) map lookup
-            // (Future optimization: use case-insensitive Hash impl to avoid allocation)
+            // Future optimization: use unicase crate or custom Eq/Hash impl for
+            // case-insensitive HashMap keys without allocations per lookup
             let normalized_name = name.to_lowercase();
             self.normalized_rules
                 .get(&normalized_name)

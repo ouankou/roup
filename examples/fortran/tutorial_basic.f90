@@ -16,7 +16,10 @@ module roup_interface
     integer(c_int), parameter :: ROUP_LANG_FORTRAN_FIXED = 2
     
     ! Maximum length for C string conversion buffer
-    ! Reasonable limit for typical directive/clause names
+    ! LIMITATION: Strings longer than this will be truncated.
+    ! This limit is sufficient for typical directive/clause names (< 100 chars),
+    ! but complex directives with many long clauses may exceed this.
+    ! For production use, consider implementing dynamic buffer sizing.
     integer, parameter :: MAX_C_STRING_LENGTH = 1024
     
     ! Opaque types

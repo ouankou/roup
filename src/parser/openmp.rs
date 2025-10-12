@@ -164,11 +164,15 @@ openmp_directives! {
     Depobj => "depobj",
     Dispatch => "dispatch",
     Distribute => "distribute",
+    DistributeParallelDo => "distribute parallel do",  // Fortran variant
+    DistributeParallelDoSimd => "distribute parallel do simd",  // Fortran variant
     DistributeParallelFor => "distribute parallel for",
     DistributeParallelForSimd => "distribute parallel for simd",
     DistributeParallelLoop => "distribute parallel loop",
     DistributeParallelLoopSimd => "distribute parallel loop simd",
     DistributeSimd => "distribute simd",
+    Do => "do",  // Fortran equivalent of FOR
+    DoSimd => "do simd",  // Fortran equivalent of FOR SIMD
     EndDeclareTarget => "end declare target",
     Error => "error",
     Flush => "flush",
@@ -184,6 +188,8 @@ openmp_directives! {
     Nothing => "nothing",
     Ordered => "ordered",
     Parallel => "parallel",
+    ParallelDo => "parallel do",  // Fortran equivalent of PARALLEL FOR
+    ParallelDoSimd => "parallel do simd",  // Fortran equivalent of PARALLEL FOR SIMD
     ParallelFor => "parallel for",
     ParallelForSimd => "parallel for simd",
     ParallelLoop => "parallel loop",
@@ -207,6 +213,8 @@ openmp_directives! {
     TargetLoop => "target loop",
     TargetLoopSimd => "target loop simd",
     TargetParallel => "target parallel",
+    TargetParallelDo => "target parallel do",  // Fortran variant
+    TargetParallelDoSimd => "target parallel do simd",  // Fortran variant
     TargetParallelFor => "target parallel for",
     TargetParallelForSimd => "target parallel for simd",
     TargetParallelLoop => "target parallel loop",
@@ -214,6 +222,8 @@ openmp_directives! {
     TargetSimd => "target simd",
     TargetTeams => "target teams",
     TargetTeamsDistribute => "target teams distribute",
+    TargetTeamsDistributeParallelDo => "target teams distribute parallel do",  // Fortran variant
+    TargetTeamsDistributeParallelDoSimd => "target teams distribute parallel do simd",  // Fortran variant
     TargetTeamsDistributeParallelFor => "target teams distribute parallel for",
     TargetTeamsDistributeParallelForSimd => "target teams distribute parallel for simd",
     TargetTeamsDistributeParallelLoop => "target teams distribute parallel loop",
@@ -231,6 +241,8 @@ openmp_directives! {
     Taskyield => "taskyield",
     Teams => "teams",
     TeamsDistribute => "teams distribute",
+    TeamsDistributeParallelDo => "teams distribute parallel do",  // Fortran variant
+    TeamsDistributeParallelDoSimd => "teams distribute parallel do simd",  // Fortran variant
     TeamsDistributeParallelFor => "teams distribute parallel for",
     TeamsDistributeParallelForSimd => "teams distribute parallel for simd",
     TeamsDistributeParallelLoop => "teams distribute parallel loop",
