@@ -99,8 +99,9 @@ impl DirectiveRegistry {
         } else {
             name.to_string()
         };
-        
-        let rule = self.rules
+
+        let rule = self
+            .rules
             .iter()
             .find(|(k, _)| {
                 if self.case_insensitive {
@@ -111,7 +112,7 @@ impl DirectiveRegistry {
             })
             .map(|(_, v)| *v)
             .unwrap_or(self.default_rule);
-        
+
         rule.parse(name, input, clause_registry)
     }
 
@@ -152,11 +153,13 @@ impl DirectiveRegistry {
 
             let candidate = &input[start..j];
             let has_rule = if self.case_insensitive {
-                self.rules.keys().any(|k| k.to_lowercase() == candidate.to_lowercase())
+                self.rules
+                    .keys()
+                    .any(|k| k.to_lowercase() == candidate.to_lowercase())
             } else {
                 self.rules.contains_key(candidate)
             };
-            
+
             if has_rule {
                 last_match_end = Some(j);
             }
@@ -177,13 +180,18 @@ impl DirectiveRegistry {
                     // check if prefix is registered; if so, continue to extend
                     let prefix_candidate = input[start..idx].trim_end();
                     let has_prefix = if self.case_insensitive {
-                        self.prefixes.iter().any(|p| p.to_lowercase() == prefix_candidate.to_lowercase())
-                            || self.rules.keys().any(|k| k.to_lowercase() == prefix_candidate.to_lowercase())
+                        self.prefixes
+                            .iter()
+                            .any(|p| p.to_lowercase() == prefix_candidate.to_lowercase())
+                            || self
+                                .rules
+                                .keys()
+                                .any(|k| k.to_lowercase() == prefix_candidate.to_lowercase())
                     } else {
                         self.prefixes.contains(prefix_candidate)
                             || self.rules.contains_key(prefix_candidate)
                     };
-                    
+
                     if has_prefix {
                         continue;
                     }

@@ -271,7 +271,10 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
 /// }
 /// ```
 #[no_mangle]
-pub extern "C" fn roup_parse_with_language(input: *const c_char, language: i32) -> *mut OmpDirective {
+pub extern "C" fn roup_parse_with_language(
+    input: *const c_char,
+    language: i32,
+) -> *mut OmpDirective {
     // NULL check
     if input.is_null() {
         return ptr::null_mut();
@@ -294,7 +297,7 @@ pub extern "C" fn roup_parse_with_language(input: *const c_char, language: i32) 
 
     // Create parser with specified language
     let parser = openmp::parser().with_language(lang);
-    
+
     // Parse using language-aware parser
     let directive = match parser.parse(rust_str) {
         Ok((_, dir)) => dir,

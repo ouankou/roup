@@ -25,7 +25,7 @@ impl Parser {
 
     pub fn with_language(mut self, language: Language) -> Self {
         self.language = language;
-        
+
         // Enable case-insensitive matching for Fortran
         match language {
             Language::FortranFree | Language::FortranFixed => {
@@ -34,7 +34,7 @@ impl Parser {
             }
             Language::C => {}
         }
-        
+
         self
     }
 
