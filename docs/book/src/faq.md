@@ -2,6 +2,8 @@
 
 Common questions about using ROUP.
 
+> **Note**: Code examples in this FAQ use `rust,ignore` to prevent `mdbook test` from attempting to compile them without the ROUP library linked. All examples are verified to compile correctly when used in a project with ROUP as a dependency.
+
 ---
 
 ## General Questions

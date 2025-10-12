@@ -66,6 +66,8 @@ pub struct DirectiveRegistry {
     /// Normalized lowercase map for case-insensitive lookups (built at construction)
     normalized_rules: HashMap<String, DirectiveRule>,
     prefixes: HashSet<String>,
+    /// Normalized lowercase prefixes for case-insensitive lookups (built at construction)
+    normalized_prefixes: HashSet<String>,
     default_rule: DirectiveRule,
     case_insensitive: bool,
 }
@@ -77,16 +79,18 @@ impl DirectiveRegistry {
 
     pub fn with_case_insensitive(mut self, enabled: bool) -> Self {
         self.case_insensitive = enabled;
-        // Rebuild normalized map if enabling case-insensitive mode
+        // Rebuild normalized maps if enabling case-insensitive mode
         if enabled && self.normalized_rules.is_empty() {
             self.normalized_rules = self
                 .rules
                 .iter()
                 .map(|(k, v)| (k.to_lowercase(), *v))
                 .collect();
+            self.normalized_prefixes = self.prefixes.iter().map(|p| p.to_lowercase()).collect();
         } else if !enabled {
-            // Clear normalized map if disabling case-insensitive mode
+            // Clear normalized maps if disabling case-insensitive mode
             self.normalized_rules.clear();
+            self.normalized_prefixes.clear();
         }
         self
     }
@@ -157,10 +161,10 @@ impl DirectiveRegistry {
             }
 
             let candidate = &input[start..j];
+            // Use O(1) HashMap lookup for case-insensitive mode
             let has_rule = if self.case_insensitive {
-                self.rules
-                    .keys()
-                    .any(|k| k.to_lowercase() == candidate.to_lowercase())
+                self.normalized_rules
+                    .contains_key(&candidate.to_lowercase())
             } else {
                 self.rules.contains_key(candidate)
             };
@@ -184,14 +188,11 @@ impl DirectiveRegistry {
                 if is_ident_char(next_ch) {
                     // check if prefix is registered; if so, continue to extend
                     let prefix_candidate = input[start..idx].trim_end();
+                    // Use O(1) HashSet/HashMap lookups for case-insensitive mode
                     let has_prefix = if self.case_insensitive {
-                        self.prefixes
-                            .iter()
-                            .any(|p| p.to_lowercase() == prefix_candidate.to_lowercase())
-                            || self
-                                .rules
-                                .keys()
-                                .any(|k| k.to_lowercase() == prefix_candidate.to_lowercase())
+                        let normalized = prefix_candidate.to_lowercase();
+                        self.normalized_prefixes.contains(&normalized)
+                            || self.normalized_rules.contains_key(&normalized)
                     } else {
                         self.prefixes.contains(prefix_candidate)
                             || self.rules.contains_key(prefix_candidate)
@@ -262,20 +263,24 @@ impl DirectiveRegistryBuilder {
     }
 
     pub fn build(self) -> DirectiveRegistry {
-        // Build normalized map if case-insensitive mode is enabled
-        let normalized_rules = if self.case_insensitive {
-            self.rules
+        // Build normalized maps if case-insensitive mode is enabled
+        let (normalized_rules, normalized_prefixes) = if self.case_insensitive {
+            let rules_map = self
+                .rules
                 .iter()
                 .map(|(k, v)| (k.to_lowercase(), *v))
-                .collect()
+                .collect();
+            let prefixes_set = self.prefixes.iter().map(|p| p.to_lowercase()).collect();
+            (rules_map, prefixes_set)
         } else {
-            HashMap::new() // Empty map for case-sensitive mode
+            (HashMap::new(), HashSet::new()) // Empty maps for case-sensitive mode
         };
 
         DirectiveRegistry {
             rules: self.rules,
             normalized_rules,
             prefixes: self.prefixes,
+            normalized_prefixes,
             default_rule: self.default_rule,
             case_insensitive: self.case_insensitive,
         }

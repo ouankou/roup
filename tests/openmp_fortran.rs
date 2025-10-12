@@ -1,5 +1,9 @@
 /// Comprehensive Fortran OpenMP directive parsing tests
 /// Tests both free-form and fixed-form Fortran syntax
+///
+/// Note: Fortran is case-insensitive, but ROUP preserves the original case from the input.
+/// Tests use `.to_lowercase()` for assertions to ensure case-insensitive matching works correctly
+/// regardless of the input case (PARALLEL, Parallel, parallel all match the same directive).
 use roup::lexer::Language;
 use roup::parser::openmp;
 

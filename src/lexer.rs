@@ -72,8 +72,12 @@ pub fn lex_omp(input: &str) -> IResult<&str, &str> {
 
 /// Parse Fortran free-form sentinel "!$OMP" (case-insensitive)
 pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
-    let input_lower = input.to_lowercase();
-    if input_lower.starts_with("!$omp") {
+    // Optimize: check only first 5 characters instead of entire input
+    let matches = input
+        .get(..5)
+        .map_or(false, |s| s.eq_ignore_ascii_case("!$omp"));
+
+    if matches {
         Ok((&input[5..], &input[..5]))
     } else {
         Err(nom::Err::Error(nom::error::Error::new(
@@ -85,8 +89,15 @@ pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
 
 /// Parse Fortran fixed-form sentinel "!$OMP" or "C$OMP" in columns 1-6 (case-insensitive)
 pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
-    let input_lower = input.to_lowercase();
-    if input_lower.starts_with("!$omp") || input_lower.starts_with("c$omp") {
+    // Optimize: check only first 5 characters instead of entire input
+    let first_5 = input.get(..5);
+    let matches = first_5.map_or(false, |s| {
+        s.eq_ignore_ascii_case("!$omp")
+            || s.eq_ignore_ascii_case("c$omp")
+            || s.eq_ignore_ascii_case("*$omp")
+    });
+
+    if matches {
         Ok((&input[5..], &input[..5]))
     } else {
         Err(nom::Err::Error(nom::error::Error::new(

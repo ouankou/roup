@@ -286,7 +286,13 @@ pub extern "C" fn roup_parse_with_language(
         ROUP_LANG_C => Language::C,
         ROUP_LANG_FORTRAN_FREE => Language::FortranFree,
         ROUP_LANG_FORTRAN_FIXED => Language::FortranFixed,
-        _ => return ptr::null_mut(), // Invalid language value
+        _ => {
+            eprintln!(
+                "roup_parse_with_language: Invalid language value: {}. Valid values: ROUP_LANG_C ({}), ROUP_LANG_FORTRAN_FREE ({}), ROUP_LANG_FORTRAN_FIXED ({})",
+                language, ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE, ROUP_LANG_FORTRAN_FIXED
+            );
+            return ptr::null_mut(); // Invalid language value
+        }
     };
 
     // UNSAFE BLOCK: Convert C string to Rust &str
