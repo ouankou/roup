@@ -52,6 +52,14 @@ RUN set -eux; \
     apt-get update; \
     rm -rf /var/lib/apt/lists/*;
 
+# Install Fortran compilers (gfortran and flang matching LLVM version)
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        gfortran \
+        flang-${LLVM_VERSION}; \
+    rm -rf /var/lib/apt/lists/*;
+
 # Configure environment to prefer the requested LLVM binaries, libraries and headers.
 ENV LD_LIBRARY_PATH=/usr/lib/llvm-${LLVM_VERSION}/lib
 ENV LIBRARY_PATH=/usr/lib/llvm-${LLVM_VERSION}/lib

@@ -15,19 +15,19 @@ module roup_interface
     integer(c_int), parameter :: ROUP_LANG_FORTRAN_FREE = 1
     integer(c_int), parameter :: ROUP_LANG_FORTRAN_FIXED = 2
     
-    ! Maximum length for C string conversion buffer
-    ! LIMITATION: Strings longer than this will be truncated.
-    ! This limit is sufficient for typical directive/clause names (< 100 chars),
-    ! but complex directives with many long clauses may exceed this.
-    ! For production use, consider implementing dynamic buffer sizing.
-    integer, parameter :: MAX_C_STRING_LENGTH = 1024
-    
     ! Opaque types
     type, bind(C) :: OmpDirective
         type(c_ptr) :: ptr
     end type OmpDirective
     
     interface
+        ! C standard library strlen for dynamic string sizing
+        function strlen(s) bind(C, name="strlen")
+            use iso_c_binding
+            type(c_ptr), value :: s
+            integer(c_size_t) :: strlen
+        end function strlen
+        
         ! Parse with language specification
         function roup_parse_with_language(input, language) bind(C, name="roup_parse_with_language")
             use iso_c_binding
@@ -74,28 +74,31 @@ contains
         c_string(n+1) = c_null_char
     end function f_to_c_string
     
-    ! Helper to convert C string to Fortran string
+    ! Helper to convert C string to Fortran string with dynamic sizing
     function c_to_f_string(c_string_ptr) result(f_string)
         type(c_ptr), intent(in) :: c_string_ptr
         character(len=:), allocatable :: f_string
         character(kind=c_char), pointer :: c_string_array(:)
-        integer :: i, length
+        integer(c_size_t) :: length
+        integer :: i
         
         if (.not. c_associated(c_string_ptr)) then
             f_string = ""
             return
         end if
         
-        ! Find string length (up to MAX_C_STRING_LENGTH characters)
-        call c_f_pointer(c_string_ptr, c_string_array, [MAX_C_STRING_LENGTH])
-        length = 0
-        do i = 1, MAX_C_STRING_LENGTH
-            if (c_string_array(i) == c_null_char) exit
-            length = length + 1
-        end do
+        ! Dynamically determine string length using C strlen
+        ! No hardcoded buffer limit - handles arbitrarily long strings
+        length = strlen(c_string_ptr)
         
-        allocate(character(len=length) :: f_string)
-        do i = 1, length
+        ! Create properly-sized pointer to C string array
+        call c_f_pointer(c_string_ptr, c_string_array, [length])
+        
+        ! Allocate Fortran string with exact length needed
+        allocate(character(len=int(length)) :: f_string)
+        
+        ! Copy characters from C string to Fortran string
+        do i = 1, int(length)
             f_string(i:i) = c_string_array(i)
         end do
     end function c_to_f_string
@@ -185,7 +188,7 @@ contains
     function parse_fortran_directive(input_str) result(dir_ptr)
         character(len=*), intent(in) :: input_str
         type(c_ptr) :: dir_ptr
-        character(kind=c_char), dimension(:), allocatable :: c_str
+        character(kind=c_char), dimension(:), allocatable, target :: c_str
         
         c_str = f_to_c_string(input_str)
         dir_ptr = roup_parse_with_language(c_loc(c_str), ROUP_LANG_FORTRAN_FREE)
