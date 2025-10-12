@@ -884,13 +884,29 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
         // Note: This allocates a String. While eq_ignore_ascii_case() would be more efficient,
         // the build system's constant parser requires a match expression with string literals.
         // The performance impact is negligible for the C API boundary.
+        //
+        // Fortran DO variants map to same codes as their C FOR equivalents:
+        // - "do" -> 1 (same as "for")
+        // - "parallel do" -> 0 (same as "parallel for")
+        // - "distribute parallel do" -> 15 (same as "distribute parallel for")
+        // - "target parallel do" -> 13 (same as "target parallel for")
+        // etc.
         match name_str.to_lowercase().as_str() {
+            // Parallel directives (kind 0)
             "parallel" => 0,
             "parallel for" => 0,
-            "parallel do" => 0,
+            "parallel do" => 0, // Fortran variant
+            "parallel for simd" => 0,
+            "parallel do simd" => 0, // Fortran variant
             "parallel sections" => 0,
+
+            // For/Do directives (kind 1)
             "for" => 1,
-            "do" => 1,
+            "do" => 1, // Fortran variant
+            "for simd" => 1,
+            "do simd" => 1, // Fortran variant
+
+            // Other basic directives
             "sections" => 2,
             "single" => 3,
             "task" => 4,
@@ -902,12 +918,41 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
             "atomic" => 10,
             "flush" => 11,
             "ordered" => 12,
+
+            // Target directives (kind 13)
             "target" => 13,
             "target teams" => 13,
+            "target parallel" => 13,
+            "target parallel for" => 13,
+            "target parallel do" => 13, // Fortran variant
+            "target parallel for simd" => 13,
+            "target parallel do simd" => 13, // Fortran variant
+            "target teams distribute" => 13,
+            "target teams distribute parallel for" => 13,
+            "target teams distribute parallel do" => 13, // Fortran variant
+            "target teams distribute parallel for simd" => 13,
+            "target teams distribute parallel do simd" => 13, // Fortran variant
+
+            // Teams directives (kind 14)
             "teams" => 14,
             "teams distribute" => 14,
+            "teams distribute parallel for" => 14,
+            "teams distribute parallel do" => 14, // Fortran variant
+            "teams distribute parallel for simd" => 14,
+            "teams distribute parallel do simd" => 14, // Fortran variant
+
+            // Distribute directives (kind 15)
             "distribute" => 15,
+            "distribute parallel for" => 15,
+            "distribute parallel do" => 15, // Fortran variant
+            "distribute parallel for simd" => 15,
+            "distribute parallel do simd" => 15, // Fortran variant
+            "distribute simd" => 15,
+
+            // Metadirective (kind 16)
             "metadirective" => 16,
+
+            // Unknown directive
             _ => 999,
         }
     }

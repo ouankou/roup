@@ -71,14 +71,22 @@ pub fn lex_omp(input: &str) -> IResult<&str, &str> {
 }
 
 /// Parse Fortran free-form sentinel "!$OMP" (case-insensitive)
+///
+/// Supports leading whitespace before the sentinel (common for indented code):
+/// - "!$OMP PARALLEL" -> matches
+/// - "    !$OMP PARALLEL" -> matches (leading spaces consumed)
+/// - "  \t!$OMP DO" -> matches (mixed whitespace consumed)
 pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
+    // Skip optional leading whitespace (common in indented Fortran code)
+    let (after_space, _) = skip_space_and_comments(input)?;
+
     // Optimize: check only first 5 characters instead of entire input
-    let matches = input
+    let matches = after_space
         .get(..5)
         .map_or(false, |s| s.eq_ignore_ascii_case("!$omp"));
 
     if matches {
-        Ok((&input[5..], &input[..5]))
+        Ok((&after_space[5..], &after_space[..5]))
     } else {
         Err(nom::Err::Error(nom::error::Error::new(
             input,
@@ -88,9 +96,18 @@ pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
 }
 
 /// Parse Fortran fixed-form sentinel "!$OMP" or "C$OMP" in columns 1-6 (case-insensitive)
+///
+/// Supports leading whitespace before the sentinel:
+/// - "!$OMP PARALLEL" -> matches
+/// - "    !$OMP PARALLEL" -> matches (leading spaces consumed)
+/// - "C$OMP DO" -> matches
+/// - "*$OMP END PARALLEL" -> matches
 pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
+    // Skip optional leading whitespace (common in indented Fortran code)
+    let (after_space, _) = skip_space_and_comments(input)?;
+
     // Optimize: check only first 5 characters instead of entire input
-    let first_5 = input.get(..5);
+    let first_5 = after_space.get(..5);
     let matches = first_5.map_or(false, |s| {
         s.eq_ignore_ascii_case("!$omp")
             || s.eq_ignore_ascii_case("c$omp")
@@ -98,7 +115,7 @@ pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
     });
 
     if matches {
-        Ok((&input[5..], &input[..5]))
+        Ok((&after_space[5..], &after_space[..5]))
     } else {
         Err(nom::Err::Error(nom::error::Error::new(
             input,
