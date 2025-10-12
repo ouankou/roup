@@ -260,7 +260,16 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
 ///
 /// ## Returns
 /// - Pointer to `OmpDirective` on success
-/// - NULL on parse error or invalid input
+/// - `NULL` on error:
+///   - `input` is NULL
+///   - `language` is not a valid ROUP_LANG_* constant
+///   - `input` contains invalid UTF-8
+///   - Parse error (invalid OpenMP directive syntax)
+///
+/// ## Error Handling
+/// This function returns `NULL` for all error conditions without detailed error codes.
+/// Callers should check for NULL and handle errors appropriately.
+/// For debugging, use a valid language constant and well-formed directive string.
 ///
 /// ## Example (Fortran free-form)
 /// ```c
@@ -268,6 +277,9 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
 /// if (dir) {
 ///     // Use directive
 ///     roup_directive_free(dir);
+/// } else {
+///     // Handle error: NULL, invalid language, invalid UTF-8, or parse failure
+///     fprintf(stderr, "Failed to parse directive\n");
 /// }
 /// ```
 #[no_mangle]

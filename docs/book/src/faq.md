@@ -2,7 +2,7 @@
 
 Common questions about using ROUP.
 
-> **Note**: Code examples in this FAQ use `rust,ignore` to prevent `mdbook test` from attempting to compile them without the ROUP library linked. All examples are verified to compile correctly when used in a project with ROUP as a dependency.
+> **Note**: Code examples in this FAQ use `rust,ignore` to prevent `mdbook test` from attempting to compile them without the ROUP library linked. To test these examples yourself, create a new Rust project and add ROUP as a dependency in your `Cargo.toml`. See the [Getting Started](./getting-started.md) guide for step-by-step instructions. All examples are verified to compile correctly when used in a project with ROUP as a dependency.
 
 ---
 

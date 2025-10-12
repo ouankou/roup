@@ -15,6 +15,10 @@ module roup_interface
     integer(c_int), parameter :: ROUP_LANG_FORTRAN_FREE = 1
     integer(c_int), parameter :: ROUP_LANG_FORTRAN_FIXED = 2
     
+    ! Maximum length for C string conversion buffer
+    ! Reasonable limit for typical directive/clause names
+    integer, parameter :: MAX_C_STRING_LENGTH = 1024
+    
     ! Opaque types
     type, bind(C) :: OmpDirective
         type(c_ptr) :: ptr
@@ -79,10 +83,10 @@ contains
             return
         end if
         
-        ! Find string length
-        call c_f_pointer(c_string_ptr, c_string_array, [1024])
+        ! Find string length (up to MAX_C_STRING_LENGTH characters)
+        call c_f_pointer(c_string_ptr, c_string_array, [MAX_C_STRING_LENGTH])
         length = 0
-        do i = 1, 1024
+        do i = 1, MAX_C_STRING_LENGTH
             if (c_string_array(i) == c_null_char) exit
             length = length + 1
         end do

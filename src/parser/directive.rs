@@ -115,13 +115,15 @@ impl DirectiveRegistry {
     ) -> IResult<&'a str, Directive<'a>> {
         // Use efficient lookup based on case sensitivity mode
         let rule = if self.case_insensitive {
-            // Use pre-built normalized map for O(1) case-insensitive lookup
+            // One String allocation for normalization, then O(1) map lookup
+            // (Future optimization: use case-insensitive Hash impl to avoid allocation)
+            let normalized_name = name.to_lowercase();
             self.normalized_rules
-                .get(&name.to_lowercase())
+                .get(&normalized_name)
                 .copied()
                 .unwrap_or(self.default_rule)
         } else {
-            // Direct HashMap lookup for case-sensitive mode (no allocation)
+            // Direct HashMap lookup for case-sensitive mode (zero allocations)
             self.rules.get(name).copied().unwrap_or(self.default_rule)
         };
 
