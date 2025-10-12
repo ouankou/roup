@@ -203,42 +203,52 @@
 <li><strong>Environment</strong>: OS, Rust version, ROUP version</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code>Title: Parser fails on `collapse` clause with variable
+<pre><code class="language-text">Title: Parser fails on `collapse` clause with variable
 
 Input: #pragma omp for collapse(n)
 Expected: Parse successfully
 Actual: Parse error: "Expected integer literal"
 Environment: Ubuntu 22.04, Rust 1.75, ROUP 0.1.0
-</code></pre>
-<h3 id="2-suggest-features"><a class="header" href="#2-suggest-features">2. Suggest Features</a></h3>
-<p>Have an idea? <a href="https://github.com/ouankou/roup/discussions">Start a discussion</a> or open an issue with:</p>
-<ul>
-<li><strong>Use case</strong>: Why is this needed?</li>
-<li><strong>Proposed API</strong>: How would it work?</li>
-<li><strong>Alternatives</strong>: Other ways to solve the problem?</li>
-</ul>
-<h3 id="3-improve-documentation"><a class="header" href="#3-improve-documentation">3. Improve Documentation</a></h3>
-<p>Documentation improvements are always welcome:</p>
-<ul>
-<li>Fix typos or unclear explanations</li>
-<li>Add examples</li>
-<li>Improve error messages</li>
-<li>Translate documentation</li>
-<li>Write tutorials or blog posts</li>
-</ul>
-<p>See <a href="#documentation-updates">Documentation Updates</a> below.</p>
-<h3 id="4-submit-code"><a class="header" href="#4-submit-code">4. Submit Code</a></h3>
-<p>Ready to code? See <a href="#development-setup">Development Setup</a> and <a href="#pull-request-process">Pull Request Process</a>.</p>
-<hr />
-<h2 id="development-setup"><a class="header" href="#development-setup">Development Setup</a></h2>
-<h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>
-<ul>
-<li><strong>Rust 1.70+</strong> - <a href="https://rustup.rs/">Install Rust</a></li>
-<li><strong>Git</strong> - Version control</li>
-<li><strong>mdBook</strong> (optional) - For documentation: <code>cargo install mdbook</code></li>
-</ul>
-<h3 id="clone-and-build"><a class="header" href="#clone-and-build">Clone and Build</a></h3>
-<pre><code class="language-bash"># Clone repository
+```text
+
+### 2. Suggest Features
+
+Have an idea? [Start a discussion](https://github.com/ouankou/roup/discussions) or open an issue with:
+
+- **Use case**: Why is this needed?
+- **Proposed API**: How would it work?
+- **Alternatives**: Other ways to solve the problem?
+
+### 3. Improve Documentation
+
+Documentation improvements are always welcome:
+
+- Fix typos or unclear explanations
+- Add examples
+- Improve error messages
+- Translate documentation
+- Write tutorials or blog posts
+
+See [Documentation Updates](#documentation-updates) below.
+
+### 4. Submit Code
+
+Ready to code? See [Development Setup](#development-setup) and [Pull Request Process](#pull-request-process).
+
+---
+
+## Development Setup
+
+### Prerequisites
+
+- **Rust 1.70+** - [Install Rust](https://rustup.rs/)
+- **Git** - Version control
+- **mdBook** (optional) - For documentation: `cargo install mdbook`
+
+### Clone and Build
+
+```bash
+# Clone repository
 git clone https://github.com/ouankou/roup.git
 cd roup
 
@@ -250,16 +260,18 @@ cargo test
 
 # Build documentation
 cargo doc --no-deps --open
-</code></pre>
-<h3 id="development-tools"><a class="header" href="#development-tools">Development Tools</a></h3>
-<p><strong>Recommended VS Code Extensions:</strong></p>
-<ul>
-<li>rust-analyzer</li>
-<li>Even Better TOML</li>
-<li>Error Lens</li>
-</ul>
-<p><strong>Recommended CLI Tools:</strong></p>
-<pre><code class="language-bash"># Code formatter
+```text
+
+### Development Tools
+
+**Recommended VS Code Extensions:**
+- rust-analyzer
+- Even Better TOML
+- Error Lens
+
+**Recommended CLI Tools:**
+```bash
+# Code formatter
 rustup component add rustfmt
 
 # Linter
@@ -267,13 +279,20 @@ rustup component add clippy
 
 # Documentation builder
 cargo install mdbook
-</code></pre>
-<hr />
-<h2 id="code-quality-standards"><a class="header" href="#code-quality-standards">Code Quality Standards</a></h2>
-<h3 id="rust-code"><a class="header" href="#rust-code">Rust Code</a></h3>
-<h4 id="1-use-safe-rust"><a class="header" href="#1-use-safe-rust">1. Use Safe Rust</a></h4>
-<p><strong>Rule</strong>: Unsafe code is permitted ONLY at the FFI boundary in <code>src/c_api.rs</code>.</p>
-<pre><code class="language-rust">// ✅ GOOD: Safe Rust in parser
+```text
+
+---
+
+## Code Quality Standards
+
+### Rust Code
+
+#### 1. Use Safe Rust
+
+**Rule**: Unsafe code is permitted ONLY at the FFI boundary in `src/c_api.rs`.
+
+```rust
+// ✅ GOOD: Safe Rust in parser
 pub fn parse(input: &amp;str) -&gt; Result&lt;DirectiveIR, ParseError&gt; {
     // All safe code
 }
@@ -283,31 +302,46 @@ pub fn parse(input: &amp;str) -&gt; Result&lt;DirectiveIR, ParseError&gt; {
     unsafe {  // ← Not allowed outside c_api.rs!
         // ...
     }
-}</code></pre>
-<h4 id="2-format-your-code"><a class="header" href="#2-format-your-code">2. Format Your Code</a></h4>
-<pre><code class="language-bash"># Format all code
+}
+```text
+
+#### 2. Format Your Code
+
+```bash
+# Format all code
 cargo fmt
 
 # Check formatting (CI uses this)
 cargo fmt -- --check
-</code></pre>
-<h4 id="3-pass-clippy"><a class="header" href="#3-pass-clippy">3. Pass Clippy</a></h4>
-<pre><code class="language-bash"># Run linter
+```text
+
+#### 3. Pass Clippy
+
+```bash
+# Run linter
 cargo clippy
 
 # CI requires no warnings
 cargo clippy -- -D warnings
-</code></pre>
-<h4 id="4-write-tests"><a class="header" href="#4-write-tests">4. Write Tests</a></h4>
-<p>Every new feature or bug fix should include tests.</p>
-<pre><code class="language-rust">#[test]
+```text
+
+#### 4. Write Tests
+
+Every new feature or bug fix should include tests.
+
+```rust
+#[test]
 fn test_new_feature() {
     let result = parse("#pragma omp my_new_directive");
     assert!(result.is_ok());
     // More assertions...
-}</code></pre>
-<h4 id="5-document-public-apis"><a class="header" href="#5-document-public-apis">5. Document Public APIs</a></h4>
-<pre><code class="language-rust">/// Parse an OpenMP directive from a string.
+}
+```text
+
+#### 5. Document Public APIs
+
+```rust
+/// Parse an OpenMP directive from a string.
 ///
 /// # Arguments
 ///
@@ -328,16 +362,20 @@ fn test_new_feature() {
 /// ```
 pub fn parse(input: &amp;str) -&gt; Result&lt;DirectiveIR, ParseError&gt; {
     // ...
-}</code></pre>
-<h3 id="c-api-code"><a class="header" href="#c-api-code">C API Code</a></h3>
-<p>If modifying <code>src/c_api.rs</code>:</p>
-<ul>
-<li><strong>Minimize unsafe blocks</strong>: Only what's absolutely necessary</li>
-<li><strong>NULL checks</strong>: Before every pointer dereference</li>
-<li><strong>Document safety contracts</strong>: Explain caller obligations</li>
-<li><strong>Test thoroughly</strong>: Including NULL inputs and edge cases</li>
-</ul>
-<pre><code class="language-rust">/// # Safety
+}
+```text
+
+### C API Code
+
+If modifying `src/c_api.rs`:
+
+- **Minimize unsafe blocks**: Only what's absolutely necessary
+- **NULL checks**: Before every pointer dereference
+- **Document safety contracts**: Explain caller obligations
+- **Test thoroughly**: Including NULL inputs and edge cases
+
+```rust
+/// # Safety
 ///
 /// Caller must ensure:
 /// - `input` points to a valid null-terminated C string
@@ -350,11 +388,17 @@ pub extern "C" fn roup_parse(input: *const c_char) -&gt; *mut OmpDirective {
     }
     
     // ... minimal unsafe code ...
-}</code></pre>
-<hr />
-<h2 id="testing-guidelines"><a class="header" href="#testing-guidelines">Testing Guidelines</a></h2>
-<h3 id="running-tests"><a class="header" href="#running-tests">Running Tests</a></h3>
-<pre><code class="language-bash"># All tests
+}
+```text
+
+---
+
+## Testing Guidelines
+
+### Running Tests
+
+```bash
+# All tests
 cargo test
 
 # Specific test
@@ -365,11 +409,16 @@ cargo test -- --nocapture
 
 # Tests in specific module
 cargo test parser::
-</code></pre>
-<h3 id="test-categories"><a class="header" href="#test-categories">Test Categories</a></h3>
-<h4 id="unit-tests"><a class="header" href="#unit-tests">Unit Tests</a></h4>
-<p>Test individual functions in isolation.</p>
-<pre><code class="language-rust">#[cfg(test)]
+```text
+
+### Test Categories
+
+#### Unit Tests
+
+Test individual functions in isolation.
+
+```rust
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -379,10 +428,15 @@ mod tests {
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0], Token::Identifier("parallel"));
     }
-}</code></pre>
-<h4 id="integration-tests"><a class="header" href="#integration-tests">Integration Tests</a></h4>
-<p>Test complete parsing workflows in <code>tests/</code>.</p>
-<pre><code class="language-rust">// tests/openmp_parallel.rs
+}
+```text
+
+#### Integration Tests
+
+Test complete parsing workflows in `tests/`.
+
+```rust
+// tests/openmp_parallel.rs
 #[test]
 fn test_parallel_with_clauses() {
     let input = "#pragma omp parallel num_threads(4) private(x)";
@@ -391,26 +445,38 @@ fn test_parallel_with_clauses() {
     assert!(result.is_ok());
     let directive = result.unwrap();
     assert_eq!(directive.clauses.len(), 2);
-}</code></pre>
-<h4 id="ffi-tests"><a class="header" href="#ffi-tests">FFI Tests</a></h4>
-<p>Test C API safety and correctness.</p>
-<pre><code class="language-rust">#[test]
+}
+```text
+
+#### FFI Tests
+
+Test C API safety and correctness.
+
+```rust
+#[test]
 fn test_null_safety() {
     let dir = roup_parse(std::ptr::null());
     assert!(dir.is_null());
-}</code></pre>
-<h3 id="test-coverage"><a class="header" href="#test-coverage">Test Coverage</a></h3>
-<p>Aim for:</p>
-<ul>
-<li><strong>90%+ coverage</strong> for parser code</li>
-<li><strong>100% coverage</strong> for FFI boundary code</li>
-<li><strong>All error paths</strong> tested</li>
-</ul>
-<hr />
-<h2 id="documentation-updates"><a class="header" href="#documentation-updates">Documentation Updates</a></h2>
-<h3 id="mdbook-website"><a class="header" href="#mdbook-website">mdBook Website</a></h3>
-<p>The main documentation is in <code>docs/book/src/</code>:</p>
-<pre><code>docs/book/src/
+}
+```text
+
+### Test Coverage
+
+Aim for:
+- **90%+ coverage** for parser code
+- **100% coverage** for FFI boundary code
+- **All error paths** tested
+
+---
+
+## Documentation Updates
+
+### mdBook Website
+
+The main documentation is in `docs/book/src/`:
+
+```text
+docs/book/src/
 ├── SUMMARY.md           # Navigation (table of contents)
 ├── intro.md             # Homepage
 ├── getting-started.md   # Quick start guide
@@ -423,9 +489,12 @@ fn test_null_safety() {
 ├── openmp-support.md    # OpenMP support matrix
 ├── contributing.md      # This file
 └── faq.md              # Frequently asked questions
-</code></pre>
-<h4 id="building-documentation"><a class="header" href="#building-documentation">Building Documentation</a></h4>
-<pre><code class="language-bash"># Build website
+```text
+
+#### Building Documentation
+
+```bash
+# Build website
 cd docs/book
 mdbook build
 
@@ -433,14 +502,16 @@ mdbook build
 mdbook serve --open
 
 # View at http://localhost:3000
+```text
+
+#### Adding New Pages
+
+1. Create `.md` file in `docs/book/src/`
+2. Add to `SUMMARY.md`:
+   ```markdown
+   - [My New Page](./my-new-page.md)
 </code></pre>
-<h4 id="adding-new-pages"><a class="header" href="#adding-new-pages">Adding New Pages</a></h4>
-<ol>
-<li>Create <code>.md</code> file in <code>docs/book/src/</code></li>
-<li>Add to <code>SUMMARY.md</code>:
-<pre><code class="language-markdown">- [My New Page](./my-new-page.md)
-</code></pre>
-</li>
+<ol start="3">
 <li>Build and verify: <code>mdbook build</code></li>
 </ol>
 <h3 id="rustdoc"><a class="header" href="#rustdoc">Rustdoc</a></h3>
@@ -450,88 +521,101 @@ cargo doc --no-deps --open
 
 # With private items (for development)
 cargo doc --no-deps --document-private-items --open
-</code></pre>
-<h3 id="readmemd"><a class="header" href="#readmemd">README.md</a></h3>
-<p><strong>IMPORTANT</strong>: After any change, check that <code>README.md</code> stays in sync:</p>
-<ul>
-<li>API changes → Update README examples</li>
-<li>Feature changes → Update README feature list</li>
-<li>Build changes → Update README installation instructions</li>
-</ul>
-<p>The README should match website content in <code>docs/book/src/</code>.</p>
-<hr />
-<h2 id="pull-request-process"><a class="header" href="#pull-request-process">Pull Request Process</a></h2>
-<h3 id="1-fork-and-branch"><a class="header" href="#1-fork-and-branch">1. Fork and Branch</a></h3>
-<pre><code class="language-bash"># Fork on GitHub, then clone your fork
+```text
+
+### README.md
+
+**IMPORTANT**: After any change, check that `README.md` stays in sync:
+
+- API changes → Update README examples
+- Feature changes → Update README feature list
+- Build changes → Update README installation instructions
+
+The README should match website content in `docs/book/src/`.
+
+---
+
+## Pull Request Process
+
+### 1. Fork and Branch
+
+```bash
+# Fork on GitHub, then clone your fork
 git clone https://github.com/YOUR_USERNAME/roup.git
 cd roup
 
 # Create feature branch
 git checkout -b feature/my-awesome-feature
-</code></pre>
-<h3 id="2-make-changes"><a class="header" href="#2-make-changes">2. Make Changes</a></h3>
-<ul>
-<li>Write code</li>
-<li>Write tests</li>
-<li>Update documentation</li>
-<li>Format code: <code>cargo fmt</code></li>
-<li>Run tests: <code>cargo test</code></li>
-<li>Check lints: <code>cargo clippy</code></li>
-</ul>
-<h3 id="3-commit"><a class="header" href="#3-commit">3. Commit</a></h3>
-<p>Use clear, descriptive commit messages:</p>
-<pre><code class="language-bash">git commit -m "feat: add support for OpenMP 6.0 loop directive"
+```text
+
+### 2. Make Changes
+
+- Write code
+- Write tests
+- Update documentation
+- Format code: `cargo fmt`
+- Run tests: `cargo test`
+- Check lints: `cargo clippy`
+
+### 3. Commit
+
+Use clear, descriptive commit messages:
+
+```bash
+git commit -m "feat: add support for OpenMP 6.0 loop directive"
 git commit -m "fix: handle null pointers in roup_parse"
 git commit -m "docs: add examples for metadirective"
 git commit -m "test: add tests for error recovery"
-</code></pre>
-<p><strong>Commit Message Format:</strong></p>
-<ul>
-<li><code>feat:</code> - New feature</li>
-<li><code>fix:</code> - Bug fix</li>
-<li><code>docs:</code> - Documentation only</li>
-<li><code>test:</code> - Tests only</li>
-<li><code>refactor:</code> - Code refactoring</li>
-<li><code>perf:</code> - Performance improvement</li>
-<li><code>chore:</code> - Maintenance tasks</li>
-</ul>
-<h3 id="4-pre-pr-checklist"><a class="header" href="#4-pre-pr-checklist">4. Pre-PR Checklist</a></h3>
-<p>Before opening a PR, ensure:</p>
-<ul>
-<li><input disabled="" type="checkbox"/>
-<code>cargo fmt -- --check</code> passes (no formatting issues)</li>
-<li><input disabled="" type="checkbox"/>
-<code>cargo build</code> passes (no compilation warnings)</li>
-<li><input disabled="" type="checkbox"/>
-<code>cargo clippy</code> passes (no linter warnings)</li>
-<li><input disabled="" type="checkbox"/>
-<code>cargo test</code> passes (all tests green)</li>
-<li><input disabled="" type="checkbox"/>
-<code>cargo doc --no-deps</code> passes (no rustdoc warnings)</li>
-<li><input disabled="" type="checkbox"/>
-<code>mdbook build docs/book</code> passes (if docs changed)</li>
-<li><input disabled="" type="checkbox"/>
-README.md is in sync with changes</li>
-<li><input disabled="" type="checkbox"/>
-New features have tests</li>
-<li><input disabled="" type="checkbox"/>
-New features have documentation</li>
-</ul>
-<h3 id="5-push-and-open-pr"><a class="header" href="#5-push-and-open-pr">5. Push and Open PR</a></h3>
-<pre><code class="language-bash"># Push to your fork
+```text
+
+**Commit Message Format:**
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation only
+- `test:` - Tests only
+- `refactor:` - Code refactoring
+- `perf:` - Performance improvement
+- `chore:` - Maintenance tasks
+
+### 4. Pre-PR Checklist
+
+Before opening a PR, ensure:
+
+- [ ] `cargo fmt -- --check` passes (no formatting issues)
+- [ ] `cargo build` passes (no compilation warnings)
+- [ ] `cargo clippy` passes (no linter warnings)
+- [ ] `cargo test` passes (all tests green)
+- [ ] `cargo doc --no-deps` passes (no rustdoc warnings)
+- [ ] `mdbook build docs/book` passes (if docs changed)
+- [ ] README.md is in sync with changes
+- [ ] New features have tests
+- [ ] New features have documentation
+
+### 5. Push and Open PR
+
+```bash
+# Push to your fork
 git push origin feature/my-awesome-feature
 
 # Open PR on GitHub
 # Go to https://github.com/ouankou/roup and click "New Pull Request"
-</code></pre>
-<h3 id="6-pr-description"><a class="header" href="#6-pr-description">6. PR Description</a></h3>
-<p>Include:</p>
-<p><strong>What</strong>: What does this PR do?</p>
-<p><strong>Why</strong>: Why is this change needed?</p>
-<p><strong>How</strong>: How does it work?</p>
-<p><strong>Testing</strong>: How was it tested?</p>
-<p><strong>Example:</strong></p>
-<pre><code class="language-markdown">## What
+```text
+
+### 6. PR Description
+
+Include:
+
+**What**: What does this PR do?
+
+**Why**: Why is this change needed?
+
+**How**: How does it work?
+
+**Testing**: How was it tested?
+
+**Example:**
+```markdown
+## What
 Adds support for the OpenMP 6.0 `loop` directive.
 
 ## Why
@@ -546,156 +630,200 @@ OpenMP 6.0 introduced a new `loop` directive as a more generic alternative to `f
 - Added 15 new test cases covering various `loop` directive forms
 - All existing tests still pass
 - Manually tested with real-world code
-</code></pre>
-<h3 id="7-code-review"><a class="header" href="#7-code-review">7. Code Review</a></h3>
-<p>Maintainers will review your PR and may:</p>
-<ul>
-<li>Request changes</li>
-<li>Ask questions</li>
-<li>Suggest improvements</li>
-</ul>
-<p><strong>Be patient and responsive!</strong> Code review is a collaborative process.</p>
-<h3 id="8-merge"><a class="header" href="#8-merge">8. Merge</a></h3>
-<p>Once approved, maintainers will merge your PR. Congratulations! 🎉</p>
-<hr />
-<h2 id="openmp-specification-compliance"><a class="header" href="#openmp-specification-compliance">OpenMP Specification Compliance</a></h2>
-<p>When adding support for new OpenMP features:</p>
-<h3 id="1-consult-official-specs"><a class="header" href="#1-consult-official-specs">1. Consult Official Specs</a></h3>
-<ul>
-<li><strong>OpenMP 6.0</strong>: <a href="https://www.openmp.org/specifications/">Latest specification</a></li>
-<li><strong>Archive</strong>: <a href="https://www.openmp.org/specifications/">Older versions</a></li>
-</ul>
-<h3 id="2-check-syntax-carefully"><a class="header" href="#2-check-syntax-carefully">2. Check Syntax Carefully</a></h3>
-<p>OpenMP syntax can be subtle. Double-check:</p>
-<ul>
-<li>Required vs optional clauses</li>
-<li>Clause argument types</li>
-<li>Directive applicability (C/C++ vs Fortran)</li>
-<li>Version introduced</li>
-</ul>
-<h3 id="3-update-support-matrix"><a class="header" href="#3-update-support-matrix">3. Update Support Matrix</a></h3>
-<p>After adding a directive/clause, update <code>docs/book/src/openmp-support.md</code>:</p>
-<pre><code class="language-markdown">| Directive | OpenMP Version | Status | Notes |
+```text
+
+### 7. Code Review
+
+Maintainers will review your PR and may:
+
+- Request changes
+- Ask questions
+- Suggest improvements
+
+**Be patient and responsive!** Code review is a collaborative process.
+
+### 8. Merge
+
+Once approved, maintainers will merge your PR. Congratulations! 🎉
+
+---
+
+## OpenMP Specification Compliance
+
+When adding support for new OpenMP features:
+
+### 1. Consult Official Specs
+
+- **OpenMP 6.0**: [Latest specification](https://www.openmp.org/specifications/)
+- **Archive**: [Older versions](https://www.openmp.org/specifications/)
+
+### 2. Check Syntax Carefully
+
+OpenMP syntax can be subtle. Double-check:
+
+- Required vs optional clauses
+- Clause argument types
+- Directive applicability (C/C++ vs Fortran)
+- Version introduced
+
+### 3. Update Support Matrix
+
+After adding a directive/clause, update `docs/book/src/openmp-support.md`:
+
+```markdown
+| Directive | OpenMP Version | Status | Notes |
 |-----------|----------------|--------|-------|
 | `loop` | 5.0 | ✅ Supported | New in OpenMP 5.0 |
-</code></pre>
-<h3 id="4-add-examples"><a class="header" href="#4-add-examples">4. Add Examples</a></h3>
-<p>Include examples in documentation showing correct usage.</p>
-<hr />
-<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
-<h3 id="benchmarking"><a class="header" href="#benchmarking">Benchmarking</a></h3>
-<p>If your change affects performance:</p>
-<pre><code class="language-bash"># Run benchmarks (if available)
+```text
+
+### 4. Add Examples
+
+Include examples in documentation showing correct usage.
+
+---
+
+## Performance Considerations
+
+### Benchmarking
+
+If your change affects performance:
+
+```bash
+# Run benchmarks (if available)
 cargo bench
 
 # Profile with flamegraph
 cargo install flamegraph
 cargo flamegraph --bin roup
+```text
+
+### Performance Guidelines
+
+- Avoid unnecessary allocations
+- Prefer zero-copy when possible
+- Use `&amp;str` instead of `String` where appropriate
+- Benchmark before/after for significant changes
+
+---
+
+## Security
+
+### Reporting Security Issues
+
+Please report security vulnerabilities by opening a GitHub issue at:
+[https://github.com/ouankou/roup/issues](https://github.com/ouankou/roup/issues)
+
+Include:
+- Description of vulnerability
+- Steps to reproduce
+- Potential impact
+- Suggested fix (if any)
+
+### Security Best Practices
+
+When writing code:
+
+- Validate all inputs
+- Check for integer overflow
+- Avoid buffer overruns
+- Be careful with unsafe code
+- Use safe defaults
+
+---
+
+## Release Process
+
+(For maintainers)
+
+### Version Numbering
+
+ROUP follows [Semantic Versioning](https://semver.org/):
+
+- **MAJOR**: Breaking API changes
+- **MINOR**: New features (backward compatible)
+- **PATCH**: Bug fixes (backward compatible)
+
+### Release Checklist
+
+1. Update version in `Cargo.toml`
+2. Update `CHANGELOG.md`
+3. Run full test suite
+4. Build documentation
+5. Create git tag: `git tag v0.2.0`
+6. Push tag: `git push origin v0.2.0`
+7. Publish to crates.io: `cargo publish`
+8. Create GitHub release with notes
+
+---
+
+## Getting Help
+
+### Stuck?
+
+- **Documentation**: Read [roup.ouankou.com](https://roup.ouankou.com)
+- **Discussions**: Ask on [GitHub Discussions](https://github.com/ouankou/roup/discussions)
+- **Issues**: Search [existing issues](https://github.com/ouankou/roup/issues)
+- **Examples**: Check `examples/` directory
+
+### Communication Guidelines
+
+- Be respectful and professional
+- Provide context for questions
+- Include minimal reproducible examples
+- Search before asking (avoid duplicates)
+
+---
+
+## Code of Conduct
+
+### Our Standards
+
+- **Be respectful**: Treat everyone with respect
+- **Be constructive**: Provide helpful feedback
+- **Be patient**: Remember that everyone is learning
+- **Be inclusive**: Welcome newcomers
+
+### Unacceptable Behavior
+
+- Harassment or discrimination
+- Trolling or insulting comments
+- Personal attacks
+- Publishing others' private information
+
+### Reporting
+
+Report unacceptable behavior to: [conduct@ouankou.com](mailto:conduct@ouankou.com)
+
+---
+
+## Recognition
+
+Contributors will be:
+
+- Listed in `CONTRIBUTORS.md`
+- Mentioned in release notes
+- Credited in commit messages
+
+Significant contributions may result in:
+
+- Maintainer status
+- Commit access
+- Decision-making authority
+
+---
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the same license as the project (see `LICENSE` file).
+
+---
+
+## Questions?
+
+Still have questions? Open a [discussion](https://github.com/ouankou/roup/discussions) or reach out to the maintainers.
+
+**Thank you for contributing to ROUP!** 🚀
 </code></pre>
-<h3 id="performance-guidelines"><a class="header" href="#performance-guidelines">Performance Guidelines</a></h3>
-<ul>
-<li>Avoid unnecessary allocations</li>
-<li>Prefer zero-copy when possible</li>
-<li>Use <code>&amp;str</code> instead of <code>String</code> where appropriate</li>
-<li>Benchmark before/after for significant changes</li>
-</ul>
-<hr />
-<h2 id="security"><a class="header" href="#security">Security</a></h2>
-<h3 id="reporting-security-issues"><a class="header" href="#reporting-security-issues">Reporting Security Issues</a></h3>
-<p>Please report security vulnerabilities by opening a GitHub issue at:
-<a href="https://github.com/ouankou/roup/issues">https://github.com/ouankou/roup/issues</a></p>
-<p>Include:</p>
-<ul>
-<li>Description of vulnerability</li>
-<li>Steps to reproduce</li>
-<li>Potential impact</li>
-<li>Suggested fix (if any)</li>
-</ul>
-<h3 id="security-best-practices"><a class="header" href="#security-best-practices">Security Best Practices</a></h3>
-<p>When writing code:</p>
-<ul>
-<li>Validate all inputs</li>
-<li>Check for integer overflow</li>
-<li>Avoid buffer overruns</li>
-<li>Be careful with unsafe code</li>
-<li>Use safe defaults</li>
-</ul>
-<hr />
-<h2 id="release-process"><a class="header" href="#release-process">Release Process</a></h2>
-<p>(For maintainers)</p>
-<h3 id="version-numbering"><a class="header" href="#version-numbering">Version Numbering</a></h3>
-<p>ROUP follows <a href="https://semver.org/">Semantic Versioning</a>:</p>
-<ul>
-<li><strong>MAJOR</strong>: Breaking API changes</li>
-<li><strong>MINOR</strong>: New features (backward compatible)</li>
-<li><strong>PATCH</strong>: Bug fixes (backward compatible)</li>
-</ul>
-<h3 id="release-checklist"><a class="header" href="#release-checklist">Release Checklist</a></h3>
-<ol>
-<li>Update version in <code>Cargo.toml</code></li>
-<li>Update <code>CHANGELOG.md</code></li>
-<li>Run full test suite</li>
-<li>Build documentation</li>
-<li>Create git tag: <code>git tag v0.2.0</code></li>
-<li>Push tag: <code>git push origin v0.2.0</code></li>
-<li>Publish to crates.io: <code>cargo publish</code></li>
-<li>Create GitHub release with notes</li>
-</ol>
-<hr />
-<h2 id="getting-help"><a class="header" href="#getting-help">Getting Help</a></h2>
-<h3 id="stuck"><a class="header" href="#stuck">Stuck?</a></h3>
-<ul>
-<li><strong>Documentation</strong>: Read <a href="https://roup.ouankou.com">roup.ouankou.com</a></li>
-<li><strong>Discussions</strong>: Ask on <a href="https://github.com/ouankou/roup/discussions">GitHub Discussions</a></li>
-<li><strong>Issues</strong>: Search <a href="https://github.com/ouankou/roup/issues">existing issues</a></li>
-<li><strong>Examples</strong>: Check <code>examples/</code> directory</li>
-</ul>
-<h3 id="communication-guidelines"><a class="header" href="#communication-guidelines">Communication Guidelines</a></h3>
-<ul>
-<li>Be respectful and professional</li>
-<li>Provide context for questions</li>
-<li>Include minimal reproducible examples</li>
-<li>Search before asking (avoid duplicates)</li>
-</ul>
-<hr />
-<h2 id="code-of-conduct"><a class="header" href="#code-of-conduct">Code of Conduct</a></h2>
-<h3 id="our-standards"><a class="header" href="#our-standards">Our Standards</a></h3>
-<ul>
-<li><strong>Be respectful</strong>: Treat everyone with respect</li>
-<li><strong>Be constructive</strong>: Provide helpful feedback</li>
-<li><strong>Be patient</strong>: Remember that everyone is learning</li>
-<li><strong>Be inclusive</strong>: Welcome newcomers</li>
-</ul>
-<h3 id="unacceptable-behavior"><a class="header" href="#unacceptable-behavior">Unacceptable Behavior</a></h3>
-<ul>
-<li>Harassment or discrimination</li>
-<li>Trolling or insulting comments</li>
-<li>Personal attacks</li>
-<li>Publishing others' private information</li>
-</ul>
-<h3 id="reporting"><a class="header" href="#reporting">Reporting</a></h3>
-<p>Report unacceptable behavior to: <a href="mailto:conduct@ouankou.com">conduct@ouankou.com</a></p>
-<hr />
-<h2 id="recognition"><a class="header" href="#recognition">Recognition</a></h2>
-<p>Contributors will be:</p>
-<ul>
-<li>Listed in <code>CONTRIBUTORS.md</code></li>
-<li>Mentioned in release notes</li>
-<li>Credited in commit messages</li>
-</ul>
-<p>Significant contributions may result in:</p>
-<ul>
-<li>Maintainer status</li>
-<li>Commit access</li>
-<li>Decision-making authority</li>
-</ul>
-<hr />
-<h2 id="license"><a class="header" href="#license">License</a></h2>
-<p>By contributing, you agree that your contributions will be licensed under the same license as the project (see <code>LICENSE</code> file).</p>
-<hr />
-<h2 id="questions"><a class="header" href="#questions">Questions?</a></h2>
-<p>Still have questions? Open a <a href="https://github.com/ouankou/roup/discussions">discussion</a> or reach out to the maintainers.</p>
-<p><strong>Thank you for contributing to ROUP!</strong> 🚀</p>
 
                     </main>
 

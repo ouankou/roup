@@ -393,9 +393,12 @@ if (dir) {
 <hr />
 <h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
 <h3 id="rust"><a class="header" href="#rust">Rust</a></h3>
-<pre><code class="language-rust">match parse(input) {
-    Ok(directive) =&gt; { /* use directive */ },
-    Err(e) =&gt; eprintln!("Parse error: {}", e),
+<pre><code class="language-rust ignore">use roup::parser::openmp;
+
+let parser = openmp::parser();
+match parser.parse(input) {
+    Ok((_, directive)) =&gt; { /* use directive */ },
+    Err(e) =&gt; eprintln!("Parse error: {:?}", e),
 }</code></pre>
 <h3 id="c"><a class="header" href="#c">C</a></h3>
 <pre><code class="language-c">OmpDirective* dir = roup_parse(input);

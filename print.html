@@ -222,19 +222,27 @@
 <li><strong>Spec compliant</strong> - Follows official OpenMP specifications</li>
 </ul>
 <h3 id="-multi-language-apis"><a class="header" href="#-multi-language-apis">🔌 Multi-Language APIs</a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Language</th><th>API Style</th><th>Memory Management</th></tr></thead><tbody>
-<tr><td><strong>Rust</strong></td><td>Native</td><td>Automatic (ownership)</td></tr>
-<tr><td><strong>C</strong></td><td>Pointer-based</td><td>Manual (malloc/free pattern)</td></tr>
-<tr><td><strong>C++</strong></td><td>RAII wrappers</td><td>Automatic (destructors)</td></tr>
+<div class="table-wrapper"><table><thead><tr><th>Language</th><th>API Style</th><th>Memory Management</th><th>Status</th></tr></thead><tbody>
+<tr><td><strong>Rust</strong></td><td>Native</td><td>Automatic (ownership)</td><td>✅ Stable</td></tr>
+<tr><td><strong>C</strong></td><td>Pointer-based</td><td>Manual (malloc/free pattern)</td><td>✅ Stable</td></tr>
+<tr><td><strong>C++</strong></td><td>RAII wrappers</td><td>Automatic (destructors)</td><td>✅ Stable</td></tr>
+<tr><td><strong>Fortran</strong></td><td>C interop</td><td>Manual (via iso_c_binding)</td><td>⚠️ Experimental</td></tr>
 </tbody></table>
 </div>
 <hr />
 <h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
 <h3 id="parse-in-3-lines-rust"><a class="header" href="#parse-in-3-lines-rust">Parse in 3 Lines (Rust)</a></h3>
-<pre><code class="language-rust">use roup::parser::parse;
+<pre><code class="language-rust">use roup::parser::openmp;
 
-let directive = parse("#pragma omp parallel for num_threads(4)").unwrap();
-println!("Found {} clauses", directive.clauses.len());  // Output: Found 1 clauses</code></pre>
+let parser = openmp::parser();
+let (_, directive) = parser.parse("#pragma omp parallel for num_threads(4)").unwrap();
+// Access directive information
+println!("Directive: {}", directive.name);  // Output: Directive: parallel for
+println!("Found {} clauses", directive.clauses.len());  // Output: Found 1 clauses
+// Iterate through clauses
+for clause in &amp;directive.clauses {
+    println!("  Clause: {}", clause.name);  // Output:   Clause: num_threads
+}</code></pre>
 <h3 id="parse-in-c"><a class="header" href="#parse-in-c">Parse in C</a></h3>
 <pre><code class="language-c">OmpDirective* dir = roup_parse("#pragma omp parallel for num_threads(4)");
 printf("Clauses: %d\n", roup_directive_clause_count(dir));
@@ -244,6 +252,11 @@ roup_directive_free(dir);
 <pre><code class="language-cpp">roup::Directive dir("#pragma omp parallel for num_threads(4)");
 std::cout &lt;&lt; "Clauses: " &lt;&lt; dir.clause_count() &lt;&lt; "\n";
 // Automatic cleanup!
+</code></pre>
+<h3 id="parse-fortran-experimental"><a class="header" href="#parse-fortran-experimental">Parse Fortran (Experimental)</a></h3>
+<pre><code class="language-fortran">! Free-form Fortran
+directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
+                                          ROUP_LANG_FORTRAN_FREE)
 </code></pre>
 <p><a href="./getting-started.html">See full examples →</a></p>
 <hr />
@@ -326,7 +339,7 @@ std::cout &lt;&lt; "Clauses: " &lt;&lt; dir.clause_count() &lt;&lt; "\n";
 <p><a href="./api-reference.html">Complete clause reference →</a></p>
 <hr />
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<pre><code>┌─────────────────────────────────────┐
+<pre><code class="language-text">┌─────────────────────────────────────┐
 │   Your Application                  │
 ├─────────────────────────────────────┤
 │   Language Bindings                 │
@@ -523,15 +536,16 @@ roup = "0.1"
 <hr />
 <h2 id="quick-example-1"><a class="header" href="#quick-example-1">Quick Example</a></h2>
 <h3 id="rust"><a class="header" href="#rust">Rust</a></h3>
-<pre><code class="language-rust">use roup::parser::parse;
+<pre><code class="language-rust">use roup::parser::openmp;
 
+let parser = openmp::parser();
 let input = "#pragma omp parallel for num_threads(4) private(i)";
-match parse(input) {
-    Ok(directive) =&gt; {
+match parser.parse(input) {
+    Ok((_, directive)) =&gt; {
         println!("Directive: {:?}", directive.kind);
         println!("Clauses: {}", directive.clauses.len());
     }
-    Err(e) =&gt; eprintln!("Parse error: {}", e),
+    Err(e) =&gt; eprintln!("Parse error: {:?}", e),
 }</code></pre>
 <h3 id="c"><a class="header" href="#c">C</a></h3>
 <pre><code class="language-c">#include &lt;stdio.h&gt;
@@ -585,7 +599,7 @@ int main() {
 <hr />
 <h2 id="architecture-1"><a class="header" href="#architecture-1">Architecture</a></h2>
 <p>ROUP uses a clean, modular architecture:</p>
-<pre><code>┌─────────────────────────────────────────┐
+<pre><code class="language-text">┌─────────────────────────────────────────┐
 │         Application Layer               │
 │  (Your compiler/tool/analyzer)          │
 └─────────────────┬───────────────────────┘
@@ -3273,6 +3287,302 @@ make  # Builds all examples
 ./omp_analyzer ../../tests/data/sample.c
 </code></pre>
 <p>Happy parsing! 🚀</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="fortran-tutorial"><a class="header" href="#fortran-tutorial">Fortran Tutorial</a></h1>
+<p>This tutorial demonstrates how to use ROUP to parse OpenMP directives in Fortran code.</p>
+<h2 id="-experimental-status"><a class="header" href="#-experimental-status">🚧 Experimental Status</a></h2>
+<p><strong>Fortran support in ROUP is currently experimental.</strong> Features may change as development progresses.</p>
+<h2 id="introduction"><a class="header" href="#introduction">Introduction</a></h2>
+<p>ROUP supports parsing OpenMP directives from Fortran source code in both free-form and fixed-form formats. This enables Fortran developers to:</p>
+<ul>
+<li>Parse OpenMP directives from Fortran source</li>
+<li>Validate directive syntax</li>
+<li>Extract clause information</li>
+<li>Build tools for Fortran+OpenMP code analysis</li>
+</ul>
+<h2 id="fortran-directive-formats"><a class="header" href="#fortran-directive-formats">Fortran Directive Formats</a></h2>
+<h3 id="free-form-modern-fortran"><a class="header" href="#free-form-modern-fortran">Free-Form (Modern Fortran)</a></h3>
+<p>Free-form Fortran uses the <code>!$OMP</code> sentinel (case-insensitive):</p>
+<pre><code class="language-fortran">!$OMP PARALLEL PRIVATE(A, B) NUM_THREADS(4)
+!$OMP END PARALLEL
+
+!$omp parallel do private(i) reduction(+:sum)
+!$OMP END PARALLEL DO
+</code></pre>
+<h3 id="fixed-form-fortran-77"><a class="header" href="#fixed-form-fortran-77">Fixed-Form (Fortran 77)</a></h3>
+<p>Fixed-form Fortran uses <code>!$OMP</code> or <code>C$OMP</code> sentinels in columns 1-6:</p>
+<pre><code class="language-fortran">C$OMP PARALLEL PRIVATE(X, Y)
+!$OMP DO SCHEDULE(STATIC, 10)
+C$OMP END DO
+C$OMP END PARALLEL
+</code></pre>
+<h2 id="fortran-specific-directives"><a class="header" href="#fortran-specific-directives">Fortran-Specific Directives</a></h2>
+<p>ROUP supports Fortran-specific directive syntax, including the Fortran <code>DO</code> construct which is equivalent to C/C++ <code>FOR</code>:</p>
+<h3 id="do-directive-fortran"><a class="header" href="#do-directive-fortran">DO Directive (Fortran)</a></h3>
+<pre><code class="language-fortran">!$OMP DO PRIVATE(I) SCHEDULE(STATIC)
+    do i = 1, n
+        ! Loop body
+    end do
+!$OMP END DO
+</code></pre>
+<h3 id="parallel-do-fortran"><a class="header" href="#parallel-do-fortran">PARALLEL DO (Fortran)</a></h3>
+<pre><code class="language-fortran">!$OMP PARALLEL DO PRIVATE(I) REDUCTION(+:SUM)
+    do i = 1, n
+        sum = sum + a(i)
+    end do
+!$OMP END PARALLEL DO
+</code></pre>
+<p><strong>Note</strong>: ROUP recognizes both Fortran syntax (<code>DO</code>) and C syntax (<code>FOR</code>) for compatibility:</p>
+<ul>
+<li><code>!$OMP DO</code> → Fortran-specific (preferred for Fortran code)</li>
+<li><code>!$OMP FOR</code> → C/C++ syntax (also works in Fortran mode)</li>
+<li><code>!$OMP PARALLEL DO</code> → Fortran-specific</li>
+<li><code>!$OMP PARALLEL FOR</code> → C/C++ syntax (also works in Fortran mode)</li>
+</ul>
+<h2 id="language-constants"><a class="header" href="#language-constants">Language Constants</a></h2>
+<p>ROUP provides language format constants for Fortran parsing:</p>
+<pre><code class="language-c">#define ROUP_LANG_C                0  // C/C++ (#pragma omp)
+#define ROUP_LANG_FORTRAN_FREE     1  // Fortran free-form (!$OMP)
+#define ROUP_LANG_FORTRAN_FIXED    2  // Fortran fixed-form (!$OMP or C$OMP)
+</code></pre>
+<h2 id="using-the-rust-api"><a class="header" href="#using-the-rust-api">Using the Rust API</a></h2>
+<h3 id="parsing-fortran-directives"><a class="header" href="#parsing-fortran-directives">Parsing Fortran Directives</a></h3>
+<pre><code class="language-rust">use roup::lexer::Language;
+use roup::parser::openmp;
+
+// Create parser with Fortran free-form support
+let parser = openmp::parser().with_language(Language::FortranFree);
+
+// Parse a Fortran OpenMP directive
+let input = "!$OMP PARALLEL PRIVATE(A, B) NUM_THREADS(4)";
+let (rest, directive) = parser.parse(input).expect("parsing should succeed");
+
+println!("Directive: {}", directive.name);
+println!("Clauses: {}", directive.clauses.len());</code></pre>
+<h3 id="supported-language-formats"><a class="header" href="#supported-language-formats">Supported Language Formats</a></h3>
+<pre><code class="language-rust">use roup::lexer::Language;
+
+// C/C++ format (default)
+let c_parser = openmp::parser().with_language(Language::C);
+
+// Fortran free-form
+let fortran_free = openmp::parser().with_language(Language::FortranFree);
+
+// Fortran fixed-form
+let fortran_fixed = openmp::parser().with_language(Language::FortranFixed);</code></pre>
+<h2 id="using-the-c-api-from-fortran"><a class="header" href="#using-the-c-api-from-fortran">Using the C API from Fortran</a></h2>
+<h3 id="setting-up-fortran-c-interoperability"><a class="header" href="#setting-up-fortran-c-interoperability">Setting Up Fortran-C Interoperability</a></h3>
+<p>Create an interface module for ROUP C API:</p>
+<pre><code class="language-fortran">module roup_interface
+    use iso_c_binding
+    implicit none
+    
+    ! Language constants
+    integer(c_int), parameter :: ROUP_LANG_FORTRAN_FREE = 1
+    integer(c_int), parameter :: ROUP_LANG_FORTRAN_FIXED = 2
+    
+    interface
+        ! Parse with language specification
+        function roup_parse_with_language(input, language) &amp;
+            bind(C, name="roup_parse_with_language")
+            use iso_c_binding
+            type(c_ptr), value :: input
+            integer(c_int), value :: language
+            type(c_ptr) :: roup_parse_with_language
+        end function roup_parse_with_language
+        
+        ! Free directive
+        subroutine roup_directive_free(directive) &amp;
+            bind(C, name="roup_directive_free")
+            use iso_c_binding
+            type(c_ptr), value :: directive
+        end subroutine roup_directive_free
+        
+        ! Get directive name
+        function roup_directive_name(directive) &amp;
+            bind(C, name="roup_directive_name")
+            use iso_c_binding
+            type(c_ptr), value :: directive
+            type(c_ptr) :: roup_directive_name
+        end function roup_directive_name
+        
+        ! Get clause count
+        function roup_directive_clause_count(directive) &amp;
+            bind(C, name="roup_directive_clause_count")
+            use iso_c_binding
+            type(c_ptr), value :: directive
+            integer(c_size_t) :: roup_directive_clause_count
+        end function roup_directive_clause_count
+    end interface
+end module roup_interface
+</code></pre>
+<h3 id="parsing-fortran-directives-from-fortran"><a class="header" href="#parsing-fortran-directives-from-fortran">Parsing Fortran Directives from Fortran</a></h3>
+<pre><code class="language-fortran">program parse_example
+    use iso_c_binding
+    use roup_interface
+    implicit none
+    
+    type(c_ptr) :: directive_ptr, name_ptr
+    character(len=100) :: input = "!$OMP PARALLEL PRIVATE(X)"
+    character(kind=c_char), dimension(:), allocatable :: c_input
+    integer :: i, n
+    
+    ! Convert Fortran string to C string
+    n = len_trim(input)
+    allocate(c_input(n+1))
+    do i = 1, n
+        c_input(i) = input(i:i)
+    end do
+    c_input(n+1) = c_null_char
+    
+    ! Parse directive
+    directive_ptr = roup_parse_with_language(c_loc(c_input), &amp;
+                                              ROUP_LANG_FORTRAN_FREE)
+    
+    if (c_associated(directive_ptr)) then
+        ! Get directive information
+        name_ptr = roup_directive_name(directive_ptr)
+        ! ... process name_ptr ...
+        
+        ! Clean up
+        call roup_directive_free(directive_ptr)
+    else
+        print *, "Parse error"
+    end if
+    
+    deallocate(c_input)
+end program parse_example
+</code></pre>
+<h2 id="case-insensitivity"><a class="header" href="#case-insensitivity">Case Insensitivity</a></h2>
+<p>Fortran is case-insensitive, and ROUP respects this:</p>
+<pre><code class="language-fortran">! All of these are equivalent
+!$OMP PARALLEL PRIVATE(X)
+!$omp parallel private(x)
+!$Omp Parallel Private(X)
+</code></pre>
+<p>ROUP normalizes Fortran identifiers to lowercase internally while preserving the original case in the parsed output.</p>
+<h2 id="common-fortran-openmp-constructs"><a class="header" href="#common-fortran-openmp-constructs">Common Fortran OpenMP Constructs</a></h2>
+<h3 id="parallel-regions"><a class="header" href="#parallel-regions">Parallel Regions</a></h3>
+<pre><code class="language-fortran">!$OMP PARALLEL PRIVATE(TID) SHARED(N)
+    ! Parallel code
+!$OMP END PARALLEL
+</code></pre>
+<h3 id="work-sharing-constructs"><a class="header" href="#work-sharing-constructs">Work-Sharing Constructs</a></h3>
+<p>In Fortran, use <code>DO</code> instead of C's <code>for</code>:</p>
+<pre><code class="language-fortran">!$OMP DO PRIVATE(I) SCHEDULE(STATIC, 10)
+    do i = 1, n
+        ! Loop body
+    end do
+!$OMP END DO
+</code></pre>
+<p>Or combined:</p>
+<pre><code class="language-fortran">!$OMP PARALLEL DO PRIVATE(I,J) REDUCTION(+:SUM)
+    do i = 1, n
+        sum = sum + array(i)
+    end do
+!$OMP END PARALLEL DO
+</code></pre>
+<h3 id="array-sections"><a class="header" href="#array-sections">Array Sections</a></h3>
+<p>Fortran array sections use different syntax than C:</p>
+<pre><code class="language-fortran">!$OMP PARALLEL PRIVATE(A(1:N), B(:,1:M))
+    ! Work with array sections
+!$OMP END PARALLEL
+</code></pre>
+<h3 id="common-blocks"><a class="header" href="#common-blocks">Common Blocks</a></h3>
+<p>Fortran's <code>THREADPRIVATE</code> can apply to common blocks:</p>
+<pre><code class="language-fortran">      COMMON /MYDATA/ X, Y, Z
+!$OMP THREADPRIVATE(/MYDATA/)
+</code></pre>
+<h2 id="examples-1"><a class="header" href="#examples-1">Examples</a></h2>
+<p>See the <a href="../../examples/fortran/"><code>examples/fortran/</code></a> directory for complete working examples:</p>
+<ul>
+<li><strong>basic_parse.f90</strong>: Simple Fortran directive examples</li>
+<li><strong>tutorial_basic.f90</strong>: Full C API integration tutorial</li>
+</ul>
+<h2 id="building-fortran-programs-with-roup"><a class="header" href="#building-fortran-programs-with-roup">Building Fortran Programs with ROUP</a></h2>
+<h3 id="using-gfortran"><a class="header" href="#using-gfortran">Using gfortran</a></h3>
+<pre><code class="language-bash"># Compile Fortran code
+gfortran -c my_program.f90
+
+# Link with ROUP library
+gcc my_program.o -L/path/to/roup/target/release -lroup -o my_program
+
+# Run (set LD_LIBRARY_PATH)
+LD_LIBRARY_PATH=/path/to/roup/target/release ./my_program
+</code></pre>
+<h3 id="makefile-example"><a class="header" href="#makefile-example">Makefile Example</a></h3>
+<pre><code class="language-makefile">FC = gfortran
+ROUP_LIB = -L../../target/release -lroup -Wl,-rpath,../../target/release
+
+my_program: my_program.f90
+	$(FC) -o $@ $&lt; $(ROUP_LIB)
+</code></pre>
+<h2 id="known-limitations"><a class="header" href="#known-limitations">Known Limitations</a></h2>
+<p>⚠️ <strong>Current limitations in experimental Fortran support:</strong></p>
+<ol>
+<li>
+<p><strong>Single-Line Input Only</strong>: ROUP requires complete directives on a single line</p>
+<ul>
+<li><strong>Not supported</strong>: Multi-line directives with <code>&amp;</code> continuation
+<pre><code class="language-fortran">!$OMP PARALLEL DO &amp;
+!$OMP   PRIVATE(I,J)
+</code></pre>
+</li>
+<li><strong>Workaround</strong>: Provide complete directive on one line:
+<pre><code class="language-fortran">!$OMP PARALLEL DO PRIVATE(I,J)
+</code></pre>
+</li>
+<li><strong>Rationale</strong>: This is an architectural design constraint that applies to both C and Fortran. Users must preprocess multi-line directives into single lines before passing to ROUP.</li>
+</ul>
+</li>
+<li>
+<p><strong>End Directives</strong>: <code>!$OMP END PARALLEL</code> and similar end directives may not parse correctly</p>
+</li>
+<li>
+<p><strong>Array Sections</strong>: Complex array section syntax may have issues</p>
+</li>
+<li>
+<p><strong>Fixed-Form Column Rules</strong>: Strict column 1-6 sentinel placement not enforced</p>
+</li>
+<li>
+<p><strong>Fortran-Specific Directives</strong>: Some Fortran-only directives (e.g., <code>WORKSHARE</code>) may not be registered</p>
+</li>
+</ol>
+<h2 id="troubleshooting-4"><a class="header" href="#troubleshooting-4">Troubleshooting</a></h2>
+<h3 id="parse-errors"><a class="header" href="#parse-errors">Parse Errors</a></h3>
+<p>If parsing fails:</p>
+<ol>
+<li><strong>Check sentinel format</strong>: Use <code>!$OMP</code> for free-form or <code>!$OMP</code>/<code>C$OMP</code> for fixed-form</li>
+<li><strong>Verify case</strong>: While case-insensitive, ensure proper formatting</li>
+<li><strong>Check whitespace</strong>: Ensure proper spacing after sentinel</li>
+<li><strong>Use correct language mode</strong>: Specify <code>ROUP_LANG_FORTRAN_FREE</code> or <code>ROUP_LANG_FORTRAN_FIXED</code></li>
+</ol>
+<h3 id="directive-not-found"><a class="header" href="#directive-not-found">Directive Not Found</a></h3>
+<p>Some directives may not be in the registry. Check:</p>
+<ul>
+<li>Is the directive name correct? (Fortran supports both <code>DO</code> and <code>FOR</code> syntax)</li>
+<li>Is it a composite directive? (Use <code>PARALLEL DO</code> not <code>PARALLEL</code> + <code>DO</code>)</li>
+</ul>
+<h2 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h2>
+<p>See:</p>
+<ul>
+<li><a href="./c-tutorial.html">C Tutorial</a> - C API documentation</li>
+<li><a href="./api-reference.html">API Reference</a> - Complete API listing</li>
+<li><a href="./architecture.html">Architecture</a> - Parser internals</li>
+</ul>
+<h2 id="contributing"><a class="header" href="#contributing">Contributing</a></h2>
+<p>Fortran support is under active development. Contributions welcome:</p>
+<ul>
+<li>Test with real Fortran+OpenMP code</li>
+<li>Report parsing issues</li>
+<li>Add more Fortran-specific test cases</li>
+<li>Improve documentation</li>
+</ul>
+<h2 id="further-reading"><a class="header" href="#further-reading">Further Reading</a></h2>
+<ul>
+<li><a href="https://www.openmp.org/specifications/">OpenMP 5.2 Specification</a> - Official OpenMP standard</li>
+<li><a href="https://gcc.gnu.org/onlinedocs/gfortran/OpenMP.html">Fortran OpenMP Documentation</a> - GCC Fortran OpenMP guide</li>
+<li><a href="https://gcc.gnu.org/onlinedocs/gfortran/Interoperability-with-C.html">ISO C Binding</a> - Fortran-C interop guide</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="ompparser-compatibility-layer"><a class="header" href="#ompparser-compatibility-layer">ompparser Compatibility Layer</a></h1>
 <p>⚠️ <strong>Experimental Feature</strong> - This compatibility layer is under active development.</p>
 <p>ROUP provides a drop-in compatibility layer for projects using <a href="https://github.com/ouankou/ompparser">ompparser</a>, allowing you to switch to ROUP's expected-to-be faster, safer Rust-based parser without changing your code.</p>
@@ -3465,7 +3775,7 @@ A: ⚠️ Experimental stage - thoroughly tested (46 tests) but under active dev
 <li><strong>Discussions</strong>: <a href="https://github.com/ouankou/roup/discussions">GitHub Discussions</a></li>
 <li><strong>Email</strong>: See <a href="./contributing.html">Contributing Guide</a></li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="api-reference-1"><a class="header" href="#api-reference-1">API Reference</a></h1>
 <p>ROUP provides comprehensive APIs for Rust, C, and C++.</p>
 <hr />
 <h2 id="rust-api-documentation"><a class="header" href="#rust-api-documentation">Rust API Documentation</a></h2>
@@ -3677,9 +3987,12 @@ if (dir) {
 <hr />
 <h2 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h2>
 <h3 id="rust-1"><a class="header" href="#rust-1">Rust</a></h3>
-<pre><code class="language-rust">match parse(input) {
-    Ok(directive) =&gt; { /* use directive */ },
-    Err(e) =&gt; eprintln!("Parse error: {}", e),
+<pre><code class="language-rust ignore">use roup::parser::openmp;
+
+let parser = openmp::parser();
+match parser.parse(input) {
+    Ok((_, directive)) =&gt; { /* use directive */ },
+    Err(e) =&gt; eprintln!("Parse error: {:?}", e),
 }</code></pre>
 <h3 id="c-2"><a class="header" href="#c-2">C</a></h3>
 <pre><code class="language-c">OmpDirective* dir = roup_parse(input);
@@ -3716,7 +4029,7 @@ if (!dir) {
 <li><strong>Profile first</strong> - parsing is usually not the bottleneck</li>
 </ol>
 <hr />
-<h2 id="further-reading"><a class="header" href="#further-reading">Further Reading</a></h2>
+<h2 id="further-reading-1"><a class="header" href="#further-reading-1">Further Reading</a></h2>
 <ul>
 <li><a href="./api/roup/index.html">Rust API Documentation</a> - Complete rustdoc</li>
 <li><a href="./cpp-tutorial.html">C++ Tutorial</a> - Real-world C++ examples</li>
@@ -4068,7 +4381,7 @@ end do
 <hr />
 <h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
 <p>ROUP is structured in three main layers:</p>
-<pre><code>┌─────────────────────────────────────┐
+<pre><code class="language-text">┌─────────────────────────────────────┐
 │   C/C++ Applications                │
 ├─────────────────────────────────────┤
 │   C FFI Layer (16 functions)        │  ← ~60 lines of unsafe code (0.9%)
@@ -4077,20 +4390,26 @@ end do
 ├─────────────────────────────────────┤
 │   Lexer (nom-based)                  │  ← Token extraction
 └─────────────────────────────────────┘
-</code></pre>
-<p><strong>Key Design Principles:</strong></p>
-<ul>
-<li><strong>Safety First</strong>: 99.1% safe Rust code</li>
-<li><strong>Zero-Copy</strong>: Minimal allocations during parsing</li>
-<li><strong>Error Recovery</strong>: Detailed error messages with location info</li>
-<li><strong>Language Agnostic</strong>: Supports C, C++, and Fortran</li>
-</ul>
-<hr />
-<h2 id="lexer-layer"><a class="header" href="#lexer-layer">Lexer Layer</a></h2>
-<p><strong>Location</strong>: <code>src/lexer.rs</code></p>
-<p>The lexer transforms raw OpenMP pragma text into a stream of tokens.</p>
-<h3 id="tokenization-process"><a class="header" href="#tokenization-process">Tokenization Process</a></h3>
-<pre><code class="language-rust">Input:  "#pragma omp parallel num_threads(4)"
+```text
+
+**Key Design Principles:**
+- **Safety First**: 99.1% safe Rust code
+- **Zero-Copy**: Minimal allocations during parsing
+- **Error Recovery**: Detailed error messages with location info
+- **Language Agnostic**: Supports C, C++, and Fortran
+
+---
+
+## Lexer Layer
+
+**Location**: `src/lexer.rs`
+
+The lexer transforms raw OpenMP pragma text into a stream of tokens.
+
+### Tokenization Process
+
+```rust
+Input:  "#pragma omp parallel num_threads(4)"
          ↓
 Tokens: [
     Pragma("#pragma omp"),
@@ -4099,9 +4418,13 @@ Tokens: [
     LParen,
     Integer(4),
     RParen
-]</code></pre>
-<h3 id="token-types"><a class="header" href="#token-types">Token Types</a></h3>
-<pre><code class="language-rust">pub enum Token&lt;'a&gt; {
+]
+```text
+
+### Token Types
+
+```rust
+pub enum Token&lt;'a&gt; {
     Identifier(&amp;'a str),      // parallel, private, shared
     Integer(i64),              // 4, 100, 256
     Float(f64),                // 2.5, 1.0e-6
@@ -4114,49 +4437,76 @@ Tokens: [
     Minus,                     // -
     Star,                      // *
     // ... more operators
-}</code></pre>
-<h3 id="lexer-implementation"><a class="header" href="#lexer-implementation">Lexer Implementation</a></h3>
-<p><strong>Technology</strong>: Built with <a href="https://github.com/rust-bakery/nom">nom</a> parser combinators</p>
-<p><strong>Why nom?</strong></p>
-<ul>
-<li><strong>Zero-copy</strong>: Works directly on input &amp;str, no allocations</li>
-<li><strong>Composable</strong>: Small parsers combine into larger ones</li>
-<li><strong>Error-rich</strong>: Detailed error messages with position</li>
-<li><strong>Well-established</strong>: Widely used parser combinator library</li>
-</ul>
-<p><strong>Example Lexer Function:</strong></p>
-<pre><code class="language-rust">// Parse an identifier: alphanumeric + underscores
+}
+```text
+
+### Lexer Implementation
+
+**Technology**: Built with [nom](https://github.com/rust-bakery/nom) parser combinators
+
+**Why nom?**
+- **Zero-copy**: Works directly on input &amp;str, no allocations
+- **Composable**: Small parsers combine into larger ones
+- **Error-rich**: Detailed error messages with position
+- **Well-established**: Widely used parser combinator library
+
+**Example Lexer Function:**
+
+```rust
+// Parse an identifier: alphanumeric + underscores
 fn identifier(input: &amp;str) -&gt; IResult&lt;&amp;str, Token&gt; {
     let (remaining, matched) = take_while1(|c: char| {
         c.is_alphanumeric() || c == '_'
     })(input)?;
     
     Ok((remaining, Token::Identifier(matched)))
-}</code></pre>
-<hr />
-<h2 id="parser-layer"><a class="header" href="#parser-layer">Parser Layer</a></h2>
-<p><strong>Location</strong>: <code>src/parser/</code></p>
-<p>The parser converts token streams into a structured Intermediate Representation (IR).</p>
-<h3 id="parser-modules"><a class="header" href="#parser-modules">Parser Modules</a></h3>
-<pre><code>src/parser/
+}
+```text
+
+---
+
+## Parser Layer
+
+**Location**: `src/parser/`
+
+The parser converts token streams into a structured Intermediate Representation (IR).
+
+### Parser Modules
+
+```text
+src/parser/
 ├── mod.rs          # Main parser entry point
 ├── directive.rs    # Directive parsing (parallel, for, task, etc.)
 ├── clause.rs       # Clause parsing (private, reduction, etc.)
 └── openmp.rs       # OpenMP-specific parsing logic
-</code></pre>
-<h3 id="parsing-phases"><a class="header" href="#parsing-phases">Parsing Phases</a></h3>
-<h4 id="phase-1-directive-recognition"><a class="header" href="#phase-1-directive-recognition">Phase 1: Directive Recognition</a></h4>
-<pre><code class="language-rust">Input tokens: [Identifier("parallel"), Identifier("for"), ...]
+```text
+
+### Parsing Phases
+
+#### Phase 1: Directive Recognition
+
+```rust
+Input tokens: [Identifier("parallel"), Identifier("for"), ...]
                ↓
-Directive:    DirectiveKind::ParallelFor</code></pre>
-<p>Supports 120+ directive types from OpenMP 3.0 through 6.0.</p>
-<h4 id="phase-2-clause-parsing"><a class="header" href="#phase-2-clause-parsing">Phase 2: Clause Parsing</a></h4>
-<pre><code class="language-rust">Input tokens: [Identifier("num_threads"), LParen, Integer(4), RParen]
+Directive:    DirectiveKind::ParallelFor
+```text
+
+Supports 120+ directive types from OpenMP 3.0 through 6.0.
+
+#### Phase 2: Clause Parsing
+
+```rust
+Input tokens: [Identifier("num_threads"), LParen, Integer(4), RParen]
                ↓
-Clause:       Clause::NumThreads(IntegerExpr(4))</code></pre>
-<p>Parses 92+ clause types with full argument validation.</p>
-<h4 id="phase-3-ir-construction"><a class="header" href="#phase-3-ir-construction">Phase 3: IR Construction</a></h4>
-<pre><code class="language-rust">DirectiveIR {
+Clause:       Clause::NumThreads(IntegerExpr(4))
+```text
+
+Parses 92+ clause types with full argument validation.
+
+#### Phase 3: IR Construction
+
+```rust
+DirectiveIR {
     kind: DirectiveKind::ParallelFor,
     clauses: vec![
         Clause::NumThreads(IntegerExpr(4)),
@@ -4164,28 +4514,45 @@ Clause:       Clause::NumThreads(IntegerExpr(4))</code></pre>
     ],
     location: SourceLocation { line: 1, column: 1 },
     language: Language::C,
-}</code></pre>
-<h3 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h3>
-<p>Errors include detailed context:</p>
-<pre><code class="language-rust">ParseError {
+}
+```text
+
+### Error Handling
+
+Errors include detailed context:
+
+```rust
+ParseError {
     message: "Expected ')' after num_threads value",
     location: SourceLocation { line: 1, column: 27 },
     context: "#pragma omp parallel num_threads(4",
                                               ^
-}</code></pre>
-<hr />
-<h2 id="intermediate-representation-ir"><a class="header" href="#intermediate-representation-ir">Intermediate Representation (IR)</a></h2>
-<p><strong>Location</strong>: <code>src/ir/</code></p>
-<p>The IR is the central data structure representing parsed OpenMP directives.</p>
-<h3 id="ir-structure"><a class="header" href="#ir-structure">IR Structure</a></h3>
-<pre><code class="language-rust">pub struct DirectiveIR {
+}
+```text
+
+---
+
+## Intermediate Representation (IR)
+
+**Location**: `src/ir/`
+
+The IR is the central data structure representing parsed OpenMP directives.
+
+### IR Structure
+
+```rust
+pub struct DirectiveIR {
     pub kind: DirectiveKind,           // What directive?
     pub clauses: Vec&lt;Clause&gt;,          // What clauses?
     pub location: SourceLocation,      // Where in source?
     pub language: Language,            // C, C++, or Fortran?
-}</code></pre>
-<h3 id="directive-kinds-1"><a class="header" href="#directive-kinds-1">Directive Kinds</a></h3>
-<pre><code class="language-rust">pub enum DirectiveKind {
+}
+```text
+
+### Directive Kinds
+
+```rust
+pub enum DirectiveKind {
     // Parallel constructs
     Parallel,
     ParallelFor,
@@ -4225,9 +4592,13 @@ Clause:       Clause::NumThreads(IntegerExpr(4))</code></pre>
     Loop,
     
     // ... 120+ total directives
-}</code></pre>
-<h3 id="clause-types"><a class="header" href="#clause-types">Clause Types</a></h3>
-<pre><code class="language-rust">pub enum Clause {
+}
+```text
+
+### Clause Types
+
+```rust
+pub enum Clause {
     // Thread management
     NumThreads(IntegerExpr),
     If(Condition),
@@ -4259,9 +4630,13 @@ Clause:       Clause::NumThreads(IntegerExpr(4))</code></pre>
     Default(DefaultKind),
     
     // ... 92+ total clauses
-}</code></pre>
-<h3 id="supporting-types"><a class="header" href="#supporting-types">Supporting Types</a></h3>
-<pre><code class="language-rust">pub enum ScheduleKind {
+}
+```text
+
+### Supporting Types
+
+```rust
+pub enum ScheduleKind {
     Static,
     Dynamic,
     Guided,
@@ -4293,23 +4668,33 @@ pub enum Language {
     C,
     Cpp,
     Fortran,
-}</code></pre>
-<hr />
-<h2 id="c-ffi-layer"><a class="header" href="#c-ffi-layer">C FFI Layer</a></h2>
-<p><strong>Location</strong>: <code>src/c_api.rs</code></p>
-<p>The FFI layer exposes a minimal unsafe pointer-based API to C/C++.</p>
-<h3 id="design-philosophy"><a class="header" href="#design-philosophy">Design Philosophy</a></h3>
-<p><strong>Goal</strong>: Provide a traditional C API (malloc/free pattern) with minimal unsafe code.</p>
-<p><strong>Achieved</strong>:</p>
-<ul>
-<li><strong>16 functions</strong>: Complete C API surface</li>
-<li><strong>~60 lines of unsafe</strong>: Only at FFI boundary (~0.9% of file)</li>
-<li><strong>Standard patterns</strong>: Familiar to C programmers</li>
-<li><strong>Safe internals</strong>: All business logic in safe Rust</li>
-</ul>
-<h3 id="ffi-functions"><a class="header" href="#ffi-functions">FFI Functions</a></h3>
-<h4 id="lifecycle-functions-3"><a class="header" href="#lifecycle-functions-3">Lifecycle Functions (3)</a></h4>
-<pre><code class="language-c">// Parse directive, returns pointer or NULL
+}
+```text
+
+---
+
+## C FFI Layer
+
+**Location**: `src/c_api.rs`
+
+The FFI layer exposes a minimal unsafe pointer-based API to C/C++.
+
+### Design Philosophy
+
+**Goal**: Provide a traditional C API (malloc/free pattern) with minimal unsafe code.
+
+**Achieved**:
+- **16 functions**: Complete C API surface
+- **~60 lines of unsafe**: Only at FFI boundary (~0.9% of file)
+- **Standard patterns**: Familiar to C programmers
+- **Safe internals**: All business logic in safe Rust
+
+### FFI Functions
+
+#### Lifecycle Functions (3)
+
+```c
+// Parse directive, returns pointer or NULL
 OmpDirective* roup_parse(const char* input);
 
 // Free directive (required)
@@ -4317,9 +4702,12 @@ void roup_directive_free(OmpDirective* directive);
 
 // Free clause (not usually needed - owned by directive)
 void roup_clause_free(OmpClause* clause);
-</code></pre>
-<h4 id="directive-query-functions-3"><a class="header" href="#directive-query-functions-3">Directive Query Functions (3)</a></h4>
-<pre><code class="language-c">// Get directive type (integer)
+```text
+
+#### Directive Query Functions (3)
+
+```c
+// Get directive type (integer)
 int32_t roup_directive_kind(const OmpDirective* directive);
 
 // Get number of clauses
@@ -4327,16 +4715,22 @@ int32_t roup_directive_clause_count(const OmpDirective* directive);
 
 // Create iterator over clauses
 OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
-</code></pre>
-<h4 id="iterator-functions-2"><a class="header" href="#iterator-functions-2">Iterator Functions (2)</a></h4>
-<pre><code class="language-c">// Get next clause (returns 1 if available, 0 if done)
+```text
+
+#### Iterator Functions (2)
+
+```c
+// Get next clause (returns 1 if available, 0 if done)
 int32_t roup_clause_iterator_next(OmpClauseIterator* iter, OmpClause** out);
 
 // Free iterator
 void roup_clause_iterator_free(OmpClauseIterator* iter);
-</code></pre>
-<h4 id="clause-query-functions-4"><a class="header" href="#clause-query-functions-4">Clause Query Functions (4)</a></h4>
-<pre><code class="language-c">// Get clause type (0=num_threads, 2=private, etc.)
+```text
+
+#### Clause Query Functions (4)
+
+```c
+// Get clause type (0=num_threads, 2=private, etc.)
 int32_t roup_clause_kind(const OmpClause* clause);
 
 // Get schedule kind for schedule clauses
@@ -4347,9 +4741,12 @@ int32_t roup_clause_reduction_operator(const OmpClause* clause);
 
 // Get default data sharing
 int32_t roup_clause_default_data_sharing(const OmpClause* clause);
-</code></pre>
-<h4 id="variable-list-functions-4"><a class="header" href="#variable-list-functions-4">Variable List Functions (4)</a></h4>
-<pre><code class="language-c">// Get variable list from clause
+```text
+
+#### Variable List Functions (4)
+
+```c
+// Get variable list from clause
 OmpStringList* roup_clause_variables(const OmpClause* clause);
 
 // Get list length
@@ -4360,73 +4757,97 @@ const char* roup_string_list_get(const OmpStringList* list, int32_t index);
 
 // Free string list
 void roup_string_list_free(OmpStringList* list);
-</code></pre>
-<h3 id="memory-model"><a class="header" href="#memory-model">Memory Model</a></h3>
-<p><strong>Ownership Rules:</strong></p>
-<ol>
-<li><strong>Directives</strong>: Created by <code>roup_parse()</code>, freed by <code>roup_directive_free()</code></li>
-<li><strong>Iterators</strong>: Created by <code>roup_directive_clauses_iter()</code>, freed by <code>roup_clause_iterator_free()</code></li>
-<li><strong>String Lists</strong>: Created by <code>roup_clause_variables()</code>, freed by <code>roup_string_list_free()</code></li>
-<li><strong>Clauses</strong>: Owned by directive, DO NOT call <code>roup_clause_free()</code> on them</li>
-</ol>
-<p><strong>Pattern</strong>: Standard C malloc/free, familiar to all C programmers.</p>
-<h3 id="safety-boundaries"><a class="header" href="#safety-boundaries">Safety Boundaries</a></h3>
-<h4 id="the-60-lines-of-unsafe"><a class="header" href="#the-60-lines-of-unsafe">The ~60 Lines of Unsafe</a></h4>
-<p>All unsafe code is confined to FFI boundary operations:</p>
-<p><strong>1. Reading C Strings (2 places)</strong></p>
-<pre><code class="language-rust">// Safety: Caller must ensure input is valid null-terminated C string
+```text
+
+### Memory Model
+
+**Ownership Rules:**
+1. **Directives**: Created by `roup_parse()`, freed by `roup_directive_free()`
+2. **Iterators**: Created by `roup_directive_clauses_iter()`, freed by `roup_clause_iterator_free()`
+3. **String Lists**: Created by `roup_clause_variables()`, freed by `roup_string_list_free()`
+4. **Clauses**: Owned by directive, DO NOT call `roup_clause_free()` on them
+
+**Pattern**: Standard C malloc/free, familiar to all C programmers.
+
+### Safety Boundaries
+
+#### The ~60 Lines of Unsafe
+
+All unsafe code is confined to FFI boundary operations:
+
+**1. Reading C Strings (2 places)**
+```rust
+// Safety: Caller must ensure input is valid null-terminated C string
 unsafe {
     CStr::from_ptr(input).to_str()
-}</code></pre>
-<p><strong>Checks:</strong></p>
-<ul>
-<li>✅ NULL pointer check before unsafe</li>
-<li>✅ UTF-8 validation with error return</li>
-<li>✅ No memory writes, only reads</li>
-</ul>
-<p><strong>2. Writing to Output Pointers (multiple places)</strong></p>
-<pre><code class="language-rust">// Safety: Caller must ensure out is valid, aligned, writable
+}
+```text
+
+**Checks:**
+- ✅ NULL pointer check before unsafe
+- ✅ UTF-8 validation with error return
+- ✅ No memory writes, only reads
+
+**2. Writing to Output Pointers (multiple places)**
+```rust
+// Safety: Caller must ensure out is valid, aligned, writable
 unsafe {
     *out = value;
-}</code></pre>
-<p><strong>Checks:</strong></p>
-<ul>
-<li>✅ NULL pointer check before unsafe</li>
-<li>✅ Only writes primitive types (i32, u32, pointers)</li>
-<li>✅ Single write operation, no loops</li>
-</ul>
-<p><strong>3. Pointer Manipulation for Iterators</strong></p>
-<pre><code class="language-rust">// Safety: Internal Box pointer management
+}
+```text
+
+**Checks:**
+- ✅ NULL pointer check before unsafe
+- ✅ Only writes primitive types (i32, u32, pointers)
+- ✅ Single write operation, no loops
+
+**3. Pointer Manipulation for Iterators**
+```rust
+// Safety: Internal Box pointer management
 unsafe {
     Box::from_raw(ptr)
-}</code></pre>
-<p><strong>Checks:</strong></p>
-<ul>
-<li>✅ NULL pointer check</li>
-<li>✅ Pointer created by Box::into_raw()</li>
-<li>✅ No double-free (consumed on free)</li>
-</ul>
-<h3 id="why-minimal-unsafe-is-necessary"><a class="header" href="#why-minimal-unsafe-is-necessary">Why Minimal Unsafe is Necessary</a></h3>
-<p><strong>Cannot avoid unsafe for FFI:</strong></p>
-<ul>
-<li>Reading C strings requires <code>CStr::from_ptr()</code> (unsafe)</li>
-<li>Writing to C pointers requires dereference (unsafe)</li>
-<li>This is standard Rust FFI practice</li>
-</ul>
-<p><strong>Alternative approaches considered:</strong></p>
-<p>❌ <strong>Zero unsafe</strong>: Would require C programs to build strings byte-by-byte (40x slower, unusable)</p>
-<p>❌ <strong>Handle-based API</strong>: Would need global registry with more unsafe code (50+ blocks)</p>
-<p>✅ <strong>Minimal unsafe pointer API</strong>: Only ~60 lines, standard C patterns, practical performance</p>
-<p>See <a href="https://github.com/ouankou/roup/blob/main/AGENTS.md">AGENTS.md</a> for the official API architecture documentation.</p>
-<hr />
-<h2 id="data-flow-example"><a class="header" href="#data-flow-example">Data Flow Example</a></h2>
-<p>Let's trace a complete parse operation:</p>
-<h3 id="input"><a class="header" href="#input">Input</a></h3>
-<pre><code class="language-c">const char* input = "#pragma omp parallel for num_threads(4) private(i)";
+}
+```text
+
+**Checks:**
+- ✅ NULL pointer check
+- ✅ Pointer created by Box::into_raw()
+- ✅ No double-free (consumed on free)
+
+### Why Minimal Unsafe is Necessary
+
+**Cannot avoid unsafe for FFI:**
+- Reading C strings requires `CStr::from_ptr()` (unsafe)
+- Writing to C pointers requires dereference (unsafe)
+- This is standard Rust FFI practice
+
+**Alternative approaches considered:**
+
+❌ **Zero unsafe**: Would require C programs to build strings byte-by-byte (40x slower, unusable)
+
+❌ **Handle-based API**: Would need global registry with more unsafe code (50+ blocks)
+
+✅ **Minimal unsafe pointer API**: Only ~60 lines, standard C patterns, practical performance
+
+See [AGENTS.md](https://github.com/ouankou/roup/blob/main/AGENTS.md) for the official API architecture documentation.
+
+---
+
+## Data Flow Example
+
+Let's trace a complete parse operation:
+
+### Input
+
+```c
+const char* input = "#pragma omp parallel for num_threads(4) private(i)";
 OmpDirective* dir = roup_parse(input);
-</code></pre>
-<h3 id="step-1-ffi-boundary-c--rust"><a class="header" href="#step-1-ffi-boundary-c--rust">Step 1: FFI Boundary (C → Rust)</a></h3>
-<pre><code class="language-rust">// src/c_api.rs
+```text
+
+### Step 1: FFI Boundary (C → Rust)
+
+```rust
+// src/c_api.rs
 #[no_mangle]
 pub extern "C" fn roup_parse(input: *const c_char) -&gt; *mut OmpDirective {
     // NULL check
@@ -4444,9 +4865,13 @@ pub extern "C" fn roup_parse(input: *const c_char) -&gt; *mut OmpDirective {
     
     // Box and return pointer
     Box::into_raw(Box::new(directive_ir))
-}</code></pre>
-<h3 id="step-2-lexer-pure-rust"><a class="header" href="#step-2-lexer-pure-rust">Step 2: Lexer (Pure Rust)</a></h3>
-<pre><code class="language-rust">// src/lexer.rs
+}
+```text
+
+### Step 2: Lexer (Pure Rust)
+
+```rust
+// src/lexer.rs
 tokenize("#pragma omp parallel for num_threads(4) private(i)")
   ↓
 [
@@ -4461,9 +4886,13 @@ tokenize("#pragma omp parallel for num_threads(4) private(i)")
     LParen,
     Identifier("i"),
     RParen,
-]</code></pre>
-<h3 id="step-3-parser-pure-rust"><a class="header" href="#step-3-parser-pure-rust">Step 3: Parser (Pure Rust)</a></h3>
-<pre><code class="language-rust">// src/parser/mod.rs
+]
+```text
+
+### Step 3: Parser (Pure Rust)
+
+```rust
+// src/parser/mod.rs
 parse_directive(tokens)
   ↓
 DirectiveIR {
@@ -4474,111 +4903,165 @@ DirectiveIR {
     ],
     location: SourceLocation { line: 1, column: 1 },
     language: Language::C,
-}</code></pre>
-<h3 id="step-4-ffi-boundary-rust--c"><a class="header" href="#step-4-ffi-boundary-rust--c">Step 4: FFI Boundary (Rust → C)</a></h3>
-<pre><code class="language-rust">// Return pointer to C
-Box::into_raw(Box::new(directive_ir)) → 0x7fff12340000</code></pre>
-<h3 id="step-5-c-queries"><a class="header" href="#step-5-c-queries">Step 5: C Queries</a></h3>
-<pre><code class="language-c">int32_t kind = roup_directive_kind(dir);           // 28 (ParallelFor)
+}
+```text
+
+### Step 4: FFI Boundary (Rust → C)
+
+```rust
+// Return pointer to C
+Box::into_raw(Box::new(directive_ir)) → 0x7fff12340000
+```text
+
+### Step 5: C Queries
+
+```c
+int32_t kind = roup_directive_kind(dir);           // 28 (ParallelFor)
 int32_t count = roup_directive_clause_count(dir);  // 2
-</code></pre>
-<h3 id="step-6-cleanup"><a class="header" href="#step-6-cleanup">Step 6: Cleanup</a></h3>
-<pre><code class="language-c">roup_directive_free(dir);  // Calls Box::from_raw() and drops
-</code></pre>
-<hr />
-<h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
-<h3 id="time-complexity"><a class="header" href="#time-complexity">Time Complexity</a></h3>
-<ul>
-<li><strong>Lexing</strong>: O(n) where n = input length</li>
-<li><strong>Parsing</strong>: O(n × m) where m = average clause complexity (~O(n) in practice)</li>
-<li><strong>IR Construction</strong>: O(c) where c = number of clauses</li>
-<li><strong>FFI Call Overhead</strong>: ~10ns per call</li>
-</ul>
-<h3 id="space-complexity"><a class="header" href="#space-complexity">Space Complexity</a></h3>
-<ul>
-<li><strong>Lexer</strong>: O(1) - zero-copy, works on &amp;str</li>
-<li><strong>Parser</strong>: O(c) - allocates clause vector</li>
-<li><strong>IR</strong>: O(c) - owns clause data</li>
-<li><strong>FFI</strong>: O(1) - pointer conversion only</li>
-</ul>
-<h3 id="benchmarks-1"><a class="header" href="#benchmarks-1">Benchmarks</a></h3>
-<p>Typical directive parsing:</p>
-<div class="table-wrapper"><table><thead><tr><th>Directive</th><th>Time</th><th>Allocations</th></tr></thead><tbody>
-<tr><td><code>#pragma omp parallel</code></td><td>~500ns</td><td>1 (DirectiveIR)</td></tr>
-<tr><td><code>#pragma omp parallel for num_threads(4)</code></td><td>~800ns</td><td>2 (DirectiveIR + 1 clause)</td></tr>
-<tr><td><code>#pragma omp parallel for private(i,j,k) reduction(+:sum)</code></td><td>~1.2µs</td><td>3 (DirectiveIR + 2 clauses)</td></tr>
-</tbody></table>
-</div>
-<p><strong>Compare to old handle-based API</strong>: 40x fewer FFI calls, 320x faster string building.</p>
-<hr />
-<h2 id="thread-safety-1"><a class="header" href="#thread-safety-1">Thread Safety</a></h2>
-<h3 id="safe-concurrency"><a class="header" href="#safe-concurrency">Safe Concurrency</a></h3>
-<p><strong>Parser</strong>: Thread-safe, can parse from multiple threads simultaneously</p>
-<pre><code class="language-rust">// Safe to do in parallel
+```text
+
+### Step 6: Cleanup
+
+```c
+roup_directive_free(dir);  // Calls Box::from_raw() and drops
+```text
+
+---
+
+## Performance Characteristics
+
+### Time Complexity
+
+- **Lexing**: O(n) where n = input length
+- **Parsing**: O(n × m) where m = average clause complexity (~O(n) in practice)
+- **IR Construction**: O(c) where c = number of clauses
+- **FFI Call Overhead**: ~10ns per call
+
+### Space Complexity
+
+- **Lexer**: O(1) - zero-copy, works on &amp;str
+- **Parser**: O(c) - allocates clause vector
+- **IR**: O(c) - owns clause data
+- **FFI**: O(1) - pointer conversion only
+
+### Benchmarks
+
+Typical directive parsing:
+
+| Directive | Time | Allocations |
+|-----------|------|-------------|
+| `#pragma omp parallel` | ~500ns | 1 (DirectiveIR) |
+| `#pragma omp parallel for num_threads(4)` | ~800ns | 2 (DirectiveIR + 1 clause) |
+| `#pragma omp parallel for private(i,j,k) reduction(+:sum)` | ~1.2µs | 3 (DirectiveIR + 2 clauses) |
+
+**Compare to old handle-based API**: 40x fewer FFI calls, 320x faster string building.
+
+---
+
+## Thread Safety
+
+### Safe Concurrency
+
+**Parser**: Thread-safe, can parse from multiple threads simultaneously
+
+```rust
+// Safe to do in parallel
 std::thread::spawn(|| {
     let dir1 = parse("#pragma omp parallel");
 });
 std::thread::spawn(|| {
     let dir2 = parse("#pragma omp for");
-});</code></pre>
-<p><strong>IR</strong>: Immutable after construction, safe to share across threads</p>
-<p><strong>FFI</strong>: Each directive is independent, safe to parse in parallel</p>
-<h3 id="unsafe-patterns-user-responsibility"><a class="header" href="#unsafe-patterns-user-responsibility">Unsafe Patterns (User Responsibility)</a></h3>
-<p>❌ <strong>Sharing directive across threads without synchronization</strong></p>
-<pre><code class="language-c">// Thread 1
+});
+```text
+
+**IR**: Immutable after construction, safe to share across threads
+
+**FFI**: Each directive is independent, safe to parse in parallel
+
+### Unsafe Patterns (User Responsibility)
+
+❌ **Sharing directive across threads without synchronization**
+```c
+// Thread 1
 roup_directive_free(dir);
 
 // Thread 2 (at same time)
 roup_directive_kind(dir);  // Use-after-free!
-</code></pre>
-<p>❌ <strong>Double-free</strong></p>
-<pre><code class="language-c">roup_directive_free(dir);
+```text
+
+❌ **Double-free**
+```c
+roup_directive_free(dir);
 roup_directive_free(dir);  // Undefined behavior!
-</code></pre>
-<p>✅ <strong>Safe multi-threaded usage</strong></p>
-<pre><code class="language-c">// Each thread has its own directive
+```text
+
+✅ **Safe multi-threaded usage**
+```c
+// Each thread has its own directive
 OmpDirective* dir1 = roup_parse("#pragma omp parallel");  // Thread 1
 OmpDirective* dir2 = roup_parse("#pragma omp for");       // Thread 2
-</code></pre>
-<hr />
-<h2 id="error-handling-strategy"><a class="header" href="#error-handling-strategy">Error Handling Strategy</a></h2>
-<h3 id="rust-api-1"><a class="header" href="#rust-api-1">Rust API</a></h3>
-<p>Uses <code>Result&lt;DirectiveIR, ParseError&gt;</code>:</p>
-<pre><code class="language-rust">match parse(input) {
+```text
+
+---
+
+## Error Handling Strategy
+
+### Rust API
+
+Uses `Result&lt;DirectiveIR, ParseError&gt;`:
+
+```rust
+match parse(input) {
     Ok(directive) =&gt; { /* use directive */ },
     Err(ParseError { message, location, .. }) =&gt; {
         eprintln!("Parse error at line {}: {}", location.line, message);
     }
-}</code></pre>
-<h3 id="c-api-1"><a class="header" href="#c-api-1">C API</a></h3>
-<p>Uses <code>NULL</code> return values:</p>
-<pre><code class="language-c">OmpDirective* dir = roup_parse(input);
+}
+```text
+
+### C API
+
+Uses `NULL` return values:
+
+```c
+OmpDirective* dir = roup_parse(input);
 if (dir == NULL) {
     fprintf(stderr, "Parse failed\n");
     return 1;
 }
-</code></pre>
-<p><strong>Query functions</strong>: Return <code>-1</code> or safe defaults for NULL inputs</p>
-<pre><code class="language-c">int32_t kind = roup_directive_kind(NULL);  // Returns -1, won't crash
-</code></pre>
-<hr />
-<h2 id="testing-strategy"><a class="header" href="#testing-strategy">Testing Strategy</a></h2>
-<h3 id="test-coverage-1"><a class="header" href="#test-coverage-1">Test Coverage</a></h3>
-<pre><code>Total Tests:    352
+```text
+
+**Query functions**: Return `-1` or safe defaults for NULL inputs
+
+```c
+int32_t kind = roup_directive_kind(NULL);  // Returns -1, won't crash
+```text
+
+---
+
+## Testing Strategy
+
+### Test Coverage
+
+```text
+Total Tests:    352
 Unit Tests:     239
 Integration:    51
 Doc Tests:      62
-</code></pre>
-<h3 id="test-categories"><a class="header" href="#test-categories">Test Categories</a></h3>
-<ol>
-<li><strong>Lexer Tests</strong>: Token extraction, edge cases, Unicode</li>
-<li><strong>Parser Tests</strong>: Directive recognition, clause parsing, error cases</li>
-<li><strong>IR Tests</strong>: Structure validation, roundtrip serialization</li>
-<li><strong>FFI Tests</strong>: NULL handling, memory safety, error propagation</li>
-<li><strong>Concurrent Tests</strong>: Multi-threaded parsing, race detection</li>
-</ol>
-<h3 id="example-tests"><a class="header" href="#example-tests">Example Tests</a></h3>
-<pre><code class="language-rust">#[test]
+```text
+
+### Test Categories
+
+1. **Lexer Tests**: Token extraction, edge cases, Unicode
+2. **Parser Tests**: Directive recognition, clause parsing, error cases
+3. **IR Tests**: Structure validation, roundtrip serialization
+4. **FFI Tests**: NULL handling, memory safety, error propagation
+5. **Concurrent Tests**: Multi-threaded parsing, race detection
+
+### Example Tests
+
+```rust
+#[test]
 fn test_parallel_for_parsing() {
     let result = parse("#pragma omp parallel for num_threads(4)");
     assert!(result.is_ok());
@@ -4600,97 +5083,106 @@ fn test_ffi_null_safety() {
     
     let kind = roup_directive_kind(std::ptr::null());
     assert_eq!(kind, -1);
-}</code></pre>
-<hr />
-<h2 id="design-trade-offs"><a class="header" href="#design-trade-offs">Design Trade-offs</a></h2>
-<h3 id="lexer-nom-vs-custom"><a class="header" href="#lexer-nom-vs-custom">Lexer: nom vs Custom</a></h3>
-<p><strong>Chose nom:</strong></p>
-<ul>
-<li>✅ Zero-copy parsing</li>
-<li>✅ Rich error messages</li>
-<li>✅ Well-tested combinators</li>
-<li>✅ Easy to extend</li>
-</ul>
-<p><strong>vs Custom Lexer:</strong></p>
-<ul>
-<li>❌ Learning curve</li>
-<li>❌ Dependency on external crate</li>
-</ul>
-<h3 id="ir-owned-vs-borrowed"><a class="header" href="#ir-owned-vs-borrowed">IR: Owned vs Borrowed</a></h3>
-<p><strong>Chose owned (Vec, String):</strong></p>
-<ul>
-<li>✅ Simple lifetime management</li>
-<li>✅ Easy to pass across FFI</li>
-<li>✅ No lifetime annotations in IR</li>
-</ul>
-<p><strong>vs Borrowed (&amp;str slices):</strong></p>
-<ul>
-<li>❌ Slower (allocations)</li>
-<li>❌ More memory usage</li>
-</ul>
-<p><strong>Justification</strong>: Parsing is not the bottleneck; simplicity and FFI compatibility matter more.</p>
-<h3 id="ffi-pointers-vs-handles"><a class="header" href="#ffi-pointers-vs-handles">FFI: Pointers vs Handles</a></h3>
-<p><strong>Chose pointers:</strong></p>
-<ul>
-<li>✅ Standard C pattern (malloc/free)</li>
-<li>✅ Minimal unsafe (~60 lines)</li>
-<li>✅ Zero overhead</li>
-<li>✅ Familiar to C programmers</li>
-</ul>
-<p><strong>vs Handle-based:</strong></p>
-<ul>
-<li>❌ 40x more FFI calls</li>
-<li>❌ 50+ unsafe blocks</li>
-<li>❌ Global registry complexity</li>
-</ul>
-<p>See <a href="https://github.com/ouankou/roup/blob/main/AGENTS.md#c-ffi-api-architecture">AGENTS.md - C FFI API Architecture</a> for details.</p>
-<hr />
-<h2 id="future-architecture-considerations"><a class="header" href="#future-architecture-considerations">Future Architecture Considerations</a></h2>
-<h3 id="potential-enhancements"><a class="header" href="#potential-enhancements">Potential Enhancements</a></h3>
-<ol>
-<li><strong>Incremental Parsing</strong>: Parse only changed directives</li>
-<li><strong>Streaming API</strong>: Parse large files without loading into memory</li>
-<li><strong>Parallel Parsing</strong>: Parse multiple files concurrently</li>
-<li><strong>AST Transformation</strong>: Optimize or transform directives</li>
-<li><strong>Code Generation</strong>: Generate code from IR</li>
-</ol>
-<h3 id="stability-guarantees"><a class="header" href="#stability-guarantees">Stability Guarantees</a></h3>
-<p><strong>⚠️ Pre-1.0 Experimental Status:</strong></p>
-<p>ROUP is under active development. While we aim for stability, <strong>all APIs may change</strong> before v1.0.</p>
-<p><strong>More stable</strong> (unlikely to change much):</p>
-<ul>
-<li>Core parsing functionality (<code>parse()</code> pattern)</li>
-<li>C FFI function signatures (16 functions)</li>
-<li>IR structure (major fields)</li>
-</ul>
-<p><strong>Less stable</strong> (may change between versions):</p>
-<ul>
-<li>Internal parser implementation details</li>
-<li>Lexer token types and error structures</li>
-<li>Error message formatting</li>
-<li>Clause/directive kind integer values</li>
-<li>Specific API details and return types</li>
-</ul>
-<hr />
-<h2 id="summary-3"><a class="header" href="#summary-3">Summary</a></h2>
-<p>ROUP's architecture prioritizes:</p>
-<ol>
-<li><strong>Safety</strong>: 99.1% safe Rust, minimal unsafe only at FFI boundary</li>
-<li><strong>Performance</strong>: Zero-copy lexing, minimal allocations</li>
-<li><strong>Usability</strong>: Standard C patterns, clear error messages</li>
-<li><strong>Correctness</strong>: 352 tests, comprehensive OpenMP support</li>
-</ol>
-<p>The three-layer design (Lexer → Parser → FFI) provides a clean separation of concerns while maintaining excellent performance characteristics.</p>
-<p><strong>Key Metrics:</strong></p>
-<ul>
-<li>16 FFI functions</li>
-<li>~60 lines of unsafe code (0.9%)</li>
-<li>95 directives</li>
-<li>91 clauses</li>
-<li>352 tests</li>
-<li>~500ns to parse simple directive</li>
-</ul>
-<p>For implementation details, see the source code in <code>src/</code>.</p>
+}
+```text
+
+---
+
+## Design Trade-offs
+
+### Lexer: nom vs Custom
+
+**Chose nom:**
+- ✅ Zero-copy parsing
+- ✅ Rich error messages
+- ✅ Well-tested combinators
+- ✅ Easy to extend
+
+**vs Custom Lexer:**
+- ❌ Learning curve
+- ❌ Dependency on external crate
+
+### IR: Owned vs Borrowed
+
+**Chose owned (Vec, String):**
+- ✅ Simple lifetime management
+- ✅ Easy to pass across FFI
+- ✅ No lifetime annotations in IR
+
+**vs Borrowed (&amp;str slices):**
+- ❌ Slower (allocations)
+- ❌ More memory usage
+
+**Justification**: Parsing is not the bottleneck; simplicity and FFI compatibility matter more.
+
+### FFI: Pointers vs Handles
+
+**Chose pointers:**
+- ✅ Standard C pattern (malloc/free)
+- ✅ Minimal unsafe (~60 lines)
+- ✅ Zero overhead
+- ✅ Familiar to C programmers
+
+**vs Handle-based:**
+- ❌ 40x more FFI calls
+- ❌ 50+ unsafe blocks
+- ❌ Global registry complexity
+
+See [AGENTS.md - C FFI API Architecture](https://github.com/ouankou/roup/blob/main/AGENTS.md#c-ffi-api-architecture) for details.
+
+---
+
+## Future Architecture Considerations
+
+### Potential Enhancements
+
+1. **Incremental Parsing**: Parse only changed directives
+2. **Streaming API**: Parse large files without loading into memory
+3. **Parallel Parsing**: Parse multiple files concurrently
+4. **AST Transformation**: Optimize or transform directives
+5. **Code Generation**: Generate code from IR
+
+### Stability Guarantees
+
+**⚠️ Pre-1.0 Experimental Status:**
+
+ROUP is under active development. While we aim for stability, **all APIs may change** before v1.0.
+
+**More stable** (unlikely to change much):
+- Core parsing functionality (`parse()` pattern)
+- C FFI function signatures (16 functions)
+- IR structure (major fields)
+
+**Less stable** (may change between versions):
+- Internal parser implementation details
+- Lexer token types and error structures
+- Error message formatting
+- Clause/directive kind integer values
+- Specific API details and return types
+
+---
+
+## Summary
+
+ROUP's architecture prioritizes:
+
+1. **Safety**: 99.1% safe Rust, minimal unsafe only at FFI boundary
+2. **Performance**: Zero-copy lexing, minimal allocations
+3. **Usability**: Standard C patterns, clear error messages
+4. **Correctness**: 352 tests, comprehensive OpenMP support
+
+The three-layer design (Lexer → Parser → FFI) provides a clean separation of concerns while maintaining excellent performance characteristics.
+
+**Key Metrics:**
+- 16 FFI functions
+- ~60 lines of unsafe code (0.9%)
+- 95 directives
+- 91 clauses
+- 352 tests
+- ~500ns to parse simple directive
+
+For implementation details, see the source code in `src/`.
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="contributing-guide"><a class="header" href="#contributing-guide">Contributing Guide</a></h1>
 <p>Thank you for your interest in contributing to ROUP! This guide will help you get started.</p>
 <hr />
@@ -4713,42 +5205,52 @@ fn test_ffi_null_safety() {
 <li><strong>Environment</strong>: OS, Rust version, ROUP version</li>
 </ul>
 <p><strong>Example:</strong></p>
-<pre><code>Title: Parser fails on `collapse` clause with variable
+<pre><code class="language-text">Title: Parser fails on `collapse` clause with variable
 
 Input: #pragma omp for collapse(n)
 Expected: Parse successfully
 Actual: Parse error: "Expected integer literal"
 Environment: Ubuntu 22.04, Rust 1.75, ROUP 0.1.0
-</code></pre>
-<h3 id="2-suggest-features"><a class="header" href="#2-suggest-features">2. Suggest Features</a></h3>
-<p>Have an idea? <a href="https://github.com/ouankou/roup/discussions">Start a discussion</a> or open an issue with:</p>
-<ul>
-<li><strong>Use case</strong>: Why is this needed?</li>
-<li><strong>Proposed API</strong>: How would it work?</li>
-<li><strong>Alternatives</strong>: Other ways to solve the problem?</li>
-</ul>
-<h3 id="3-improve-documentation"><a class="header" href="#3-improve-documentation">3. Improve Documentation</a></h3>
-<p>Documentation improvements are always welcome:</p>
-<ul>
-<li>Fix typos or unclear explanations</li>
-<li>Add examples</li>
-<li>Improve error messages</li>
-<li>Translate documentation</li>
-<li>Write tutorials or blog posts</li>
-</ul>
-<p>See <a href="contributing.html#documentation-updates">Documentation Updates</a> below.</p>
-<h3 id="4-submit-code"><a class="header" href="#4-submit-code">4. Submit Code</a></h3>
-<p>Ready to code? See <a href="contributing.html#development-setup">Development Setup</a> and <a href="contributing.html#pull-request-process">Pull Request Process</a>.</p>
-<hr />
-<h2 id="development-setup"><a class="header" href="#development-setup">Development Setup</a></h2>
-<h3 id="prerequisites-4"><a class="header" href="#prerequisites-4">Prerequisites</a></h3>
-<ul>
-<li><strong>Rust 1.70+</strong> - <a href="https://rustup.rs/">Install Rust</a></li>
-<li><strong>Git</strong> - Version control</li>
-<li><strong>mdBook</strong> (optional) - For documentation: <code>cargo install mdbook</code></li>
-</ul>
-<h3 id="clone-and-build"><a class="header" href="#clone-and-build">Clone and Build</a></h3>
-<pre><code class="language-bash"># Clone repository
+```text
+
+### 2. Suggest Features
+
+Have an idea? [Start a discussion](https://github.com/ouankou/roup/discussions) or open an issue with:
+
+- **Use case**: Why is this needed?
+- **Proposed API**: How would it work?
+- **Alternatives**: Other ways to solve the problem?
+
+### 3. Improve Documentation
+
+Documentation improvements are always welcome:
+
+- Fix typos or unclear explanations
+- Add examples
+- Improve error messages
+- Translate documentation
+- Write tutorials or blog posts
+
+See [Documentation Updates](#documentation-updates) below.
+
+### 4. Submit Code
+
+Ready to code? See [Development Setup](#development-setup) and [Pull Request Process](#pull-request-process).
+
+---
+
+## Development Setup
+
+### Prerequisites
+
+- **Rust 1.70+** - [Install Rust](https://rustup.rs/)
+- **Git** - Version control
+- **mdBook** (optional) - For documentation: `cargo install mdbook`
+
+### Clone and Build
+
+```bash
+# Clone repository
 git clone https://github.com/ouankou/roup.git
 cd roup
 
@@ -4760,16 +5262,18 @@ cargo test
 
 # Build documentation
 cargo doc --no-deps --open
-</code></pre>
-<h3 id="development-tools"><a class="header" href="#development-tools">Development Tools</a></h3>
-<p><strong>Recommended VS Code Extensions:</strong></p>
-<ul>
-<li>rust-analyzer</li>
-<li>Even Better TOML</li>
-<li>Error Lens</li>
-</ul>
-<p><strong>Recommended CLI Tools:</strong></p>
-<pre><code class="language-bash"># Code formatter
+```text
+
+### Development Tools
+
+**Recommended VS Code Extensions:**
+- rust-analyzer
+- Even Better TOML
+- Error Lens
+
+**Recommended CLI Tools:**
+```bash
+# Code formatter
 rustup component add rustfmt
 
 # Linter
@@ -4777,13 +5281,20 @@ rustup component add clippy
 
 # Documentation builder
 cargo install mdbook
-</code></pre>
-<hr />
-<h2 id="code-quality-standards"><a class="header" href="#code-quality-standards">Code Quality Standards</a></h2>
-<h3 id="rust-code"><a class="header" href="#rust-code">Rust Code</a></h3>
-<h4 id="1-use-safe-rust"><a class="header" href="#1-use-safe-rust">1. Use Safe Rust</a></h4>
-<p><strong>Rule</strong>: Unsafe code is permitted ONLY at the FFI boundary in <code>src/c_api.rs</code>.</p>
-<pre><code class="language-rust">// ✅ GOOD: Safe Rust in parser
+```text
+
+---
+
+## Code Quality Standards
+
+### Rust Code
+
+#### 1. Use Safe Rust
+
+**Rule**: Unsafe code is permitted ONLY at the FFI boundary in `src/c_api.rs`.
+
+```rust
+// ✅ GOOD: Safe Rust in parser
 pub fn parse(input: &amp;str) -&gt; Result&lt;DirectiveIR, ParseError&gt; {
     // All safe code
 }
@@ -4793,31 +5304,46 @@ pub fn parse(input: &amp;str) -&gt; Result&lt;DirectiveIR, ParseError&gt; {
     unsafe {  // ← Not allowed outside c_api.rs!
         // ...
     }
-}</code></pre>
-<h4 id="2-format-your-code"><a class="header" href="#2-format-your-code">2. Format Your Code</a></h4>
-<pre><code class="language-bash"># Format all code
+}
+```text
+
+#### 2. Format Your Code
+
+```bash
+# Format all code
 cargo fmt
 
 # Check formatting (CI uses this)
 cargo fmt -- --check
-</code></pre>
-<h4 id="3-pass-clippy"><a class="header" href="#3-pass-clippy">3. Pass Clippy</a></h4>
-<pre><code class="language-bash"># Run linter
+```text
+
+#### 3. Pass Clippy
+
+```bash
+# Run linter
 cargo clippy
 
 # CI requires no warnings
 cargo clippy -- -D warnings
-</code></pre>
-<h4 id="4-write-tests"><a class="header" href="#4-write-tests">4. Write Tests</a></h4>
-<p>Every new feature or bug fix should include tests.</p>
-<pre><code class="language-rust">#[test]
+```text
+
+#### 4. Write Tests
+
+Every new feature or bug fix should include tests.
+
+```rust
+#[test]
 fn test_new_feature() {
     let result = parse("#pragma omp my_new_directive");
     assert!(result.is_ok());
     // More assertions...
-}</code></pre>
-<h4 id="5-document-public-apis"><a class="header" href="#5-document-public-apis">5. Document Public APIs</a></h4>
-<pre><code class="language-rust">/// Parse an OpenMP directive from a string.
+}
+```text
+
+#### 5. Document Public APIs
+
+```rust
+/// Parse an OpenMP directive from a string.
 ///
 /// # Arguments
 ///
@@ -4838,16 +5364,20 @@ fn test_new_feature() {
 /// ```
 pub fn parse(input: &amp;str) -&gt; Result&lt;DirectiveIR, ParseError&gt; {
     // ...
-}</code></pre>
-<h3 id="c-api-code"><a class="header" href="#c-api-code">C API Code</a></h3>
-<p>If modifying <code>src/c_api.rs</code>:</p>
-<ul>
-<li><strong>Minimize unsafe blocks</strong>: Only what's absolutely necessary</li>
-<li><strong>NULL checks</strong>: Before every pointer dereference</li>
-<li><strong>Document safety contracts</strong>: Explain caller obligations</li>
-<li><strong>Test thoroughly</strong>: Including NULL inputs and edge cases</li>
-</ul>
-<pre><code class="language-rust">/// # Safety
+}
+```text
+
+### C API Code
+
+If modifying `src/c_api.rs`:
+
+- **Minimize unsafe blocks**: Only what's absolutely necessary
+- **NULL checks**: Before every pointer dereference
+- **Document safety contracts**: Explain caller obligations
+- **Test thoroughly**: Including NULL inputs and edge cases
+
+```rust
+/// # Safety
 ///
 /// Caller must ensure:
 /// - `input` points to a valid null-terminated C string
@@ -4860,11 +5390,17 @@ pub extern "C" fn roup_parse(input: *const c_char) -&gt; *mut OmpDirective {
     }
     
     // ... minimal unsafe code ...
-}</code></pre>
-<hr />
-<h2 id="testing-guidelines"><a class="header" href="#testing-guidelines">Testing Guidelines</a></h2>
-<h3 id="running-tests"><a class="header" href="#running-tests">Running Tests</a></h3>
-<pre><code class="language-bash"># All tests
+}
+```text
+
+---
+
+## Testing Guidelines
+
+### Running Tests
+
+```bash
+# All tests
 cargo test
 
 # Specific test
@@ -4875,11 +5411,16 @@ cargo test -- --nocapture
 
 # Tests in specific module
 cargo test parser::
-</code></pre>
-<h3 id="test-categories-1"><a class="header" href="#test-categories-1">Test Categories</a></h3>
-<h4 id="unit-tests"><a class="header" href="#unit-tests">Unit Tests</a></h4>
-<p>Test individual functions in isolation.</p>
-<pre><code class="language-rust">#[cfg(test)]
+```text
+
+### Test Categories
+
+#### Unit Tests
+
+Test individual functions in isolation.
+
+```rust
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -4889,10 +5430,15 @@ mod tests {
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0], Token::Identifier("parallel"));
     }
-}</code></pre>
-<h4 id="integration-tests"><a class="header" href="#integration-tests">Integration Tests</a></h4>
-<p>Test complete parsing workflows in <code>tests/</code>.</p>
-<pre><code class="language-rust">// tests/openmp_parallel.rs
+}
+```text
+
+#### Integration Tests
+
+Test complete parsing workflows in `tests/`.
+
+```rust
+// tests/openmp_parallel.rs
 #[test]
 fn test_parallel_with_clauses() {
     let input = "#pragma omp parallel num_threads(4) private(x)";
@@ -4901,26 +5447,38 @@ fn test_parallel_with_clauses() {
     assert!(result.is_ok());
     let directive = result.unwrap();
     assert_eq!(directive.clauses.len(), 2);
-}</code></pre>
-<h4 id="ffi-tests"><a class="header" href="#ffi-tests">FFI Tests</a></h4>
-<p>Test C API safety and correctness.</p>
-<pre><code class="language-rust">#[test]
+}
+```text
+
+#### FFI Tests
+
+Test C API safety and correctness.
+
+```rust
+#[test]
 fn test_null_safety() {
     let dir = roup_parse(std::ptr::null());
     assert!(dir.is_null());
-}</code></pre>
-<h3 id="test-coverage-2"><a class="header" href="#test-coverage-2">Test Coverage</a></h3>
-<p>Aim for:</p>
-<ul>
-<li><strong>90%+ coverage</strong> for parser code</li>
-<li><strong>100% coverage</strong> for FFI boundary code</li>
-<li><strong>All error paths</strong> tested</li>
-</ul>
-<hr />
-<h2 id="documentation-updates"><a class="header" href="#documentation-updates">Documentation Updates</a></h2>
-<h3 id="mdbook-website"><a class="header" href="#mdbook-website">mdBook Website</a></h3>
-<p>The main documentation is in <code>docs/book/src/</code>:</p>
-<pre><code>docs/book/src/
+}
+```text
+
+### Test Coverage
+
+Aim for:
+- **90%+ coverage** for parser code
+- **100% coverage** for FFI boundary code
+- **All error paths** tested
+
+---
+
+## Documentation Updates
+
+### mdBook Website
+
+The main documentation is in `docs/book/src/`:
+
+```text
+docs/book/src/
 ├── SUMMARY.md           # Navigation (table of contents)
 ├── intro.md             # Homepage
 ├── getting-started.md   # Quick start guide
@@ -4933,9 +5491,12 @@ fn test_null_safety() {
 ├── openmp-support.md    # OpenMP support matrix
 ├── contributing.md      # This file
 └── faq.md              # Frequently asked questions
-</code></pre>
-<h4 id="building-documentation"><a class="header" href="#building-documentation">Building Documentation</a></h4>
-<pre><code class="language-bash"># Build website
+```text
+
+#### Building Documentation
+
+```bash
+# Build website
 cd docs/book
 mdbook build
 
@@ -4943,14 +5504,16 @@ mdbook build
 mdbook serve --open
 
 # View at http://localhost:3000
+```text
+
+#### Adding New Pages
+
+1. Create `.md` file in `docs/book/src/`
+2. Add to `SUMMARY.md`:
+   ```markdown
+   - [My New Page](./my-new-page.md)
 </code></pre>
-<h4 id="adding-new-pages"><a class="header" href="#adding-new-pages">Adding New Pages</a></h4>
-<ol>
-<li>Create <code>.md</code> file in <code>docs/book/src/</code></li>
-<li>Add to <code>SUMMARY.md</code>:
-<pre><code class="language-markdown">- [My New Page](./my-new-page.md)
-</code></pre>
-</li>
+<ol start="3">
 <li>Build and verify: <code>mdbook build</code></li>
 </ol>
 <h3 id="rustdoc"><a class="header" href="#rustdoc">Rustdoc</a></h3>
@@ -4960,88 +5523,101 @@ cargo doc --no-deps --open
 
 # With private items (for development)
 cargo doc --no-deps --document-private-items --open
-</code></pre>
-<h3 id="readmemd"><a class="header" href="#readmemd">README.md</a></h3>
-<p><strong>IMPORTANT</strong>: After any change, check that <code>README.md</code> stays in sync:</p>
-<ul>
-<li>API changes → Update README examples</li>
-<li>Feature changes → Update README feature list</li>
-<li>Build changes → Update README installation instructions</li>
-</ul>
-<p>The README should match website content in <code>docs/book/src/</code>.</p>
-<hr />
-<h2 id="pull-request-process"><a class="header" href="#pull-request-process">Pull Request Process</a></h2>
-<h3 id="1-fork-and-branch"><a class="header" href="#1-fork-and-branch">1. Fork and Branch</a></h3>
-<pre><code class="language-bash"># Fork on GitHub, then clone your fork
+```text
+
+### README.md
+
+**IMPORTANT**: After any change, check that `README.md` stays in sync:
+
+- API changes → Update README examples
+- Feature changes → Update README feature list
+- Build changes → Update README installation instructions
+
+The README should match website content in `docs/book/src/`.
+
+---
+
+## Pull Request Process
+
+### 1. Fork and Branch
+
+```bash
+# Fork on GitHub, then clone your fork
 git clone https://github.com/YOUR_USERNAME/roup.git
 cd roup
 
 # Create feature branch
 git checkout -b feature/my-awesome-feature
-</code></pre>
-<h3 id="2-make-changes"><a class="header" href="#2-make-changes">2. Make Changes</a></h3>
-<ul>
-<li>Write code</li>
-<li>Write tests</li>
-<li>Update documentation</li>
-<li>Format code: <code>cargo fmt</code></li>
-<li>Run tests: <code>cargo test</code></li>
-<li>Check lints: <code>cargo clippy</code></li>
-</ul>
-<h3 id="3-commit"><a class="header" href="#3-commit">3. Commit</a></h3>
-<p>Use clear, descriptive commit messages:</p>
-<pre><code class="language-bash">git commit -m "feat: add support for OpenMP 6.0 loop directive"
+```text
+
+### 2. Make Changes
+
+- Write code
+- Write tests
+- Update documentation
+- Format code: `cargo fmt`
+- Run tests: `cargo test`
+- Check lints: `cargo clippy`
+
+### 3. Commit
+
+Use clear, descriptive commit messages:
+
+```bash
+git commit -m "feat: add support for OpenMP 6.0 loop directive"
 git commit -m "fix: handle null pointers in roup_parse"
 git commit -m "docs: add examples for metadirective"
 git commit -m "test: add tests for error recovery"
-</code></pre>
-<p><strong>Commit Message Format:</strong></p>
-<ul>
-<li><code>feat:</code> - New feature</li>
-<li><code>fix:</code> - Bug fix</li>
-<li><code>docs:</code> - Documentation only</li>
-<li><code>test:</code> - Tests only</li>
-<li><code>refactor:</code> - Code refactoring</li>
-<li><code>perf:</code> - Performance improvement</li>
-<li><code>chore:</code> - Maintenance tasks</li>
-</ul>
-<h3 id="4-pre-pr-checklist"><a class="header" href="#4-pre-pr-checklist">4. Pre-PR Checklist</a></h3>
-<p>Before opening a PR, ensure:</p>
-<ul>
-<li><input disabled="" type="checkbox"/>
-<code>cargo fmt -- --check</code> passes (no formatting issues)</li>
-<li><input disabled="" type="checkbox"/>
-<code>cargo build</code> passes (no compilation warnings)</li>
-<li><input disabled="" type="checkbox"/>
-<code>cargo clippy</code> passes (no linter warnings)</li>
-<li><input disabled="" type="checkbox"/>
-<code>cargo test</code> passes (all tests green)</li>
-<li><input disabled="" type="checkbox"/>
-<code>cargo doc --no-deps</code> passes (no rustdoc warnings)</li>
-<li><input disabled="" type="checkbox"/>
-<code>mdbook build docs/book</code> passes (if docs changed)</li>
-<li><input disabled="" type="checkbox"/>
-README.md is in sync with changes</li>
-<li><input disabled="" type="checkbox"/>
-New features have tests</li>
-<li><input disabled="" type="checkbox"/>
-New features have documentation</li>
-</ul>
-<h3 id="5-push-and-open-pr"><a class="header" href="#5-push-and-open-pr">5. Push and Open PR</a></h3>
-<pre><code class="language-bash"># Push to your fork
+```text
+
+**Commit Message Format:**
+- `feat:` - New feature
+- `fix:` - Bug fix
+- `docs:` - Documentation only
+- `test:` - Tests only
+- `refactor:` - Code refactoring
+- `perf:` - Performance improvement
+- `chore:` - Maintenance tasks
+
+### 4. Pre-PR Checklist
+
+Before opening a PR, ensure:
+
+- [ ] `cargo fmt -- --check` passes (no formatting issues)
+- [ ] `cargo build` passes (no compilation warnings)
+- [ ] `cargo clippy` passes (no linter warnings)
+- [ ] `cargo test` passes (all tests green)
+- [ ] `cargo doc --no-deps` passes (no rustdoc warnings)
+- [ ] `mdbook build docs/book` passes (if docs changed)
+- [ ] README.md is in sync with changes
+- [ ] New features have tests
+- [ ] New features have documentation
+
+### 5. Push and Open PR
+
+```bash
+# Push to your fork
 git push origin feature/my-awesome-feature
 
 # Open PR on GitHub
 # Go to https://github.com/ouankou/roup and click "New Pull Request"
-</code></pre>
-<h3 id="6-pr-description"><a class="header" href="#6-pr-description">6. PR Description</a></h3>
-<p>Include:</p>
-<p><strong>What</strong>: What does this PR do?</p>
-<p><strong>Why</strong>: Why is this change needed?</p>
-<p><strong>How</strong>: How does it work?</p>
-<p><strong>Testing</strong>: How was it tested?</p>
-<p><strong>Example:</strong></p>
-<pre><code class="language-markdown">## What
+```text
+
+### 6. PR Description
+
+Include:
+
+**What**: What does this PR do?
+
+**Why**: Why is this change needed?
+
+**How**: How does it work?
+
+**Testing**: How was it tested?
+
+**Example:**
+```markdown
+## What
 Adds support for the OpenMP 6.0 `loop` directive.
 
 ## Why
@@ -5056,158 +5632,205 @@ OpenMP 6.0 introduced a new `loop` directive as a more generic alternative to `f
 - Added 15 new test cases covering various `loop` directive forms
 - All existing tests still pass
 - Manually tested with real-world code
-</code></pre>
-<h3 id="7-code-review"><a class="header" href="#7-code-review">7. Code Review</a></h3>
-<p>Maintainers will review your PR and may:</p>
-<ul>
-<li>Request changes</li>
-<li>Ask questions</li>
-<li>Suggest improvements</li>
-</ul>
-<p><strong>Be patient and responsive!</strong> Code review is a collaborative process.</p>
-<h3 id="8-merge"><a class="header" href="#8-merge">8. Merge</a></h3>
-<p>Once approved, maintainers will merge your PR. Congratulations! 🎉</p>
-<hr />
-<h2 id="openmp-specification-compliance"><a class="header" href="#openmp-specification-compliance">OpenMP Specification Compliance</a></h2>
-<p>When adding support for new OpenMP features:</p>
-<h3 id="1-consult-official-specs"><a class="header" href="#1-consult-official-specs">1. Consult Official Specs</a></h3>
-<ul>
-<li><strong>OpenMP 6.0</strong>: <a href="https://www.openmp.org/specifications/">Latest specification</a></li>
-<li><strong>Archive</strong>: <a href="https://www.openmp.org/specifications/">Older versions</a></li>
-</ul>
-<h3 id="2-check-syntax-carefully"><a class="header" href="#2-check-syntax-carefully">2. Check Syntax Carefully</a></h3>
-<p>OpenMP syntax can be subtle. Double-check:</p>
-<ul>
-<li>Required vs optional clauses</li>
-<li>Clause argument types</li>
-<li>Directive applicability (C/C++ vs Fortran)</li>
-<li>Version introduced</li>
-</ul>
-<h3 id="3-update-support-matrix"><a class="header" href="#3-update-support-matrix">3. Update Support Matrix</a></h3>
-<p>After adding a directive/clause, update <code>docs/book/src/openmp-support.md</code>:</p>
-<pre><code class="language-markdown">| Directive | OpenMP Version | Status | Notes |
+```text
+
+### 7. Code Review
+
+Maintainers will review your PR and may:
+
+- Request changes
+- Ask questions
+- Suggest improvements
+
+**Be patient and responsive!** Code review is a collaborative process.
+
+### 8. Merge
+
+Once approved, maintainers will merge your PR. Congratulations! 🎉
+
+---
+
+## OpenMP Specification Compliance
+
+When adding support for new OpenMP features:
+
+### 1. Consult Official Specs
+
+- **OpenMP 6.0**: [Latest specification](https://www.openmp.org/specifications/)
+- **Archive**: [Older versions](https://www.openmp.org/specifications/)
+
+### 2. Check Syntax Carefully
+
+OpenMP syntax can be subtle. Double-check:
+
+- Required vs optional clauses
+- Clause argument types
+- Directive applicability (C/C++ vs Fortran)
+- Version introduced
+
+### 3. Update Support Matrix
+
+After adding a directive/clause, update `docs/book/src/openmp-support.md`:
+
+```markdown
+| Directive | OpenMP Version | Status | Notes |
 |-----------|----------------|--------|-------|
 | `loop` | 5.0 | ✅ Supported | New in OpenMP 5.0 |
-</code></pre>
-<h3 id="4-add-examples"><a class="header" href="#4-add-examples">4. Add Examples</a></h3>
-<p>Include examples in documentation showing correct usage.</p>
-<hr />
-<h2 id="performance-considerations-1"><a class="header" href="#performance-considerations-1">Performance Considerations</a></h2>
-<h3 id="benchmarking"><a class="header" href="#benchmarking">Benchmarking</a></h3>
-<p>If your change affects performance:</p>
-<pre><code class="language-bash"># Run benchmarks (if available)
+```text
+
+### 4. Add Examples
+
+Include examples in documentation showing correct usage.
+
+---
+
+## Performance Considerations
+
+### Benchmarking
+
+If your change affects performance:
+
+```bash
+# Run benchmarks (if available)
 cargo bench
 
 # Profile with flamegraph
 cargo install flamegraph
 cargo flamegraph --bin roup
+```text
+
+### Performance Guidelines
+
+- Avoid unnecessary allocations
+- Prefer zero-copy when possible
+- Use `&amp;str` instead of `String` where appropriate
+- Benchmark before/after for significant changes
+
+---
+
+## Security
+
+### Reporting Security Issues
+
+Please report security vulnerabilities by opening a GitHub issue at:
+[https://github.com/ouankou/roup/issues](https://github.com/ouankou/roup/issues)
+
+Include:
+- Description of vulnerability
+- Steps to reproduce
+- Potential impact
+- Suggested fix (if any)
+
+### Security Best Practices
+
+When writing code:
+
+- Validate all inputs
+- Check for integer overflow
+- Avoid buffer overruns
+- Be careful with unsafe code
+- Use safe defaults
+
+---
+
+## Release Process
+
+(For maintainers)
+
+### Version Numbering
+
+ROUP follows [Semantic Versioning](https://semver.org/):
+
+- **MAJOR**: Breaking API changes
+- **MINOR**: New features (backward compatible)
+- **PATCH**: Bug fixes (backward compatible)
+
+### Release Checklist
+
+1. Update version in `Cargo.toml`
+2. Update `CHANGELOG.md`
+3. Run full test suite
+4. Build documentation
+5. Create git tag: `git tag v0.2.0`
+6. Push tag: `git push origin v0.2.0`
+7. Publish to crates.io: `cargo publish`
+8. Create GitHub release with notes
+
+---
+
+## Getting Help
+
+### Stuck?
+
+- **Documentation**: Read [roup.ouankou.com](https://roup.ouankou.com)
+- **Discussions**: Ask on [GitHub Discussions](https://github.com/ouankou/roup/discussions)
+- **Issues**: Search [existing issues](https://github.com/ouankou/roup/issues)
+- **Examples**: Check `examples/` directory
+
+### Communication Guidelines
+
+- Be respectful and professional
+- Provide context for questions
+- Include minimal reproducible examples
+- Search before asking (avoid duplicates)
+
+---
+
+## Code of Conduct
+
+### Our Standards
+
+- **Be respectful**: Treat everyone with respect
+- **Be constructive**: Provide helpful feedback
+- **Be patient**: Remember that everyone is learning
+- **Be inclusive**: Welcome newcomers
+
+### Unacceptable Behavior
+
+- Harassment or discrimination
+- Trolling or insulting comments
+- Personal attacks
+- Publishing others' private information
+
+### Reporting
+
+Report unacceptable behavior to: [conduct@ouankou.com](mailto:conduct@ouankou.com)
+
+---
+
+## Recognition
+
+Contributors will be:
+
+- Listed in `CONTRIBUTORS.md`
+- Mentioned in release notes
+- Credited in commit messages
+
+Significant contributions may result in:
+
+- Maintainer status
+- Commit access
+- Decision-making authority
+
+---
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the same license as the project (see `LICENSE` file).
+
+---
+
+## Questions?
+
+Still have questions? Open a [discussion](https://github.com/ouankou/roup/discussions) or reach out to the maintainers.
+
+**Thank you for contributing to ROUP!** 🚀
 </code></pre>
-<h3 id="performance-guidelines"><a class="header" href="#performance-guidelines">Performance Guidelines</a></h3>
-<ul>
-<li>Avoid unnecessary allocations</li>
-<li>Prefer zero-copy when possible</li>
-<li>Use <code>&amp;str</code> instead of <code>String</code> where appropriate</li>
-<li>Benchmark before/after for significant changes</li>
-</ul>
-<hr />
-<h2 id="security"><a class="header" href="#security">Security</a></h2>
-<h3 id="reporting-security-issues"><a class="header" href="#reporting-security-issues">Reporting Security Issues</a></h3>
-<p>Please report security vulnerabilities by opening a GitHub issue at:
-<a href="https://github.com/ouankou/roup/issues">https://github.com/ouankou/roup/issues</a></p>
-<p>Include:</p>
-<ul>
-<li>Description of vulnerability</li>
-<li>Steps to reproduce</li>
-<li>Potential impact</li>
-<li>Suggested fix (if any)</li>
-</ul>
-<h3 id="security-best-practices"><a class="header" href="#security-best-practices">Security Best Practices</a></h3>
-<p>When writing code:</p>
-<ul>
-<li>Validate all inputs</li>
-<li>Check for integer overflow</li>
-<li>Avoid buffer overruns</li>
-<li>Be careful with unsafe code</li>
-<li>Use safe defaults</li>
-</ul>
-<hr />
-<h2 id="release-process"><a class="header" href="#release-process">Release Process</a></h2>
-<p>(For maintainers)</p>
-<h3 id="version-numbering"><a class="header" href="#version-numbering">Version Numbering</a></h3>
-<p>ROUP follows <a href="https://semver.org/">Semantic Versioning</a>:</p>
-<ul>
-<li><strong>MAJOR</strong>: Breaking API changes</li>
-<li><strong>MINOR</strong>: New features (backward compatible)</li>
-<li><strong>PATCH</strong>: Bug fixes (backward compatible)</li>
-</ul>
-<h3 id="release-checklist"><a class="header" href="#release-checklist">Release Checklist</a></h3>
-<ol>
-<li>Update version in <code>Cargo.toml</code></li>
-<li>Update <code>CHANGELOG.md</code></li>
-<li>Run full test suite</li>
-<li>Build documentation</li>
-<li>Create git tag: <code>git tag v0.2.0</code></li>
-<li>Push tag: <code>git push origin v0.2.0</code></li>
-<li>Publish to crates.io: <code>cargo publish</code></li>
-<li>Create GitHub release with notes</li>
-</ol>
-<hr />
-<h2 id="getting-help-1"><a class="header" href="#getting-help-1">Getting Help</a></h2>
-<h3 id="stuck"><a class="header" href="#stuck">Stuck?</a></h3>
-<ul>
-<li><strong>Documentation</strong>: Read <a href="https://roup.ouankou.com">roup.ouankou.com</a></li>
-<li><strong>Discussions</strong>: Ask on <a href="https://github.com/ouankou/roup/discussions">GitHub Discussions</a></li>
-<li><strong>Issues</strong>: Search <a href="https://github.com/ouankou/roup/issues">existing issues</a></li>
-<li><strong>Examples</strong>: Check <code>examples/</code> directory</li>
-</ul>
-<h3 id="communication-guidelines"><a class="header" href="#communication-guidelines">Communication Guidelines</a></h3>
-<ul>
-<li>Be respectful and professional</li>
-<li>Provide context for questions</li>
-<li>Include minimal reproducible examples</li>
-<li>Search before asking (avoid duplicates)</li>
-</ul>
-<hr />
-<h2 id="code-of-conduct"><a class="header" href="#code-of-conduct">Code of Conduct</a></h2>
-<h3 id="our-standards"><a class="header" href="#our-standards">Our Standards</a></h3>
-<ul>
-<li><strong>Be respectful</strong>: Treat everyone with respect</li>
-<li><strong>Be constructive</strong>: Provide helpful feedback</li>
-<li><strong>Be patient</strong>: Remember that everyone is learning</li>
-<li><strong>Be inclusive</strong>: Welcome newcomers</li>
-</ul>
-<h3 id="unacceptable-behavior"><a class="header" href="#unacceptable-behavior">Unacceptable Behavior</a></h3>
-<ul>
-<li>Harassment or discrimination</li>
-<li>Trolling or insulting comments</li>
-<li>Personal attacks</li>
-<li>Publishing others' private information</li>
-</ul>
-<h3 id="reporting"><a class="header" href="#reporting">Reporting</a></h3>
-<p>Report unacceptable behavior to: <a href="mailto:conduct@ouankou.com">conduct@ouankou.com</a></p>
-<hr />
-<h2 id="recognition"><a class="header" href="#recognition">Recognition</a></h2>
-<p>Contributors will be:</p>
-<ul>
-<li>Listed in <code>CONTRIBUTORS.md</code></li>
-<li>Mentioned in release notes</li>
-<li>Credited in commit messages</li>
-</ul>
-<p>Significant contributions may result in:</p>
-<ul>
-<li>Maintainer status</li>
-<li>Commit access</li>
-<li>Decision-making authority</li>
-</ul>
-<hr />
-<h2 id="license-2"><a class="header" href="#license-2">License</a></h2>
-<p>By contributing, you agree that your contributions will be licensed under the same license as the project (see <code>LICENSE</code> file).</p>
-<hr />
-<h2 id="questions"><a class="header" href="#questions">Questions?</a></h2>
-<p>Still have questions? Open a <a href="https://github.com/ouankou/roup/discussions">discussion</a> or reach out to the maintainers.</p>
-<p><strong>Thank you for contributing to ROUP!</strong> 🚀</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="frequently-asked-questions"><a class="header" href="#frequently-asked-questions">Frequently Asked Questions</a></h1>
 <p>Common questions about using ROUP.</p>
+<blockquote>
+<p><strong>Note</strong>: Code examples in this FAQ use <code>rust,ignore</code> to prevent <code>mdbook test</code> from attempting to compile them without the ROUP library linked. To test these examples yourself, create a new Rust project and add ROUP as a dependency in your <code>Cargo.toml</code>. See the <a href="./getting-started.html">Getting Started</a> guide for step-by-step instructions. All examples are verified to compile correctly when used in a project with ROUP as a dependency.</p>
+</blockquote>
 <hr />
 <h2 id="general-questions"><a class="header" href="#general-questions">General Questions</a></h2>
 <h3 id="what-is-roup-1"><a class="header" href="#what-is-roup-1">What is ROUP?</a></h3>
@@ -5297,12 +5920,14 @@ export RUSTC_WRAPPER=sccache
 <h2 id="usage-questions"><a class="header" href="#usage-questions">Usage Questions</a></h2>
 <h3 id="how-do-i-parse-a-simple-directive"><a class="header" href="#how-do-i-parse-a-simple-directive">How do I parse a simple directive?</a></h3>
 <p><strong>Rust:</strong></p>
-<pre><code class="language-rust">use roup::parser::parse;
+<pre><code class="language-rust ignore">// Note: Using `rust,ignore` - see top of page for testing instructions
+use roup::parser::openmp;
 
-let result = parse("#pragma omp parallel");
+let parser = openmp::parser();
+let result = parser.parse("#pragma omp parallel");
 match result {
-    Ok(directive) =&gt; println!("Parsed: {:?}", directive),
-    Err(e) =&gt; eprintln!("Error: {}", e),
+    Ok((_, directive)) =&gt; println!("Parsed: {:?}", directive),
+    Err(e) =&gt; eprintln!("Error: {:?}", e),
 }</code></pre>
 <p><strong>C:</strong></p>
 <pre><code class="language-c">OmpDirective* dir = roup_parse("#pragma omp parallel");
@@ -5314,7 +5939,8 @@ if (dir) {
 <p>See the <a href="./getting-started.html">Getting Started</a> guide for more examples.</p>
 <h3 id="how-do-i-iterate-through-clauses"><a class="header" href="#how-do-i-iterate-through-clauses">How do I iterate through clauses?</a></h3>
 <p><strong>Rust:</strong></p>
-<pre><code class="language-rust">for clause in &amp;directive.clauses {
+<pre><code class="language-rust ignore">// Note: Using `rust,ignore` - see top of page for testing instructions
+for clause in &amp;directive.clauses {
     println!("Clause: {:?}", clause);
 }</code></pre>
 <p><strong>C:</strong></p>
@@ -5329,7 +5955,8 @@ roup_clause_iterator_free(iter);
 <p>See <a href="./c-tutorial.html#step-4-iterate-through-clauses">C Tutorial - Step 4</a> for details.</p>
 <h3 id="how-do-i-access-clause-data-like-variable-lists"><a class="header" href="#how-do-i-access-clause-data-like-variable-lists">How do I access clause data (like variable lists)?</a></h3>
 <p><strong>Rust:</strong></p>
-<pre><code class="language-rust">match &amp;clause {
+<pre><code class="language-rust ignore">// Note: Using `rust,ignore` - see top of page for testing instructions
+match &amp;clause {
     Clause::Private(vars) =&gt; {
         for var in vars {
             println!("Private variable: {}", var);
@@ -5349,10 +5976,19 @@ roup_clause_iterator_free(iter);
 </code></pre>
 <h3 id="can-i-parse-multiple-directives-in-parallel"><a class="header" href="#can-i-parse-multiple-directives-in-parallel">Can I parse multiple directives in parallel?</a></h3>
 <p><strong>Yes!</strong> Parsing is thread-safe:</p>
-<pre><code class="language-rust">use std::thread;
+<pre><code class="language-rust ignore">// Note: Using `rust,ignore` - see top of page for testing instructions
+use roup::parser::openmp;
+use std::thread;
 
-let t1 = thread::spawn(|| parse("#pragma omp parallel"));
-let t2 = thread::spawn(|| parse("#pragma omp for"));
+let parser = openmp::parser();
+let t1 = thread::spawn(move || {
+    let p = openmp::parser();
+    p.parse("#pragma omp parallel")
+});
+let t2 = thread::spawn(move || {
+    let p = openmp::parser();
+    p.parse("#pragma omp for")
+});
 
 let dir1 = t1.join().unwrap();
 let dir2 = t2.join().unwrap();</code></pre>
@@ -5404,8 +6040,12 @@ let dir2 = t2.join().unwrap();</code></pre>
 <h2 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h2>
 <h3 id="do-i-need-to-free-anything-in-rust"><a class="header" href="#do-i-need-to-free-anything-in-rust">Do I need to free anything in Rust?</a></h3>
 <p><strong>No.</strong> Rust's ownership system handles everything automatically:</p>
-<pre><code class="language-rust">{
-    let directive = parse("#pragma omp parallel").unwrap();
+<pre><code class="language-rust ignore">// Note: Using `rust,ignore` - see top of page for testing instructions
+use roup::parser::openmp;
+
+{
+    let parser = openmp::parser();
+    let (_, directive) = parser.parse("#pragma omp parallel").unwrap();
     // Use directive...
 } // ← Automatically freed here</code></pre>
 <h3 id="what-do-i-need-to-free-in-c"><a class="header" href="#what-do-i-need-to-free-in-c">What do I need to free in C?</a></h3>
@@ -5442,14 +6082,16 @@ roup_directive_free(dir);  // ❌ CRASH!
 dir = NULL;
 </code></pre>
 <hr />
-<h2 id="error-handling-3"><a class="header" href="#error-handling-3">Error Handling</a></h2>
+<h2 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h2>
 <h3 id="how-do-i-know-if-parsing-failed"><a class="header" href="#how-do-i-know-if-parsing-failed">How do I know if parsing failed?</a></h3>
 <p><strong>Rust:</strong></p>
-<pre><code class="language-rust">match parse(input) {
-    Ok(directive) =&gt; { /* success */ },
+<pre><code class="language-rust ignore">use roup::parser::openmp;
+
+let parser = openmp::parser();
+match parser.parse(input) {
+    Ok((_, directive)) =&gt; { /* success */ },
     Err(error) =&gt; {
-        eprintln!("Parse error: {}", error.message);
-        eprintln!("At line {}, column {}", error.location.line, error.location.column);
+        eprintln!("Parse error: {:?}", error);
     }
 }</code></pre>
 <p><strong>C:</strong></p>
@@ -5471,8 +6113,11 @@ if (dir == NULL) {
 <h3 id="can-i-recover-from-parse-errors"><a class="header" href="#can-i-recover-from-parse-errors">Can I recover from parse errors?</a></h3>
 <p>Not automatically. If parsing fails, you get an error but no partial directive.</p>
 <p><strong>Workaround:</strong> Parse line-by-line and skip lines that fail:</p>
-<pre><code class="language-rust">for line in source_code.lines() {
-    if let Ok(directive) = parse(line) {
+<pre><code class="language-rust ignore">use roup::parser::openmp;
+
+let parser = openmp::parser();
+for line in source_code.lines() {
+    if let Ok((_, directive)) = parser.parse(line) {
         // Process directive
     }
     // Skip lines that don't parse
@@ -5662,7 +6307,7 @@ target_link_libraries(myapp roup pthread dl m)
 </ul>
 <p>Regex will fail on edge cases and give incorrect results.</p>
 <hr />
-<h2 id="troubleshooting-4"><a class="header" href="#troubleshooting-4">Troubleshooting</a></h2>
+<h2 id="troubleshooting-5"><a class="header" href="#troubleshooting-5">Troubleshooting</a></h2>
 <h3 id="cannot-find--lroup-when-linking"><a class="header" href="#cannot-find--lroup-when-linking">"cannot find -lroup" when linking</a></h3>
 <p><strong>Problem:</strong> Linker can't find library.</p>
 <p><strong>Solution:</strong></p>
@@ -5706,7 +6351,7 @@ rustup update stable
 rustc --version
 </code></pre>
 <hr />
-<h2 id="getting-help-2"><a class="header" href="#getting-help-2">Getting Help</a></h2>
+<h2 id="getting-help-1"><a class="header" href="#getting-help-1">Getting Help</a></h2>
 <h3 id="where-can-i-ask-questions"><a class="header" href="#where-can-i-ask-questions">Where can I ask questions?</a></h3>
 <ol>
 <li><strong>Search first</strong>: Check this FAQ and documentation</li>

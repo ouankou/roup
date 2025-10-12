@@ -1,0 +1,532 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Fortran Tutorial - ROUP Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ROUP Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/fortran-tutorial.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="fortran-tutorial"><a class="header" href="#fortran-tutorial">Fortran Tutorial</a></h1>
+<p>This tutorial demonstrates how to use ROUP to parse OpenMP directives in Fortran code.</p>
+<h2 id="-experimental-status"><a class="header" href="#-experimental-status">🚧 Experimental Status</a></h2>
+<p><strong>Fortran support in ROUP is currently experimental.</strong> Features may change as development progresses.</p>
+<h2 id="introduction"><a class="header" href="#introduction">Introduction</a></h2>
+<p>ROUP supports parsing OpenMP directives from Fortran source code in both free-form and fixed-form formats. This enables Fortran developers to:</p>
+<ul>
+<li>Parse OpenMP directives from Fortran source</li>
+<li>Validate directive syntax</li>
+<li>Extract clause information</li>
+<li>Build tools for Fortran+OpenMP code analysis</li>
+</ul>
+<h2 id="fortran-directive-formats"><a class="header" href="#fortran-directive-formats">Fortran Directive Formats</a></h2>
+<h3 id="free-form-modern-fortran"><a class="header" href="#free-form-modern-fortran">Free-Form (Modern Fortran)</a></h3>
+<p>Free-form Fortran uses the <code>!$OMP</code> sentinel (case-insensitive):</p>
+<pre><code class="language-fortran">!$OMP PARALLEL PRIVATE(A, B) NUM_THREADS(4)
+!$OMP END PARALLEL
+
+!$omp parallel do private(i) reduction(+:sum)
+!$OMP END PARALLEL DO
+</code></pre>
+<h3 id="fixed-form-fortran-77"><a class="header" href="#fixed-form-fortran-77">Fixed-Form (Fortran 77)</a></h3>
+<p>Fixed-form Fortran uses <code>!$OMP</code> or <code>C$OMP</code> sentinels in columns 1-6:</p>
+<pre><code class="language-fortran">C$OMP PARALLEL PRIVATE(X, Y)
+!$OMP DO SCHEDULE(STATIC, 10)
+C$OMP END DO
+C$OMP END PARALLEL
+</code></pre>
+<h2 id="fortran-specific-directives"><a class="header" href="#fortran-specific-directives">Fortran-Specific Directives</a></h2>
+<p>ROUP supports Fortran-specific directive syntax, including the Fortran <code>DO</code> construct which is equivalent to C/C++ <code>FOR</code>:</p>
+<h3 id="do-directive-fortran"><a class="header" href="#do-directive-fortran">DO Directive (Fortran)</a></h3>
+<pre><code class="language-fortran">!$OMP DO PRIVATE(I) SCHEDULE(STATIC)
+    do i = 1, n
+        ! Loop body
+    end do
+!$OMP END DO
+</code></pre>
+<h3 id="parallel-do-fortran"><a class="header" href="#parallel-do-fortran">PARALLEL DO (Fortran)</a></h3>
+<pre><code class="language-fortran">!$OMP PARALLEL DO PRIVATE(I) REDUCTION(+:SUM)
+    do i = 1, n
+        sum = sum + a(i)
+    end do
+!$OMP END PARALLEL DO
+</code></pre>
+<p><strong>Note</strong>: ROUP recognizes both Fortran syntax (<code>DO</code>) and C syntax (<code>FOR</code>) for compatibility:</p>
+<ul>
+<li><code>!$OMP DO</code> → Fortran-specific (preferred for Fortran code)</li>
+<li><code>!$OMP FOR</code> → C/C++ syntax (also works in Fortran mode)</li>
+<li><code>!$OMP PARALLEL DO</code> → Fortran-specific</li>
+<li><code>!$OMP PARALLEL FOR</code> → C/C++ syntax (also works in Fortran mode)</li>
+</ul>
+<h2 id="language-constants"><a class="header" href="#language-constants">Language Constants</a></h2>
+<p>ROUP provides language format constants for Fortran parsing:</p>
+<pre><code class="language-c">#define ROUP_LANG_C                0  // C/C++ (#pragma omp)
+#define ROUP_LANG_FORTRAN_FREE     1  // Fortran free-form (!$OMP)
+#define ROUP_LANG_FORTRAN_FIXED    2  // Fortran fixed-form (!$OMP or C$OMP)
+</code></pre>
+<h2 id="using-the-rust-api"><a class="header" href="#using-the-rust-api">Using the Rust API</a></h2>
+<h3 id="parsing-fortran-directives"><a class="header" href="#parsing-fortran-directives">Parsing Fortran Directives</a></h3>
+<pre><code class="language-rust">use roup::lexer::Language;
+use roup::parser::openmp;
+
+// Create parser with Fortran free-form support
+let parser = openmp::parser().with_language(Language::FortranFree);
+
+// Parse a Fortran OpenMP directive
+let input = "!$OMP PARALLEL PRIVATE(A, B) NUM_THREADS(4)";
+let (rest, directive) = parser.parse(input).expect("parsing should succeed");
+
+println!("Directive: {}", directive.name);
+println!("Clauses: {}", directive.clauses.len());</code></pre>
+<h3 id="supported-language-formats"><a class="header" href="#supported-language-formats">Supported Language Formats</a></h3>
+<pre><code class="language-rust">use roup::lexer::Language;
+
+// C/C++ format (default)
+let c_parser = openmp::parser().with_language(Language::C);
+
+// Fortran free-form
+let fortran_free = openmp::parser().with_language(Language::FortranFree);
+
+// Fortran fixed-form
+let fortran_fixed = openmp::parser().with_language(Language::FortranFixed);</code></pre>
+<h2 id="using-the-c-api-from-fortran"><a class="header" href="#using-the-c-api-from-fortran">Using the C API from Fortran</a></h2>
+<h3 id="setting-up-fortran-c-interoperability"><a class="header" href="#setting-up-fortran-c-interoperability">Setting Up Fortran-C Interoperability</a></h3>
+<p>Create an interface module for ROUP C API:</p>
+<pre><code class="language-fortran">module roup_interface
+    use iso_c_binding
+    implicit none
+    
+    ! Language constants
+    integer(c_int), parameter :: ROUP_LANG_FORTRAN_FREE = 1
+    integer(c_int), parameter :: ROUP_LANG_FORTRAN_FIXED = 2
+    
+    interface
+        ! Parse with language specification
+        function roup_parse_with_language(input, language) &amp;
+            bind(C, name="roup_parse_with_language")
+            use iso_c_binding
+            type(c_ptr), value :: input
+            integer(c_int), value :: language
+            type(c_ptr) :: roup_parse_with_language
+        end function roup_parse_with_language
+        
+        ! Free directive
+        subroutine roup_directive_free(directive) &amp;
+            bind(C, name="roup_directive_free")
+            use iso_c_binding
+            type(c_ptr), value :: directive
+        end subroutine roup_directive_free
+        
+        ! Get directive name
+        function roup_directive_name(directive) &amp;
+            bind(C, name="roup_directive_name")
+            use iso_c_binding
+            type(c_ptr), value :: directive
+            type(c_ptr) :: roup_directive_name
+        end function roup_directive_name
+        
+        ! Get clause count
+        function roup_directive_clause_count(directive) &amp;
+            bind(C, name="roup_directive_clause_count")
+            use iso_c_binding
+            type(c_ptr), value :: directive
+            integer(c_size_t) :: roup_directive_clause_count
+        end function roup_directive_clause_count
+    end interface
+end module roup_interface
+</code></pre>
+<h3 id="parsing-fortran-directives-from-fortran"><a class="header" href="#parsing-fortran-directives-from-fortran">Parsing Fortran Directives from Fortran</a></h3>
+<pre><code class="language-fortran">program parse_example
+    use iso_c_binding
+    use roup_interface
+    implicit none
+    
+    type(c_ptr) :: directive_ptr, name_ptr
+    character(len=100) :: input = "!$OMP PARALLEL PRIVATE(X)"
+    character(kind=c_char), dimension(:), allocatable :: c_input
+    integer :: i, n
+    
+    ! Convert Fortran string to C string
+    n = len_trim(input)
+    allocate(c_input(n+1))
+    do i = 1, n
+        c_input(i) = input(i:i)
+    end do
+    c_input(n+1) = c_null_char
+    
+    ! Parse directive
+    directive_ptr = roup_parse_with_language(c_loc(c_input), &amp;
+                                              ROUP_LANG_FORTRAN_FREE)
+    
+    if (c_associated(directive_ptr)) then
+        ! Get directive information
+        name_ptr = roup_directive_name(directive_ptr)
+        ! ... process name_ptr ...
+        
+        ! Clean up
+        call roup_directive_free(directive_ptr)
+    else
+        print *, "Parse error"
+    end if
+    
+    deallocate(c_input)
+end program parse_example
+</code></pre>
+<h2 id="case-insensitivity"><a class="header" href="#case-insensitivity">Case Insensitivity</a></h2>
+<p>Fortran is case-insensitive, and ROUP respects this:</p>
+<pre><code class="language-fortran">! All of these are equivalent
+!$OMP PARALLEL PRIVATE(X)
+!$omp parallel private(x)
+!$Omp Parallel Private(X)
+</code></pre>
+<p>ROUP normalizes Fortran identifiers to lowercase internally while preserving the original case in the parsed output.</p>
+<h2 id="common-fortran-openmp-constructs"><a class="header" href="#common-fortran-openmp-constructs">Common Fortran OpenMP Constructs</a></h2>
+<h3 id="parallel-regions"><a class="header" href="#parallel-regions">Parallel Regions</a></h3>
+<pre><code class="language-fortran">!$OMP PARALLEL PRIVATE(TID) SHARED(N)
+    ! Parallel code
+!$OMP END PARALLEL
+</code></pre>
+<h3 id="work-sharing-constructs"><a class="header" href="#work-sharing-constructs">Work-Sharing Constructs</a></h3>
+<p>In Fortran, use <code>DO</code> instead of C's <code>for</code>:</p>
+<pre><code class="language-fortran">!$OMP DO PRIVATE(I) SCHEDULE(STATIC, 10)
+    do i = 1, n
+        ! Loop body
+    end do
+!$OMP END DO
+</code></pre>
+<p>Or combined:</p>
+<pre><code class="language-fortran">!$OMP PARALLEL DO PRIVATE(I,J) REDUCTION(+:SUM)
+    do i = 1, n
+        sum = sum + array(i)
+    end do
+!$OMP END PARALLEL DO
+</code></pre>
+<h3 id="array-sections"><a class="header" href="#array-sections">Array Sections</a></h3>
+<p>Fortran array sections use different syntax than C:</p>
+<pre><code class="language-fortran">!$OMP PARALLEL PRIVATE(A(1:N), B(:,1:M))
+    ! Work with array sections
+!$OMP END PARALLEL
+</code></pre>
+<h3 id="common-blocks"><a class="header" href="#common-blocks">Common Blocks</a></h3>
+<p>Fortran's <code>THREADPRIVATE</code> can apply to common blocks:</p>
+<pre><code class="language-fortran">      COMMON /MYDATA/ X, Y, Z
+!$OMP THREADPRIVATE(/MYDATA/)
+</code></pre>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<p>See the <a href="../../examples/fortran/"><code>examples/fortran/</code></a> directory for complete working examples:</p>
+<ul>
+<li><strong>basic_parse.f90</strong>: Simple Fortran directive examples</li>
+<li><strong>tutorial_basic.f90</strong>: Full C API integration tutorial</li>
+</ul>
+<h2 id="building-fortran-programs-with-roup"><a class="header" href="#building-fortran-programs-with-roup">Building Fortran Programs with ROUP</a></h2>
+<h3 id="using-gfortran"><a class="header" href="#using-gfortran">Using gfortran</a></h3>
+<pre><code class="language-bash"># Compile Fortran code
+gfortran -c my_program.f90
+
+# Link with ROUP library
+gcc my_program.o -L/path/to/roup/target/release -lroup -o my_program
+
+# Run (set LD_LIBRARY_PATH)
+LD_LIBRARY_PATH=/path/to/roup/target/release ./my_program
+</code></pre>
+<h3 id="makefile-example"><a class="header" href="#makefile-example">Makefile Example</a></h3>
+<pre><code class="language-makefile">FC = gfortran
+ROUP_LIB = -L../../target/release -lroup -Wl,-rpath,../../target/release
+
+my_program: my_program.f90
+	$(FC) -o $@ $&lt; $(ROUP_LIB)
+</code></pre>
+<h2 id="known-limitations"><a class="header" href="#known-limitations">Known Limitations</a></h2>
+<p>⚠️ <strong>Current limitations in experimental Fortran support:</strong></p>
+<ol>
+<li>
+<p><strong>Single-Line Input Only</strong>: ROUP requires complete directives on a single line</p>
+<ul>
+<li><strong>Not supported</strong>: Multi-line directives with <code>&amp;</code> continuation
+<pre><code class="language-fortran">!$OMP PARALLEL DO &amp;
+!$OMP   PRIVATE(I,J)
+</code></pre>
+</li>
+<li><strong>Workaround</strong>: Provide complete directive on one line:
+<pre><code class="language-fortran">!$OMP PARALLEL DO PRIVATE(I,J)
+</code></pre>
+</li>
+<li><strong>Rationale</strong>: This is an architectural design constraint that applies to both C and Fortran. Users must preprocess multi-line directives into single lines before passing to ROUP.</li>
+</ul>
+</li>
+<li>
+<p><strong>End Directives</strong>: <code>!$OMP END PARALLEL</code> and similar end directives may not parse correctly</p>
+</li>
+<li>
+<p><strong>Array Sections</strong>: Complex array section syntax may have issues</p>
+</li>
+<li>
+<p><strong>Fixed-Form Column Rules</strong>: Strict column 1-6 sentinel placement not enforced</p>
+</li>
+<li>
+<p><strong>Fortran-Specific Directives</strong>: Some Fortran-only directives (e.g., <code>WORKSHARE</code>) may not be registered</p>
+</li>
+</ol>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="parse-errors"><a class="header" href="#parse-errors">Parse Errors</a></h3>
+<p>If parsing fails:</p>
+<ol>
+<li><strong>Check sentinel format</strong>: Use <code>!$OMP</code> for free-form or <code>!$OMP</code>/<code>C$OMP</code> for fixed-form</li>
+<li><strong>Verify case</strong>: While case-insensitive, ensure proper formatting</li>
+<li><strong>Check whitespace</strong>: Ensure proper spacing after sentinel</li>
+<li><strong>Use correct language mode</strong>: Specify <code>ROUP_LANG_FORTRAN_FREE</code> or <code>ROUP_LANG_FORTRAN_FIXED</code></li>
+</ol>
+<h3 id="directive-not-found"><a class="header" href="#directive-not-found">Directive Not Found</a></h3>
+<p>Some directives may not be in the registry. Check:</p>
+<ul>
+<li>Is the directive name correct? (Fortran supports both <code>DO</code> and <code>FOR</code> syntax)</li>
+<li>Is it a composite directive? (Use <code>PARALLEL DO</code> not <code>PARALLEL</code> + <code>DO</code>)</li>
+</ul>
+<h2 id="api-reference"><a class="header" href="#api-reference">API Reference</a></h2>
+<p>See:</p>
+<ul>
+<li><a href="./c-tutorial.html">C Tutorial</a> - C API documentation</li>
+<li><a href="./api-reference.html">API Reference</a> - Complete API listing</li>
+<li><a href="./architecture.html">Architecture</a> - Parser internals</li>
+</ul>
+<h2 id="contributing"><a class="header" href="#contributing">Contributing</a></h2>
+<p>Fortran support is under active development. Contributions welcome:</p>
+<ul>
+<li>Test with real Fortran+OpenMP code</li>
+<li>Report parsing issues</li>
+<li>Add more Fortran-specific test cases</li>
+<li>Improve documentation</li>
+</ul>
+<h2 id="further-reading"><a class="header" href="#further-reading">Further Reading</a></h2>
+<ul>
+<li><a href="https://www.openmp.org/specifications/">OpenMP 5.2 Specification</a> - Official OpenMP standard</li>
+<li><a href="https://gcc.gnu.org/onlinedocs/gfortran/OpenMP.html">Fortran OpenMP Documentation</a> - GCC Fortran OpenMP guide</li>
+<li><a href="https://gcc.gnu.org/onlinedocs/gfortran/Interoperability-with-C.html">ISO C Binding</a> - Fortran-C interop guide</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="cpp-tutorial.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="ompparser-compat.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="cpp-tutorial.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="ompparser-compat.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

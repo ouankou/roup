@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["is_identifier_char","lex_clause","lex_directive","lex_identifier_token","lex_omp","lex_pragma","skip_space1_and_comments","skip_space_and_comments"]};
+window.SIDEBAR_ITEMS = {"enum":["Language"],"fn":["is_identifier_char","lex_clause","lex_directive","lex_fortran_fixed_sentinel","lex_fortran_free_sentinel","lex_identifier_token","lex_omp","lex_pragma","normalize_fortran_identifier","skip_space1_and_comments","skip_space_and_comments"]};

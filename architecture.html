@@ -186,7 +186,7 @@
 <hr />
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <p>ROUP is structured in three main layers:</p>
-<pre><code>┌─────────────────────────────────────┐
+<pre><code class="language-text">┌─────────────────────────────────────┐
 │   C/C++ Applications                │
 ├─────────────────────────────────────┤
 │   C FFI Layer (16 functions)        │  ← ~60 lines of unsafe code (0.9%)
@@ -195,20 +195,26 @@
 ├─────────────────────────────────────┤
 │   Lexer (nom-based)                  │  ← Token extraction
 └─────────────────────────────────────┘
-</code></pre>
-<p><strong>Key Design Principles:</strong></p>
-<ul>
-<li><strong>Safety First</strong>: 99.1% safe Rust code</li>
-<li><strong>Zero-Copy</strong>: Minimal allocations during parsing</li>
-<li><strong>Error Recovery</strong>: Detailed error messages with location info</li>
-<li><strong>Language Agnostic</strong>: Supports C, C++, and Fortran</li>
-</ul>
-<hr />
-<h2 id="lexer-layer"><a class="header" href="#lexer-layer">Lexer Layer</a></h2>
-<p><strong>Location</strong>: <code>src/lexer.rs</code></p>
-<p>The lexer transforms raw OpenMP pragma text into a stream of tokens.</p>
-<h3 id="tokenization-process"><a class="header" href="#tokenization-process">Tokenization Process</a></h3>
-<pre><code class="language-rust">Input:  "#pragma omp parallel num_threads(4)"
+```text
+
+**Key Design Principles:**
+- **Safety First**: 99.1% safe Rust code
+- **Zero-Copy**: Minimal allocations during parsing
+- **Error Recovery**: Detailed error messages with location info
+- **Language Agnostic**: Supports C, C++, and Fortran
+
+---
+
+## Lexer Layer
+
+**Location**: `src/lexer.rs`
+
+The lexer transforms raw OpenMP pragma text into a stream of tokens.
+
+### Tokenization Process
+
+```rust
+Input:  "#pragma omp parallel num_threads(4)"
          ↓
 Tokens: [
     Pragma("#pragma omp"),
@@ -217,9 +223,13 @@ Tokens: [
     LParen,
     Integer(4),
     RParen
-]</code></pre>
-<h3 id="token-types"><a class="header" href="#token-types">Token Types</a></h3>
-<pre><code class="language-rust">pub enum Token&lt;'a&gt; {
+]
+```text
+
+### Token Types
+
+```rust
+pub enum Token&lt;'a&gt; {
     Identifier(&amp;'a str),      // parallel, private, shared
     Integer(i64),              // 4, 100, 256
     Float(f64),                // 2.5, 1.0e-6
@@ -232,49 +242,76 @@ Tokens: [
     Minus,                     // -
     Star,                      // *
     // ... more operators
-}</code></pre>
-<h3 id="lexer-implementation"><a class="header" href="#lexer-implementation">Lexer Implementation</a></h3>
-<p><strong>Technology</strong>: Built with <a href="https://github.com/rust-bakery/nom">nom</a> parser combinators</p>
-<p><strong>Why nom?</strong></p>
-<ul>
-<li><strong>Zero-copy</strong>: Works directly on input &amp;str, no allocations</li>
-<li><strong>Composable</strong>: Small parsers combine into larger ones</li>
-<li><strong>Error-rich</strong>: Detailed error messages with position</li>
-<li><strong>Well-established</strong>: Widely used parser combinator library</li>
-</ul>
-<p><strong>Example Lexer Function:</strong></p>
-<pre><code class="language-rust">// Parse an identifier: alphanumeric + underscores
+}
+```text
+
+### Lexer Implementation
+
+**Technology**: Built with [nom](https://github.com/rust-bakery/nom) parser combinators
+
+**Why nom?**
+- **Zero-copy**: Works directly on input &amp;str, no allocations
+- **Composable**: Small parsers combine into larger ones
+- **Error-rich**: Detailed error messages with position
+- **Well-established**: Widely used parser combinator library
+
+**Example Lexer Function:**
+
+```rust
+// Parse an identifier: alphanumeric + underscores
 fn identifier(input: &amp;str) -&gt; IResult&lt;&amp;str, Token&gt; {
     let (remaining, matched) = take_while1(|c: char| {
         c.is_alphanumeric() || c == '_'
     })(input)?;
     
     Ok((remaining, Token::Identifier(matched)))
-}</code></pre>
-<hr />
-<h2 id="parser-layer"><a class="header" href="#parser-layer">Parser Layer</a></h2>
-<p><strong>Location</strong>: <code>src/parser/</code></p>
-<p>The parser converts token streams into a structured Intermediate Representation (IR).</p>
-<h3 id="parser-modules"><a class="header" href="#parser-modules">Parser Modules</a></h3>
-<pre><code>src/parser/
+}
+```text
+
+---
+
+## Parser Layer
+
+**Location**: `src/parser/`
+
+The parser converts token streams into a structured Intermediate Representation (IR).
+
+### Parser Modules
+
+```text
+src/parser/
 ├── mod.rs          # Main parser entry point
 ├── directive.rs    # Directive parsing (parallel, for, task, etc.)
 ├── clause.rs       # Clause parsing (private, reduction, etc.)
 └── openmp.rs       # OpenMP-specific parsing logic
-</code></pre>
-<h3 id="parsing-phases"><a class="header" href="#parsing-phases">Parsing Phases</a></h3>
-<h4 id="phase-1-directive-recognition"><a class="header" href="#phase-1-directive-recognition">Phase 1: Directive Recognition</a></h4>
-<pre><code class="language-rust">Input tokens: [Identifier("parallel"), Identifier("for"), ...]
+```text
+
+### Parsing Phases
+
+#### Phase 1: Directive Recognition
+
+```rust
+Input tokens: [Identifier("parallel"), Identifier("for"), ...]
                ↓
-Directive:    DirectiveKind::ParallelFor</code></pre>
-<p>Supports 120+ directive types from OpenMP 3.0 through 6.0.</p>
-<h4 id="phase-2-clause-parsing"><a class="header" href="#phase-2-clause-parsing">Phase 2: Clause Parsing</a></h4>
-<pre><code class="language-rust">Input tokens: [Identifier("num_threads"), LParen, Integer(4), RParen]
+Directive:    DirectiveKind::ParallelFor
+```text
+
+Supports 120+ directive types from OpenMP 3.0 through 6.0.
+
+#### Phase 2: Clause Parsing
+
+```rust
+Input tokens: [Identifier("num_threads"), LParen, Integer(4), RParen]
                ↓
-Clause:       Clause::NumThreads(IntegerExpr(4))</code></pre>
-<p>Parses 92+ clause types with full argument validation.</p>
-<h4 id="phase-3-ir-construction"><a class="header" href="#phase-3-ir-construction">Phase 3: IR Construction</a></h4>
-<pre><code class="language-rust">DirectiveIR {
+Clause:       Clause::NumThreads(IntegerExpr(4))
+```text
+
+Parses 92+ clause types with full argument validation.
+
+#### Phase 3: IR Construction
+
+```rust
+DirectiveIR {
     kind: DirectiveKind::ParallelFor,
     clauses: vec![
         Clause::NumThreads(IntegerExpr(4)),
@@ -282,28 +319,45 @@ Clause:       Clause::NumThreads(IntegerExpr(4))</code></pre>
     ],
     location: SourceLocation { line: 1, column: 1 },
     language: Language::C,
-}</code></pre>
-<h3 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h3>
-<p>Errors include detailed context:</p>
-<pre><code class="language-rust">ParseError {
+}
+```text
+
+### Error Handling
+
+Errors include detailed context:
+
+```rust
+ParseError {
     message: "Expected ')' after num_threads value",
     location: SourceLocation { line: 1, column: 27 },
     context: "#pragma omp parallel num_threads(4",
                                               ^
-}</code></pre>
-<hr />
-<h2 id="intermediate-representation-ir"><a class="header" href="#intermediate-representation-ir">Intermediate Representation (IR)</a></h2>
-<p><strong>Location</strong>: <code>src/ir/</code></p>
-<p>The IR is the central data structure representing parsed OpenMP directives.</p>
-<h3 id="ir-structure"><a class="header" href="#ir-structure">IR Structure</a></h3>
-<pre><code class="language-rust">pub struct DirectiveIR {
+}
+```text
+
+---
+
+## Intermediate Representation (IR)
+
+**Location**: `src/ir/`
+
+The IR is the central data structure representing parsed OpenMP directives.
+
+### IR Structure
+
+```rust
+pub struct DirectiveIR {
     pub kind: DirectiveKind,           // What directive?
     pub clauses: Vec&lt;Clause&gt;,          // What clauses?
     pub location: SourceLocation,      // Where in source?
     pub language: Language,            // C, C++, or Fortran?
-}</code></pre>
-<h3 id="directive-kinds"><a class="header" href="#directive-kinds">Directive Kinds</a></h3>
-<pre><code class="language-rust">pub enum DirectiveKind {
+}
+```text
+
+### Directive Kinds
+
+```rust
+pub enum DirectiveKind {
     // Parallel constructs
     Parallel,
     ParallelFor,
@@ -343,9 +397,13 @@ Clause:       Clause::NumThreads(IntegerExpr(4))</code></pre>
     Loop,
     
     // ... 120+ total directives
-}</code></pre>
-<h3 id="clause-types"><a class="header" href="#clause-types">Clause Types</a></h3>
-<pre><code class="language-rust">pub enum Clause {
+}
+```text
+
+### Clause Types
+
+```rust
+pub enum Clause {
     // Thread management
     NumThreads(IntegerExpr),
     If(Condition),
@@ -377,9 +435,13 @@ Clause:       Clause::NumThreads(IntegerExpr(4))</code></pre>
     Default(DefaultKind),
     
     // ... 92+ total clauses
-}</code></pre>
-<h3 id="supporting-types"><a class="header" href="#supporting-types">Supporting Types</a></h3>
-<pre><code class="language-rust">pub enum ScheduleKind {
+}
+```text
+
+### Supporting Types
+
+```rust
+pub enum ScheduleKind {
     Static,
     Dynamic,
     Guided,
@@ -411,23 +473,33 @@ pub enum Language {
     C,
     Cpp,
     Fortran,
-}</code></pre>
-<hr />
-<h2 id="c-ffi-layer"><a class="header" href="#c-ffi-layer">C FFI Layer</a></h2>
-<p><strong>Location</strong>: <code>src/c_api.rs</code></p>
-<p>The FFI layer exposes a minimal unsafe pointer-based API to C/C++.</p>
-<h3 id="design-philosophy"><a class="header" href="#design-philosophy">Design Philosophy</a></h3>
-<p><strong>Goal</strong>: Provide a traditional C API (malloc/free pattern) with minimal unsafe code.</p>
-<p><strong>Achieved</strong>:</p>
-<ul>
-<li><strong>16 functions</strong>: Complete C API surface</li>
-<li><strong>~60 lines of unsafe</strong>: Only at FFI boundary (~0.9% of file)</li>
-<li><strong>Standard patterns</strong>: Familiar to C programmers</li>
-<li><strong>Safe internals</strong>: All business logic in safe Rust</li>
-</ul>
-<h3 id="ffi-functions"><a class="header" href="#ffi-functions">FFI Functions</a></h3>
-<h4 id="lifecycle-functions-3"><a class="header" href="#lifecycle-functions-3">Lifecycle Functions (3)</a></h4>
-<pre><code class="language-c">// Parse directive, returns pointer or NULL
+}
+```text
+
+---
+
+## C FFI Layer
+
+**Location**: `src/c_api.rs`
+
+The FFI layer exposes a minimal unsafe pointer-based API to C/C++.
+
+### Design Philosophy
+
+**Goal**: Provide a traditional C API (malloc/free pattern) with minimal unsafe code.
+
+**Achieved**:
+- **16 functions**: Complete C API surface
+- **~60 lines of unsafe**: Only at FFI boundary (~0.9% of file)
+- **Standard patterns**: Familiar to C programmers
+- **Safe internals**: All business logic in safe Rust
+
+### FFI Functions
+
+#### Lifecycle Functions (3)
+
+```c
+// Parse directive, returns pointer or NULL
 OmpDirective* roup_parse(const char* input);
 
 // Free directive (required)
@@ -435,9 +507,12 @@ void roup_directive_free(OmpDirective* directive);
 
 // Free clause (not usually needed - owned by directive)
 void roup_clause_free(OmpClause* clause);
-</code></pre>
-<h4 id="directive-query-functions-3"><a class="header" href="#directive-query-functions-3">Directive Query Functions (3)</a></h4>
-<pre><code class="language-c">// Get directive type (integer)
+```text
+
+#### Directive Query Functions (3)
+
+```c
+// Get directive type (integer)
 int32_t roup_directive_kind(const OmpDirective* directive);
 
 // Get number of clauses
@@ -445,16 +520,22 @@ int32_t roup_directive_clause_count(const OmpDirective* directive);
 
 // Create iterator over clauses
 OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
-</code></pre>
-<h4 id="iterator-functions-2"><a class="header" href="#iterator-functions-2">Iterator Functions (2)</a></h4>
-<pre><code class="language-c">// Get next clause (returns 1 if available, 0 if done)
+```text
+
+#### Iterator Functions (2)
+
+```c
+// Get next clause (returns 1 if available, 0 if done)
 int32_t roup_clause_iterator_next(OmpClauseIterator* iter, OmpClause** out);
 
 // Free iterator
 void roup_clause_iterator_free(OmpClauseIterator* iter);
-</code></pre>
-<h4 id="clause-query-functions-4"><a class="header" href="#clause-query-functions-4">Clause Query Functions (4)</a></h4>
-<pre><code class="language-c">// Get clause type (0=num_threads, 2=private, etc.)
+```text
+
+#### Clause Query Functions (4)
+
+```c
+// Get clause type (0=num_threads, 2=private, etc.)
 int32_t roup_clause_kind(const OmpClause* clause);
 
 // Get schedule kind for schedule clauses
@@ -465,9 +546,12 @@ int32_t roup_clause_reduction_operator(const OmpClause* clause);
 
 // Get default data sharing
 int32_t roup_clause_default_data_sharing(const OmpClause* clause);
-</code></pre>
-<h4 id="variable-list-functions-4"><a class="header" href="#variable-list-functions-4">Variable List Functions (4)</a></h4>
-<pre><code class="language-c">// Get variable list from clause
+```text
+
+#### Variable List Functions (4)
+
+```c
+// Get variable list from clause
 OmpStringList* roup_clause_variables(const OmpClause* clause);
 
 // Get list length
@@ -478,73 +562,97 @@ const char* roup_string_list_get(const OmpStringList* list, int32_t index);
 
 // Free string list
 void roup_string_list_free(OmpStringList* list);
-</code></pre>
-<h3 id="memory-model"><a class="header" href="#memory-model">Memory Model</a></h3>
-<p><strong>Ownership Rules:</strong></p>
-<ol>
-<li><strong>Directives</strong>: Created by <code>roup_parse()</code>, freed by <code>roup_directive_free()</code></li>
-<li><strong>Iterators</strong>: Created by <code>roup_directive_clauses_iter()</code>, freed by <code>roup_clause_iterator_free()</code></li>
-<li><strong>String Lists</strong>: Created by <code>roup_clause_variables()</code>, freed by <code>roup_string_list_free()</code></li>
-<li><strong>Clauses</strong>: Owned by directive, DO NOT call <code>roup_clause_free()</code> on them</li>
-</ol>
-<p><strong>Pattern</strong>: Standard C malloc/free, familiar to all C programmers.</p>
-<h3 id="safety-boundaries"><a class="header" href="#safety-boundaries">Safety Boundaries</a></h3>
-<h4 id="the-60-lines-of-unsafe"><a class="header" href="#the-60-lines-of-unsafe">The ~60 Lines of Unsafe</a></h4>
-<p>All unsafe code is confined to FFI boundary operations:</p>
-<p><strong>1. Reading C Strings (2 places)</strong></p>
-<pre><code class="language-rust">// Safety: Caller must ensure input is valid null-terminated C string
+```text
+
+### Memory Model
+
+**Ownership Rules:**
+1. **Directives**: Created by `roup_parse()`, freed by `roup_directive_free()`
+2. **Iterators**: Created by `roup_directive_clauses_iter()`, freed by `roup_clause_iterator_free()`
+3. **String Lists**: Created by `roup_clause_variables()`, freed by `roup_string_list_free()`
+4. **Clauses**: Owned by directive, DO NOT call `roup_clause_free()` on them
+
+**Pattern**: Standard C malloc/free, familiar to all C programmers.
+
+### Safety Boundaries
+
+#### The ~60 Lines of Unsafe
+
+All unsafe code is confined to FFI boundary operations:
+
+**1. Reading C Strings (2 places)**
+```rust
+// Safety: Caller must ensure input is valid null-terminated C string
 unsafe {
     CStr::from_ptr(input).to_str()
-}</code></pre>
-<p><strong>Checks:</strong></p>
-<ul>
-<li>✅ NULL pointer check before unsafe</li>
-<li>✅ UTF-8 validation with error return</li>
-<li>✅ No memory writes, only reads</li>
-</ul>
-<p><strong>2. Writing to Output Pointers (multiple places)</strong></p>
-<pre><code class="language-rust">// Safety: Caller must ensure out is valid, aligned, writable
+}
+```text
+
+**Checks:**
+- ✅ NULL pointer check before unsafe
+- ✅ UTF-8 validation with error return
+- ✅ No memory writes, only reads
+
+**2. Writing to Output Pointers (multiple places)**
+```rust
+// Safety: Caller must ensure out is valid, aligned, writable
 unsafe {
     *out = value;
-}</code></pre>
-<p><strong>Checks:</strong></p>
-<ul>
-<li>✅ NULL pointer check before unsafe</li>
-<li>✅ Only writes primitive types (i32, u32, pointers)</li>
-<li>✅ Single write operation, no loops</li>
-</ul>
-<p><strong>3. Pointer Manipulation for Iterators</strong></p>
-<pre><code class="language-rust">// Safety: Internal Box pointer management
+}
+```text
+
+**Checks:**
+- ✅ NULL pointer check before unsafe
+- ✅ Only writes primitive types (i32, u32, pointers)
+- ✅ Single write operation, no loops
+
+**3. Pointer Manipulation for Iterators**
+```rust
+// Safety: Internal Box pointer management
 unsafe {
     Box::from_raw(ptr)
-}</code></pre>
-<p><strong>Checks:</strong></p>
-<ul>
-<li>✅ NULL pointer check</li>
-<li>✅ Pointer created by Box::into_raw()</li>
-<li>✅ No double-free (consumed on free)</li>
-</ul>
-<h3 id="why-minimal-unsafe-is-necessary"><a class="header" href="#why-minimal-unsafe-is-necessary">Why Minimal Unsafe is Necessary</a></h3>
-<p><strong>Cannot avoid unsafe for FFI:</strong></p>
-<ul>
-<li>Reading C strings requires <code>CStr::from_ptr()</code> (unsafe)</li>
-<li>Writing to C pointers requires dereference (unsafe)</li>
-<li>This is standard Rust FFI practice</li>
-</ul>
-<p><strong>Alternative approaches considered:</strong></p>
-<p>❌ <strong>Zero unsafe</strong>: Would require C programs to build strings byte-by-byte (40x slower, unusable)</p>
-<p>❌ <strong>Handle-based API</strong>: Would need global registry with more unsafe code (50+ blocks)</p>
-<p>✅ <strong>Minimal unsafe pointer API</strong>: Only ~60 lines, standard C patterns, practical performance</p>
-<p>See <a href="https://github.com/ouankou/roup/blob/main/AGENTS.md">AGENTS.md</a> for the official API architecture documentation.</p>
-<hr />
-<h2 id="data-flow-example"><a class="header" href="#data-flow-example">Data Flow Example</a></h2>
-<p>Let's trace a complete parse operation:</p>
-<h3 id="input"><a class="header" href="#input">Input</a></h3>
-<pre><code class="language-c">const char* input = "#pragma omp parallel for num_threads(4) private(i)";
+}
+```text
+
+**Checks:**
+- ✅ NULL pointer check
+- ✅ Pointer created by Box::into_raw()
+- ✅ No double-free (consumed on free)
+
+### Why Minimal Unsafe is Necessary
+
+**Cannot avoid unsafe for FFI:**
+- Reading C strings requires `CStr::from_ptr()` (unsafe)
+- Writing to C pointers requires dereference (unsafe)
+- This is standard Rust FFI practice
+
+**Alternative approaches considered:**
+
+❌ **Zero unsafe**: Would require C programs to build strings byte-by-byte (40x slower, unusable)
+
+❌ **Handle-based API**: Would need global registry with more unsafe code (50+ blocks)
+
+✅ **Minimal unsafe pointer API**: Only ~60 lines, standard C patterns, practical performance
+
+See [AGENTS.md](https://github.com/ouankou/roup/blob/main/AGENTS.md) for the official API architecture documentation.
+
+---
+
+## Data Flow Example
+
+Let's trace a complete parse operation:
+
+### Input
+
+```c
+const char* input = "#pragma omp parallel for num_threads(4) private(i)";
 OmpDirective* dir = roup_parse(input);
-</code></pre>
-<h3 id="step-1-ffi-boundary-c--rust"><a class="header" href="#step-1-ffi-boundary-c--rust">Step 1: FFI Boundary (C → Rust)</a></h3>
-<pre><code class="language-rust">// src/c_api.rs
+```text
+
+### Step 1: FFI Boundary (C → Rust)
+
+```rust
+// src/c_api.rs
 #[no_mangle]
 pub extern "C" fn roup_parse(input: *const c_char) -&gt; *mut OmpDirective {
     // NULL check
@@ -562,9 +670,13 @@ pub extern "C" fn roup_parse(input: *const c_char) -&gt; *mut OmpDirective {
     
     // Box and return pointer
     Box::into_raw(Box::new(directive_ir))
-}</code></pre>
-<h3 id="step-2-lexer-pure-rust"><a class="header" href="#step-2-lexer-pure-rust">Step 2: Lexer (Pure Rust)</a></h3>
-<pre><code class="language-rust">// src/lexer.rs
+}
+```text
+
+### Step 2: Lexer (Pure Rust)
+
+```rust
+// src/lexer.rs
 tokenize("#pragma omp parallel for num_threads(4) private(i)")
   ↓
 [
@@ -579,9 +691,13 @@ tokenize("#pragma omp parallel for num_threads(4) private(i)")
     LParen,
     Identifier("i"),
     RParen,
-]</code></pre>
-<h3 id="step-3-parser-pure-rust"><a class="header" href="#step-3-parser-pure-rust">Step 3: Parser (Pure Rust)</a></h3>
-<pre><code class="language-rust">// src/parser/mod.rs
+]
+```text
+
+### Step 3: Parser (Pure Rust)
+
+```rust
+// src/parser/mod.rs
 parse_directive(tokens)
   ↓
 DirectiveIR {
@@ -592,111 +708,165 @@ DirectiveIR {
     ],
     location: SourceLocation { line: 1, column: 1 },
     language: Language::C,
-}</code></pre>
-<h3 id="step-4-ffi-boundary-rust--c"><a class="header" href="#step-4-ffi-boundary-rust--c">Step 4: FFI Boundary (Rust → C)</a></h3>
-<pre><code class="language-rust">// Return pointer to C
-Box::into_raw(Box::new(directive_ir)) → 0x7fff12340000</code></pre>
-<h3 id="step-5-c-queries"><a class="header" href="#step-5-c-queries">Step 5: C Queries</a></h3>
-<pre><code class="language-c">int32_t kind = roup_directive_kind(dir);           // 28 (ParallelFor)
+}
+```text
+
+### Step 4: FFI Boundary (Rust → C)
+
+```rust
+// Return pointer to C
+Box::into_raw(Box::new(directive_ir)) → 0x7fff12340000
+```text
+
+### Step 5: C Queries
+
+```c
+int32_t kind = roup_directive_kind(dir);           // 28 (ParallelFor)
 int32_t count = roup_directive_clause_count(dir);  // 2
-</code></pre>
-<h3 id="step-6-cleanup"><a class="header" href="#step-6-cleanup">Step 6: Cleanup</a></h3>
-<pre><code class="language-c">roup_directive_free(dir);  // Calls Box::from_raw() and drops
-</code></pre>
-<hr />
-<h2 id="performance-characteristics"><a class="header" href="#performance-characteristics">Performance Characteristics</a></h2>
-<h3 id="time-complexity"><a class="header" href="#time-complexity">Time Complexity</a></h3>
-<ul>
-<li><strong>Lexing</strong>: O(n) where n = input length</li>
-<li><strong>Parsing</strong>: O(n × m) where m = average clause complexity (~O(n) in practice)</li>
-<li><strong>IR Construction</strong>: O(c) where c = number of clauses</li>
-<li><strong>FFI Call Overhead</strong>: ~10ns per call</li>
-</ul>
-<h3 id="space-complexity"><a class="header" href="#space-complexity">Space Complexity</a></h3>
-<ul>
-<li><strong>Lexer</strong>: O(1) - zero-copy, works on &amp;str</li>
-<li><strong>Parser</strong>: O(c) - allocates clause vector</li>
-<li><strong>IR</strong>: O(c) - owns clause data</li>
-<li><strong>FFI</strong>: O(1) - pointer conversion only</li>
-</ul>
-<h3 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h3>
-<p>Typical directive parsing:</p>
-<div class="table-wrapper"><table><thead><tr><th>Directive</th><th>Time</th><th>Allocations</th></tr></thead><tbody>
-<tr><td><code>#pragma omp parallel</code></td><td>~500ns</td><td>1 (DirectiveIR)</td></tr>
-<tr><td><code>#pragma omp parallel for num_threads(4)</code></td><td>~800ns</td><td>2 (DirectiveIR + 1 clause)</td></tr>
-<tr><td><code>#pragma omp parallel for private(i,j,k) reduction(+:sum)</code></td><td>~1.2µs</td><td>3 (DirectiveIR + 2 clauses)</td></tr>
-</tbody></table>
-</div>
-<p><strong>Compare to old handle-based API</strong>: 40x fewer FFI calls, 320x faster string building.</p>
-<hr />
-<h2 id="thread-safety"><a class="header" href="#thread-safety">Thread Safety</a></h2>
-<h3 id="safe-concurrency"><a class="header" href="#safe-concurrency">Safe Concurrency</a></h3>
-<p><strong>Parser</strong>: Thread-safe, can parse from multiple threads simultaneously</p>
-<pre><code class="language-rust">// Safe to do in parallel
+```text
+
+### Step 6: Cleanup
+
+```c
+roup_directive_free(dir);  // Calls Box::from_raw() and drops
+```text
+
+---
+
+## Performance Characteristics
+
+### Time Complexity
+
+- **Lexing**: O(n) where n = input length
+- **Parsing**: O(n × m) where m = average clause complexity (~O(n) in practice)
+- **IR Construction**: O(c) where c = number of clauses
+- **FFI Call Overhead**: ~10ns per call
+
+### Space Complexity
+
+- **Lexer**: O(1) - zero-copy, works on &amp;str
+- **Parser**: O(c) - allocates clause vector
+- **IR**: O(c) - owns clause data
+- **FFI**: O(1) - pointer conversion only
+
+### Benchmarks
+
+Typical directive parsing:
+
+| Directive | Time | Allocations |
+|-----------|------|-------------|
+| `#pragma omp parallel` | ~500ns | 1 (DirectiveIR) |
+| `#pragma omp parallel for num_threads(4)` | ~800ns | 2 (DirectiveIR + 1 clause) |
+| `#pragma omp parallel for private(i,j,k) reduction(+:sum)` | ~1.2µs | 3 (DirectiveIR + 2 clauses) |
+
+**Compare to old handle-based API**: 40x fewer FFI calls, 320x faster string building.
+
+---
+
+## Thread Safety
+
+### Safe Concurrency
+
+**Parser**: Thread-safe, can parse from multiple threads simultaneously
+
+```rust
+// Safe to do in parallel
 std::thread::spawn(|| {
     let dir1 = parse("#pragma omp parallel");
 });
 std::thread::spawn(|| {
     let dir2 = parse("#pragma omp for");
-});</code></pre>
-<p><strong>IR</strong>: Immutable after construction, safe to share across threads</p>
-<p><strong>FFI</strong>: Each directive is independent, safe to parse in parallel</p>
-<h3 id="unsafe-patterns-user-responsibility"><a class="header" href="#unsafe-patterns-user-responsibility">Unsafe Patterns (User Responsibility)</a></h3>
-<p>❌ <strong>Sharing directive across threads without synchronization</strong></p>
-<pre><code class="language-c">// Thread 1
+});
+```text
+
+**IR**: Immutable after construction, safe to share across threads
+
+**FFI**: Each directive is independent, safe to parse in parallel
+
+### Unsafe Patterns (User Responsibility)
+
+❌ **Sharing directive across threads without synchronization**
+```c
+// Thread 1
 roup_directive_free(dir);
 
 // Thread 2 (at same time)
 roup_directive_kind(dir);  // Use-after-free!
-</code></pre>
-<p>❌ <strong>Double-free</strong></p>
-<pre><code class="language-c">roup_directive_free(dir);
+```text
+
+❌ **Double-free**
+```c
+roup_directive_free(dir);
 roup_directive_free(dir);  // Undefined behavior!
-</code></pre>
-<p>✅ <strong>Safe multi-threaded usage</strong></p>
-<pre><code class="language-c">// Each thread has its own directive
+```text
+
+✅ **Safe multi-threaded usage**
+```c
+// Each thread has its own directive
 OmpDirective* dir1 = roup_parse("#pragma omp parallel");  // Thread 1
 OmpDirective* dir2 = roup_parse("#pragma omp for");       // Thread 2
-</code></pre>
-<hr />
-<h2 id="error-handling-strategy"><a class="header" href="#error-handling-strategy">Error Handling Strategy</a></h2>
-<h3 id="rust-api"><a class="header" href="#rust-api">Rust API</a></h3>
-<p>Uses <code>Result&lt;DirectiveIR, ParseError&gt;</code>:</p>
-<pre><code class="language-rust">match parse(input) {
+```text
+
+---
+
+## Error Handling Strategy
+
+### Rust API
+
+Uses `Result&lt;DirectiveIR, ParseError&gt;`:
+
+```rust
+match parse(input) {
     Ok(directive) =&gt; { /* use directive */ },
     Err(ParseError { message, location, .. }) =&gt; {
         eprintln!("Parse error at line {}: {}", location.line, message);
     }
-}</code></pre>
-<h3 id="c-api"><a class="header" href="#c-api">C API</a></h3>
-<p>Uses <code>NULL</code> return values:</p>
-<pre><code class="language-c">OmpDirective* dir = roup_parse(input);
+}
+```text
+
+### C API
+
+Uses `NULL` return values:
+
+```c
+OmpDirective* dir = roup_parse(input);
 if (dir == NULL) {
     fprintf(stderr, "Parse failed\n");
     return 1;
 }
-</code></pre>
-<p><strong>Query functions</strong>: Return <code>-1</code> or safe defaults for NULL inputs</p>
-<pre><code class="language-c">int32_t kind = roup_directive_kind(NULL);  // Returns -1, won't crash
-</code></pre>
-<hr />
-<h2 id="testing-strategy"><a class="header" href="#testing-strategy">Testing Strategy</a></h2>
-<h3 id="test-coverage"><a class="header" href="#test-coverage">Test Coverage</a></h3>
-<pre><code>Total Tests:    352
+```text
+
+**Query functions**: Return `-1` or safe defaults for NULL inputs
+
+```c
+int32_t kind = roup_directive_kind(NULL);  // Returns -1, won't crash
+```text
+
+---
+
+## Testing Strategy
+
+### Test Coverage
+
+```text
+Total Tests:    352
 Unit Tests:     239
 Integration:    51
 Doc Tests:      62
-</code></pre>
-<h3 id="test-categories"><a class="header" href="#test-categories">Test Categories</a></h3>
-<ol>
-<li><strong>Lexer Tests</strong>: Token extraction, edge cases, Unicode</li>
-<li><strong>Parser Tests</strong>: Directive recognition, clause parsing, error cases</li>
-<li><strong>IR Tests</strong>: Structure validation, roundtrip serialization</li>
-<li><strong>FFI Tests</strong>: NULL handling, memory safety, error propagation</li>
-<li><strong>Concurrent Tests</strong>: Multi-threaded parsing, race detection</li>
-</ol>
-<h3 id="example-tests"><a class="header" href="#example-tests">Example Tests</a></h3>
-<pre><code class="language-rust">#[test]
+```text
+
+### Test Categories
+
+1. **Lexer Tests**: Token extraction, edge cases, Unicode
+2. **Parser Tests**: Directive recognition, clause parsing, error cases
+3. **IR Tests**: Structure validation, roundtrip serialization
+4. **FFI Tests**: NULL handling, memory safety, error propagation
+5. **Concurrent Tests**: Multi-threaded parsing, race detection
+
+### Example Tests
+
+```rust
+#[test]
 fn test_parallel_for_parsing() {
     let result = parse("#pragma omp parallel for num_threads(4)");
     assert!(result.is_ok());
@@ -718,97 +888,106 @@ fn test_ffi_null_safety() {
     
     let kind = roup_directive_kind(std::ptr::null());
     assert_eq!(kind, -1);
-}</code></pre>
-<hr />
-<h2 id="design-trade-offs"><a class="header" href="#design-trade-offs">Design Trade-offs</a></h2>
-<h3 id="lexer-nom-vs-custom"><a class="header" href="#lexer-nom-vs-custom">Lexer: nom vs Custom</a></h3>
-<p><strong>Chose nom:</strong></p>
-<ul>
-<li>✅ Zero-copy parsing</li>
-<li>✅ Rich error messages</li>
-<li>✅ Well-tested combinators</li>
-<li>✅ Easy to extend</li>
-</ul>
-<p><strong>vs Custom Lexer:</strong></p>
-<ul>
-<li>❌ Learning curve</li>
-<li>❌ Dependency on external crate</li>
-</ul>
-<h3 id="ir-owned-vs-borrowed"><a class="header" href="#ir-owned-vs-borrowed">IR: Owned vs Borrowed</a></h3>
-<p><strong>Chose owned (Vec, String):</strong></p>
-<ul>
-<li>✅ Simple lifetime management</li>
-<li>✅ Easy to pass across FFI</li>
-<li>✅ No lifetime annotations in IR</li>
-</ul>
-<p><strong>vs Borrowed (&amp;str slices):</strong></p>
-<ul>
-<li>❌ Slower (allocations)</li>
-<li>❌ More memory usage</li>
-</ul>
-<p><strong>Justification</strong>: Parsing is not the bottleneck; simplicity and FFI compatibility matter more.</p>
-<h3 id="ffi-pointers-vs-handles"><a class="header" href="#ffi-pointers-vs-handles">FFI: Pointers vs Handles</a></h3>
-<p><strong>Chose pointers:</strong></p>
-<ul>
-<li>✅ Standard C pattern (malloc/free)</li>
-<li>✅ Minimal unsafe (~60 lines)</li>
-<li>✅ Zero overhead</li>
-<li>✅ Familiar to C programmers</li>
-</ul>
-<p><strong>vs Handle-based:</strong></p>
-<ul>
-<li>❌ 40x more FFI calls</li>
-<li>❌ 50+ unsafe blocks</li>
-<li>❌ Global registry complexity</li>
-</ul>
-<p>See <a href="https://github.com/ouankou/roup/blob/main/AGENTS.md#c-ffi-api-architecture">AGENTS.md - C FFI API Architecture</a> for details.</p>
-<hr />
-<h2 id="future-architecture-considerations"><a class="header" href="#future-architecture-considerations">Future Architecture Considerations</a></h2>
-<h3 id="potential-enhancements"><a class="header" href="#potential-enhancements">Potential Enhancements</a></h3>
-<ol>
-<li><strong>Incremental Parsing</strong>: Parse only changed directives</li>
-<li><strong>Streaming API</strong>: Parse large files without loading into memory</li>
-<li><strong>Parallel Parsing</strong>: Parse multiple files concurrently</li>
-<li><strong>AST Transformation</strong>: Optimize or transform directives</li>
-<li><strong>Code Generation</strong>: Generate code from IR</li>
-</ol>
-<h3 id="stability-guarantees"><a class="header" href="#stability-guarantees">Stability Guarantees</a></h3>
-<p><strong>⚠️ Pre-1.0 Experimental Status:</strong></p>
-<p>ROUP is under active development. While we aim for stability, <strong>all APIs may change</strong> before v1.0.</p>
-<p><strong>More stable</strong> (unlikely to change much):</p>
-<ul>
-<li>Core parsing functionality (<code>parse()</code> pattern)</li>
-<li>C FFI function signatures (16 functions)</li>
-<li>IR structure (major fields)</li>
-</ul>
-<p><strong>Less stable</strong> (may change between versions):</p>
-<ul>
-<li>Internal parser implementation details</li>
-<li>Lexer token types and error structures</li>
-<li>Error message formatting</li>
-<li>Clause/directive kind integer values</li>
-<li>Specific API details and return types</li>
-</ul>
-<hr />
-<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
-<p>ROUP's architecture prioritizes:</p>
-<ol>
-<li><strong>Safety</strong>: 99.1% safe Rust, minimal unsafe only at FFI boundary</li>
-<li><strong>Performance</strong>: Zero-copy lexing, minimal allocations</li>
-<li><strong>Usability</strong>: Standard C patterns, clear error messages</li>
-<li><strong>Correctness</strong>: 352 tests, comprehensive OpenMP support</li>
-</ol>
-<p>The three-layer design (Lexer → Parser → FFI) provides a clean separation of concerns while maintaining excellent performance characteristics.</p>
-<p><strong>Key Metrics:</strong></p>
-<ul>
-<li>16 FFI functions</li>
-<li>~60 lines of unsafe code (0.9%)</li>
-<li>95 directives</li>
-<li>91 clauses</li>
-<li>352 tests</li>
-<li>~500ns to parse simple directive</li>
-</ul>
-<p>For implementation details, see the source code in <code>src/</code>.</p>
+}
+```text
+
+---
+
+## Design Trade-offs
+
+### Lexer: nom vs Custom
+
+**Chose nom:**
+- ✅ Zero-copy parsing
+- ✅ Rich error messages
+- ✅ Well-tested combinators
+- ✅ Easy to extend
+
+**vs Custom Lexer:**
+- ❌ Learning curve
+- ❌ Dependency on external crate
+
+### IR: Owned vs Borrowed
+
+**Chose owned (Vec, String):**
+- ✅ Simple lifetime management
+- ✅ Easy to pass across FFI
+- ✅ No lifetime annotations in IR
+
+**vs Borrowed (&amp;str slices):**
+- ❌ Slower (allocations)
+- ❌ More memory usage
+
+**Justification**: Parsing is not the bottleneck; simplicity and FFI compatibility matter more.
+
+### FFI: Pointers vs Handles
+
+**Chose pointers:**
+- ✅ Standard C pattern (malloc/free)
+- ✅ Minimal unsafe (~60 lines)
+- ✅ Zero overhead
+- ✅ Familiar to C programmers
+
+**vs Handle-based:**
+- ❌ 40x more FFI calls
+- ❌ 50+ unsafe blocks
+- ❌ Global registry complexity
+
+See [AGENTS.md - C FFI API Architecture](https://github.com/ouankou/roup/blob/main/AGENTS.md#c-ffi-api-architecture) for details.
+
+---
+
+## Future Architecture Considerations
+
+### Potential Enhancements
+
+1. **Incremental Parsing**: Parse only changed directives
+2. **Streaming API**: Parse large files without loading into memory
+3. **Parallel Parsing**: Parse multiple files concurrently
+4. **AST Transformation**: Optimize or transform directives
+5. **Code Generation**: Generate code from IR
+
+### Stability Guarantees
+
+**⚠️ Pre-1.0 Experimental Status:**
+
+ROUP is under active development. While we aim for stability, **all APIs may change** before v1.0.
+
+**More stable** (unlikely to change much):
+- Core parsing functionality (`parse()` pattern)
+- C FFI function signatures (16 functions)
+- IR structure (major fields)
+
+**Less stable** (may change between versions):
+- Internal parser implementation details
+- Lexer token types and error structures
+- Error message formatting
+- Clause/directive kind integer values
+- Specific API details and return types
+
+---
+
+## Summary
+
+ROUP's architecture prioritizes:
+
+1. **Safety**: 99.1% safe Rust, minimal unsafe only at FFI boundary
+2. **Performance**: Zero-copy lexing, minimal allocations
+3. **Usability**: Standard C patterns, clear error messages
+4. **Correctness**: 352 tests, comprehensive OpenMP support
+
+The three-layer design (Lexer → Parser → FFI) provides a clean separation of concerns while maintaining excellent performance characteristics.
+
+**Key Metrics:**
+- 16 FFI functions
+- ~60 lines of unsafe code (0.9%)
+- 95 directives
+- 91 clauses
+- 352 tests
+- ~500ns to parse simple directive
+
+For implementation details, see the source code in `src/`.
+</code></pre>
 
                     </main>
 

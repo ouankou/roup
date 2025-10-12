@@ -224,19 +224,27 @@
 <li><strong>Spec compliant</strong> - Follows official OpenMP specifications</li>
 </ul>
 <h3 id="-multi-language-apis"><a class="header" href="#-multi-language-apis">🔌 Multi-Language APIs</a></h3>
-<div class="table-wrapper"><table><thead><tr><th>Language</th><th>API Style</th><th>Memory Management</th></tr></thead><tbody>
-<tr><td><strong>Rust</strong></td><td>Native</td><td>Automatic (ownership)</td></tr>
-<tr><td><strong>C</strong></td><td>Pointer-based</td><td>Manual (malloc/free pattern)</td></tr>
-<tr><td><strong>C++</strong></td><td>RAII wrappers</td><td>Automatic (destructors)</td></tr>
+<div class="table-wrapper"><table><thead><tr><th>Language</th><th>API Style</th><th>Memory Management</th><th>Status</th></tr></thead><tbody>
+<tr><td><strong>Rust</strong></td><td>Native</td><td>Automatic (ownership)</td><td>✅ Stable</td></tr>
+<tr><td><strong>C</strong></td><td>Pointer-based</td><td>Manual (malloc/free pattern)</td><td>✅ Stable</td></tr>
+<tr><td><strong>C++</strong></td><td>RAII wrappers</td><td>Automatic (destructors)</td><td>✅ Stable</td></tr>
+<tr><td><strong>Fortran</strong></td><td>C interop</td><td>Manual (via iso_c_binding)</td><td>⚠️ Experimental</td></tr>
 </tbody></table>
 </div>
 <hr />
 <h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
 <h3 id="parse-in-3-lines-rust"><a class="header" href="#parse-in-3-lines-rust">Parse in 3 Lines (Rust)</a></h3>
-<pre><code class="language-rust">use roup::parser::parse;
+<pre><code class="language-rust">use roup::parser::openmp;
 
-let directive = parse("#pragma omp parallel for num_threads(4)").unwrap();
-println!("Found {} clauses", directive.clauses.len());  // Output: Found 1 clauses</code></pre>
+let parser = openmp::parser();
+let (_, directive) = parser.parse("#pragma omp parallel for num_threads(4)").unwrap();
+// Access directive information
+println!("Directive: {}", directive.name);  // Output: Directive: parallel for
+println!("Found {} clauses", directive.clauses.len());  // Output: Found 1 clauses
+// Iterate through clauses
+for clause in &amp;directive.clauses {
+    println!("  Clause: {}", clause.name);  // Output:   Clause: num_threads
+}</code></pre>
 <h3 id="parse-in-c"><a class="header" href="#parse-in-c">Parse in C</a></h3>
 <pre><code class="language-c">OmpDirective* dir = roup_parse("#pragma omp parallel for num_threads(4)");
 printf("Clauses: %d\n", roup_directive_clause_count(dir));
@@ -246,6 +254,11 @@ roup_directive_free(dir);
 <pre><code class="language-cpp">roup::Directive dir("#pragma omp parallel for num_threads(4)");
 std::cout &lt;&lt; "Clauses: " &lt;&lt; dir.clause_count() &lt;&lt; "\n";
 // Automatic cleanup!
+</code></pre>
+<h3 id="parse-fortran-experimental"><a class="header" href="#parse-fortran-experimental">Parse Fortran (Experimental)</a></h3>
+<pre><code class="language-fortran">! Free-form Fortran
+directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
+                                          ROUP_LANG_FORTRAN_FREE)
 </code></pre>
 <p><a href="./getting-started.html">See full examples →</a></p>
 <hr />
@@ -328,7 +341,7 @@ std::cout &lt;&lt; "Clauses: " &lt;&lt; dir.clause_count() &lt;&lt; "\n";
 <p><a href="./api-reference.html">Complete clause reference →</a></p>
 <hr />
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<pre><code>┌─────────────────────────────────────┐
+<pre><code class="language-text">┌─────────────────────────────────────┐
 │   Your Application                  │
 ├─────────────────────────────────────┤
 │   Language Bindings                 │
@@ -525,15 +538,16 @@ roup = "0.1"
 <hr />
 <h2 id="quick-example-1"><a class="header" href="#quick-example-1">Quick Example</a></h2>
 <h3 id="rust"><a class="header" href="#rust">Rust</a></h3>
-<pre><code class="language-rust">use roup::parser::parse;
+<pre><code class="language-rust">use roup::parser::openmp;
 
+let parser = openmp::parser();
 let input = "#pragma omp parallel for num_threads(4) private(i)";
-match parse(input) {
-    Ok(directive) =&gt; {
+match parser.parse(input) {
+    Ok((_, directive)) =&gt; {
         println!("Directive: {:?}", directive.kind);
         println!("Clauses: {}", directive.clauses.len());
     }
-    Err(e) =&gt; eprintln!("Parse error: {}", e),
+    Err(e) =&gt; eprintln!("Parse error: {:?}", e),
 }</code></pre>
 <h3 id="c"><a class="header" href="#c">C</a></h3>
 <pre><code class="language-c">#include &lt;stdio.h&gt;
@@ -587,7 +601,7 @@ int main() {
 <hr />
 <h2 id="architecture-1"><a class="header" href="#architecture-1">Architecture</a></h2>
 <p>ROUP uses a clean, modular architecture:</p>
-<pre><code>┌─────────────────────────────────────────┐
+<pre><code class="language-text">┌─────────────────────────────────────────┐
 │         Application Layer               │
 │  (Your compiler/tool/analyzer)          │
 └─────────────────┬───────────────────────┘

@@ -183,6 +183,9 @@
                     <main>
                         <h1 id="frequently-asked-questions"><a class="header" href="#frequently-asked-questions">Frequently Asked Questions</a></h1>
 <p>Common questions about using ROUP.</p>
+<blockquote>
+<p><strong>Note</strong>: Code examples in this FAQ use <code>rust,ignore</code> to prevent <code>mdbook test</code> from attempting to compile them without the ROUP library linked. To test these examples yourself, create a new Rust project and add ROUP as a dependency in your <code>Cargo.toml</code>. See the <a href="./getting-started.html">Getting Started</a> guide for step-by-step instructions. All examples are verified to compile correctly when used in a project with ROUP as a dependency.</p>
+</blockquote>
 <hr />
 <h2 id="general-questions"><a class="header" href="#general-questions">General Questions</a></h2>
 <h3 id="what-is-roup"><a class="header" href="#what-is-roup">What is ROUP?</a></h3>
@@ -272,12 +275,14 @@ export RUSTC_WRAPPER=sccache
 <h2 id="usage-questions"><a class="header" href="#usage-questions">Usage Questions</a></h2>
 <h3 id="how-do-i-parse-a-simple-directive"><a class="header" href="#how-do-i-parse-a-simple-directive">How do I parse a simple directive?</a></h3>
 <p><strong>Rust:</strong></p>
-<pre><code class="language-rust">use roup::parser::parse;
+<pre><code class="language-rust ignore">// Note: Using `rust,ignore` - see top of page for testing instructions
+use roup::parser::openmp;
 
-let result = parse("#pragma omp parallel");
+let parser = openmp::parser();
+let result = parser.parse("#pragma omp parallel");
 match result {
-    Ok(directive) =&gt; println!("Parsed: {:?}", directive),
-    Err(e) =&gt; eprintln!("Error: {}", e),
+    Ok((_, directive)) =&gt; println!("Parsed: {:?}", directive),
+    Err(e) =&gt; eprintln!("Error: {:?}", e),
 }</code></pre>
 <p><strong>C:</strong></p>
 <pre><code class="language-c">OmpDirective* dir = roup_parse("#pragma omp parallel");
@@ -289,7 +294,8 @@ if (dir) {
 <p>See the <a href="./getting-started.html">Getting Started</a> guide for more examples.</p>
 <h3 id="how-do-i-iterate-through-clauses"><a class="header" href="#how-do-i-iterate-through-clauses">How do I iterate through clauses?</a></h3>
 <p><strong>Rust:</strong></p>
-<pre><code class="language-rust">for clause in &amp;directive.clauses {
+<pre><code class="language-rust ignore">// Note: Using `rust,ignore` - see top of page for testing instructions
+for clause in &amp;directive.clauses {
     println!("Clause: {:?}", clause);
 }</code></pre>
 <p><strong>C:</strong></p>
@@ -304,7 +310,8 @@ roup_clause_iterator_free(iter);
 <p>See <a href="./c-tutorial.html#step-4-iterate-through-clauses">C Tutorial - Step 4</a> for details.</p>
 <h3 id="how-do-i-access-clause-data-like-variable-lists"><a class="header" href="#how-do-i-access-clause-data-like-variable-lists">How do I access clause data (like variable lists)?</a></h3>
 <p><strong>Rust:</strong></p>
-<pre><code class="language-rust">match &amp;clause {
+<pre><code class="language-rust ignore">// Note: Using `rust,ignore` - see top of page for testing instructions
+match &amp;clause {
     Clause::Private(vars) =&gt; {
         for var in vars {
             println!("Private variable: {}", var);
@@ -324,10 +331,19 @@ roup_clause_iterator_free(iter);
 </code></pre>
 <h3 id="can-i-parse-multiple-directives-in-parallel"><a class="header" href="#can-i-parse-multiple-directives-in-parallel">Can I parse multiple directives in parallel?</a></h3>
 <p><strong>Yes!</strong> Parsing is thread-safe:</p>
-<pre><code class="language-rust">use std::thread;
+<pre><code class="language-rust ignore">// Note: Using `rust,ignore` - see top of page for testing instructions
+use roup::parser::openmp;
+use std::thread;
 
-let t1 = thread::spawn(|| parse("#pragma omp parallel"));
-let t2 = thread::spawn(|| parse("#pragma omp for"));
+let parser = openmp::parser();
+let t1 = thread::spawn(move || {
+    let p = openmp::parser();
+    p.parse("#pragma omp parallel")
+});
+let t2 = thread::spawn(move || {
+    let p = openmp::parser();
+    p.parse("#pragma omp for")
+});
 
 let dir1 = t1.join().unwrap();
 let dir2 = t2.join().unwrap();</code></pre>
@@ -379,8 +395,12 @@ let dir2 = t2.join().unwrap();</code></pre>
 <h2 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h2>
 <h3 id="do-i-need-to-free-anything-in-rust"><a class="header" href="#do-i-need-to-free-anything-in-rust">Do I need to free anything in Rust?</a></h3>
 <p><strong>No.</strong> Rust's ownership system handles everything automatically:</p>
-<pre><code class="language-rust">{
-    let directive = parse("#pragma omp parallel").unwrap();
+<pre><code class="language-rust ignore">// Note: Using `rust,ignore` - see top of page for testing instructions
+use roup::parser::openmp;
+
+{
+    let parser = openmp::parser();
+    let (_, directive) = parser.parse("#pragma omp parallel").unwrap();
     // Use directive...
 } // ← Automatically freed here</code></pre>
 <h3 id="what-do-i-need-to-free-in-c"><a class="header" href="#what-do-i-need-to-free-in-c">What do I need to free in C?</a></h3>
@@ -420,11 +440,13 @@ dir = NULL;
 <h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
 <h3 id="how-do-i-know-if-parsing-failed"><a class="header" href="#how-do-i-know-if-parsing-failed">How do I know if parsing failed?</a></h3>
 <p><strong>Rust:</strong></p>
-<pre><code class="language-rust">match parse(input) {
-    Ok(directive) =&gt; { /* success */ },
+<pre><code class="language-rust ignore">use roup::parser::openmp;
+
+let parser = openmp::parser();
+match parser.parse(input) {
+    Ok((_, directive)) =&gt; { /* success */ },
     Err(error) =&gt; {
-        eprintln!("Parse error: {}", error.message);
-        eprintln!("At line {}, column {}", error.location.line, error.location.column);
+        eprintln!("Parse error: {:?}", error);
     }
 }</code></pre>
 <p><strong>C:</strong></p>
@@ -446,8 +468,11 @@ if (dir == NULL) {
 <h3 id="can-i-recover-from-parse-errors"><a class="header" href="#can-i-recover-from-parse-errors">Can I recover from parse errors?</a></h3>
 <p>Not automatically. If parsing fails, you get an error but no partial directive.</p>
 <p><strong>Workaround:</strong> Parse line-by-line and skip lines that fail:</p>
-<pre><code class="language-rust">for line in source_code.lines() {
-    if let Ok(directive) = parse(line) {
+<pre><code class="language-rust ignore">use roup::parser::openmp;
+
+let parser = openmp::parser();
+for line in source_code.lines() {
+    if let Ok((_, directive)) = parser.parse(line) {
         // Process directive
     }
     // Skip lines that don't parse
