@@ -63,7 +63,7 @@ ROUP supports both Fortran free-form and fixed-form formats:
 
 ```fortran
 !$OMP PARALLEL PRIVATE(A, B) NUM_THREADS(4)
-!$OMP FOR SCHEDULE(STATIC, 10)
+!$OMP DO SCHEDULE(STATIC, 10)
 !$OMP END PARALLEL
 ```
 
