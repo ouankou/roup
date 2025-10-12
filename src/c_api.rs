@@ -280,11 +280,13 @@ pub extern "C" fn roup_parse_with_language(
         return ptr::null_mut();
     }
 
-    // Convert language code to Language enum
+    // Convert language code to Language enum using explicit constants
+    // Return NULL for invalid language values instead of silently defaulting
     let lang = match language {
-        1 => Language::FortranFree,
-        2 => Language::FortranFixed,
-        _ => Language::C, // Default to C for invalid values
+        ROUP_LANG_C => Language::C,
+        ROUP_LANG_FORTRAN_FREE => Language::FortranFree,
+        ROUP_LANG_FORTRAN_FIXED => Language::FortranFixed,
+        _ => return ptr::null_mut(), // Invalid language value
     };
 
     // UNSAFE BLOCK: Convert C string to Rust &str

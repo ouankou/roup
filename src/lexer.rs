@@ -49,11 +49,6 @@ pub fn is_identifier_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
-/// Check if a character is valid in a Fortran identifier (case-insensitive)
-pub fn is_fortran_identifier_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
-}
-
 /// Normalize Fortran identifier to lowercase for case-insensitive matching
 pub fn normalize_fortran_identifier(s: &str) -> String {
     s.to_lowercase()

@@ -71,6 +71,8 @@ impl ClauseRule {
 
 pub struct ClauseRegistry {
     rules: HashMap<&'static str, ClauseRule>,
+    /// Normalized lowercase map for case-insensitive lookups (built at construction)
+    normalized_rules: HashMap<String, ClauseRule>,
     default_rule: ClauseRule,
     case_insensitive: bool,
 }
@@ -82,6 +84,17 @@ impl ClauseRegistry {
 
     pub fn with_case_insensitive(mut self, enabled: bool) -> Self {
         self.case_insensitive = enabled;
+        // Rebuild normalized map if enabling case-insensitive mode
+        if enabled && self.normalized_rules.is_empty() {
+            self.normalized_rules = self
+                .rules
+                .iter()
+                .map(|(k, v)| (k.to_lowercase(), *v))
+                .collect();
+        } else if !enabled {
+            // Clear normalized map if disabling case-insensitive mode
+            self.normalized_rules.clear();
+        }
         self
     }
 
@@ -99,13 +112,15 @@ impl ClauseRegistry {
     fn parse_clause<'a>(&self, input: &'a str) -> IResult<&'a str, Clause<'a>> {
         let (input, name) = lexer::lex_clause(input)?;
 
+        // Use efficient lookup based on case sensitivity mode
         let rule = if self.case_insensitive {
-            self.rules
-                .iter()
-                .find(|(k, _)| k.to_lowercase() == name.to_lowercase())
-                .map(|(_, v)| *v)
+            // Use pre-built normalized map for O(1) case-insensitive lookup
+            self.normalized_rules
+                .get(&name.to_lowercase())
+                .copied()
                 .unwrap_or(self.default_rule)
         } else {
+            // Direct HashMap lookup for case-sensitive mode (no allocation)
             self.rules.get(name).copied().unwrap_or(self.default_rule)
         };
 
@@ -169,8 +184,19 @@ impl ClauseRegistryBuilder {
     }
 
     pub fn build(self) -> ClauseRegistry {
+        // Build normalized map if case-insensitive mode is enabled
+        let normalized_rules = if self.case_insensitive {
+            self.rules
+                .iter()
+                .map(|(k, v)| (k.to_lowercase(), *v))
+                .collect()
+        } else {
+            HashMap::new() // Empty map for case-sensitive mode
+        };
+
         ClauseRegistry {
             rules: self.rules,
+            normalized_rules,
             default_rule: self.default_rule,
             case_insensitive: self.case_insensitive,
         }

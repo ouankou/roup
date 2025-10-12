@@ -63,6 +63,8 @@ impl DirectiveRule {
 
 pub struct DirectiveRegistry {
     rules: HashMap<&'static str, DirectiveRule>,
+    /// Normalized lowercase map for case-insensitive lookups (built at construction)
+    normalized_rules: HashMap<String, DirectiveRule>,
     prefixes: HashSet<String>,
     default_rule: DirectiveRule,
     case_insensitive: bool,
@@ -75,6 +77,17 @@ impl DirectiveRegistry {
 
     pub fn with_case_insensitive(mut self, enabled: bool) -> Self {
         self.case_insensitive = enabled;
+        // Rebuild normalized map if enabling case-insensitive mode
+        if enabled && self.normalized_rules.is_empty() {
+            self.normalized_rules = self
+                .rules
+                .iter()
+                .map(|(k, v)| (k.to_lowercase(), *v))
+                .collect();
+        } else if !enabled {
+            // Clear normalized map if disabling case-insensitive mode
+            self.normalized_rules.clear();
+        }
         self
     }
 
@@ -93,25 +106,17 @@ impl DirectiveRegistry {
         input: &'a str,
         clause_registry: &ClauseRegistry,
     ) -> IResult<&'a str, Directive<'a>> {
-        // For case-insensitive matching, normalize to lowercase
-        let lookup_key = if self.case_insensitive {
-            name.to_lowercase()
+        // Use efficient lookup based on case sensitivity mode
+        let rule = if self.case_insensitive {
+            // Use pre-built normalized map for O(1) case-insensitive lookup
+            self.normalized_rules
+                .get(&name.to_lowercase())
+                .copied()
+                .unwrap_or(self.default_rule)
         } else {
-            name.to_string()
+            // Direct HashMap lookup for case-sensitive mode (no allocation)
+            self.rules.get(name).copied().unwrap_or(self.default_rule)
         };
-
-        let rule = self
-            .rules
-            .iter()
-            .find(|(k, _)| {
-                if self.case_insensitive {
-                    k.to_lowercase() == lookup_key
-                } else {
-                    **k == lookup_key
-                }
-            })
-            .map(|(_, v)| *v)
-            .unwrap_or(self.default_rule);
 
         rule.parse(name, input, clause_registry)
     }
@@ -257,8 +262,19 @@ impl DirectiveRegistryBuilder {
     }
 
     pub fn build(self) -> DirectiveRegistry {
+        // Build normalized map if case-insensitive mode is enabled
+        let normalized_rules = if self.case_insensitive {
+            self.rules
+                .iter()
+                .map(|(k, v)| (k.to_lowercase(), *v))
+                .collect()
+        } else {
+            HashMap::new() // Empty map for case-sensitive mode
+        };
+
         DirectiveRegistry {
             rules: self.rules,
+            normalized_rules,
             prefixes: self.prefixes,
             default_rule: self.default_rule,
             case_insensitive: self.case_insensitive,
