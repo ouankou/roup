@@ -26,14 +26,14 @@ Found a bug? Please [open an issue](https://github.com/ouankou/roup/issues/new) 
 - **Environment**: OS, Rust version, ROUP version
 
 **Example:**
-```
+```text
 Title: Parser fails on `collapse` clause with variable
 
 Input: #pragma omp for collapse(n)
 Expected: Parse successfully
 Actual: Parse error: "Expected integer literal"
 Environment: Ubuntu 22.04, Rust 1.75, ROUP 0.1.0
-```
+```text
 
 ### 2. Suggest Features
 
@@ -84,7 +84,7 @@ cargo test
 
 # Build documentation
 cargo doc --no-deps --open
-```
+```text
 
 ### Development Tools
 
@@ -103,7 +103,7 @@ rustup component add clippy
 
 # Documentation builder
 cargo install mdbook
-```
+```text
 
 ---
 
@@ -127,7 +127,7 @@ pub fn parse(input: &str) -> Result<DirectiveIR, ParseError> {
         // ...
     }
 }
-```
+```text
 
 #### 2. Format Your Code
 
@@ -137,7 +137,7 @@ cargo fmt
 
 # Check formatting (CI uses this)
 cargo fmt -- --check
-```
+```text
 
 #### 3. Pass Clippy
 
@@ -147,7 +147,7 @@ cargo clippy
 
 # CI requires no warnings
 cargo clippy -- -D warnings
-```
+```text
 
 #### 4. Write Tests
 
@@ -160,7 +160,7 @@ fn test_new_feature() {
     assert!(result.is_ok());
     // More assertions...
 }
-```
+```text
 
 #### 5. Document Public APIs
 
@@ -187,7 +187,7 @@ fn test_new_feature() {
 pub fn parse(input: &str) -> Result<DirectiveIR, ParseError> {
     // ...
 }
-```
+```text
 
 ### C API Code
 
@@ -213,7 +213,7 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
     
     // ... minimal unsafe code ...
 }
-```
+```text
 
 ---
 
@@ -233,7 +233,7 @@ cargo test -- --nocapture
 
 # Tests in specific module
 cargo test parser::
-```
+```text
 
 ### Test Categories
 
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(tokens[0], Token::Identifier("parallel"));
     }
 }
-```
+```text
 
 #### Integration Tests
 
@@ -270,7 +270,7 @@ fn test_parallel_with_clauses() {
     let directive = result.unwrap();
     assert_eq!(directive.clauses.len(), 2);
 }
-```
+```text
 
 #### FFI Tests
 
@@ -282,7 +282,7 @@ fn test_null_safety() {
     let dir = roup_parse(std::ptr::null());
     assert!(dir.is_null());
 }
-```
+```text
 
 ### Test Coverage
 
@@ -299,7 +299,7 @@ Aim for:
 
 The main documentation is in `docs/book/src/`:
 
-```
+```text
 docs/book/src/
 ├── SUMMARY.md           # Navigation (table of contents)
 ├── intro.md             # Homepage
@@ -313,7 +313,7 @@ docs/book/src/
 ├── openmp-support.md    # OpenMP support matrix
 ├── contributing.md      # This file
 └── faq.md              # Frequently asked questions
-```
+```text
 
 #### Building Documentation
 
@@ -326,7 +326,7 @@ mdbook build
 mdbook serve --open
 
 # View at http://localhost:3000
-```
+```text
 
 #### Adding New Pages
 
@@ -347,7 +347,7 @@ cargo doc --no-deps --open
 
 # With private items (for development)
 cargo doc --no-deps --document-private-items --open
-```
+```text
 
 ### README.md
 
@@ -372,7 +372,7 @@ cd roup
 
 # Create feature branch
 git checkout -b feature/my-awesome-feature
-```
+```text
 
 ### 2. Make Changes
 
@@ -392,7 +392,7 @@ git commit -m "feat: add support for OpenMP 6.0 loop directive"
 git commit -m "fix: handle null pointers in roup_parse"
 git commit -m "docs: add examples for metadirective"
 git commit -m "test: add tests for error recovery"
-```
+```text
 
 **Commit Message Format:**
 - `feat:` - New feature
@@ -425,7 +425,7 @@ git push origin feature/my-awesome-feature
 
 # Open PR on GitHub
 # Go to https://github.com/ouankou/roup and click "New Pull Request"
-```
+```text
 
 ### 6. PR Description
 
@@ -456,7 +456,7 @@ OpenMP 6.0 introduced a new `loop` directive as a more generic alternative to `f
 - Added 15 new test cases covering various `loop` directive forms
 - All existing tests still pass
 - Manually tested with real-world code
-```
+```text
 
 ### 7. Code Review
 
@@ -500,7 +500,7 @@ After adding a directive/clause, update `docs/book/src/openmp-support.md`:
 | Directive | OpenMP Version | Status | Notes |
 |-----------|----------------|--------|-------|
 | `loop` | 5.0 | ✅ Supported | New in OpenMP 5.0 |
-```
+```text
 
 ### 4. Add Examples
 
@@ -521,7 +521,7 @@ cargo bench
 # Profile with flamegraph
 cargo install flamegraph
 cargo flamegraph --bin roup
-```
+```text
 
 ### Performance Guidelines
 

@@ -106,7 +106,7 @@ export RUSTC_WRAPPER=sccache
 ### How do I parse a simple directive?
 
 **Rust:**
-```rust
+```rust,ignore
 use roup::parser::openmp;
 
 let parser = openmp::parser();

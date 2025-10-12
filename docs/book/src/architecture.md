@@ -8,7 +8,7 @@ This document explains ROUP's internal design, from lexical analysis to the C FF
 
 ROUP is structured in three main layers:
 
-```
+```text
 ┌─────────────────────────────────────┐
 │   C/C++ Applications                │
 ├─────────────────────────────────────┤
@@ -18,7 +18,7 @@ ROUP is structured in three main layers:
 ├─────────────────────────────────────┤
 │   Lexer (nom-based)                  │  ← Token extraction
 └─────────────────────────────────────┘
-```
+```text
 
 **Key Design Principles:**
 - **Safety First**: 99.1% safe Rust code
@@ -47,7 +47,7 @@ Tokens: [
     Integer(4),
     RParen
 ]
-```
+```text
 
 ### Token Types
 
@@ -66,7 +66,7 @@ pub enum Token<'a> {
     Star,                      // *
     // ... more operators
 }
-```
+```text
 
 ### Lexer Implementation
 
@@ -89,7 +89,7 @@ fn identifier(input: &str) -> IResult<&str, Token> {
     
     Ok((remaining, Token::Identifier(matched)))
 }
-```
+```text
 
 ---
 
@@ -101,13 +101,13 @@ The parser converts token streams into a structured Intermediate Representation 
 
 ### Parser Modules
 
-```
+```text
 src/parser/
 ├── mod.rs          # Main parser entry point
 ├── directive.rs    # Directive parsing (parallel, for, task, etc.)
 ├── clause.rs       # Clause parsing (private, reduction, etc.)
 └── openmp.rs       # OpenMP-specific parsing logic
-```
+```text
 
 ### Parsing Phases
 
@@ -117,7 +117,7 @@ src/parser/
 Input tokens: [Identifier("parallel"), Identifier("for"), ...]
                ↓
 Directive:    DirectiveKind::ParallelFor
-```
+```text
 
 Supports 120+ directive types from OpenMP 3.0 through 6.0.
 
@@ -127,7 +127,7 @@ Supports 120+ directive types from OpenMP 3.0 through 6.0.
 Input tokens: [Identifier("num_threads"), LParen, Integer(4), RParen]
                ↓
 Clause:       Clause::NumThreads(IntegerExpr(4))
-```
+```text
 
 Parses 92+ clause types with full argument validation.
 
@@ -143,7 +143,7 @@ DirectiveIR {
     location: SourceLocation { line: 1, column: 1 },
     language: Language::C,
 }
-```
+```text
 
 ### Error Handling
 
@@ -156,7 +156,7 @@ ParseError {
     context: "#pragma omp parallel num_threads(4",
                                               ^
 }
-```
+```text
 
 ---
 
@@ -175,7 +175,7 @@ pub struct DirectiveIR {
     pub location: SourceLocation,      // Where in source?
     pub language: Language,            // C, C++, or Fortran?
 }
-```
+```text
 
 ### Directive Kinds
 
@@ -221,7 +221,7 @@ pub enum DirectiveKind {
     
     // ... 120+ total directives
 }
-```
+```text
 
 ### Clause Types
 
@@ -259,7 +259,7 @@ pub enum Clause {
     
     // ... 92+ total clauses
 }
-```
+```text
 
 ### Supporting Types
 
@@ -297,7 +297,7 @@ pub enum Language {
     Cpp,
     Fortran,
 }
-```
+```text
 
 ---
 
@@ -330,7 +330,7 @@ void roup_directive_free(OmpDirective* directive);
 
 // Free clause (not usually needed - owned by directive)
 void roup_clause_free(OmpClause* clause);
-```
+```text
 
 #### Directive Query Functions (3)
 
@@ -343,7 +343,7 @@ int32_t roup_directive_clause_count(const OmpDirective* directive);
 
 // Create iterator over clauses
 OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
-```
+```text
 
 #### Iterator Functions (2)
 
@@ -353,7 +353,7 @@ int32_t roup_clause_iterator_next(OmpClauseIterator* iter, OmpClause** out);
 
 // Free iterator
 void roup_clause_iterator_free(OmpClauseIterator* iter);
-```
+```text
 
 #### Clause Query Functions (4)
 
@@ -369,7 +369,7 @@ int32_t roup_clause_reduction_operator(const OmpClause* clause);
 
 // Get default data sharing
 int32_t roup_clause_default_data_sharing(const OmpClause* clause);
-```
+```text
 
 #### Variable List Functions (4)
 
@@ -385,7 +385,7 @@ const char* roup_string_list_get(const OmpStringList* list, int32_t index);
 
 // Free string list
 void roup_string_list_free(OmpStringList* list);
-```
+```text
 
 ### Memory Model
 
@@ -409,7 +409,7 @@ All unsafe code is confined to FFI boundary operations:
 unsafe {
     CStr::from_ptr(input).to_str()
 }
-```
+```text
 
 **Checks:**
 - ✅ NULL pointer check before unsafe
@@ -422,7 +422,7 @@ unsafe {
 unsafe {
     *out = value;
 }
-```
+```text
 
 **Checks:**
 - ✅ NULL pointer check before unsafe
@@ -435,7 +435,7 @@ unsafe {
 unsafe {
     Box::from_raw(ptr)
 }
-```
+```text
 
 **Checks:**
 - ✅ NULL pointer check
@@ -470,7 +470,7 @@ Let's trace a complete parse operation:
 ```c
 const char* input = "#pragma omp parallel for num_threads(4) private(i)";
 OmpDirective* dir = roup_parse(input);
-```
+```text
 
 ### Step 1: FFI Boundary (C → Rust)
 
@@ -494,7 +494,7 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
     // Box and return pointer
     Box::into_raw(Box::new(directive_ir))
 }
-```
+```text
 
 ### Step 2: Lexer (Pure Rust)
 
@@ -515,7 +515,7 @@ tokenize("#pragma omp parallel for num_threads(4) private(i)")
     Identifier("i"),
     RParen,
 ]
-```
+```text
 
 ### Step 3: Parser (Pure Rust)
 
@@ -532,27 +532,27 @@ DirectiveIR {
     location: SourceLocation { line: 1, column: 1 },
     language: Language::C,
 }
-```
+```text
 
 ### Step 4: FFI Boundary (Rust → C)
 
 ```rust
 // Return pointer to C
 Box::into_raw(Box::new(directive_ir)) → 0x7fff12340000
-```
+```text
 
 ### Step 5: C Queries
 
 ```c
 int32_t kind = roup_directive_kind(dir);           // 28 (ParallelFor)
 int32_t count = roup_directive_clause_count(dir);  // 2
-```
+```text
 
 ### Step 6: Cleanup
 
 ```c
 roup_directive_free(dir);  // Calls Box::from_raw() and drops
-```
+```text
 
 ---
 
@@ -600,7 +600,7 @@ std::thread::spawn(|| {
 std::thread::spawn(|| {
     let dir2 = parse("#pragma omp for");
 });
-```
+```text
 
 **IR**: Immutable after construction, safe to share across threads
 
@@ -615,20 +615,20 @@ roup_directive_free(dir);
 
 // Thread 2 (at same time)
 roup_directive_kind(dir);  // Use-after-free!
-```
+```text
 
 ❌ **Double-free**
 ```c
 roup_directive_free(dir);
 roup_directive_free(dir);  // Undefined behavior!
-```
+```text
 
 ✅ **Safe multi-threaded usage**
 ```c
 // Each thread has its own directive
 OmpDirective* dir1 = roup_parse("#pragma omp parallel");  // Thread 1
 OmpDirective* dir2 = roup_parse("#pragma omp for");       // Thread 2
-```
+```text
 
 ---
 
@@ -645,7 +645,7 @@ match parse(input) {
         eprintln!("Parse error at line {}: {}", location.line, message);
     }
 }
-```
+```text
 
 ### C API
 
@@ -657,13 +657,13 @@ if (dir == NULL) {
     fprintf(stderr, "Parse failed\n");
     return 1;
 }
-```
+```text
 
 **Query functions**: Return `-1` or safe defaults for NULL inputs
 
 ```c
 int32_t kind = roup_directive_kind(NULL);  // Returns -1, won't crash
-```
+```text
 
 ---
 
@@ -671,12 +671,12 @@ int32_t kind = roup_directive_kind(NULL);  // Returns -1, won't crash
 
 ### Test Coverage
 
-```
+```text
 Total Tests:    352
 Unit Tests:     239
 Integration:    51
 Doc Tests:      62
-```
+```text
 
 ### Test Categories
 
@@ -712,7 +712,7 @@ fn test_ffi_null_safety() {
     let kind = roup_directive_kind(std::ptr::null());
     assert_eq!(kind, -1);
 }
-```
+```text
 
 ---
 
