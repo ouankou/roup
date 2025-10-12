@@ -673,25 +673,57 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     // Use case-insensitive comparison to match both C (lowercase) and Fortran (uppercase) clauses
     // without allocating a new String. More efficient than to_ascii_lowercase().
     let name = clause.name;
-    
+
     let (kind, data) = if name.eq_ignore_ascii_case("num_threads") {
         (0, ClauseData { default: 0 })
     } else if name.eq_ignore_ascii_case("if") {
         (1, ClauseData { default: 0 })
     } else if name.eq_ignore_ascii_case("private") {
-        (2, ClauseData { variables: ptr::null_mut() })
+        (
+            2,
+            ClauseData {
+                variables: ptr::null_mut(),
+            },
+        )
     } else if name.eq_ignore_ascii_case("shared") {
-        (3, ClauseData { variables: ptr::null_mut() })
+        (
+            3,
+            ClauseData {
+                variables: ptr::null_mut(),
+            },
+        )
     } else if name.eq_ignore_ascii_case("firstprivate") {
-        (4, ClauseData { variables: ptr::null_mut() })
+        (
+            4,
+            ClauseData {
+                variables: ptr::null_mut(),
+            },
+        )
     } else if name.eq_ignore_ascii_case("lastprivate") {
-        (5, ClauseData { variables: ptr::null_mut() })
+        (
+            5,
+            ClauseData {
+                variables: ptr::null_mut(),
+            },
+        )
     } else if name.eq_ignore_ascii_case("reduction") {
         let operator = parse_reduction_operator(clause);
-        (6, ClauseData { reduction: ManuallyDrop::new(ReductionData { operator }) })
+        (
+            6,
+            ClauseData {
+                reduction: ManuallyDrop::new(ReductionData { operator }),
+            },
+        )
     } else if name.eq_ignore_ascii_case("schedule") {
         let schedule_kind = parse_schedule_kind(clause);
-        (7, ClauseData { schedule: ManuallyDrop::new(ScheduleData { kind: schedule_kind }) })
+        (
+            7,
+            ClauseData {
+                schedule: ManuallyDrop::new(ScheduleData {
+                    kind: schedule_kind,
+                }),
+            },
+        )
     } else if name.eq_ignore_ascii_case("collapse") {
         (8, ClauseData { default: 0 })
     } else if name.eq_ignore_ascii_case("ordered") {
@@ -700,7 +732,12 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         (10, ClauseData { default: 0 })
     } else if name.eq_ignore_ascii_case("default") {
         let default_kind = parse_default_kind(clause);
-        (11, ClauseData { default: default_kind })
+        (
+            11,
+            ClauseData {
+                default: default_kind,
+            },
+        )
     } else {
         (999, ClauseData { default: 0 }) // Unknown
     };
@@ -817,7 +854,7 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
     unsafe {
         let c_str = CStr::from_ptr(name);
         let name_str = c_str.to_str().unwrap_or("");
-        
+
         // Use case-insensitive comparison without allocating a new String.
         // Helper to avoid repeated .eq_ignore_ascii_case() calls.
         let matches = |s: &str| name_str.eq_ignore_ascii_case(s);
@@ -944,125 +981,181 @@ mod tests {
     fn test_fortran_directive_name_normalization() {
         // Test that uppercase Fortran directive names are properly normalized
         // This ensures C API can handle both C (lowercase) and Fortran (uppercase) directives
-        
+
         // Test basic Fortran PARALLEL directive
         let fortran_input = CString::new("!$OMP PARALLEL").unwrap();
         let directive = roup_parse_with_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FREE);
-        assert!(!directive.is_null(), "Failed to parse Fortran PARALLEL directive");
-        
+        assert!(
+            !directive.is_null(),
+            "Failed to parse Fortran PARALLEL directive"
+        );
+
         let kind = roup_directive_kind(directive);
-        assert_eq!(kind, 0, "PARALLEL directive should have kind 0, got {}", kind);
-        
+        assert_eq!(
+            kind, 0,
+            "PARALLEL directive should have kind 0, got {}",
+            kind
+        );
+
         roup_directive_free(directive);
-        
+
         // Test Fortran DO directive (equivalent to C FOR)
         let fortran_do = CString::new("!$OMP DO").unwrap();
         let directive = roup_parse_with_language(fortran_do.as_ptr(), ROUP_LANG_FORTRAN_FREE);
         assert!(!directive.is_null(), "Failed to parse Fortran DO directive");
-        
+
         let kind = roup_directive_kind(directive);
-        assert_eq!(kind, 1, "DO directive should have kind 1 (same as FOR), got {}", kind);
-        
+        assert_eq!(
+            kind, 1,
+            "DO directive should have kind 1 (same as FOR), got {}",
+            kind
+        );
+
         roup_directive_free(directive);
-        
+
         // Test compound Fortran PARALLEL DO directive
         let fortran_parallel_do = CString::new("!$OMP PARALLEL DO").unwrap();
-        let directive = roup_parse_with_language(fortran_parallel_do.as_ptr(), ROUP_LANG_FORTRAN_FREE);
-        assert!(!directive.is_null(), "Failed to parse Fortran PARALLEL DO directive");
-        
+        let directive =
+            roup_parse_with_language(fortran_parallel_do.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(
+            !directive.is_null(),
+            "Failed to parse Fortran PARALLEL DO directive"
+        );
+
         let kind = roup_directive_kind(directive);
-        assert_eq!(kind, 0, "PARALLEL DO directive should have kind 0 (composite), got {}", kind);
-        
+        assert_eq!(
+            kind, 0,
+            "PARALLEL DO directive should have kind 0 (composite), got {}",
+            kind
+        );
+
         roup_directive_free(directive);
     }
-    
+
     #[test]
     fn test_fortran_clause_name_normalization() {
         // Test that uppercase Fortran clause names are properly normalized
         // This ensures convert_clause() can handle both C and Fortran syntax
-        
+
         // Test Fortran PRIVATE clause
         let fortran_input = CString::new("!$OMP PARALLEL PRIVATE(A,B)").unwrap();
         let directive = roup_parse_with_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FREE);
-        assert!(!directive.is_null(), "Failed to parse Fortran directive with PRIVATE clause");
-        
+        assert!(
+            !directive.is_null(),
+            "Failed to parse Fortran directive with PRIVATE clause"
+        );
+
         let clause_count = roup_directive_clause_count(directive);
-        assert_eq!(clause_count, 1, "Should have 1 clause, got {}", clause_count);
-        
+        assert_eq!(
+            clause_count, 1,
+            "Should have 1 clause, got {}",
+            clause_count
+        );
+
         // Use iterator to get first clause
         let iter = roup_directive_clauses_iter(directive);
         assert!(!iter.is_null(), "Failed to create clause iterator");
-        
+
         let mut clause: *const OmpClause = ptr::null();
         let has_clause = roup_clause_iterator_next(iter, &mut clause);
         assert_eq!(has_clause, 1, "Should have a clause");
         assert!(!clause.is_null(), "Clause pointer should not be null");
-        
+
         let clause_kind = roup_clause_kind(clause);
-        assert_eq!(clause_kind, 2, "PRIVATE clause should have kind 2, got {}", clause_kind);
-        
+        assert_eq!(
+            clause_kind, 2,
+            "PRIVATE clause should have kind 2, got {}",
+            clause_kind
+        );
+
         roup_clause_iterator_free(iter);
         roup_directive_free(directive);
-        
+
         // Test Fortran REDUCTION clause
         let fortran_reduction = CString::new("!$OMP DO REDUCTION(+:SUM)").unwrap();
-        let directive = roup_parse_with_language(fortran_reduction.as_ptr(), ROUP_LANG_FORTRAN_FREE);
-        assert!(!directive.is_null(), "Failed to parse Fortran DO with REDUCTION clause");
-        
+        let directive =
+            roup_parse_with_language(fortran_reduction.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(
+            !directive.is_null(),
+            "Failed to parse Fortran DO with REDUCTION clause"
+        );
+
         let clause_count = roup_directive_clause_count(directive);
-        assert_eq!(clause_count, 1, "Should have 1 clause, got {}", clause_count);
-        
+        assert_eq!(
+            clause_count, 1,
+            "Should have 1 clause, got {}",
+            clause_count
+        );
+
         let iter = roup_directive_clauses_iter(directive);
         let mut clause: *const OmpClause = ptr::null();
         let has_clause = roup_clause_iterator_next(iter, &mut clause);
         assert_eq!(has_clause, 1, "Should have a clause");
-        
+
         let clause_kind = roup_clause_kind(clause);
-        assert_eq!(clause_kind, 6, "REDUCTION clause should have kind 6, got {}", clause_kind);
-        
+        assert_eq!(
+            clause_kind, 6,
+            "REDUCTION clause should have kind 6, got {}",
+            clause_kind
+        );
+
         roup_clause_iterator_free(iter);
         roup_directive_free(directive);
-        
+
         // Test Fortran SCHEDULE clause
         let fortran_schedule = CString::new("!$OMP DO SCHEDULE(DYNAMIC)").unwrap();
         let directive = roup_parse_with_language(fortran_schedule.as_ptr(), ROUP_LANG_FORTRAN_FREE);
-        assert!(!directive.is_null(), "Failed to parse Fortran DO with SCHEDULE clause");
-        
+        assert!(
+            !directive.is_null(),
+            "Failed to parse Fortran DO with SCHEDULE clause"
+        );
+
         let clause_count = roup_directive_clause_count(directive);
-        assert_eq!(clause_count, 1, "Should have 1 clause, got {}", clause_count);
-        
+        assert_eq!(
+            clause_count, 1,
+            "Should have 1 clause, got {}",
+            clause_count
+        );
+
         let iter = roup_directive_clauses_iter(directive);
         let mut clause: *const OmpClause = ptr::null();
         let has_clause = roup_clause_iterator_next(iter, &mut clause);
         assert_eq!(has_clause, 1, "Should have a clause");
-        
+
         let clause_kind = roup_clause_kind(clause);
-        assert_eq!(clause_kind, 7, "SCHEDULE clause should have kind 7, got {}", clause_kind);
-        
+        assert_eq!(
+            clause_kind, 7,
+            "SCHEDULE clause should have kind 7, got {}",
+            clause_kind
+        );
+
         roup_clause_iterator_free(iter);
         roup_directive_free(directive);
     }
-    
+
     #[test]
     fn test_case_insensitive_matching() {
         // Verify that both lowercase and uppercase inputs work correctly
-        
+
         // C-style lowercase
         let c_input = CString::new("#pragma omp parallel for").unwrap();
         let c_directive = roup_parse(c_input.as_ptr());
         assert!(!c_directive.is_null());
         let c_kind = roup_directive_kind(c_directive);
-        
+
         // Fortran-style uppercase
         let fortran_input = CString::new("!$OMP PARALLEL DO").unwrap();
-        let fortran_directive = roup_parse_with_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        let fortran_directive =
+            roup_parse_with_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FREE);
         assert!(!fortran_directive.is_null());
         let fortran_kind = roup_directive_kind(fortran_directive);
-        
+
         // Both should map to same kind (0 for parallel/composite)
-        assert_eq!(c_kind, fortran_kind, 
-            "C 'parallel for' and Fortran 'PARALLEL DO' should have same kind");
-        
+        assert_eq!(
+            c_kind, fortran_kind,
+            "C 'parallel for' and Fortran 'PARALLEL DO' should have same kind"
+        );
+
         roup_directive_free(c_directive);
         roup_directive_free(fortran_directive);
     }
