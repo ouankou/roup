@@ -71,8 +71,6 @@ impl ClauseRule {
 
 pub struct ClauseRegistry {
     rules: HashMap<&'static str, ClauseRule>,
-    /// Normalized lowercase map for case-insensitive lookups (built only when case-insensitive mode is enabled)
-    normalized_rules: HashMap<String, ClauseRule>,
     default_rule: ClauseRule,
     case_insensitive: bool,
 }
@@ -83,21 +81,7 @@ impl ClauseRegistry {
     }
 
     pub fn with_case_insensitive(mut self, enabled: bool) -> Self {
-        // Only rebuild map if the case sensitivity setting actually changes
-        if self.case_insensitive != enabled {
-            self.case_insensitive = enabled;
-            if enabled {
-                // Rebuild normalized map when enabling case-insensitive mode
-                self.normalized_rules = self
-                    .rules
-                    .iter()
-                    .map(|(k, v)| (k.to_lowercase(), *v))
-                    .collect();
-            } else {
-                // Clear normalized map when disabling case-insensitive mode
-                self.normalized_rules.clear();
-            }
-        }
+        self.case_insensitive = enabled;
         self
     }
 
@@ -117,10 +101,11 @@ impl ClauseRegistry {
 
         // Use efficient lookup based on case sensitivity mode
         let rule = if self.case_insensitive {
-            // TODO: Optimize case-insensitive HashMap key lookup to eliminate allocations
-            self.normalized_rules
-                .get(&name.to_ascii_lowercase())
-                .copied()
+            // Zero-allocation case-insensitive lookup using eq_ignore_ascii_case
+            self.rules
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .map(|(_, v)| *v)
                 .unwrap_or(self.default_rule)
         } else {
             // Direct HashMap lookup for case-sensitive mode (zero allocations)
@@ -187,19 +172,8 @@ impl ClauseRegistryBuilder {
     }
 
     pub fn build(self) -> ClauseRegistry {
-        // Build normalized map if case-insensitive mode is enabled
-        let normalized_rules = if self.case_insensitive {
-            self.rules
-                .iter()
-                .map(|(k, v)| (k.to_lowercase(), *v))
-                .collect()
-        } else {
-            HashMap::new() // Empty map for case-sensitive mode
-        };
-
         ClauseRegistry {
             rules: self.rules,
-            normalized_rules,
             default_rule: self.default_rule,
             case_insensitive: self.case_insensitive,
         }
