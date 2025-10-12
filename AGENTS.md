@@ -1,5 +1,14 @@
 # Agent Instructions
 
+## Project Maturity Level
+
+**IMPORTANT**: ROUP is in **experimental/development stage**. Do NOT use "production-ready" or similar terms.
+
+- **Use**: "experimental", "development", "working prototype", "proof of concept", "beta"
+- **Avoid**: "production-ready", "stable", "enterprise-grade", "battle-tested"
+- **Status markers**: Use "⚠️ Experimental", "🚧 Under Development", "🧪 Beta"
+- **Documentation tone**: Be clear about current limitations and ongoing development
+
 ## Documentation Philosophy
 
 **IMPORTANT**: ROUP maintains a **single source of truth** for all documentation. Avoid redundancy.

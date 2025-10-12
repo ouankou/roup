@@ -25,6 +25,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       # Check supported versions at: https://github.com/KyleMayes/install-llvm-action/blob/master/assets.json
       - name: Set up LLVM on Windows and macOS
@@ -40,7 +42,9 @@ jobs:
           sudo add-apt-repository -y 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${{ matrix.llvm }} main'
           sudo apt-get update
           sudo apt-get install -y \
-            clang-${{ matrix.llvm }}
+            clang-${{ matrix.llvm }} \
+            cmake \
+            pkg-config
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -85,4 +89,62 @@ jobs:
             echo "No C++ examples Makefile found yet"
           fi
           cd ../..
+        shell: bash
+
+      - name: Verify header is up-to-date (pre-build validation)
+        if: runner.os == 'Linux'
+        run: |
+          # Case 2 validation: Verify committed header matches source WITHOUT regenerating
+          # Uses build.rs in standalone mode with robust syn-based AST parsing
+          cargo run --bin gen
+        shell: bash
+
+      # Note: Case 1 validation (build-time sanity check) happens during 'cargo build'
+      # build.rs generates header, reads it back, and verifies checksum as final step
+
+      - name: Test ompparser compatibility layer
+        if: runner.os == 'Linux'
+        run: |
+          # Check if ompparser submodule exists
+          if [ -f "compat/ompparser/ompparser/src/OpenMPIR.h" ]; then
+            echo "✓ ompparser submodule found - testing compatibility layer"
+            cd compat/ompparser
+            
+            # Build compatibility layer
+            mkdir -p build && cd build
+            cmake ..
+            make -j$(nproc)
+            
+            # Ensure loader can locate libompparser.so in build directory
+            export LD_LIBRARY_PATH="$PWD:${LD_LIBRARY_PATH:-}"
+
+            # Run all tests
+            ctest --output-on-failure --verbose
+            
+            # Verify library size
+            # CONFIGURABLE: Set ROUP_LIBRARY_SIZE_THRESHOLD env var to override (default: 10MB).
+            # This allows CI flexibility as the library evolves without workflow changes.
+            # Default is 10MB (10485760 bytes), which accommodates static ROUP embedding (~5.5MB observed).
+            # Adjust as needed if the library grows. Typical sizes:
+            #   - Dynamic linking: ~522KB
+            #   - Static embedding: ~5.5MB
+            #   - Threshold: 10MB (safety margin for future growth)
+            LIBRARY_SIZE_THRESHOLD="${ROUP_LIBRARY_SIZE_THRESHOLD:-10485760}"
+            if [ -f "libompparser.so" ]; then
+              SIZE=$(stat -c%s libompparser.so)
+              echo "libompparser.so size: $SIZE bytes"
+              if [ "$SIZE" -gt "$LIBRARY_SIZE_THRESHOLD" ]; then
+                echo "❌ Library too large: $SIZE bytes (expected < $LIBRARY_SIZE_THRESHOLD bytes)"
+                exit 1
+              fi
+              echo "✓ Library size acceptable ($SIZE / $LIBRARY_SIZE_THRESHOLD bytes)"
+            fi
+            
+            # Test drop-in replacement (LD_LIBRARY_PATH already set above)
+            ./ompparser_example
+            echo "✓ Drop-in replacement verified"
+          else
+            echo "⚠ ompparser submodule not initialized - skipping compat tests"
+            echo "This is expected if submodule wasn't recursively cloned"
+          fi
         shell: bash

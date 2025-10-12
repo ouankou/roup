@@ -12,6 +12,7 @@
 - [Rust Tutorial](./rust-tutorial.md)
 - [C Tutorial](./c-tutorial.md)
 - [C++ Tutorial](./cpp-tutorial.md)
+- [ompparser Compatibility](./ompparser-compat.md)
 
 # Reference
 

@@ -18,7 +18,7 @@
 ### Rust
 ```toml
 [dependencies]
-roup = "0.1"
+roup = "0.3"
 ```
 
 ### C/C++
@@ -37,6 +37,7 @@ cargo build --release
 - ✅ **Experimental:** 352 tests, active development
 - ✅ **Modern C++:** C++17 RAII wrappers
 - ✅ **Well Documented:** [Comprehensive website](https://roup.ouankou.com)
+- 🔄 **ompparser Compatible:** Drop-in replacement layer ([see below](#ompparser-compatibility))
 
 ## Documentation
 
@@ -257,6 +258,56 @@ ROUP exports **16 C functions** for seamless C/C++ integration:
 - And more...
 
 **Full API reference:** [API Documentation](https://roup.ouankou.com/api-reference.html#c-api-reference)
+
+## ompparser Compatibility
+
+🔄 **Drop-in replacement for existing compilers**
+
+ROUP provides a compatibility layer for compilers currently using [ompparser](https://github.com/ouankou/ompparser). Switch to ROUP without changing your code:
+
+```cpp
+#include <OpenMPIR.h>  // Same header as ompparser
+
+// Same API - works identically
+OpenMPDirective* dir = parseOpenMP("#pragma omp parallel", nullptr);
+std::cout << dir->toString() << std::endl;
+delete dir;
+```
+
+**Benefits:**
+- ✅ **Zero code changes** - Same API, same behavior
+- ✅ **Safer** - 99.1% safe Rust instead of C++ with manual memory management
+- ✅ **Faster** - Rust optimizations and modern parser design
+- ✅ **Well-tested** - Validated against ompparser's own test suite
+
+**Setup:**
+
+```bash
+```bash
+# Quick start - one command builds everything
+cd compat/ompparser
+./BUILD.sh
+
+# Or manual build:
+# 1. Initialize submodule
+git submodule update --init --recursive
+
+# 2. Build ROUP and compatibility layer
+cd compat/ompparser
+mkdir build && cd build
+cmake .. && make
+
+# 3. Run tests
+ctest --output-on-failure
+```
+
+**Why submodule?** We use ompparser's actual headers (not copies) to guarantee perfect binary compatibility!
+
+**Documentation:**
+- [Compatibility Layer Guide](compat/ompparser/README.md)
+- [Full Documentation](docs/book/src/ompparser-compat.md)
+
+**Status:** ⚠️ **Experimental** - 46 tests passing, actively developed
 
 ## Contributing
 

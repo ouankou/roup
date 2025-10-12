@@ -1,0 +1,4 @@
+[submodule "compat/ompparser/ompparser"]
+	path = compat/ompparser/ompparser
+	url = https://github.com/ouankou/ompparser.git
+	branch = main

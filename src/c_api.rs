@@ -43,6 +43,26 @@ use std::ptr;
 use crate::parser::{parse_omp_directive, Clause, ClauseKind};
 
 // ============================================================================
+// Constants Documentation
+// ============================================================================
+//
+// SINGLE SOURCE OF TRUTH: This file defines all directive and clause kind codes.
+//
+// The constants are defined in:
+// - directive_name_to_kind() function (directive codes 0-16)
+// - convert_clause() function (clause codes 0-11)
+//
+// For C/C++ usage:
+// - build.rs auto-generates src/roup_constants.h with #define macros
+// - The header provides compile-time constants for switch/case statements
+// - Never modify roup_constants.h directly - edit this file instead
+//
+// Maintenance: When adding new directives/clauses:
+// 1. Update directive_name_to_kind() or convert_clause() in this file
+// 2. Run `cargo build` to regenerate roup_constants.h
+// 3. The header will automatically include your new constants
+
+// ============================================================================
 // C-Compatible Types
 // ============================================================================
 //

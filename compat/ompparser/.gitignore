@@ -1,0 +1,35 @@
+# Build directory
+build/
+!build/.gitkeep
+
+# Compiled binaries
+*.o
+*.a
+*.so
+*.so.*
+
+# Test executables
+compat_example
+ompparser_example
+comprehensive_test
+test_c_api
+test_num_threads
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# pkg-config generated file
+ompparser.pc
+
+# Test files
+test_parallel_for
+test_parallel_for.c
+
+# CTest
+Testing/
+CTestTestfile.cmake

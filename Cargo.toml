@@ -16,15 +16,29 @@ nom = "8.0.0"
 once_cell = "1"     # Lazy static initialization
 parking_lot = "0.12" # Faster Mutex than std
 
+# Robust Rust AST parser (used by both build.rs and `gen` binary for header validation)
+syn = { version = "2", features = ["full", "parsing"] }
+
 [dev-dependencies]
 # Test-only dependencies
 serial_test = "3.0" # Serialize tests that share global state
 
+[build-dependencies]
+# Build script dependencies (build.rs only) - syn also in main dependencies for `gen` binary
+syn = { version = "2", features = ["full", "parsing"] }  # Robust Rust AST parser
+
+# Note: build.rs serves dual purposes (build script + standalone binary)
+# This triggers a harmless Cargo warning about multiple build targets - it's expected behavior
+[[bin]]
+name = "gen"
+path = "build.rs"
+
 [lib]
 # Library configuration for FFI
 # cdylib = C-compatible dynamic library for FFI
+# staticlib = C-compatible static library for embedding
 # rlib = Rust library for Rust code
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 # Learning Rust: Binary Targets
 # ==============================
