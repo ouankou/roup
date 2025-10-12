@@ -61,62 +61,193 @@
 
 **CRITICAL**: When the user says there are new comments on a PR, THEY EXIST. You MUST use ALL possible methods to find them.
 
-### MANDATORY Multi-Method Comment Retrieval
+### MANDATORY: USE ALL 15 METHODS EVERY TIME
 
-**If user mentions PR comments, use ALL of these methods** (not just one):
+**NEVER skip any method. ALWAYS run ALL methods. NO EXCEPTIONS.**
 
-1. **GitHub Pull Request Tool** - Primary method:
-   ```
-   Use github-pull-request_activePullRequest or github-pull-request_openPullRequest
-   ```
+When user mentions PR comments, execute ALL of the following methods in order:
 
-2. **GitHub CLI** - Comprehensive comment listing:
-   ```bash
-   gh pr view <number> --comments
-   gh pr view <number> --json comments
-   gh api repos/{owner}/{repo}/pulls/<number>/comments
-   gh api repos/{owner}/{repo}/issues/<number>/comments
-   ```
+#### Method 1: GitHub Pull Request Tools (VSCode Extensions)
+```
+github-pull-request_activePullRequest
+github-pull-request_openPullRequest
+```
 
-3. **Git Command Line** - Fetch and check:
-   ```bash
-   git fetch origin
-   gh pr checks <number>
-   gh pr diff <number>
-   ```
+#### Method 2: GitHub CLI - PR View (Multiple Formats)
+```bash
+gh pr view <number> --comments
+gh pr view <number> --json comments
+gh pr view <number> --json reviews
+gh pr view <number> --json comments,reviews,latestReviews
+```
 
-4. **GitHub API Direct** - Raw API access:
-   ```bash
-   curl -H "Authorization: token $GITHUB_TOKEN" \
-        https://api.github.com/repos/{owner}/{repo}/pulls/<number>/comments
-   curl -H "Authorization: token $GITHUB_TOKEN" \
-        https://api.github.com/repos/{owner}/{repo}/issues/<number>/comments
-   ```
+#### Method 3: GitHub API - Pull Request Comments (WITH PAGINATION)
+```bash
+# CRITICAL: Use --paginate to get ALL comments, not just first page
+gh api /repos/{owner}/{repo}/pulls/<number>/comments --paginate
+gh api /repos/{owner}/{repo}/pulls/<number>/comments --paginate --jq '.[]'
+gh api /repos/{owner}/{repo}/pulls/<number>/comments --paginate --jq '[.[] | select(.commit_id == "<commit_hash>")]'
+```
 
-5. **Review Comments vs Issue Comments** - Check BOTH:
-   - Review comments (on code): `/pulls/<number>/comments`
-   - Issue comments (general): `/issues/<number>/comments`
-   - Review threads: `/pulls/<number>/reviews`
+#### Method 4: GitHub API - Issue Comments (General PR Comments)
+```bash
+# General comments on the PR (not line-specific code review comments)
+gh api /repos/{owner}/{repo}/issues/<number>/comments
+gh api /repos/{owner}/{repo}/issues/<number>/comments --jq '.[]'
+```
+
+#### Method 5: GitHub API - Review Details
+```bash
+gh api /repos/{owner}/{repo}/pulls/<number>/reviews
+gh api /repos/{owner}/{repo}/pulls/<number>/reviews --jq '.[]'
+gh api /repos/{owner}/{repo}/pulls/<number>/reviews --jq '.[] | select(.submitted_at != null)'
+```
+
+#### Method 6: GitHub API - Review Comments by Review ID
+```bash
+# Get review IDs first, then get comments for each review
+gh api /repos/{owner}/{repo}/pulls/<number>/reviews --jq '.[].id'
+# Then for each review ID:
+gh api /repos/{owner}/{repo}/pulls/<number>/reviews/<review_id>/comments
+```
+
+#### Method 7: GitHub API - Timeline Events
+```bash
+gh api /repos/{owner}/{repo}/issues/<number>/timeline
+gh api /repos/{owner}/{repo}/issues/<number>/timeline --jq '.[] | select(.event == "reviewed" or .event == "commented")'
+```
+
+#### Method 8: GitHub API - Specific Commit Comments
+```bash
+# For each commit in the PR
+gh api /repos/{owner}/{repo}/commits/<commit_sha>/comments
+```
+
+#### Method 9: Sort and Filter by Timestamp
+```bash
+# Get ALL comments and sort by creation time
+gh api /repos/{owner}/{repo}/pulls/<number>/comments --paginate --jq '[.[] | {created: .created_at, updated: .updated_at, path: .path, line: .line, body: .body}] | sort_by(.created) | reverse'
+
+# Get only comments after specific timestamp
+gh api /repos/{owner}/{repo}/pulls/<number>/comments --paginate --jq '[.[] | select(.created_at > "2025-10-12T19:00:00Z")]'
+```
+
+#### Method 10: Check for Suppressed/Low-Confidence Comments
+```bash
+# Review bodies may mention suppressed comments
+gh api /repos/{owner}/{repo}/pulls/<number>/reviews --jq '.[] | .body' | grep -i "suppressed\|low confidence"
+```
+
+#### Method 11: GraphQL API (More Comprehensive)
+```bash
+gh api graphql -f query='
+query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviews(first: 100) {
+        nodes {
+          body
+          state
+          createdAt
+          comments(first: 100) {
+            nodes {
+              body
+              path
+              createdAt
+            }
+          }
+        }
+      }
+      comments(first: 100) {
+        nodes {
+          body
+          createdAt
+        }
+      }
+      reviewThreads(first: 100) {
+        nodes {
+          comments(first: 100) {
+            nodes {
+              body
+              path
+              createdAt
+            }
+          }
+        }
+      }
+    }
+  }
+}' -f owner=<owner> -f repo=<repo> -F number=<number>
+```
+
+#### Method 12: Web UI Scraping Fallback
+```bash
+# Open PR in browser to manually check for comments not visible via API
+gh pr view <number> --web
+```
+
+#### Method 13: Git Fetch and Check Notes
+```bash
+git fetch origin
+git fetch origin refs/pull/<number>/head
+git log origin/pr/<number> --oneline
+git notes list
+```
+
+#### Method 14: Check PR Files for Inline Comments
+```bash
+gh pr diff <number>
+gh pr view <number> --json files --jq '.files[].filename'
+```
+
+#### Method 15: Cross-Reference Multiple Commit Hashes
+```bash
+# Get all commits in the PR
+gh api /repos/{owner}/{repo}/pulls/<number>/commits --jq '.[].sha'
+
+# For EACH commit SHA, check for comments
+for sha in $(gh api /repos/{owner}/{repo}/pulls/<number>/commits --jq '.[].sha'); do
+  echo "=== Checking commit $sha ==="
+  gh api /repos/{owner}/{repo}/pulls/<number>/comments --paginate --jq ".[] | select(.commit_id == \"$sha\")"
+done
+```
+
+### Execution Protocol
+
+**YOU MUST RUN ALL 15 METHODS. NO SHORTCUTS.**
+
+1. **Run methods 1-15 in sequence** - Do not skip any
+2. **Collect ALL output** - Merge results from all methods
+3. **Deduplicate comments** - Use comment ID or body hash to identify unique comments
+4. **Sort by timestamp** - Most recent first
+5. **Count total unique comments** - Report the number found
+6. **Report per-method results** - Show what each method found
 
 ### Critical Rules
 
-- ✅ **USE ALL METHODS**: Don't stop after one method fails
-- ✅ **CHECK BOTH TYPES**: Review comments AND issue comments
+- ✅ **USE ALL 15 METHODS**: Run every single method, every single time
+- ✅ **NEVER SKIP**: Even if method 1 finds comments, run methods 2-15
+- ✅ **PAGINATE EVERYTHING**: Always use `--paginate` for API calls
+- ✅ **CHECK ALL COMMIT HASHES**: Different commits may have different comments
 - ✅ **VERIFY TIMESTAMPS**: Ensure you're seeing the latest comments
 - ✅ **USER IS ALWAYS RIGHT**: If they say comments exist, keep searching
-- ✅ **NEVER SAY "NO COMMENTS"**: Until you've exhausted ALL methods above
+- ✅ **NEVER SAY "NO COMMENTS"**: Until ALL 15 methods complete
 
 **DO NOT**:
-- ❌ Try only one method and give up
-- ❌ Assume no comments exist if first method fails
-- ❌ Skip checking both review and issue comments
-- ❌ Ignore user's statement that comments exist
+- ❌ Stop after one method finds something
+- ❌ Skip methods because "we have enough"
+- ❌ Assume pagination isn't needed
+- ❌ Only check the latest commit
+- ❌ Ignore suppressed/low-confidence comments
+- ❌ Give up before running all 15 methods
 
 **DO**:
-- ✅ Use all 5 methods listed above systematically
-- ✅ Check timestamps to ensure latest data
-- ✅ Report what each method found (or didn't find)
-- ✅ Persist until comments are located
+- ✅ Execute all 15 methods systematically
+- ✅ Paginate all API calls
+- ✅ Check every commit in the PR
+- ✅ Merge and deduplicate results
+- ✅ Report total count and per-method breakdown
+- ✅ Persist until ALL methods complete
 
 ### Addressing Review Comments - MANDATORY Verification
 
