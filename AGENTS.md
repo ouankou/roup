@@ -188,6 +188,17 @@ All documentation tools are pre-installed and ready to use.
   - Subject: Concise summary (50 chars or less)
   - Body: Detailed explanation of changes, motivation, and impact
   - Footer: Breaking changes, issue references
+- **Pre-Merge Documentation Audit**: Before final merge, check for documentation redundancy:
+  - **Scan for duplicate content**: Review all documentation files for overlapping information
+  - **Consolidate or remove**: Merge duplicate content into canonical locations or delete redundant files
+  - **Check specific areas**:
+    - Multiple README files with similar content
+    - Duplicate tutorials or guides (e.g., `docs/QUICK_START.md` vs `docs/book/src/getting-started.md`)
+    - Planning/status documents that should be deleted after completion
+    - Old summary files (e.g., `FORTRAN_SUPPORT_SUMMARY.md`) that duplicate information in other docs
+  - **Apply documentation hierarchy**: Ensure content lives in the right place per the Documentation Philosophy section
+  - **Cross-reference instead of duplicate**: Replace duplicated content with links to canonical source
+  - **Clean up temporary files**: Remove implementation summaries, status files, and planning documents after merging
 
 ## Testing Requirements
 
