@@ -18,6 +18,25 @@
 //! - **Isolated** only at FFI boundary, never in business logic
 //! - **Auditable**: ~0.9% of file (60 unsafe lines / 632 total)
 //!
+//! ## Case-Insensitive Matching: String Allocation Tradeoff
+//!
+//! Functions `directive_name_to_kind()` and `convert_clause()` allocate a String
+//! for case-insensitive matching (Fortran uses uppercase, C uses lowercase).
+//!
+//! **Why not optimize with `eq_ignore_ascii_case()`?**
+//! - Constants generator (`src/constants_gen.rs`) requires `match` expressions
+//! - Parser uses syn crate to extract directive/clause mappings from AST
+//! - Cannot parse if-else chains → must use `match normalized_name.as_str()`
+//! - String allocation is necessary for match arm patterns
+//!
+//! **Is this a performance issue?**
+//! - No: These functions are called once per directive/clause at API boundary
+//! - Typical usage: Parse a few dozen directives in an entire program
+//! - String allocation cost is negligible compared to parsing overhead
+//!
+//! **Future optimization path**: Update `constants_gen.rs` to parse if-else chains,
+//! then use `eq_ignore_ascii_case()` without allocations.
+//!
 //! ## Learning Rust: Why Unsafe is Needed at FFI Boundary
 //!
 //! 1. **C strings** → Rust strings: `CStr::from_ptr()` requires unsafe
