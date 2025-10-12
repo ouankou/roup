@@ -670,76 +670,71 @@ fn allocate_c_string(s: &str) -> *const c_char {
 /// - 5 = lastprivate    - 11 = default
 /// - 999 = unknown
 fn convert_clause(clause: &Clause) -> OmpClause {
-    // Use case-insensitive comparison to match both C (lowercase) and Fortran (uppercase) clauses
-    // without allocating a new String. More efficient than to_ascii_lowercase().
-    let name = clause.name;
+    // Normalize clause name to lowercase for case-insensitive matching
+    // (Fortran clauses are uppercase, C clauses are lowercase)
+    // Note: Uses one String allocation per clause - acceptable for API boundary
+    let normalized_name = clause.name.to_ascii_lowercase();
 
-    let (kind, data) = if name.eq_ignore_ascii_case("num_threads") {
-        (0, ClauseData { default: 0 })
-    } else if name.eq_ignore_ascii_case("if") {
-        (1, ClauseData { default: 0 })
-    } else if name.eq_ignore_ascii_case("private") {
-        (
+    let (kind, data) = match normalized_name.as_str() {
+        "num_threads" => (0, ClauseData { default: 0 }),
+        "if" => (1, ClauseData { default: 0 }),
+        "private" => (
             2,
             ClauseData {
                 variables: ptr::null_mut(),
             },
-        )
-    } else if name.eq_ignore_ascii_case("shared") {
-        (
+        ),
+        "shared" => (
             3,
             ClauseData {
                 variables: ptr::null_mut(),
             },
-        )
-    } else if name.eq_ignore_ascii_case("firstprivate") {
-        (
+        ),
+        "firstprivate" => (
             4,
             ClauseData {
                 variables: ptr::null_mut(),
             },
-        )
-    } else if name.eq_ignore_ascii_case("lastprivate") {
-        (
+        ),
+        "lastprivate" => (
             5,
             ClauseData {
                 variables: ptr::null_mut(),
             },
-        )
-    } else if name.eq_ignore_ascii_case("reduction") {
-        let operator = parse_reduction_operator(clause);
-        (
-            6,
-            ClauseData {
-                reduction: ManuallyDrop::new(ReductionData { operator }),
-            },
-        )
-    } else if name.eq_ignore_ascii_case("schedule") {
-        let schedule_kind = parse_schedule_kind(clause);
-        (
-            7,
-            ClauseData {
-                schedule: ManuallyDrop::new(ScheduleData {
-                    kind: schedule_kind,
-                }),
-            },
-        )
-    } else if name.eq_ignore_ascii_case("collapse") {
-        (8, ClauseData { default: 0 })
-    } else if name.eq_ignore_ascii_case("ordered") {
-        (9, ClauseData { default: 0 })
-    } else if name.eq_ignore_ascii_case("nowait") {
-        (10, ClauseData { default: 0 })
-    } else if name.eq_ignore_ascii_case("default") {
-        let default_kind = parse_default_kind(clause);
-        (
-            11,
-            ClauseData {
-                default: default_kind,
-            },
-        )
-    } else {
-        (999, ClauseData { default: 0 }) // Unknown
+        ),
+        "reduction" => {
+            let operator = parse_reduction_operator(clause);
+            (
+                6,
+                ClauseData {
+                    reduction: ManuallyDrop::new(ReductionData { operator }),
+                },
+            )
+        }
+        "schedule" => {
+            let schedule_kind = parse_schedule_kind(clause);
+            (
+                7,
+                ClauseData {
+                    schedule: ManuallyDrop::new(ScheduleData {
+                        kind: schedule_kind,
+                    }),
+                },
+            )
+        }
+        "collapse" => (8, ClauseData { default: 0 }),
+        "ordered" => (9, ClauseData { default: 0 }),
+        "nowait" => (10, ClauseData { default: 0 }),
+        "default" => {
+            let default_kind = parse_default_kind(clause);
+            (
+                11,
+                ClauseData {
+                    default: default_kind,
+                },
+            )
+        }
+        _ => (999, ClauseData { default: 0 }), // Unknown
     };
 
     OmpClause { kind, data }
@@ -864,54 +859,36 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
         let c_str = CStr::from_ptr(name);
         let name_str = c_str.to_str().unwrap_or("");
 
-        // Use case-insensitive comparison without allocating a new String.
-        // Helper to avoid repeated .eq_ignore_ascii_case() calls.
-        let matches = |s: &str| name_str.eq_ignore_ascii_case(s);
+        // Normalize to lowercase for case-insensitive matching
+        // (Fortran directives are uppercase, C directives are lowercase)
+        // Note: Uses one String allocation - acceptable for API boundary
+        let normalized_name = name_str.to_ascii_lowercase();
 
-        if matches("parallel") {
-            0
-        } else if matches("parallel for") || matches("parallel do") {
-            0 // Composite: treat as parallel (C/Fortran variants)
-        } else if matches("parallel sections") {
-            0
-        } else if matches("for") || matches("do") {
-            1 // C and Fortran loop directives
-        } else if matches("sections") {
-            2
-        } else if matches("single") {
-            3
-        } else if matches("task") {
-            4
-        } else if matches("master") {
-            5
-        } else if matches("critical") {
-            6
-        } else if matches("barrier") {
-            7
-        } else if matches("taskwait") {
-            8
-        } else if matches("taskgroup") {
-            9
-        } else if matches("atomic") {
-            10
-        } else if matches("flush") {
-            11
-        } else if matches("ordered") {
-            12
-        } else if matches("target") {
-            13
-        } else if matches("target teams") {
-            13 // Composite: treat as target
-        } else if matches("teams") {
-            14
-        } else if matches("teams distribute") {
-            14 // Composite: treat as teams
-        } else if matches("distribute") {
-            15
-        } else if matches("metadirective") {
-            16
-        } else {
-            999 // Unknown
+        match normalized_name.as_str() {
+            "parallel" => 0,
+            "parallel for" => 0, // Composite: treat as parallel
+            "parallel do" => 0,  // Fortran variant of parallel for
+            "parallel sections" => 0,
+            "for" => 1, // C loop directive
+            "do" => 1,  // Fortran loop directive
+            "sections" => 2,
+            "single" => 3,
+            "task" => 4,
+            "master" => 5,
+            "critical" => 6,
+            "barrier" => 7,
+            "taskwait" => 8,
+            "taskgroup" => 9,
+            "atomic" => 10,
+            "flush" => 11,
+            "ordered" => 12,
+            "target" => 13,
+            "target teams" => 13, // Composite: treat as target
+            "teams" => 14,
+            "teams distribute" => 14, // Composite: treat as teams
+            "distribute" => 15,
+            "metadirective" => 16,
+            _ => 999, // Unknown
         }
     }
 }
