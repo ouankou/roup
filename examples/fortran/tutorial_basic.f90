@@ -82,14 +82,15 @@ contains
         integer(c_size_t) :: length
         integer :: i
         
+        ! NULL pointer check - critical for safe strlen() usage
         if (.not. c_associated(c_string_ptr)) then
             f_string = ""
             return
         end if
         
         ! Dynamically determine string length using C strlen
-        ! SAFETY: Assumes C string is properly null-terminated. ROUP C API guarantees
-        ! all returned strings are null-terminated, so this is safe for ROUP functions.
+        ! SAFETY: NULL pointer already checked above. ROUP C API guarantees all
+        ! returned strings are properly null-terminated, so strlen() is safe here.
         ! For general use with untrusted C strings, add bounds checking.
         length = strlen(c_string_ptr)
         

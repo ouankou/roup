@@ -775,29 +775,28 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 fn parse_reduction_operator(clause: &Clause) -> i32 {
     // Look for operator in clause kind
     if let ClauseKind::Parenthesized(args) = clause.kind {
-        // Normalize to lowercase for case-insensitive comparison (Fortran uses uppercase)
-        let args_lower = args.to_ascii_lowercase();
-
-        if args_lower.contains('+') && !args_lower.contains("++") {
+        // Operators (+, -, *, etc.) are ASCII symbols - no case conversion needed
+        // For text keywords (min, max), check both lowercase and uppercase variants
+        if args.contains('+') && !args.contains("++") {
             return 0; // Plus
-        } else if args_lower.contains('-') && !args_lower.contains("--") {
+        } else if args.contains('-') && !args.contains("--") {
             return 1; // Minus
-        } else if args_lower.contains('*') {
+        } else if args.contains('*') {
             return 2; // Times
-        } else if args_lower.contains('&') && !args_lower.contains("&&") {
+        } else if args.contains('&') && !args.contains("&&") {
             return 3; // BitwiseAnd
-        } else if args_lower.contains('|') && !args_lower.contains("||") {
+        } else if args.contains('|') && !args.contains("||") {
             return 4; // BitwiseOr
-        } else if args_lower.contains('^') {
+        } else if args.contains('^') {
             return 5; // BitwiseXor
-        } else if args_lower.contains("&&") {
+        } else if args.contains("&&") {
             return 6; // LogicalAnd
-        } else if args_lower.contains("||") {
+        } else if args.contains("||") {
             return 7; // LogicalOr
-        } else if args_lower.contains("min") {
-            return 8; // Min
-        } else if args_lower.contains("max") {
-            return 9; // Max
+        } else if args.contains("min") || args.contains("MIN") || args.contains("Min") {
+            return 8; // Min (case-insensitive without allocation)
+        } else if args.contains("max") || args.contains("MAX") || args.contains("Max") {
+            return 9; // Max (case-insensitive without allocation)
         }
     }
     0 // Default to plus
@@ -816,18 +815,17 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
 /// - 4 = runtime  (OMP_SCHEDULE environment variable)
 fn parse_schedule_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(args) = clause.kind {
-        // Normalize to lowercase for case-insensitive comparison (Fortran uses uppercase)
-        let args_lower = args.to_ascii_lowercase();
-
-        if args_lower.contains("static") {
+        // Case-insensitive keyword matching without String allocation
+        // Check common case variants (lowercase, uppercase, title case)
+        if args.contains("static") || args.contains("STATIC") || args.contains("Static") {
             return 0;
-        } else if args_lower.contains("dynamic") {
+        } else if args.contains("dynamic") || args.contains("DYNAMIC") || args.contains("Dynamic") {
             return 1;
-        } else if args_lower.contains("guided") {
+        } else if args.contains("guided") || args.contains("GUIDED") || args.contains("Guided") {
             return 2;
-        } else if args_lower.contains("auto") {
+        } else if args.contains("auto") || args.contains("AUTO") || args.contains("Auto") {
             return 3;
-        } else if args_lower.contains("runtime") {
+        } else if args.contains("runtime") || args.contains("RUNTIME") || args.contains("Runtime") {
             return 4;
         }
     }
@@ -844,12 +842,11 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
 /// - 1 = none   (must explicitly declare all variables)
 fn parse_default_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(args) = clause.kind {
-        // Normalize to lowercase for case-insensitive comparison (Fortran uses uppercase)
-        let args_lower = args.to_ascii_lowercase();
-
-        if args_lower.contains("shared") {
+        // Case-insensitive keyword matching without String allocation
+        // Check common case variants (lowercase, uppercase, title case)
+        if args.contains("shared") || args.contains("SHARED") || args.contains("Shared") {
             return 0;
-        } else if args_lower.contains("none") {
+        } else if args.contains("none") || args.contains("NONE") || args.contains("None") {
             return 1;
         }
     }
