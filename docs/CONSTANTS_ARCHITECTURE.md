@@ -23,7 +23,7 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
 }
 
 fn convert_clause(clause: &Clause) -> OmpClause {
-    let (kind, data) = match clause.name {
+    let (kind, data) = match clause.name.as_ref() {
         "num_threads" => (0, ...),
         "if" => (1, ...),
         // ... etc

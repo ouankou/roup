@@ -13,9 +13,15 @@ fn parses_parallel_with_core_clauses() {
     assert_eq!(directive.name, "parallel");
     assert_eq!(directive.clauses.len(), 3);
     assert_eq!(directive.clauses[0].name, "private");
-    assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("a, b"));
+    assert_eq!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized("a, b".into())
+    );
     assert_eq!(directive.clauses[1].name, "firstprivate");
-    assert_eq!(directive.clauses[1].kind, ClauseKind::Parenthesized("c"));
+    assert_eq!(
+        directive.clauses[1].kind,
+        ClauseKind::Parenthesized("c".into())
+    );
     assert_eq!(directive.clauses[2].name, "nowait");
     assert_eq!(directive.clauses[2].kind, ClauseKind::Bare);
 }
@@ -31,19 +37,22 @@ fn parses_parallel_for_simd_combination() {
     assert_eq!(directive.clauses[0].name, "aligned");
     assert_eq!(
         directive.clauses[0].kind,
-        ClauseKind::Parenthesized("buf:64"),
+        ClauseKind::Parenthesized("buf:64".into()),
     );
     assert_eq!(directive.clauses[1].name, "schedule");
     assert_eq!(
         directive.clauses[1].kind,
-        ClauseKind::Parenthesized("static,4")
+        ClauseKind::Parenthesized("static,4".into())
     );
     assert_eq!(directive.clauses[2].name, "collapse");
-    assert_eq!(directive.clauses[2].kind, ClauseKind::Parenthesized("2"));
+    assert_eq!(
+        directive.clauses[2].kind,
+        ClauseKind::Parenthesized("2".into())
+    );
     assert_eq!(directive.clauses[3].name, "reduction");
     assert_eq!(
         directive.clauses[3].kind,
-        ClauseKind::Parenthesized("+:sum"),
+        ClauseKind::Parenthesized("+:sum".into()),
     );
 }
 

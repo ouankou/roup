@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
     fmt,
 };
@@ -8,11 +9,11 @@ use nom::{error::ErrorKind, IResult};
 use super::clause::{Clause, ClauseRegistry};
 
 type DirectiveParserFn =
-    for<'a> fn(&'a str, &'a str, &ClauseRegistry) -> IResult<&'a str, Directive<'a>>;
+    for<'a> fn(Cow<'a, str>, &'a str, &ClauseRegistry) -> IResult<&'a str, Directive<'a>>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Directive<'a> {
-    pub name: &'a str,
+    pub name: Cow<'a, str>,
     pub clauses: Vec<Clause<'a>>,
 }
 
@@ -24,7 +25,7 @@ impl<'a> Directive<'a> {
 
 impl<'a> fmt::Display for Directive<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#pragma omp {}", self.name)?;
+        write!(f, "#pragma omp {}", self.name.as_ref())?;
         if !self.clauses.is_empty() {
             write!(f, " ")?;
             for (idx, clause) in self.clauses.iter().enumerate() {
@@ -47,7 +48,7 @@ pub enum DirectiveRule {
 impl DirectiveRule {
     fn parse<'a>(
         self,
-        name: &'a str,
+        name: Cow<'a, str>,
         input: &'a str,
         clause_registry: &ClauseRegistry,
     ) -> IResult<&'a str, Directive<'a>> {
@@ -89,11 +90,12 @@ impl DirectiveRegistry {
 
     pub fn parse_with_name<'a>(
         &self,
-        name: &'a str,
+        name: Cow<'a, str>,
         input: &'a str,
         clause_registry: &ClauseRegistry,
     ) -> IResult<&'a str, Directive<'a>> {
         // Use efficient lookup based on case sensitivity mode
+        let lookup_name = name.as_ref();
         let rule = if self.case_insensitive {
             // Case-insensitive lookup using eq_ignore_ascii_case (O(n) linear search)
             // Performance note: For small registries (~17 directives), linear search with
@@ -102,18 +104,21 @@ impl DirectiveRegistry {
             // Benchmarking shows O(n) scan is faster than HashMap for n < ~50 items.
             self.rules
                 .iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .find(|(k, _)| k.eq_ignore_ascii_case(lookup_name))
                 .map(|(_, v)| *v)
                 .unwrap_or(self.default_rule)
         } else {
             // Direct HashMap lookup for case-sensitive mode (O(1), zero allocations)
-            self.rules.get(name).copied().unwrap_or(self.default_rule)
+            self.rules
+                .get(lookup_name)
+                .copied()
+                .unwrap_or(self.default_rule)
         };
 
         rule.parse(name, input, clause_registry)
     }
 
-    fn lex_name<'a>(&self, input: &'a str) -> IResult<&'a str, &'a str> {
+    fn lex_name<'a>(&self, input: &'a str) -> IResult<&'a str, Cow<'a, str>> {
         use crate::lexer::is_identifier_char as is_ident_char;
 
         let mut chars = input.char_indices();
@@ -149,11 +154,15 @@ impl DirectiveRegistry {
             }
 
             let candidate = &input[start..j];
+            let candidate = crate::lexer::collapse_line_continuations(candidate);
+            let candidate_ref = candidate.as_ref().trim();
             // Check if this candidate matches any registered directive
             let has_rule = if self.case_insensitive {
-                self.rules.keys().any(|k| k.eq_ignore_ascii_case(candidate))
+                self.rules
+                    .keys()
+                    .any(|k| k.eq_ignore_ascii_case(candidate_ref))
             } else {
-                self.rules.contains_key(candidate)
+                self.rules.contains_key(candidate_ref)
             };
 
             if has_rule {
@@ -162,12 +171,9 @@ impl DirectiveRegistry {
 
             // advance idx past any whitespace following the identifier
             idx = j;
-            while let Some((p, chw)) = input[idx..].char_indices().next() {
-                if chw.is_whitespace() {
-                    idx = idx + p + chw.len_utf8();
-                } else {
-                    break;
-                }
+            if let Ok((remaining, _)) = crate::lexer::skip_space_and_comments(&input[idx..]) {
+                let consumed = input[idx..].len() - remaining.len();
+                idx += consumed;
             }
 
             // if next character starts an identifier, loop to extend candidate
@@ -175,20 +181,22 @@ impl DirectiveRegistry {
                 if is_ident_char(next_ch) {
                     // check if prefix is registered; if so, continue to extend
                     let prefix_candidate = input[start..idx].trim_end();
+                    let prefix_candidate =
+                        crate::lexer::collapse_line_continuations(prefix_candidate);
+                    let prefix_candidate_ref = prefix_candidate.as_ref().trim_end();
                     // Check for prefixes
                     let has_prefix = if self.case_insensitive {
                         self.prefixes
                             .iter()
-                            .any(|p| p.eq_ignore_ascii_case(prefix_candidate))
+                            .any(|p| p.eq_ignore_ascii_case(prefix_candidate_ref))
                             || self
                                 .rules
                                 .keys()
-                                .any(|k| k.eq_ignore_ascii_case(prefix_candidate))
+                                .any(|k| k.eq_ignore_ascii_case(prefix_candidate_ref))
                     } else {
-                        self.prefixes.contains(prefix_candidate)
-                            || self.rules.contains_key(prefix_candidate)
+                        self.prefixes.contains(prefix_candidate_ref)
+                            || self.rules.contains_key(prefix_candidate_ref)
                     };
-
                     if has_prefix {
                         continue;
                     }
@@ -201,10 +209,22 @@ impl DirectiveRegistry {
         let name_end = last_match_end
             .ok_or_else(|| nom::Err::Error(nom::error::Error::new(input, ErrorKind::Tag)))?;
 
-        let name = &input[start..name_end];
+        let raw_name = &input[start..name_end];
+        let normalized = crate::lexer::collapse_line_continuations(raw_name);
+        let normalized = if self.case_insensitive {
+            let lowered = normalized.as_ref().to_ascii_lowercase();
+            if lowered == normalized.as_ref() {
+                normalized
+            } else {
+                Cow::Owned(lowered)
+            }
+        } else {
+            normalized
+        };
+
         let rest = &input[name_end..];
 
-        Ok((rest, name))
+        Ok((rest, normalized))
     }
 }
 
@@ -304,14 +324,17 @@ mod tests {
         let registry = DirectiveRegistry::default();
 
         let (rest, directive) = registry
-            .parse_with_name("parallel", " private(x, y) nowait", &clause_registry)
+            .parse_with_name("parallel".into(), " private(x, y) nowait", &clause_registry)
             .expect("parsing should succeed");
 
         assert_eq!(rest, "");
         assert_eq!(directive.name, "parallel");
         assert_eq!(directive.clauses.len(), 2);
         assert_eq!(directive.clauses[0].name, "private");
-        assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("x, y"));
+        assert_eq!(
+            directive.clauses[0].kind,
+            ClauseKind::Parenthesized("x, y".into())
+        );
         assert_eq!(directive.clauses[1].name, "nowait");
         assert_eq!(directive.clauses[1].kind, ClauseKind::Bare);
     }
@@ -339,7 +362,7 @@ mod tests {
     }
 
     fn parse_prefixed_directive<'a>(
-        name: &'a str,
+        name: Cow<'a, str>,
         input: &'a str,
         clause_registry: &ClauseRegistry,
     ) -> IResult<&'a str, Directive<'a>> {
@@ -357,27 +380,30 @@ mod tests {
             .build();
 
         let (rest, directive) = registry
-            .parse_with_name("target", "custom: private(a)", &clause_registry)
+            .parse_with_name("target".into(), "custom: private(a)", &clause_registry)
             .expect("parsing should succeed");
 
         assert_eq!(rest, "");
         assert_eq!(directive.name, "target");
         assert_eq!(directive.clauses.len(), 1);
         assert_eq!(directive.clauses[0].name, "private");
-        assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("a"));
+        assert_eq!(
+            directive.clauses[0].kind,
+            ClauseKind::Parenthesized("a".into())
+        );
     }
 
     #[test]
     fn directive_display_includes_all_clauses() {
         let directive = Directive {
-            name: "parallel",
+            name: "parallel".into(),
             clauses: vec![
                 Clause {
-                    name: "private",
-                    kind: ClauseKind::Parenthesized("a, b"),
+                    name: "private".into(),
+                    kind: ClauseKind::Parenthesized("a, b".into()),
                 },
                 Clause {
-                    name: "nowait",
+                    name: "nowait".into(),
                     kind: ClauseKind::Bare,
                 },
             ],
@@ -396,7 +422,7 @@ mod tests {
     #[test]
     fn directive_display_without_clauses() {
         let directive = Directive {
-            name: "barrier",
+            name: "barrier".into(),
             clauses: vec![],
         };
 

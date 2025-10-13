@@ -227,7 +227,7 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
 
     // Convert to C-compatible format
     let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name),
+        name: allocate_c_string(directive.name.as_ref()),
         clauses: directive
             .clauses
             .into_iter()
@@ -347,7 +347,7 @@ pub extern "C" fn roup_parse_with_language(
 
     // Convert to C-compatible format
     let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name),
+        name: allocate_c_string(directive.name.as_ref()),
         clauses: directive
             .clauses
             .into_iter()
@@ -774,7 +774,8 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 /// - 4 = |  (bitwise OR)    - 9 = max
 fn parse_reduction_operator(clause: &Clause) -> i32 {
     // Look for operator in clause kind
-    if let ClauseKind::Parenthesized(args) = clause.kind {
+    if let ClauseKind::Parenthesized(ref args) = clause.kind {
+        let args = args.as_ref();
         // Operators (+, -, *, etc.) are ASCII symbols - no case conversion needed
         if args.contains('+') && !args.contains("++") {
             return 0; // Plus
@@ -817,7 +818,8 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
 /// - 3 = auto     (compiler decides)
 /// - 4 = runtime  (OMP_SCHEDULE environment variable)
 fn parse_schedule_kind(clause: &Clause) -> i32 {
-    if let ClauseKind::Parenthesized(args) = clause.kind {
+    if let ClauseKind::Parenthesized(ref args) = clause.kind {
+        let args = args.as_ref();
         // Case-insensitive keyword matching without String allocation
         // Check common case variants (lowercase, uppercase, title case)
         if args.contains("static") || args.contains("STATIC") || args.contains("Static") {
@@ -844,7 +846,8 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
 /// - 0 = shared (all variables shared by default)
 /// - 1 = none   (must explicitly declare all variables)
 fn parse_default_kind(clause: &Clause) -> i32 {
-    if let ClauseKind::Parenthesized(args) = clause.kind {
+    if let ClauseKind::Parenthesized(ref args) = clause.kind {
+        let args = args.as_ref();
         // Case-insensitive keyword matching without String allocation
         // Check common case variants (lowercase, uppercase, title case)
         if args.contains("shared") || args.contains("SHARED") || args.contains("Shared") {
