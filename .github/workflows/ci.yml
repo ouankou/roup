@@ -175,11 +175,17 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Test mdBook code examples
+        run: mdbook test docs/book
+
       - name: Build mdBook
         run: mdbook build docs/book
 
       - name: Build rustdoc
         run: cargo doc --no-deps --all-features
+
+      - name: Verify examples compile
+        run: cargo build --examples
 
       - name: Combine documentation
         run: |
