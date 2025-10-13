@@ -340,22 +340,61 @@ TEST(lang_cpp) {
 }
 
 TEST(lang_fortran) {
-    // TODO: Fortran parsing not yet supported - requires ROUP C API language parameter.
-    // For now, this test only verifies setLang() works; actual parsing is skipped.
     setLang(Lang_Fortran);
-    
-    // This will fail until ROUP's C API supports language parameter
-    // Skipping actual parse test for now
-    std::cout << "  ⚠ SKIP: Fortran parsing requires ROUP C API enhancement" << std::endl;
-    std::cout << "  ✓ PASS (setLang works, parsing TODO)" << std::endl;
-    
-    // Reset to C for subsequent tests
+    const char* directive =
+        "!$omp parallel do &\n"
+        "!$omp& private(i, j)";
+
+    DirectivePtr dir(parseOpenMP(directive, nullptr));
+    ASSERT_NOT_NULL(dir.get());
+    ASSERT_EQ(dir->getBaseLang(), Lang_Fortran);
+
     setLang(Lang_C);
 }
 
 // ============================================================================
 // Complex Directive Tests
 // ============================================================================
+
+TEST(c_line_continuation) {
+    setLang(Lang_C);
+    const char* directive =
+        "omp target \\\n"
+        "    // comment between continued lines\n"
+        "    map(to: a[0:N]) \\\n"
+        "    map(from: b[0:N])";
+
+    DirectivePtr dir(parseOpenMP(directive, nullptr));
+    ASSERT_NOT_NULL(dir.get());
+    ASSERT_EQ(dir->getKind(), OMPD_target);
+}
+
+TEST(fortran_continuation_with_repeated_sentinel) {
+    setLang(Lang_Fortran);
+    const char* directive =
+        "!$omp parallel &\n"
+        "!$omp& private(i) &\n"
+        "!$omp  num_threads(4)";
+
+    DirectivePtr dir(parseOpenMP(directive, nullptr));
+    ASSERT_NOT_NULL(dir.get());
+    ASSERT_EQ(dir->getKind(), OMPD_parallel);
+
+    setLang(Lang_C);
+}
+
+TEST(fortran_fixed_form_continuation) {
+    setLang(Lang_Fortran);
+    const char* directive =
+        "C$OMP PARALLEL DO&\n"
+        "C$OMP& PRIVATE(I)";
+
+    DirectivePtr dir(parseOpenMP(directive, nullptr));
+    ASSERT_NOT_NULL(dir.get());
+    ASSERT_EQ(dir->getKind(), OMPD_parallel);
+
+    setLang(Lang_C);
+}
 
 TEST(complex_parallel_for) {
     DirectivePtr dir(parseOpenMP(
@@ -415,7 +454,13 @@ int main() {
     run_if_clause();
     run_nowait_clause();
     std::cout << std::endl;
-    
+
+    std::cout << "--- Continuation Tests ---" << std::endl;
+    run_c_line_continuation();
+    run_fortran_continuation_with_repeated_sentinel();
+    run_fortran_fixed_form_continuation();
+    std::cout << std::endl;
+
     std::cout << "--- String Generation Tests ---" << std::endl;
     run_toString_basic();
     run_toString_with_clause();

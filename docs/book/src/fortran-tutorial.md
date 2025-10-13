@@ -301,27 +301,18 @@ my_program: my_program.f90
 	$(FC) -o $@ $< $(ROUP_LIB)
 ```
 
+## Multi-line Directives
+
+ROUP now accepts multi-line OpenMP directives in both free-form and fixed-form Fortran. The parser understands trailing `&`, optional leading `&` on continuation lines, and repeated sentinels such as `!$OMP` or `C$OMP`. For a deep dive—including C and C++ examples—see [OpenMP Line Continuations](./line-continuations.md).
+
 ## Known Limitations
 
 ⚠️ **Current limitations in experimental Fortran support:**
 
-1. **Single-Line Input Only**: ROUP requires complete directives on a single line
-   - **Not supported**: Multi-line directives with `&` continuation
-     ```fortran
-     !$OMP PARALLEL DO &
-     !$OMP   PRIVATE(I,J)
-     ```
-   - **Workaround**: Provide complete directive on one line:
-     ```fortran
-     !$OMP PARALLEL DO PRIVATE(I,J)
-     ```
-   - **Rationale**: This is an architectural design constraint that applies to both C and Fortran. Users must preprocess multi-line directives into single lines before passing to ROUP.
-
-2. **End Directives**: `!$OMP END PARALLEL` and similar end directives may not parse correctly
-
-3. **Array Sections**: Complex array section syntax may have issues
-4. **Fixed-Form Column Rules**: Strict column 1-6 sentinel placement not enforced
-5. **Fortran-Specific Directives**: Some Fortran-only directives (e.g., `WORKSHARE`) may not be registered
+1. **End Directives**: `!$OMP END PARALLEL` and similar end directives may not parse correctly
+2. **Array Sections**: Complex array section syntax may have issues
+3. **Fixed-Form Column Rules**: Strict column 1-6 sentinel placement not enforced
+4. **Fortran-Specific Directives**: Some Fortran-only directives (e.g., `WORKSHARE`) may not be registered
 
 ## Troubleshooting
 

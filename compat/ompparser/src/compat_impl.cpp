@@ -9,6 +9,8 @@
  */
 
 #include <OpenMPIR.h>
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -28,6 +30,7 @@ extern "C" {
 
     // Core parsing
     OmpDirective* roup_parse(const char* input);
+    OmpDirective* roup_parse_with_language(const char* input, int32_t language);
     void roup_directive_free(OmpDirective* directive);
 
     // Directive queries
@@ -56,6 +59,57 @@ static constexpr const char C_PRAGMA_PREFIX[] = "#pragma";    // C/C++ pragma pr
 // Compile-time string lengths: sizeof() includes null terminator, subtract 1 for actual length
 static constexpr size_t FORTRAN_PREFIX_LEN = sizeof(FORTRAN_PREFIX) - 1;
 static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
+
+static bool starts_with_case_insensitive(const std::string& value, const char* prefix) {
+    const auto first_non_ws = value.find_first_not_of(" \t\r\n");
+    if (first_non_ws == std::string::npos) {
+        return false;
+    }
+
+    const size_t prefix_len = std::strlen(prefix);
+    if (value.size() - first_non_ws < prefix_len) {
+        return false;
+    }
+
+    for (size_t i = 0; i < prefix_len; ++i) {
+        unsigned char lhs = static_cast<unsigned char>(value[first_non_ws + i]);
+        unsigned char rhs = static_cast<unsigned char>(prefix[i]);
+        if (std::toupper(lhs) != std::toupper(rhs)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool looks_like_fixed_form(const std::string& value) {
+    const auto first_non_ws = value.find_first_not_of(" \t\r\n");
+    if (first_non_ws == std::string::npos) {
+        return false;
+    }
+
+    if (value.size() - first_non_ws < 5) {
+        return false;
+    }
+
+    std::string prefix = value.substr(first_non_ws, 5);
+    std::transform(prefix.begin(), prefix.end(), prefix.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::toupper(ch));
+    });
+
+    return prefix == "C$OMP" || prefix == "*$OMP";
+}
+
+static int32_t to_roup_language(OpenMPBaseLang lang, const std::string& value) {
+    switch (lang) {
+        case Lang_Fortran:
+            return looks_like_fixed_form(value) ? ROUP_LANG_FORTRAN_FIXED : ROUP_LANG_FORTRAN_FREE;
+        case Lang_C:
+        case Lang_Cplusplus:
+        default:
+            return ROUP_LANG_C;
+    }
+}
 
 extern "C" void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
@@ -134,10 +188,7 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     // Handle different language pragmas
     if (current_lang == Lang_Fortran) {
         // Fortran uses !$omp prefix - add if missing (case-insensitive check)
-        const bool has_prefix =
-            input_str.length() >= FORTRAN_PREFIX_LEN &&
-            (input_str.compare(0, FORTRAN_PREFIX_LEN, FORTRAN_PREFIX) == 0 ||
-             input_str.compare(0, FORTRAN_PREFIX_LEN, FORTRAN_PREFIX_UPPER) == 0);
+        const bool has_prefix = starts_with_case_insensitive(input_str, FORTRAN_PREFIX);
         if (!has_prefix) {
             input_str = std::string(FORTRAN_PREFIX) + " " + input_str;
         }
@@ -149,8 +200,18 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     }
 
-    // Call ROUP parser
-    OmpDirective* roup_dir = roup_parse(input_str.c_str());
+    const int32_t roup_language = to_roup_language(current_lang, input_str);
+
+    // Call ROUP parser with explicit language hint
+    OmpDirective* roup_dir = nullptr;
+    if (roup_language == ROUP_LANG_C) {
+        roup_dir = roup_parse(input_str.c_str());
+        if (!roup_dir) {
+            roup_dir = roup_parse_with_language(input_str.c_str(), roup_language);
+        }
+    } else {
+        roup_dir = roup_parse_with_language(input_str.c_str(), roup_language);
+    }
     if (!roup_dir) {
         return nullptr;
     }

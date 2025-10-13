@@ -37,25 +37,18 @@ impl Parser {
     }
 
     pub fn parse<'a>(&self, input: &'a str) -> IResult<&'a str, Directive<'a>> {
-        // IMPORTANT: ROUP requires complete single-line directive input
+        // Continuation Handling: ROUP automatically stitches multi-line directives
+        // for all supported languages.
         //
-        // Design Constraint: Multi-line directives are NOT supported
-        // - C: Users must not split #pragma omp across multiple lines
-        // - Fortran: Users must not use & continuation characters
+        // Supported patterns include:
+        // - C/C++ line continuations using backslash-newline sequences
+        // - Fortran free-form directives that end with '&' or begin continuation
+        //   lines with '&'
+        // - Fortran fixed-form directives that repeat the sentinel (e.g., C$OMP, !$OMP)
+        //   with an optional '&' in column 6
         //
-        // Example of UNSUPPORTED multi-line Fortran input:
-        //     !$OMP PARALLEL DO &
-        //     !$OMP   PRIVATE(I,J)
-        //
-        // Users must provide complete directives on ONE line:
-        //     !$OMP PARALLEL DO PRIVATE(I,J)
-        //
-        // Rationale: Continuation handling would require:
-        // - State tracking across multiple parse() calls
-        // - Sentinel prefix stripping on continuation lines
-        // - Complex line merging logic
-        // This significantly complicates the parser API and is beyond ROUP's scope.
-        // Users should preprocess multi-line directives before calling parse().
+        // The lexer normalizes these forms, allowing users to supply directives in the
+        // same layout they appear in real source files.
 
         let input = match self.language {
             Language::C => {

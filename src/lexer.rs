@@ -125,26 +125,18 @@ pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
 }
 
 // ============================================================================
-// Fortran Continuation Lines - NOT SUPPORTED BY DESIGN
-// ============================================================================
+// Continuation Handling Overview
+// ===========================================================================
 //
-// ROUP does NOT support multi-line Fortran directives with continuation (&).
+// The lexer understands OpenMP continuation patterns for the supported languages:
+// - C/C++: trailing backslash followed by newline (\n or \r\n)
+// - Fortran free-form: trailing '&' and optional leading '&' on continuation lines
+// - Fortran fixed-form: repeated sentinels (e.g., C$OMP, !$OMP, *$OMP) with an
+//   optional '&' occupying column 6
 //
-// Example of UNSUPPORTED input:
-//     !$OMP PARALLEL DO &
-//     !$OMP   PRIVATE(I,J)
-//
-// Design Decision:
-// - Continuation handling requires stateful multi-line parsing
-// - Users must provide complete single-line directives
-// - Applies to BOTH C and Fortran (no multi-line #pragma either)
-//
-// Workaround:
-// - Preprocess multi-line directives into single lines before calling parse()
-// - Example: "!$OMP PARALLEL DO PRIVATE(I,J)" (all on one line)
-//
-// See: src/parser/mod.rs Parser::parse() for rationale
-// ============================================================================
+// These rules allow ROUP to accept directives exactly as they appear in source
+// files without requiring the caller to flatten or preprocess input.
+// ===========================================================================
 
 /// Parse an identifier (directive or clause name)
 ///
@@ -191,6 +183,132 @@ pub fn skip_space_and_comments(input: &str) -> IResult<&str, &str> {
             let ch = input[i..].chars().next().unwrap();
             i += ch.len_utf8();
             continue;
+        }
+
+        // Handle C/C++ line continuations with trailing backslash
+        if bytes[i] == b'\\' {
+            // Support both Unix (\n) and Windows (\r\n) newlines
+            if input[i + 1..].starts_with("\r\n") {
+                i += 3; // Skip "\\\r\n"
+                continue;
+            }
+            if input[i + 1..].starts_with('\n') {
+                i += 2; // Skip "\\\n"
+                continue;
+            }
+        }
+
+        // Handle Fortran continuation markers '&' that appear at end of a line
+        if bytes[i] == b'&' {
+            let mut j = i + 1;
+            let mut saw_newline = false;
+
+            while j < len {
+                let ch = input[j..].chars().next().unwrap();
+                if ch == '\r' {
+                    j += ch.len_utf8();
+                    continue;
+                }
+                if ch == '\n' {
+                    saw_newline = true;
+                    j += ch.len_utf8();
+                    break;
+                }
+                if ch.is_whitespace() {
+                    j += ch.len_utf8();
+                    continue;
+                }
+                break;
+            }
+
+            // Continuation if followed by newline (with optional whitespace) or another sentinel
+            let sentinel_follows = input[j..]
+                .get(..5)
+                .map(|s| {
+                    s.eq_ignore_ascii_case("!$omp")
+                        || s.eq_ignore_ascii_case("c$omp")
+                        || s.eq_ignore_ascii_case("*$omp")
+                })
+                .unwrap_or(false);
+
+            let prev_line_continuation = {
+                let before = &input[..i];
+                let last_newline = before.rfind('\n');
+                let segment = match last_newline {
+                    Some(pos) => &before[..pos],
+                    None => before,
+                };
+                segment
+                    .trim_end_matches(|ch: char| ch.is_whitespace())
+                    .ends_with('&')
+            };
+
+            if saw_newline || sentinel_follows || prev_line_continuation {
+                i = j;
+                continue;
+            }
+
+            // Otherwise '&' is significant (e.g., bitwise operator) - stop skipping
+            break;
+        }
+
+        // Handle Fortran sentinel on continuation lines (e.g., !$OMP& PRIVATE)
+        if i != 0 {
+            let before = &input[..i];
+            let at_line_start = before
+                .rfind('\n')
+                .or_else(|| before.rfind('\r'))
+                .map(|pos| before[pos + 1..].chars().all(|ch| ch.is_ascii_whitespace()))
+                .unwrap_or(false);
+            let after_ampersand = before
+                .chars()
+                .rev()
+                .find(|ch| !ch.is_ascii_whitespace())
+                .map(|ch| ch == '&')
+                .unwrap_or(false);
+
+            if at_line_start || after_ampersand {
+                let sentinel = input[i..].get(..5);
+                let is_fortran_sentinel = sentinel.map_or(false, |s| {
+                    s.eq_ignore_ascii_case("!$omp")
+                        || s.eq_ignore_ascii_case("c$omp")
+                        || s.eq_ignore_ascii_case("*$omp")
+                });
+
+                if is_fortran_sentinel {
+                    i += 5;
+
+                    // Skip optional whitespace after the sentinel
+                    while i < len {
+                        let ch = input[i..].chars().next().unwrap();
+                        if ch.is_whitespace() && ch != '\n' && ch != '\r' {
+                            i += ch.len_utf8();
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Skip optional '&' directly after sentinel
+                    if i < len {
+                        let ch = input[i..].chars().next().unwrap();
+                        if ch == '&' {
+                            i += ch.len_utf8();
+
+                            // Skip whitespace after the continuation ampersand
+                            while i < len {
+                                let ch2 = input[i..].chars().next().unwrap();
+                                if ch2.is_whitespace() {
+                                    i += ch2.len_utf8();
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    continue;
+                }
+            }
         }
 
         // Handle /* */ comments
@@ -315,6 +433,38 @@ mod tests {
         let input = "  /* comment1 */  \n  // comment2\n  code";
         let (rest, _) = skip_space_and_comments(input).unwrap();
         assert_eq!(rest, "code");
+    }
+
+    #[test]
+    fn skips_c_line_continuations() {
+        let (rest, _) = skip_space_and_comments("\\\nnext").unwrap();
+        assert_eq!(rest, "next");
+
+        let (rest, _) = skip_space_and_comments("\\\r\n  value").unwrap();
+        assert_eq!(rest, "value");
+    }
+
+    #[test]
+    fn skips_fortran_trailing_ampersand() {
+        let (rest, _) = skip_space_and_comments("&\n  following").unwrap();
+        assert_eq!(rest, "following");
+
+        let (rest, _) = skip_space_and_comments("&   !$OMP next").unwrap();
+        assert_eq!(rest, "next");
+
+        let (rest, _) = skip_space_and_comments("&\n& continued").unwrap();
+        assert_eq!(rest, "continued");
+    }
+
+    #[test]
+    fn skips_fortran_continuation_sentinel() {
+        let input = "\n!$OMP& private(a)";
+        let (rest, _) = skip_space_and_comments(input).unwrap();
+        assert_eq!(rest, "private(a)");
+
+        let input = "\n  C$OMP   &   schedule(static)";
+        let (rest, _) = skip_space_and_comments(input).unwrap();
+        assert_eq!(rest, "schedule(static)");
     }
 
     #[test]
