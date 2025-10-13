@@ -53,29 +53,8 @@ jobs:
           echo "Found PR number: $pr_number"
           echo "pr=$pr_number" >> "$GITHUB_OUTPUT"
 
-      - name: Check if codex comment already exists
-        id: check_comment
-        if: steps.pr.outputs.pr != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Check if a codex review comment already exists
-          # Note: Will be posted by user (via PAT), not github-actions[bot]
-          existing=$(gh api \
-            "/repos/${{ github.repository }}/issues/${{ steps.pr.outputs.pr }}/comments" \
-            --jq '.[] | select(.body | contains("@codex review")) | .id' \
-            | head -1)
-          
-          if [ -n "$existing" ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Codex review comment already exists (ID: $existing)"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "No existing codex review comment found"
-          fi
-
       - name: Post @codex review comment
-        if: steps.pr.outputs.pr != '' && steps.check_comment.outputs.exists == 'false'
+        if: steps.pr.outputs.pr != ''
         env:
           # Use PAT to post as user instead of github-actions bot
           # This allows Copilot to respond to the @codex mention
