@@ -18,7 +18,7 @@ A compatibility layer that provides:
 
 ```bash
 cd compat/ompparser
-./BUILD.sh
+./build.sh
 ```
 
 The script will:
@@ -188,12 +188,9 @@ parseOpenMP("omp parallel num_threads(4)", nullptr)
 
 Complete documentation in `compat/ompparser/`:
 
-- **[USER_GUIDE.md](https://github.com/ouankou/roup/blob/main/compat/ompparser/USER_GUIDE.md)** - 800-line tutorial with 6 code examples
-- **[TEST_RESULTS.md](https://github.com/ouankou/roup/blob/main/compat/ompparser/TEST_RESULTS.md)** - Full test coverage report
-- **[IMPLEMENTATION_STATUS.md](https://github.com/ouankou/roup/blob/main/compat/ompparser/IMPLEMENTATION_STATUS.md)** - Implementation details
-- **[DROP_IN_REPLACEMENT.md](https://github.com/ouankou/roup/blob/main/compat/ompparser/DROP_IN_REPLACEMENT.md)** - Strategy explanation
-- **[REUSE_STRATEGY.md](https://github.com/ouankou/roup/blob/main/compat/ompparser/REUSE_STRATEGY.md)** - Why reuse ompparser code
-- **[UPGRADE_EXAMPLE.md](https://github.com/ouankou/roup/blob/main/compat/ompparser/UPGRADE_EXAMPLE.md)** - Submodule upgrade benefits
+- **[README.md](https://github.com/ouankou/roup/blob/main/compat/ompparser/README.md)** - Complete compatibility layer guide with build instructions and examples
+
+For detailed ROUP API documentation, see [API Reference](./api-reference.md).
 
 ## Requirements
 

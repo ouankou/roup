@@ -61,7 +61,7 @@ See the [OpenMP Support Matrix](./openmp-support.md) for detailed coverage.
 **For Rust projects:**
 ```toml
 [dependencies]
-roup = "0.1"
+roup = "0.3"
 ```
 
 **For C/C++ projects:**

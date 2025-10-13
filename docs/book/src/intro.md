@@ -200,21 +200,21 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &
 ## Architecture
 
 ```text
-┌─────────────────────────────────────┐
-│   Your Application                  │
-├─────────────────────────────────────┤
-│   Language Bindings                 │
-│   ├─ Rust API (native)              │
-│   ├─ C API (16 functions)           │
-│   └─ C++ API (RAII wrappers)        │
-├─────────────────────────────────────┤
-│   Parser Layer (100% safe Rust)    │
-│   ├─ Directive Parser               │
-│   ├─ Clause Parser                  │
-│   └─ Error Recovery                 │
-├─────────────────────────────────────┤
-│   Lexer (nom-based, zero-copy)     │
-└─────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│  Your Application                    │
+├──────────────────────────────────────┤
+│  Language Bindings                   │
+│  ├─ Rust API (native)                │
+│  ├─ C API (16 functions)             │
+│  └─ C++ API (RAII wrappers)          │
+├──────────────────────────────────────┤
+│  Parser Layer (99.1% safe Rust)      │
+│  ├─ Directive Parser                 │
+│  ├─ Clause Parser                    │
+│  └─ Error Recovery                   │
+├──────────────────────────────────────┤
+│  Lexer (nom-based, zero-copy)        │
+└──────────────────────────────────────┘
 ```
 
 **Design Principles:**
@@ -337,7 +337,7 @@ Choose your language:
 **Install:**
 ```toml
 [dependencies]
-roup = "0.1"
+roup = "0.3"
 ```
 
 **Learn:**

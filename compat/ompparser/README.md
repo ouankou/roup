@@ -8,7 +8,7 @@ Drop-in replacement for [ompparser](https://github.com/ouankou/ompparser) using 
 ## Quick Start
 
 ```bash
-./BUILD.sh
+./build.sh
 ```
 
 The script will:
@@ -45,7 +45,9 @@ ctest --output-on-failure
 **Full documentation**: See [ompparser Compatibility Layer](../../docs/book/src/ompparser-compat.md) in the ROUP book.
 
 **Files in this directory**:
-- `BUILD.sh` - One-command build script
+## Project Structure
+
+- `build.sh` - One-command build script
 - `CMakeLists.txt` - Build configuration
 - `src/compat_impl.cpp` - Compatibility wrapper (~190 lines)
 - `ompparser/` - Submodule (provides headers and implementation sources)
