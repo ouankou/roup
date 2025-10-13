@@ -1,22 +1,27 @@
-name: ROUP CI
+name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    name: Build
+    name: Build & Tests
     strategy:
       matrix:
-      # Version should be guarded with quotes (1.80 -> "1.80"). Otherwise, 1.80 may be recognized as 1.8, which is a much older version.
+        # Version should be guarded with quotes (1.80 -> "1.80"). Otherwise, 1.80 may be recognized as 1.8, which is a much older version.
         version: ["1.90", "1.89", "1.88", "1.87", "1.86", "1.85"]
         # ubuntu-22.04-arm, ubuntu-24.04-arm and windows-11-arm are not supported yet for private repositories
         os: [ubuntu-24.04, windows-2025, macos-15]
@@ -99,9 +104,6 @@ jobs:
           cargo run --bin gen
         shell: bash
 
-      # Note: Case 1 validation (build-time sanity check) happens during 'cargo build'
-      # build.rs generates header, reads it back, and verifies checksum as final step
-
       - name: Test ompparser compatibility layer
         if: runner.os == 'Linux'
         run: |
@@ -109,18 +111,18 @@ jobs:
           if [ -f "compat/ompparser/ompparser/src/OpenMPIR.h" ]; then
             echo "✓ ompparser submodule found - testing compatibility layer"
             cd compat/ompparser
-            
+
             # Build compatibility layer
             mkdir -p build && cd build
             cmake ..
             make -j$(nproc)
-            
+
             # Ensure loader can locate libompparser.so in build directory
             export LD_LIBRARY_PATH="$PWD:${LD_LIBRARY_PATH:-}"
 
             # Run all tests
             ctest --output-on-failure --verbose
-            
+
             # Verify library size
             # CONFIGURABLE: Set ROUP_LIBRARY_SIZE_THRESHOLD env var to override (default: 10MB).
             # This allows CI flexibility as the library evolves without workflow changes.
@@ -139,12 +141,68 @@ jobs:
               fi
               echo "✓ Library size acceptable ($SIZE / $LIBRARY_SIZE_THRESHOLD bytes)"
             fi
-            
+
             # Test drop-in replacement (LD_LIBRARY_PATH already set above)
             ./ompparser_example
             echo "✓ Drop-in replacement verified"
           else
-            echo "⚠ ompparser submodule not initialized - skipping compat tests"
-            echo "This is expected if submodule wasn't recursively cloned"
+            echo "⚠️ ompparser submodule not found - skipping compatibility tests"
+            echo "Run: git submodule update --init --recursive"
           fi
         shell: bash
+
+  docs:
+    name: Build Docs
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: 'latest'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build mdBook
+        run: mdbook build docs/book
+
+      - name: Build rustdoc
+        run: cargo doc --no-deps --all-features
+
+      - name: Combine documentation
+        run: |
+          mkdir -p ./docs/book/book/api
+          cp -r target/doc/* ./docs/book/book/api/
+
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-bundle
+          path: docs/book/book
+
+  docs-publish:
+    name: Publish Docs
+    needs: docs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - name: Download documentation artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-bundle
+          path: ./docs
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          cname: roup.ouankou.com

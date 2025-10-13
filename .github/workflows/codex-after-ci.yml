@@ -1,0 +1,73 @@
+name: Codex review (after CI success)
+
+# This workflow posts @codex review comment after successful CI on PRs
+# Note: Uses check_suite event which fires when all checks complete
+
+on:
+  check_suite:
+    types: [ completed ]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  comment:
+    # Only run when:
+    # 1. Check suite completed successfully
+    # 2. It's from a pull request
+    # 3. The check suite is the main CI workflow
+    # 4. The suite was produced by GitHub Actions (not third-party apps)
+    if: >
+      github.event.check_suite.conclusion == 'success' &&
+      github.event.check_suite.app.slug == 'github-actions' &&
+      github.event.check_suite.name == 'CI' &&
+      github.event.check_suite.pull_requests[0] != null
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug check suite info
+        run: |
+          echo "Check suite conclusion: ${{ github.event.check_suite.conclusion }}"
+          echo "Check suite app: ${{ github.event.check_suite.app.slug }}"
+          echo "Check suite name: ${{ github.event.check_suite.name }}"
+          echo "Check suite head branch: ${{ github.event.check_suite.head_branch }}"
+          echo "Pull requests: ${{ toJson(github.event.check_suite.pull_requests) }}"
+
+      - name: Get PR number
+        id: pr
+        run: |
+          pr_number="${{ github.event.check_suite.pull_requests[0].number }}"
+          echo "PR number: $pr_number"
+          echo "pr=$pr_number" >> "$GITHUB_OUTPUT"
+
+      - name: Check if codex comment already exists
+        id: check_comment
+        if: steps.pr.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if we already posted a codex review comment
+          existing=$(gh api \
+            "/repos/${{ github.repository }}/issues/${{ steps.pr.outputs.pr }}/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("@codex review"))) | .id' \
+            | head -1)
+
+          if [ -n "$existing" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Codex review comment already exists (ID: $existing)"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No existing codex review comment found"
+          fi
+
+      - name: Post @codex review comment
+        if: steps.pr.outputs.pr != '' && steps.check_comment.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Posting @codex review comment to PR #${{ steps.pr.outputs.pr }}"
+          gh pr comment ${{ steps.pr.outputs.pr }} \
+            --repo ${{ github.repository }} \
+            --body "@codex review"
+          echo "✓ Posted @codex review comment"
