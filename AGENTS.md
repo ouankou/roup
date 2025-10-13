@@ -452,9 +452,132 @@ All documentation tools are pre-installed and ready to use.
 
 ## Pull Request & Git Workflow
 
-- **PR Commit History - CRITICAL WORKFLOW**: When merging a PR, you MUST rewrite/reorganize commits in the PR branch FIRST, then merge the clean PR to main.
+### THE ONLY CORRECT WAY TO MERGE A PR
 
-  **CRITICAL RULES**:
+**CRITICAL**: There is ONLY ONE correct method to merge PRs. NEVER use any other method.
+
+**❌ FORBIDDEN METHODS** (NEVER USE THESE):
+- ❌ **NEVER** use `git rebase -i` (interactive rebase) - opens editor, will HANG
+- ❌ **NEVER** manually merge with `git merge` and push to main directly
+- ❌ **NEVER** use GitHub's "Squash and merge" or "Create merge commit" buttons
+- ❌ **NEVER** push identical commits to main separately and manually close PR
+- ❌ **NEVER** do anything other than the method below
+
+**✅ THE ONLY CORRECT METHOD**:
+
+```bash
+gh pr merge <pr-number> --rebase --delete-branch
+```
+
+**That's it. This is the ONLY way to merge PRs. Period.**
+
+### Why This is the ONLY Correct Method
+
+**What `gh pr merge --rebase` does:**
+1. ✅ Rebases PR commits onto main (clean linear history)
+2. ✅ Merges to main on GitHub (proper merge tracking)
+3. ✅ Closes the PR automatically (updates metadata)
+4. ✅ Deletes remote branch (cleanup)
+5. ✅ Deletes local branch and switches to main
+6. ✅ Updates local main to match remote
+7. ✅ Preserves all GitHub PR information (reviews, CI status, discussions)
+
+**What manual methods DO NOT do:**
+- ❌ Don't properly close PR (leaves it "open" even if commits are in main)
+- ❌ Don't update PR metadata
+- ❌ Don't track merge relationship
+- ❌ Require manual branch deletion
+- ❌ Risk pushing to wrong branch
+- ❌ Can cause duplicate commits or merge conflicts
+
+### Complete PR Workflow
+
+**Step 1: Clean up PR commits** (if needed):
+
+```bash
+# 1. On PR branch, squash all commits into logical groups
+git checkout <pr-branch-name>
+git reset --soft main
+
+# 2. Create clean commit(s)
+git commit -F - << 'EOF'
+feat: descriptive title (50 chars max)
+
+Detailed explanation of what this accomplishes and why.
+
+**Changes**:
+- Specific change 1
+- Specific change 2
+
+**Test Results**:
+- ✅ All tests passing
+
+Summary of impact.
+EOF
+
+# 3. Force push cleaned PR branch
+git push --force-with-lease origin <pr-branch-name>
+
+# 4. Verify PR has clean commits
+gh pr view <pr-number> --json commits --jq '.commits[] | "\(.oid[0:7]) \(.messageHeadline)"'
+```
+
+**Step 2: Test EVERYTHING before merging**:
+
+```bash
+# Formatting
+cargo fmt --check
+
+# Documentation
+mdbook test docs/book
+mdbook build docs/book
+cargo doc --no-deps
+
+# Tests
+cargo test
+
+# Build
+cargo build
+```
+
+**Step 3: Merge using THE ONLY CORRECT METHOD**:
+
+```bash
+gh pr merge <pr-number> --rebase --delete-branch
+```
+
+**Done. Never do it any other way.**
+
+### What NOT to Do
+
+**WRONG - Manual git merge:**
+```bash
+# ❌ DON'T DO THIS
+git checkout main
+git merge <pr-branch>
+git push origin main
+gh pr close <pr-number>  # PR not properly merged, just closed!
+```
+
+**WRONG - Interactive rebase:**
+```bash
+# ❌ DON'T DO THIS
+git rebase -i main  # Will hang waiting for editor!
+```
+
+**WRONG - Pushing same commits separately:**
+```bash
+# ❌ DON'T DO THIS
+git checkout main
+git cherry-pick <commits>
+git push origin main  # PR still open, commits duplicated!
+```
+
+### Old Workflow Documentation (DEPRECATED - DO NOT USE)
+
+The following section is kept for historical reference ONLY. **DO NOT USE THESE METHODS.**
+
+  **CRITICAL RULES** (DEPRECATED):
   - ❌ **NEVER use `git rebase -i`** (interactive rebase) - opens editor, waits for human input, WILL HANG
   - ❌ **NEVER use GitHub squash-and-merge button** - creates messy concatenated commit messages
   - ❌ **NEVER write "Merge PR #XX" or "Merges branch X into Y"** in commit messages - just describe the changes
@@ -462,145 +585,11 @@ All documentation tools are pre-installed and ready to use.
   - ✅ **ALWAYS use `git commit -F - << 'EOF'`** for multi-line messages - no editor needed
   - ✅ **ALWAYS describe WHAT changed**, not meta information about merging
 
-  **Correct Workflow**:
+  **OLD Workflow (DEPRECATED - Use `gh pr merge --rebase` instead)**:
   1. **Rewrite PR commits** using automated git commands (NO interactive rebase)
   2. **Force push** the rewritten PR branch
   3. **Verify** clean history on GitHub
   4. **Merge** to main with `git merge --no-ff --no-commit` + comprehensive commit message
-
-  **Option 1 (Preferred for cohesive features)**: Squash all commits into 1
-  
-  ```bash
-  # EXACT COMMANDS - FULLY AUTOMATED - NO HUMAN INTERACTION
-  
-  # 1. On PR branch, squash all commits
-  git checkout <pr-branch-name>
-  git reset --soft main
-  
-  # 2. Create ONE comprehensive commit (match this format exactly!)
-  git commit -m "feat: descriptive title (50 chars max)
-  
-  Detailed explanation of what this accomplishes and why.
-  Multiple paragraphs explaining motivation, approach, and impact.
-  
-  **Section Header** (use bold markdown):
-  - Specific change 1
-  - Specific change 2
-  - Specific change 3
-  
-  **Test Results**:
-  - ✅ What passed
-  - ℹ️ Additional notes
-  
-  Final summary paragraph."
-  
-  # 3. Force push rewritten PR branch
-  git push --force-with-lease origin <pr-branch-name>
-  
-  # 4. Verify PR has 1 clean commit
-  gh pr view <pr-number> --json commits --jq '.commits[] | "\(.oid[0:7]) \(.messageHeadline)"'
-  
-  # 5. Merge to main with comprehensive message (NO "Merge PR #XX" nonsense!)
-  git checkout main
-  git merge --no-ff <pr-branch-name> --no-commit
-  
-  # 6. Create merge commit - SAME format as feature commit, just describe changes
-  git commit -F - << 'EOF'
-  docs: fix mdbook test failures with proper code block syntax
-  
-  Fix mdbook documentation test failures by correcting code block syntax
-  issues across all tutorial files. Addresses invalid fence delimiters and
-  unmarked code blocks that caused mdbook to incorrectly parse documentation
-  as Rust code.
-  
-  **Code Block Syntax Fixes**:
-  - intro.md: Add `rust,ignore` tags to prevent compilation of examples
-  - getting-started.md: Add `rust,ignore` and `text` tags appropriately
-  - cpp-tutorial.md: Fix closing fences (use ``` not ```text)
-  
-  **Additional Changes**:
-  - Enable PAT-based Codex auto-review in CI workflow
-  - Add CODEX_AUTO_REVIEW_SETUP.md documentation
-  
-  **Test Results**:
-  - ✅ cpp-tutorial.md: 0 failures (was 2)
-  - ✅ ompparser-compat.md: 0 failures (was 1)
-  - ✅ c-tutorial.md, fortran-tutorial.md: Pass cleanly
-  
-  This resolves all code fence syntax issues identified by Codex review
-  and significantly improves mdbook documentation testing coverage.
-  EOF
-  
-  # 7. Push to main
-  git push origin main
-  ```
-  
-  **Key Points for Merge Commit Message**:
-  - ✅ Subject: Same format as feature commit (type: description)
-  - ✅ Body: Directly describe the changes (NO "Merges branch X" line!)
-  - ✅ Use same markdown formatting as feature commit (bold headers, bullets, emojis)
-  - ✅ Include comprehensive changes list and test results
-  - ❌ NO meta information like "Merge PR #23" or "Merges branch X into Y"
-  
-  **Option 2 (For multi-component features)**: Reorganize into logical commits
-  
-  ```bash
-  # EXACT COMMANDS - FULLY AUTOMATED
-  
-  # 1. Create backup
-  git checkout <pr-branch-name>
-  git branch backup-<pr-branch-name>
-  
-  # 2. Get list of commit hashes to reorganize
-  git log --oneline main..<pr-branch-name>
-  
-  # 3. Reset to main
-  git reset --hard main
-  
-  # 4. Cherry-pick and squash by logical component
-  # Component 1
-  git cherry-pick <hash1> <hash2> <hash3>
-  git reset --soft HEAD~3
-  git commit -m "feat: core implementation
-  
-  Detailed description...
-  
-  Changes:
-  - Change 1
-  - Change 2"
-  
-  # Component 2
-  git cherry-pick <hash4> <hash5>
-  git reset --soft HEAD~2
-  git commit -m "test: comprehensive test suite
-  
-  Detailed description...
-  
-  Coverage:
-  - Test 1
-  - Test 2"
-  
-  # 5. Force push
-  git push --force-with-lease origin <pr-branch-name>
-  
-  # 6. Merge to main (same as Option 1, steps 5-7)
-  ```
-
-  **What to Avoid**:
-  - ❌ **NEVER `git rebase -i`** - hangs waiting for editor input
-  - ❌ **NEVER write "Merge PR #23:"** in commit subject
-  - ❌ **NEVER write "Merges branch 'x' into main."** as first line of body
-  - ❌ **NEVER use GitHub squash-merge button**
-  - ❌ Keeping "fix typo", "address review", "WIP" commits
-  - ❌ Merge commits with only title, no body
-
-  **What to Do**:
-  - ✅ Use `git reset --soft main` for automated squashing
-  - ✅ Write commits that describe WHAT changed, not merge meta-info
-  - ✅ Use heredoc (`<< 'EOF'`) for multi-line commit messages
-  - ✅ Match format between feature commit and merge commit
-  - ✅ Include comprehensive changes list, test results, summary
-  - ✅ Use markdown formatting (bold headers, bullets, emojis ✅ ❌ ℹ️)
 
 - **Commit Message Format**:
   ```
