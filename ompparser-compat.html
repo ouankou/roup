@@ -294,31 +294,27 @@ target_include_directories(your_app PRIVATE ${OMPPARSER_INCLUDE_DIRS})
 ctest --output-on-failure
 </code></pre>
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<pre><code></code></pre>
-<p>Your Application (OpenMP directives to parse)
-↓
+<pre><code class="language-text">Your Application (OpenMP directives to parse)
+    ↓
 compat_impl.cpp (~190 lines) - Minimal wrapper
-↓
+    ↓
 ROUP C API (roup_parse, roup_directive_kind, etc.)
-↓
+    ↓
 ROUP Rust Parser (safe parser core)
-↓
-Returns: OpenMPDirective with ompparser methods</p>
-<pre><code>
-**Key Design**:
-- Reuses 90% of ompparser code (no duplication)
-- Git submodule approach - automatic ompparser upgrades
-- Minimal unsafe code (~60 lines, 0.9%), all at FFI boundary
-
-## Known Limitations
-
-### 1. Combined Directives ⚠️
-
-Combined directives like `parallel for` are currently parsed as the first directive only.
-
-**Example**:
-```cpp
-parseOpenMP("omp parallel for", nullptr)
+    ↓
+Returns: OpenMPDirective with ompparser methods
+</code></pre>
+<p><strong>Key Design</strong>:</p>
+<ul>
+<li>Reuses 90% of ompparser code (no duplication)</li>
+<li>Git submodule approach - automatic ompparser upgrades</li>
+<li>Minimal unsafe code (~60 lines, 0.9%), all at FFI boundary</li>
+</ul>
+<h2 id="known-limitations"><a class="header" href="#known-limitations">Known Limitations</a></h2>
+<h3 id="1-combined-directives-"><a class="header" href="#1-combined-directives-">1. Combined Directives ⚠️</a></h3>
+<p>Combined directives like <code>parallel for</code> are currently parsed as the first directive only.</p>
+<p><strong>Example</strong>:</p>
+<pre><code class="language-cpp">parseOpenMP("omp parallel for", nullptr)
 // Returns: OMPD_parallel (should be OMPD_parallel_for)
 </code></pre>
 <p><strong>Status</strong>: ROUP core limitation, tracked for future improvement.</p>

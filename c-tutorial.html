@@ -199,7 +199,7 @@
 <hr />
 <h2 id="step-1-setup-and-compilation"><a class="header" href="#step-1-setup-and-compilation">Step 1: Setup and Compilation</a></h2>
 <h3 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h3>
-<pre><code>my-project/
+<pre><code class="language-text">my-project/
 ├── src/
 │   └── main.c
 ├── include/
@@ -208,7 +208,7 @@
 </code></pre>
 <h3 id="forward-declarations"><a class="header" href="#forward-declarations">Forward Declarations</a></h3>
 <p>Create <code>include/roup_ffi.h</code> with the C API declarations:</p>
-<pre><code class="language-c">#ifndef ROUP_FFI_H
+<pre><code class="language-c ignore">#ifndef ROUP_FFI_H
 #define ROUP_FFI_H
 
 #include &lt;stdint.h&gt;
@@ -270,7 +270,7 @@ target_link_libraries(my_app ${CMAKE_SOURCE_DIR}/target/release/libroup.a pthrea
 <hr />
 <h2 id="step-2-parse-a-simple-directive"><a class="header" href="#step-2-parse-a-simple-directive">Step 2: Parse a Simple Directive</a></h2>
 <p>Let's start with the most basic operation: parsing a simple directive.</p>
-<pre><code class="language-c">#include &lt;stdio.h&gt;
+<pre><code class="language-c ignore">#include &lt;stdio.h&gt;
 #include "roup_ffi.h"
 
 int main(void) {
@@ -302,7 +302,7 @@ int main(void) {
 <hr />
 <h2 id="step-3-query-directive-properties"><a class="header" href="#step-3-query-directive-properties">Step 3: Query Directive Properties</a></h2>
 <p>After parsing, you can query the directive's properties:</p>
-<pre><code class="language-c">#include &lt;stdio.h&gt;
+<pre><code class="language-c ignore">#include &lt;stdio.h&gt;
 #include "roup_ffi.h"
 
 int main(void) {
@@ -325,7 +325,7 @@ int main(void) {
 }
 </code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Directive kind: 28
+<pre><code class="language-text">Directive kind: 28
 Clause count: 1
 </code></pre>
 <blockquote>
@@ -334,7 +334,7 @@ Clause count: 1
 <hr />
 <h2 id="step-4-iterate-through-clauses"><a class="header" href="#step-4-iterate-through-clauses">Step 4: Iterate Through Clauses</a></h2>
 <p>To access individual clauses, use the iterator pattern:</p>
-<pre><code class="language-c">#include &lt;stdio.h&gt;
+<pre><code class="language-c ignore">#include &lt;stdio.h&gt;
 #include "roup_ffi.h"
 
 const char* clause_name(int32_t kind) {
@@ -379,7 +379,7 @@ int main(void) {
 }
 </code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Clauses:
+<pre><code class="language-text">Clauses:
   - num_threads (kind=0)
   - default (kind=11)
   - nowait (kind=10)
@@ -394,7 +394,7 @@ int main(void) {
 <h2 id="step-5-query-clause-specific-data"><a class="header" href="#step-5-query-clause-specific-data">Step 5: Query Clause-Specific Data</a></h2>
 <p>Different clause types have different data. Use type-specific query functions:</p>
 <h3 id="schedule-clause"><a class="header" href="#schedule-clause">Schedule Clause</a></h3>
-<pre><code class="language-c">OmpClause* clause = /* ... get clause ... */;
+<pre><code class="language-c ignore">OmpClause* clause = /* ... get clause ... */;
 if (roup_clause_kind(clause) == 7) {  // SCHEDULE
     int32_t sched = roup_clause_schedule_kind(clause);
     const char* names[] = {"static", "dynamic", "guided", "auto", "runtime"};
@@ -402,20 +402,20 @@ if (roup_clause_kind(clause) == 7) {  // SCHEDULE
 }
 </code></pre>
 <h3 id="reduction-clause"><a class="header" href="#reduction-clause">Reduction Clause</a></h3>
-<pre><code class="language-c">if (roup_clause_kind(clause) == 6) {  // REDUCTION
+<pre><code class="language-c ignore">if (roup_clause_kind(clause) == 6) {  // REDUCTION
     int32_t op = roup_clause_reduction_operator(clause);
     const char* ops[] = {"+", "-", "*", "&amp;", "|", "^", "&amp;&amp;", "||", "min", "max"};
     printf("Reduction operator: %s\n", ops[op]);
 }
 </code></pre>
 <h3 id="default-clause"><a class="header" href="#default-clause">Default Clause</a></h3>
-<pre><code class="language-c">if (roup_clause_kind(clause) == 11) {  // DEFAULT
+<pre><code class="language-c ignore">if (roup_clause_kind(clause) == 11) {  // DEFAULT
     int32_t def = roup_clause_default_data_sharing(clause);
     printf("Default: %s\n", def == 0 ? "shared" : "none");
 }
 </code></pre>
 <h3 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h3>
-<pre><code class="language-c">#include &lt;stdio.h&gt;
+<pre><code class="language-c ignore">#include &lt;stdio.h&gt;
 #include "roup_ffi.h"
 
 int main(void) {
@@ -453,13 +453,13 @@ int main(void) {
 }
 </code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Schedule: static
+<pre><code class="language-text">Schedule: static
 Reduction: +
 </code></pre>
 <hr />
 <h2 id="step-6-access-variable-lists"><a class="header" href="#step-6-access-variable-lists">Step 6: Access Variable Lists</a></h2>
 <p>Clauses like <code>private(x, y, z)</code> contain lists of variables:</p>
-<pre><code class="language-c">#include &lt;stdio.h&gt;
+<pre><code class="language-c ignore">#include &lt;stdio.h&gt;
 #include "roup_ffi.h"
 
 int main(void) {
@@ -503,7 +503,7 @@ int main(void) {
 }
 </code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>private variables: x, y, z
+<pre><code class="language-text">private variables: x, y, z
 shared variables: a, b
 </code></pre>
 <p><strong>Key Points:</strong></p>
@@ -516,7 +516,7 @@ shared variables: a, b
 <hr />
 <h2 id="step-7-error-handling"><a class="header" href="#step-7-error-handling">Step 7: Error Handling</a></h2>
 <p>Robust error handling is crucial. The API returns <code>NULL</code> on failure:</p>
-<pre><code class="language-c">#include &lt;stdio.h&gt;
+<pre><code class="language-c ignore">#include &lt;stdio.h&gt;
 #include "roup_ffi.h"
 
 int main(void) {
@@ -556,7 +556,7 @@ int main(void) {
 <hr />
 <h2 id="step-8-complete-example"><a class="header" href="#step-8-complete-example">Step 8: Complete Example</a></h2>
 <p>Here's a complete program that demonstrates all concepts:</p>
-<pre><code class="language-c">#include &lt;stdio.h&gt;
+<pre><code class="language-c ignore">#include &lt;stdio.h&gt;
 #include &lt;stdlib.h&gt;
 #include "roup_ffi.h"
 
@@ -721,7 +721,7 @@ int main(void) {
 <li><strong>Use local variables</strong> - Cache query results instead of calling repeatedly</li>
 </ol>
 <p><strong>Example (inefficient):</strong></p>
-<pre><code class="language-c">// BAD: Queries kind multiple times
+<pre><code class="language-c ignore">// BAD: Queries kind multiple times
 for (int i = 0; i &lt; count; i++) {
     if (roup_clause_kind(clause) == 2) {
         process_private(roup_clause_kind(clause));
@@ -729,7 +729,7 @@ for (int i = 0; i &lt; count; i++) {
 }
 </code></pre>
 <p><strong>Example (efficient):</strong></p>
-<pre><code class="language-c">// GOOD: Cache the kind
+<pre><code class="language-c ignore">// GOOD: Cache the kind
 int32_t kind = roup_clause_kind(clause);
 if (kind == 2) {
     process_private(kind);

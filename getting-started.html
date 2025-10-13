@@ -213,7 +213,7 @@ roup = "0.2"
 roup = { git = "https://github.com/ouankou/roup.git" }
 </code></pre>
 <h3 id="2-parse-your-first-directive"><a class="header" href="#2-parse-your-first-directive">2. Parse Your First Directive</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
 fn main() {
@@ -237,7 +237,7 @@ fn main() {
 <pre><code class="language-bash">cargo run
 </code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>✓ Successfully parsed: ParallelFor
+<pre><code class="language-text">✓ Successfully parsed: ParallelFor
   Clauses: 1
   - NumThreads(Expr { value: "4", .. })
 </code></pre>
@@ -299,7 +299,7 @@ clang example.c \
 <pre><code class="language-bash">./example
 </code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Clause count: 1
+<pre><code class="language-text">Clause count: 1
 </code></pre>
 <p><strong>Next:</strong> See the <a href="./c-tutorial.html">C Tutorial</a> for complete examples with iteration and error handling.</p>
 <hr />
@@ -374,7 +374,7 @@ clang++ -std=c++17 example.cpp \
 <pre><code class="language-bash">./example
 </code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Clause count: 1
+<pre><code class="language-text">Clause count: 1
 </code></pre>
 <p><strong>Next:</strong> See the <a href="./cpp-tutorial.html">C++ Tutorial</a> for a complete real-world example.</p>
 <hr />

@@ -234,7 +234,7 @@
 <hr />
 <h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
 <h3 id="parse-in-3-lines-rust"><a class="header" href="#parse-in-3-lines-rust">Parse in 3 Lines (Rust)</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp;
+<pre><code class="language-rust ignore">use roup::parser::openmp;
 
 let parser = openmp::parser();
 let (_, directive) = parser.parse("#pragma omp parallel for num_threads(4)").unwrap();
@@ -538,7 +538,7 @@ roup = "0.1"
 <hr />
 <h2 id="quick-example-1"><a class="header" href="#quick-example-1">Quick Example</a></h2>
 <h3 id="rust"><a class="header" href="#rust">Rust</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp;
+<pre><code class="language-rust ignore">use roup::parser::openmp;
 
 let parser = openmp::parser();
 let input = "#pragma omp parallel for num_threads(4) private(i)";

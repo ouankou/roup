@@ -240,7 +240,7 @@ C$OMP END PARALLEL
 </code></pre>
 <h2 id="using-the-rust-api"><a class="header" href="#using-the-rust-api">Using the Rust API</a></h2>
 <h3 id="parsing-fortran-directives"><a class="header" href="#parsing-fortran-directives">Parsing Fortran Directives</a></h3>
-<pre><code class="language-rust">use roup::lexer::Language;
+<pre><code class="language-rust ignore">use roup::lexer::Language;
 use roup::parser::openmp;
 
 // Create parser with Fortran free-form support
@@ -253,7 +253,7 @@ let (rest, directive) = parser.parse(input).expect("parsing should succeed");
 println!("Directive: {}", directive.name);
 println!("Clauses: {}", directive.clauses.len());</code></pre>
 <h3 id="supported-language-formats"><a class="header" href="#supported-language-formats">Supported Language Formats</a></h3>
-<pre><code class="language-rust">use roup::lexer::Language;
+<pre><code class="language-rust ignore">use roup::lexer::Language;
 
 // C/C++ format (default)
 let c_parser = openmp::parser().with_language(Language::C);

@@ -195,7 +195,7 @@
 <li>Provides summary statistics</li>
 </ol>
 <p><strong>Example output:</strong></p>
-<pre><code>$ ./omp_analyzer mycode.c
+<pre><code class="language-text">$ ./omp_analyzer mycode.c
 Found 5 OpenMP directives:
   Line 10: parallel (3 clauses)
   Line 25: for (2 clauses)
@@ -574,11 +574,16 @@ int main(int argc, char* argv[]) {
     analyzer.print_report();
     return 0;
 }
-</code></pre>
-<hr />
-<h2 id="step-4-build-and-run"><a class="header" href="#step-4-build-and-run">Step 4: Build and Run</a></h2>
-<h3 id="compilation"><a class="header" href="#compilation">Compilation</a></h3>
-<pre><code class="language-bash"># Build ROUP library first
+```text
+
+---
+
+## Step 4: Build and Run
+
+### Compilation
+
+```bash
+# Build ROUP library first
 cd roup
 cargo build --release
 
@@ -687,9 +692,12 @@ public:
         return result;
     }
 };
-</code></pre>
-<h3 id="52-handle-parse-errors-gracefully"><a class="header" href="#52-handle-parse-errors-gracefully">5.2 Handle Parse Errors Gracefully</a></h3>
-<pre><code class="language-cpp">std::optional&lt;DirectiveInfo&gt; parse_directive(const std::string&amp; line) {
+```text
+
+### 5.2 Handle Parse Errors Gracefully
+
+```cpp
+std::optional&lt;DirectiveInfo&gt; parse_directive(const std::string&amp; line) {
     roup::Directive directive(line);
     if (!directive) {
         return std::nullopt;  // Parse failed
@@ -750,7 +758,7 @@ public:
 <li>Suitable for <strong>real-time IDE integration</strong></li>
 </ul>
 <p><strong>Benchmark</strong> (on typical code):</p>
-<pre><code>File size: 10,000 lines
+<pre><code class="language-text">File size: 10,000 lines
 OpenMP directives: 500
 Total parse time: ~2.5 milliseconds
 Throughput: ~200,000 directives/second
