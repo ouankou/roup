@@ -23,7 +23,7 @@ Before starting, ensure you have:
 
 ### Project Structure
 
-```
+```text
 my-project/
 ├── src/
 │   └── main.c
@@ -36,7 +36,7 @@ my-project/
 
 Create `include/roup_ffi.h` with the C API declarations:
 
-```c
+```c,ignore
 #ifndef ROUP_FFI_H
 #define ROUP_FFI_H
 
@@ -108,7 +108,7 @@ target_link_libraries(my_app ${CMAKE_SOURCE_DIR}/target/release/libroup.a pthrea
 
 Let's start with the most basic operation: parsing a simple directive.
 
-```c
+```c,ignore
 #include <stdio.h>
 #include "roup_ffi.h"
 
@@ -144,7 +144,7 @@ int main(void) {
 
 After parsing, you can query the directive's properties:
 
-```c
+```c,ignore
 #include <stdio.h>
 #include "roup_ffi.h"
 
@@ -169,7 +169,7 @@ int main(void) {
 ```
 
 **Output:**
-```
+```text
 Directive kind: 28
 Clause count: 1
 ```
@@ -182,7 +182,7 @@ Clause count: 1
 
 To access individual clauses, use the iterator pattern:
 
-```c
+```c,ignore
 #include <stdio.h>
 #include "roup_ffi.h"
 
@@ -229,7 +229,7 @@ int main(void) {
 ```
 
 **Output:**
-```
+```text
 Clauses:
   - num_threads (kind=0)
   - default (kind=11)
@@ -249,7 +249,7 @@ Different clause types have different data. Use type-specific query functions:
 
 ### Schedule Clause
 
-```c
+```c,ignore
 OmpClause* clause = /* ... get clause ... */;
 if (roup_clause_kind(clause) == 7) {  // SCHEDULE
     int32_t sched = roup_clause_schedule_kind(clause);
@@ -260,7 +260,7 @@ if (roup_clause_kind(clause) == 7) {  // SCHEDULE
 
 ### Reduction Clause
 
-```c
+```c,ignore
 if (roup_clause_kind(clause) == 6) {  // REDUCTION
     int32_t op = roup_clause_reduction_operator(clause);
     const char* ops[] = {"+", "-", "*", "&", "|", "^", "&&", "||", "min", "max"};
@@ -270,7 +270,7 @@ if (roup_clause_kind(clause) == 6) {  // REDUCTION
 
 ### Default Clause
 
-```c
+```c,ignore
 if (roup_clause_kind(clause) == 11) {  // DEFAULT
     int32_t def = roup_clause_default_data_sharing(clause);
     printf("Default: %s\n", def == 0 ? "shared" : "none");
@@ -279,7 +279,7 @@ if (roup_clause_kind(clause) == 11) {  // DEFAULT
 
 ### Complete Example
 
-```c
+```c,ignore
 #include <stdio.h>
 #include "roup_ffi.h"
 
@@ -319,7 +319,7 @@ int main(void) {
 ```
 
 **Output:**
-```
+```text
 Schedule: static
 Reduction: +
 ```
@@ -330,7 +330,7 @@ Reduction: +
 
 Clauses like `private(x, y, z)` contain lists of variables:
 
-```c
+```c,ignore
 #include <stdio.h>
 #include "roup_ffi.h"
 
@@ -376,7 +376,7 @@ int main(void) {
 ```
 
 **Output:**
-```
+```text
 private variables: x, y, z
 shared variables: a, b
 ```
@@ -393,7 +393,7 @@ shared variables: a, b
 
 Robust error handling is crucial. The API returns `NULL` on failure:
 
-```c
+```c,ignore
 #include <stdio.h>
 #include "roup_ffi.h"
 
@@ -437,7 +437,7 @@ int main(void) {
 
 Here's a complete program that demonstrates all concepts:
 
-```c
+```c,ignore
 #include <stdio.h>
 #include <stdlib.h>
 #include "roup_ffi.h"
@@ -605,7 +605,7 @@ The C API supports 12 common clause types:
 4. **Use local variables** - Cache query results instead of calling repeatedly
 
 **Example (inefficient):**
-```c
+```c,ignore
 // BAD: Queries kind multiple times
 for (int i = 0; i < count; i++) {
     if (roup_clause_kind(clause) == 2) {
@@ -615,7 +615,7 @@ for (int i = 0; i < count; i++) {
 ```
 
 **Example (efficient):**
-```c
+```c,ignore
 // GOOD: Cache the kind
 int32_t kind = roup_clause_kind(clause);
 if (kind == 2) {

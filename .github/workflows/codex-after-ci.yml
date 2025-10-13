@@ -3,6 +3,11 @@ name: Codex review (after CI success)
 # This workflow posts @codex review comment after successful CI on PRs
 # Note: Uses workflow_run event to trigger after CI workflow completes
 # This file must exist on the main branch to work (GitHub Actions limitation)
+#
+# REQUIRES: Repository secret 'CODEX_COMMENT_TOKEN' - Personal Access Token with:
+#   - Permissions: pull_requests: write (to post comments as user)
+#   - Scopes: repo (for private repos) or public_repo (for public repos)
+# Without PAT, comments will be posted as github-actions[bot] and Copilot won't respond
 
 on:
   workflow_run:
@@ -54,10 +59,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Check if we already posted a codex review comment
+          # Check if a codex review comment already exists
+          # Note: Will be posted by user (via PAT), not github-actions[bot]
           existing=$(gh api \
             "/repos/${{ github.repository }}/issues/${{ steps.pr.outputs.pr }}/comments" \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("@codex review"))) | .id' \
+            --jq '.[] | select(.body | contains("@codex review")) | .id' \
             | head -1)
           
           if [ -n "$existing" ]; then
@@ -71,7 +77,9 @@ jobs:
       - name: Post @codex review comment
         if: steps.pr.outputs.pr != '' && steps.check_comment.outputs.exists == 'false'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use PAT to post as user instead of github-actions bot
+          # This allows Copilot to respond to the @codex mention
+          GH_TOKEN: ${{ secrets.CODEX_COMMENT_TOKEN }}
         run: |
           echo "Posting @codex review comment to PR #${{ steps.pr.outputs.pr }}"
           gh pr comment ${{ steps.pr.outputs.pr }} \

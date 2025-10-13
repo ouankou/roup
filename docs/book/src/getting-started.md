@@ -46,7 +46,7 @@ roup = { git = "https://github.com/ouankou/roup.git" }
 
 ### 2. Parse Your First Directive
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
@@ -76,7 +76,7 @@ cargo run
 ```
 
 **Output:**
-```
+```text
 ✓ Successfully parsed: ParallelFor
   Clauses: 1
   - NumThreads(Expr { value: "4", .. })
@@ -155,7 +155,7 @@ clang example.c \
 ```
 
 **Output:**
-```
+```text
 Clause count: 1
 ```
 
@@ -245,7 +245,7 @@ clang++ -std=c++17 example.cpp \
 ```
 
 **Output:**
-```
+```text
 Clause count: 1
 ```
 

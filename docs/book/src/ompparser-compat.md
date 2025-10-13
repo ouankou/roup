@@ -138,8 +138,7 @@ ctest --output-on-failure
 
 ## Architecture
 
-```
-```
+```text
 Your Application (OpenMP directives to parse)
     ↓
 compat_impl.cpp (~190 lines) - Minimal wrapper

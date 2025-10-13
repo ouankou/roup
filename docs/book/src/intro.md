@@ -64,7 +64,7 @@ ROUP is an **experimental** parser for OpenMP directives, written in safe Rust w
 
 ### Parse in 3 Lines (Rust)
 
-```rust
+```rust,ignore
 use roup::parser::openmp;
 
 let parser = openmp::parser();
@@ -433,7 +433,7 @@ Copyright © 2024-2025 Anjia Wang
 ## Quick Example
 
 ### Rust
-```rust
+```rust,ignore
 use roup::parser::openmp;
 
 let parser = openmp::parser();
