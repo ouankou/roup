@@ -341,21 +341,21 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
 <p><a href="./api-reference.html">Complete clause reference →</a></p>
 <hr />
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<pre><code class="language-text">┌─────────────────────────────────────┐
-│   Your Application                  │
-├─────────────────────────────────────┤
-│   Language Bindings                 │
-│   ├─ Rust API (native)              │
-│   ├─ C API (16 functions)           │
-│   └─ C++ API (RAII wrappers)        │
-├─────────────────────────────────────┤
-│   Parser Layer (100% safe Rust)    │
-│   ├─ Directive Parser               │
-│   ├─ Clause Parser                  │
-│   └─ Error Recovery                 │
-├─────────────────────────────────────┤
-│   Lexer (nom-based, zero-copy)     │
-└─────────────────────────────────────┘
+<pre><code class="language-text">┌──────────────────────────────────────┐
+│  Your Application                    │
+├──────────────────────────────────────┤
+│  Language Bindings                   │
+│  ├─ Rust API (native)                │
+│  ├─ C API (16 functions)             │
+│  └─ C++ API (RAII wrappers)          │
+├──────────────────────────────────────┤
+│  Parser Layer (99.1% safe Rust)      │
+│  ├─ Directive Parser                 │
+│  ├─ Clause Parser                    │
+│  └─ Error Recovery                   │
+├──────────────────────────────────────┤
+│  Lexer (nom-based, zero-copy)        │
+└──────────────────────────────────────┘
 </code></pre>
 <p><strong>Design Principles:</strong></p>
 <ul>
@@ -461,7 +461,7 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
 <h3 id="-rust"><a class="header" href="#-rust">🦀 Rust</a></h3>
 <p><strong>Install:</strong></p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.1"
+roup = "0.3"
 </code></pre>
 <p><strong>Learn:</strong></p>
 <ul>

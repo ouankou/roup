@@ -208,10 +208,10 @@ cargo test
 <h3 id="option-1-using-cratesio-recommended"><a class="header" href="#option-1-using-cratesio-recommended">Option 1: Using crates.io (Recommended)</a></h3>
 <p>Add to your <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.1"
+roup = "0.3"
 </code></pre>
 <p>Then use in your code:</p>
-<pre><code class="language-rust">use roup::parser::parse;
+<pre><code class="language-rust ignore">use roup::parser::parse;
 
 fn main() {
     let result = parse("#pragma omp parallel for");

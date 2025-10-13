@@ -339,21 +339,21 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
 <p><a href="./api-reference.html">Complete clause reference →</a></p>
 <hr />
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<pre><code class="language-text">┌─────────────────────────────────────┐
-│   Your Application                  │
-├─────────────────────────────────────┤
-│   Language Bindings                 │
-│   ├─ Rust API (native)              │
-│   ├─ C API (16 functions)           │
-│   └─ C++ API (RAII wrappers)        │
-├─────────────────────────────────────┤
-│   Parser Layer (100% safe Rust)    │
-│   ├─ Directive Parser               │
-│   ├─ Clause Parser                  │
-│   └─ Error Recovery                 │
-├─────────────────────────────────────┤
-│   Lexer (nom-based, zero-copy)     │
-└─────────────────────────────────────┘
+<pre><code class="language-text">┌──────────────────────────────────────┐
+│  Your Application                    │
+├──────────────────────────────────────┤
+│  Language Bindings                   │
+│  ├─ Rust API (native)                │
+│  ├─ C API (16 functions)             │
+│  └─ C++ API (RAII wrappers)          │
+├──────────────────────────────────────┤
+│  Parser Layer (99.1% safe Rust)      │
+│  ├─ Directive Parser                 │
+│  ├─ Clause Parser                    │
+│  └─ Error Recovery                   │
+├──────────────────────────────────────┤
+│  Lexer (nom-based, zero-copy)        │
+└──────────────────────────────────────┘
 </code></pre>
 <p><strong>Design Principles:</strong></p>
 <ul>
@@ -459,7 +459,7 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
 <h3 id="-rust"><a class="header" href="#-rust">🦀 Rust</a></h3>
 <p><strong>Install:</strong></p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.1"
+roup = "0.3"
 </code></pre>
 <p><strong>Learn:</strong></p>
 <ul>
@@ -735,7 +735,7 @@ cargo build --release
 <h3 id="1-add-dependency"><a class="header" href="#1-add-dependency">1. Add Dependency</a></h3>
 <p>Add to your <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.2"
+roup = "0.3"
 </code></pre>
 <p>Or use the git version:</p>
 <pre><code class="language-toml">[dependencies]
@@ -1029,10 +1029,10 @@ cargo test
 <h3 id="option-1-using-cratesio-recommended"><a class="header" href="#option-1-using-cratesio-recommended">Option 1: Using crates.io (Recommended)</a></h3>
 <p>Add to your <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.1"
+roup = "0.3"
 </code></pre>
 <p>Then use in your code:</p>
-<pre><code class="language-rust">use roup::parser::parse;
+<pre><code class="language-rust ignore">use roup::parser::parse;
 
 fn main() {
     let result = parse("#pragma omp parallel for");
@@ -1446,7 +1446,7 @@ cross build --release --target x86_64-unknown-linux-gnu
 <hr />
 <h2 id="basic-parsing"><a class="header" href="#basic-parsing">Basic Parsing</a></h2>
 <h3 id="your-first-parse"><a class="header" href="#your-first-parse">Your First Parse</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
 fn main() {
@@ -1462,7 +1462,7 @@ fn main() {
     }
 }</code></pre>
 <h3 id="parse-with-clauses"><a class="header" href="#parse-with-clauses">Parse with Clauses</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
 fn main() {
@@ -1483,7 +1483,7 @@ fn main() {
     }
 }</code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Directive: ParallelFor
+<pre><code class="language-text">Directive: ParallelFor
 Clauses: 2
   Clause 1: NumThreads(Expr { value: "4", .. })
   Clause 2: Private { items: ["x", "y"], .. }
@@ -1491,7 +1491,7 @@ Clauses: 2
 <hr />
 <h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
 <h3 id="basic-error-handling"><a class="header" href="#basic-error-handling">Basic Error Handling</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
 fn parse_directive(input: &amp;str) -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
@@ -1520,7 +1520,7 @@ fn main() {
     }
 }</code></pre>
 <h3 id="custom-error-type"><a class="header" href="#custom-error-type">Custom Error Type</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 use std::fmt;
 
@@ -1577,7 +1577,7 @@ fn main() {
 <hr />
 <h2 id="querying-directives"><a class="header" href="#querying-directives">Querying Directives</a></h2>
 <h3 id="check-directive-kind"><a class="header" href="#check-directive-kind">Check Directive Kind</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::DirectiveKind;
 use roup::lexer::Language;
 
@@ -1604,7 +1604,7 @@ fn main() {
     }
 }</code></pre>
 <h3 id="extract-source-location"><a class="header" href="#extract-source-location">Extract Source Location</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
 fn main() {
@@ -1619,7 +1619,7 @@ fn main() {
 <hr />
 <h2 id="working-with-clauses"><a class="header" href="#working-with-clauses">Working with Clauses</a></h2>
 <h3 id="iterate-over-clauses"><a class="header" href="#iterate-over-clauses">Iterate Over Clauses</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
 fn main() {
@@ -1633,7 +1633,7 @@ fn main() {
     }
 }</code></pre>
 <h3 id="pattern-match-on-clauses"><a class="header" href="#pattern-match-on-clauses">Pattern Match on Clauses</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::ClauseData;
 use roup::lexer::Language;
 
@@ -1665,7 +1665,7 @@ fn main() {
     }
 }</code></pre>
 <h3 id="find-specific-clauses"><a class="header" href="#find-specific-clauses">Find Specific Clauses</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::ClauseData;
 use roup::lexer::Language;
 
@@ -1710,13 +1710,13 @@ fn main() {
     println!("Private variables: {:?}", vars);
 }</code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Thread count: 8
+<pre><code class="language-text">Thread count: 8
 Private variables: ["x", "y", "z"]
 </code></pre>
 <hr />
 <h2 id="advanced-patterns"><a class="header" href="#advanced-patterns">Advanced Patterns</a></h2>
 <h3 id="parse-multiple-directives"><a class="header" href="#parse-multiple-directives">Parse Multiple Directives</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::DirectiveIR;
 use roup::lexer::Language;
 
@@ -1748,7 +1748,7 @@ fn main() {
     }
 }</code></pre>
 <h3 id="directive-analysis"><a class="header" href="#directive-analysis">Directive Analysis</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::{DirectiveIR, ClauseData};
 use roup::lexer::Language;
 
@@ -1817,7 +1817,7 @@ fn main() {
     }
 }</code></pre>
 <p><strong>Output:</strong></p>
-<pre><code>Directive Analysis:
+<pre><code class="language-text">Directive Analysis:
   Total clauses: 4
   Has data-sharing: true
   Has scheduling: true
@@ -1825,7 +1825,7 @@ fn main() {
   Thread count: 4
 </code></pre>
 <h3 id="building-a-directive-validator"><a class="header" href="#building-a-directive-validator">Building a Directive Validator</a></h3>
-<pre><code class="language-rust">use roup::parser::openmp::parse_openmp_directive;
+<pre><code class="language-rust ignore">use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::{DirectiveIR, DirectiveKind, ClauseData};
 use roup::lexer::Language;
 
@@ -1880,7 +1880,7 @@ fn main() {
 <hr />
 <h2 id="testing-3"><a class="header" href="#testing-3">Testing</a></h2>
 <h3 id="unit-testing"><a class="header" href="#unit-testing">Unit Testing</a></h3>
-<pre><code class="language-rust">#[cfg(test)]
+<pre><code class="language-rust ignore">#[cfg(test)]
 mod tests {
     use roup::parser::openmp::parse_openmp_directive;
     use roup::ir::DirectiveKind;
@@ -1925,7 +1925,7 @@ mod tests {
     }
 }</code></pre>
 <h3 id="integration-testing"><a class="header" href="#integration-testing">Integration Testing</a></h3>
-<pre><code class="language-rust">#[cfg(test)]
+<pre><code class="language-rust ignore">#[cfg(test)]
 mod integration_tests {
     use roup::parser::openmp::parse_openmp_directive;
     use roup::ir::ClauseData;
@@ -1988,7 +1988,7 @@ mod integration_tests {
 <hr />
 <h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
 <h3 id="1-always-handle-errors"><a class="header" href="#1-always-handle-errors">1. Always Handle Errors</a></h3>
-<pre><code class="language-rust">// ❌ Bad - unwrap can panic
+<pre><code class="language-rust ignore">// ❌ Bad - unwrap can panic
 let directive = parse_openmp_directive(input, Language::C).unwrap();
 
 // ✅ Good - explicit error handling
@@ -1997,7 +1997,7 @@ match parse_openmp_directive(input, Language::C) {
     Err(e) =&gt; { /* handle error */ }
 }</code></pre>
 <h3 id="2-use-pattern-matching"><a class="header" href="#2-use-pattern-matching">2. Use Pattern Matching</a></h3>
-<pre><code class="language-rust">// ❌ Bad - lots of if-let chains
+<pre><code class="language-rust ignore">// ❌ Bad - lots of if-let chains
 for clause in &amp;directive.clauses {
     if let ClauseData::NumThreads(expr) = clause {
         // ...
@@ -2015,7 +2015,7 @@ for clause in &amp;directive.clauses {
     }
 }</code></pre>
 <h3 id="3-leverage-iterator-combinators"><a class="header" href="#3-leverage-iterator-combinators">3. Leverage Iterator Combinators</a></h3>
-<pre><code class="language-rust">// ❌ Bad - manual iteration
+<pre><code class="language-rust ignore">// ❌ Bad - manual iteration
 let mut has_reduction = false;
 for clause in &amp;directive.clauses {
     if matches!(clause, ClauseData::Reduction { .. }) {
@@ -2028,7 +2028,7 @@ for clause in &amp;directive.clauses {
 let has_reduction = directive.clauses.iter()
     .any(|c| matches!(c, ClauseData::Reduction { .. }));</code></pre>
 <h3 id="4-create-helper-functions"><a class="header" href="#4-create-helper-functions">4. Create Helper Functions</a></h3>
-<pre><code class="language-rust">// Reusable helper
+<pre><code class="language-rust ignore">// Reusable helper
 fn has_clause&lt;F&gt;(directive: &amp;DirectiveIR, predicate: F) -&gt; bool
 where
     F: Fn(&amp;ClauseData) -&gt; bool,
@@ -2059,7 +2059,7 @@ if has_clause(&amp;directive, |c| matches!(c, ClauseData::NumThreads(_))) {
 <li>Write tests for your integration code</li>
 </ol>
 <p><strong>Common Patterns:</strong></p>
-<pre><code class="language-rust">// Parse
+<pre><code class="language-rust ignore">// Parse
 let directive = parse_openmp_directive(input, Language::C)?;
 
 // Check kind
@@ -3605,7 +3605,7 @@ my_program: my_program.f90
 <h2 id="quick-start-1"><a class="header" href="#quick-start-1">Quick Start</a></h2>
 <h3 id="one-command-build"><a class="header" href="#one-command-build">One-Command Build</a></h3>
 <pre><code class="language-bash">cd compat/ompparser
-./BUILD.sh
+./build.sh
 </code></pre>
 <p>The script will:</p>
 <ol>
@@ -3740,13 +3740,9 @@ Returns: OpenMPDirective with ompparser methods
 <h2 id="documentation"><a class="header" href="#documentation">Documentation</a></h2>
 <p>Complete documentation in <code>compat/ompparser/</code>:</p>
 <ul>
-<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/USER_GUIDE.md">USER_GUIDE.md</a></strong> - 800-line tutorial with 6 code examples</li>
-<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/TEST_RESULTS.md">TEST_RESULTS.md</a></strong> - Full test coverage report</li>
-<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/IMPLEMENTATION_STATUS.md">IMPLEMENTATION_STATUS.md</a></strong> - Implementation details</li>
-<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/DROP_IN_REPLACEMENT.md">DROP_IN_REPLACEMENT.md</a></strong> - Strategy explanation</li>
-<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/REUSE_STRATEGY.md">REUSE_STRATEGY.md</a></strong> - Why reuse ompparser code</li>
-<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/UPGRADE_EXAMPLE.md">UPGRADE_EXAMPLE.md</a></strong> - Submodule upgrade benefits</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/README.md">README.md</a></strong> - Complete compatibility layer guide with build instructions and examples</li>
 </ul>
+<p>For detailed ROUP API documentation, see <a href="./api-reference.html">API Reference</a>.</p>
 <h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
 <ul>
 <li><strong>Rust toolchain</strong> (for ROUP core)</li>
@@ -5883,7 +5879,7 @@ Still have questions? Open a [discussion](https://github.com/ouankou/roup/discus
 <h3 id="how-do-i-install-roup"><a class="header" href="#how-do-i-install-roup">How do I install ROUP?</a></h3>
 <p><strong>For Rust projects:</strong></p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.1"
+roup = "0.3"
 </code></pre>
 <p><strong>For C/C++ projects:</strong></p>
 <ol>
