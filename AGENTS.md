@@ -451,78 +451,155 @@ All documentation tools are pre-installed and ready to use.
 
 ## Pull Request & Git Workflow
 
-- **PR Commit History - CRITICAL WORKFLOW**: When merging a PR, you MUST rewrite/reorganize commits in the PR branch FIRST, then merge the clean PR to main. **DO NOT use GitHub's squash-and-merge button** (it concatenates all commit messages into a mess).
+- **PR Commit History - CRITICAL WORKFLOW**: When merging a PR, you MUST rewrite/reorganize commits in the PR branch FIRST, then merge the clean PR to main.
+
+  **CRITICAL RULES**:
+  - ❌ **NEVER use `git rebase -i`** (interactive rebase) - opens editor, waits for human input, WILL HANG
+  - ❌ **NEVER use GitHub squash-and-merge button** - creates messy concatenated commit messages
+  - ❌ **NEVER write "Merge PR #XX" or "Merges branch X into Y"** in commit messages - just describe the changes
+  - ✅ **ALWAYS use `git reset --soft main`** for squashing - fully automated, no editor
+  - ✅ **ALWAYS use `git commit -F - << 'EOF'`** for multi-line messages - no editor needed
+  - ✅ **ALWAYS describe WHAT changed**, not meta information about merging
 
   **Correct Workflow**:
-  1. **Rewrite PR commits** using interactive rebase on the PR branch
+  1. **Rewrite PR commits** using automated git commands (NO interactive rebase)
   2. **Force push** the rewritten PR branch
-  3. **Verify** the clean history on GitHub PR page
-  4. **Merge** the rewritten PR to main (regular merge, not squash)
+  3. **Verify** clean history on GitHub
+  4. **Merge** to main with `git merge --no-ff --no-commit` + comprehensive commit message
 
-  **Option 1 (Preferred for cohesive features)**: Squash all commits into 1 commit with comprehensive message
+  **Option 1 (Preferred for cohesive features)**: Squash all commits into 1
   
-  Example: PR with 30 commits implementing Fortran support
   ```bash
-  # On PR branch (e.g., fortran-support)
-  git rebase -i main
-  # In editor: squash all 30 commits into 1
-  # Write NEW comprehensive commit message (not concatenated old messages)
+  # EXACT COMMANDS - FULLY AUTOMATED - NO HUMAN INTERACTION
   
-  # Force push rewritten PR
-  git push --force-with-lease origin fortran-support
+  # 1. On PR branch, squash all commits
+  git checkout <pr-branch-name>
+  git reset --soft main
   
-  # Now PR has 1 clean commit - merge it to main
-  gh pr merge 20 --merge  # Regular merge (NOT --squash)
+  # 2. Create ONE comprehensive commit (match this format exactly!)
+  git commit -m "feat: descriptive title (50 chars max)
+  
+  Detailed explanation of what this accomplishes and why.
+  Multiple paragraphs explaining motivation, approach, and impact.
+  
+  **Section Header** (use bold markdown):
+  - Specific change 1
+  - Specific change 2
+  - Specific change 3
+  
+  **Test Results**:
+  - ✅ What passed
+  - ℹ️ Additional notes
+  
+  Final summary paragraph."
+  
+  # 3. Force push rewritten PR branch
+  git push --force-with-lease origin <pr-branch-name>
+  
+  # 4. Verify PR has 1 clean commit
+  gh pr view <pr-number> --json commits --jq '.commits[] | "\(.oid[0:7]) \(.messageHeadline)"'
+  
+  # 5. Merge to main with comprehensive message (NO "Merge PR #XX" nonsense!)
+  git checkout main
+  git merge --no-ff <pr-branch-name> --no-commit
+  
+  # 6. Create merge commit - SAME format as feature commit, just describe changes
+  git commit -F - << 'EOF'
+  docs: fix mdbook test failures with proper code block syntax
+  
+  Fix mdbook documentation test failures by correcting code block syntax
+  issues across all tutorial files. Addresses invalid fence delimiters and
+  unmarked code blocks that caused mdbook to incorrectly parse documentation
+  as Rust code.
+  
+  **Code Block Syntax Fixes**:
+  - intro.md: Add `rust,ignore` tags to prevent compilation of examples
+  - getting-started.md: Add `rust,ignore` and `text` tags appropriately
+  - cpp-tutorial.md: Fix closing fences (use ``` not ```text)
+  
+  **Additional Changes**:
+  - Enable PAT-based Codex auto-review in CI workflow
+  - Add CODEX_AUTO_REVIEW_SETUP.md documentation
+  
+  **Test Results**:
+  - ✅ cpp-tutorial.md: 0 failures (was 2)
+  - ✅ ompparser-compat.md: 0 failures (was 1)
+  - ✅ c-tutorial.md, fortran-tutorial.md: Pass cleanly
+  
+  This resolves all code fence syntax issues identified by Codex review
+  and significantly improves mdbook documentation testing coverage.
+  EOF
+  
+  # 7. Push to main
+  git push origin main
   ```
   
-  **Result**: Main branch gets 1 commit with comprehensive message like:
-  ```
-  feat: Add comprehensive Fortran OpenMP support (experimental)
-  
-  Implements full Fortran parsing support for OpenMP directives:
-  - Free-form (!$OMP) and fixed-form (C$OMP) sentinels
-  - Case-insensitive directive/clause matching
-  - Language-aware parser with Fortran DO/FOR equivalence
-  - Complete C API integration with Fortran examples
-  - 29 comprehensive test cases, all passing
-  
-  This expands ROUP's language coverage beyond C/C++ to support
-  scientific computing workflows using Fortran+OpenMP.
-  ```
+  **Key Points for Merge Commit Message**:
+  - ✅ Subject: Same format as feature commit (type: description)
+  - ✅ Body: Directly describe the changes (NO "Merges branch X" line!)
+  - ✅ Use same markdown formatting as feature commit (bold headers, bullets, emojis)
+  - ✅ Include comprehensive changes list and test results
+  - ❌ NO meta information like "Merge PR #23" or "Merges branch X into Y"
   
   **Option 2 (For multi-component features)**: Reorganize into logical commits
   
-  Example: PR with 30 commits, reorganize into 5 logical components
   ```bash
-  # On PR branch
-  git rebase -i main
-  # In editor: reorganize 30 commits into 5 logical groups:
-  #   1. feat: core lexer/parser implementation
-  #   2. feat: C API extensions for Fortran
-  #   3. test: comprehensive test suite
-  #   4. docs: tutorials and examples
-  #   5. chore: infrastructure and tooling
+  # EXACT COMMANDS - FULLY AUTOMATED
   
-  # Force push rewritten PR
-  git push --force-with-lease origin fortran-support
+  # 1. Create backup
+  git checkout <pr-branch-name>
+  git branch backup-<pr-branch-name>
   
-  # Now PR has 5 clean commits - merge to main
-  gh pr merge 20 --merge  # Regular merge (NOT --squash)
+  # 2. Get list of commit hashes to reorganize
+  git log --oneline main..<pr-branch-name>
+  
+  # 3. Reset to main
+  git reset --hard main
+  
+  # 4. Cherry-pick and squash by logical component
+  # Component 1
+  git cherry-pick <hash1> <hash2> <hash3>
+  git reset --soft HEAD~3
+  git commit -m "feat: core implementation
+  
+  Detailed description...
+  
+  Changes:
+  - Change 1
+  - Change 2"
+  
+  # Component 2
+  git cherry-pick <hash4> <hash5>
+  git reset --soft HEAD~2
+  git commit -m "test: comprehensive test suite
+  
+  Detailed description...
+  
+  Coverage:
+  - Test 1
+  - Test 2"
+  
+  # 5. Force push
+  git push --force-with-lease origin <pr-branch-name>
+  
+  # 6. Merge to main (same as Option 1, steps 5-7)
   ```
-  
-  **Result**: Main branch gets 5 logical commits, each self-contained and well-documented.
 
   **What to Avoid**:
-  - ❌ **GitHub squash-and-merge button** - creates messy concatenated commit messages
-  - ❌ Keeping intermediate "fix typo", "address review comments", "WIP" commits
-  - ❌ Merging PR without rewriting commits first
-  - ❌ Using `git merge --squash` locally (same problem as GitHub button)
+  - ❌ **NEVER `git rebase -i`** - hangs waiting for editor input
+  - ❌ **NEVER write "Merge PR #23:"** in commit subject
+  - ❌ **NEVER write "Merges branch 'x' into main."** as first line of body
+  - ❌ **NEVER use GitHub squash-merge button**
+  - ❌ Keeping "fix typo", "address review", "WIP" commits
+  - ❌ Merge commits with only title, no body
 
-  **Requirements for Each Final Commit**:
-  - Self-contained and functional
-  - Clear, descriptive commit message following conventional commits format
-  - Passes all tests independently
-  - Has comprehensive commit body explaining motivation and impact
+  **What to Do**:
+  - ✅ Use `git reset --soft main` for automated squashing
+  - ✅ Write commits that describe WHAT changed, not merge meta-info
+  - ✅ Use heredoc (`<< 'EOF'`) for multi-line commit messages
+  - ✅ Match format between feature commit and merge commit
+  - ✅ Include comprehensive changes list, test results, summary
+  - ✅ Use markdown formatting (bold headers, bullets, emojis ✅ ❌ ℹ️)
 
 - **Commit Message Format**:
   ```
