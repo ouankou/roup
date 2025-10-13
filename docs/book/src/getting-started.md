@@ -34,7 +34,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-roup = "0.2"
+roup = "0.3"
 ```
 
 Or use the git version:

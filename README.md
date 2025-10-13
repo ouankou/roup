@@ -284,9 +284,10 @@ delete dir;
 
 ```bash
 ```bash
-# Quick start - one command builds everything
+```bash
 cd compat/ompparser
-./BUILD.sh
+./build.sh
+```
 
 # Or manual build:
 # 1. Initialize submodule

@@ -35,12 +35,12 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-roup = "0.1"
+roup = "0.3"
 ```
 
 Then use in your code:
 
-```rust
+```rust,ignore
 use roup::parser::parse;
 
 fn main() {

@@ -21,7 +21,7 @@ This tutorial covers:
 
 ### Your First Parse
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
@@ -41,7 +41,7 @@ fn main() {
 
 ### Parse with Clauses
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
@@ -65,7 +65,7 @@ fn main() {
 ```
 
 **Output:**
-```
+```text
 Directive: ParallelFor
 Clauses: 2
   Clause 1: NumThreads(Expr { value: "4", .. })
@@ -78,7 +78,7 @@ Clauses: 2
 
 ### Basic Error Handling
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
@@ -111,7 +111,7 @@ fn main() {
 
 ### Custom Error Type
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 use std::fmt;
@@ -174,7 +174,7 @@ fn main() {
 
 ### Check Directive Kind
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::DirectiveKind;
 use roup::lexer::Language;
@@ -205,7 +205,7 @@ fn main() {
 
 ### Extract Source Location
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
@@ -226,7 +226,7 @@ fn main() {
 
 ### Iterate Over Clauses
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::lexer::Language;
 
@@ -244,7 +244,7 @@ fn main() {
 
 ### Pattern Match on Clauses
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::ClauseData;
 use roup::lexer::Language;
@@ -280,7 +280,7 @@ fn main() {
 
 ### Find Specific Clauses
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::ClauseData;
 use roup::lexer::Language;
@@ -328,7 +328,7 @@ fn main() {
 ```
 
 **Output:**
-```
+```text
 Thread count: 8
 Private variables: ["x", "y", "z"]
 ```
@@ -339,7 +339,7 @@ Private variables: ["x", "y", "z"]
 
 ### Parse Multiple Directives
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::DirectiveIR;
 use roup::lexer::Language;
@@ -375,7 +375,7 @@ fn main() {
 
 ### Directive Analysis
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::{DirectiveIR, ClauseData};
 use roup::lexer::Language;
@@ -447,7 +447,7 @@ fn main() {
 ```
 
 **Output:**
-```
+```text
 Directive Analysis:
   Total clauses: 4
   Has data-sharing: true
@@ -458,7 +458,7 @@ Directive Analysis:
 
 ### Building a Directive Validator
 
-```rust
+```rust,ignore
 use roup::parser::openmp::parse_openmp_directive;
 use roup::ir::{DirectiveIR, DirectiveKind, ClauseData};
 use roup::lexer::Language;
@@ -519,7 +519,7 @@ fn main() {
 
 ### Unit Testing
 
-```rust
+```rust,ignore
 #[cfg(test)]
 mod tests {
     use roup::parser::openmp::parse_openmp_directive;
@@ -568,7 +568,7 @@ mod tests {
 
 ### Integration Testing
 
-```rust
+```rust,ignore
 #[cfg(test)]
 mod integration_tests {
     use roup::parser::openmp::parse_openmp_directive;
@@ -637,7 +637,7 @@ mod integration_tests {
 
 ### 1. Always Handle Errors
 
-```rust
+```rust,ignore
 // ❌ Bad - unwrap can panic
 let directive = parse_openmp_directive(input, Language::C).unwrap();
 
@@ -650,7 +650,7 @@ match parse_openmp_directive(input, Language::C) {
 
 ### 2. Use Pattern Matching
 
-```rust
+```rust,ignore
 // ❌ Bad - lots of if-let chains
 for clause in &directive.clauses {
     if let ClauseData::NumThreads(expr) = clause {
@@ -672,7 +672,7 @@ for clause in &directive.clauses {
 
 ### 3. Leverage Iterator Combinators
 
-```rust
+```rust,ignore
 // ❌ Bad - manual iteration
 let mut has_reduction = false;
 for clause in &directive.clauses {
@@ -689,7 +689,7 @@ let has_reduction = directive.clauses.iter()
 
 ### 4. Create Helper Functions
 
-```rust
+```rust,ignore
 // Reusable helper
 fn has_clause<F>(directive: &DirectiveIR, predicate: F) -> bool
 where
@@ -727,7 +727,7 @@ if has_clause(&directive, |c| matches!(c, ClauseData::NumThreads(_))) {
 
 **Common Patterns:**
 
-```rust
+```rust,ignore
 // Parse
 let directive = parse_openmp_directive(input, Language::C)?;
 

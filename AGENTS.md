@@ -440,6 +440,7 @@ All documentation tools are pre-installed and ready to use.
   - Update relevant README.md files
   - Update docs/ directory content if APIs or features changed
   - Update code examples in documentation to match current API
+  - **Update version numbers**: After any release, update all `roup = "X.Y"` version references in documentation to match `Cargo.toml`
   - Update RELEASE_NOTES.md for user-facing changes
   - Regenerate rustdoc if public APIs modified
   - Verify all documentation builds successfully
