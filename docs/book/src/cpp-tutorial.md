@@ -16,7 +16,7 @@ A command-line tool that:
 5. Provides summary statistics
 
 **Example output:**
-```
+```text
 $ ./omp_analyzer mycode.c
 Found 5 OpenMP directives:
   Line 10: parallel (3 clauses)
@@ -417,7 +417,7 @@ int main(int argc, char* argv[]) {
     analyzer.print_report();
     return 0;
 }
-```
+```text
 
 ---
 
@@ -548,7 +548,7 @@ public:
         return result;
     }
 };
-```
+```text
 
 ### 5.2 Handle Parse Errors Gracefully
 
@@ -617,7 +617,7 @@ ROUP is **fast**:
 - Suitable for **real-time IDE integration**
 
 **Benchmark** (on typical code):
-```
+```text
 File size: 10,000 lines
 OpenMP directives: 500
 Total parse time: ~2.5 milliseconds

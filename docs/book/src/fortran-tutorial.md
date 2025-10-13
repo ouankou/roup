@@ -84,7 +84,7 @@ ROUP provides language format constants for Fortran parsing:
 
 ### Parsing Fortran Directives
 
-```rust
+```rust,ignore
 use roup::lexer::Language;
 use roup::parser::openmp;
 
@@ -101,7 +101,7 @@ println!("Clauses: {}", directive.clauses.len());
 
 ### Supported Language Formats
 
-```rust
+```rust,ignore
 use roup::lexer::Language;
 
 // C/C++ format (default)
