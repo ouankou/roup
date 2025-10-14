@@ -3528,18 +3528,11 @@ my_program: my_program.f90
 <p>⚠️ <strong>Current limitations in experimental Fortran support:</strong></p>
 <ol>
 <li>
-<p><strong>Single-Line Input Only</strong>: ROUP requires complete directives on a single line</p>
+<p><strong>Continuation Syntax Requirements</strong>: Multi-line directives must use standard continuation markers</p>
 <ul>
-<li><strong>Not supported</strong>: Multi-line directives with <code>&amp;</code> continuation
-<pre><code class="language-fortran">!$OMP PARALLEL DO &amp;
-!$OMP   PRIVATE(I,J)
-</code></pre>
-</li>
-<li><strong>Workaround</strong>: Provide complete directive on one line:
-<pre><code class="language-fortran">!$OMP PARALLEL DO PRIVATE(I,J)
-</code></pre>
-</li>
-<li><strong>Rationale</strong>: This is an architectural design constraint that applies to both C and Fortran. Users must preprocess multi-line directives into single lines before passing to ROUP.</li>
+<li><strong>Fortran</strong>: Terminate continued lines with <code>&amp;</code> and optionally repeat the sentinel on the next line</li>
+<li><strong>C/C++</strong>: Place a trailing <code>\</code> at the end of each continued line</li>
+<li>See <a href="./line-continuations.html">Line Continuations</a> for canonical examples across languages</li>
 </ul>
 </li>
 <li>
@@ -4376,6 +4369,64 @@ end do
 <li>✅ <strong>Latest spec</strong> (OpenMP 6.0, 2024)</li>
 </ul>
 <p><strong>⚠️ Experimental - for research, education, and prototype tooling. Not yet production-ready.</strong> 🧪</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="line-continuations"><a class="header" href="#line-continuations">Line Continuations</a></h1>
+<p>⚠️ Experimental: ROUP now understands multi-line OpenMP directives across C, C++, and Fortran. This guide shows how to format
+continuations so the parser and ompparser compatibility layer recognize them reliably.</p>
+<h2 id="when-to-use-continuations"><a class="header" href="#when-to-use-continuations">When to use continuations</a></h2>
+<p>OpenMP pragmas often grow long once multiple clauses are attached. Rather than forcing everything onto a single line, you can
+split directives while keeping source files readable. ROUP stitches the continued lines together during lexing, so downstream
+APIs still observe canonical single-line directive strings.</p>
+<p>Continuations are supported in two situations:</p>
+<ul>
+<li><strong>C / C++ pragmas</strong> that end a line with a trailing backslash (<code>\</code>).</li>
+<li><strong>Fortran sentinels</strong> (<code>!$OMP</code>, <code>C$OMP</code>, <code>*$OMP</code>) that use the standard ampersand (<code>&amp;</code>) continuation syntax.</li>
+</ul>
+<p>ROUP preserves clause order and trims whitespace that was introduced only to align indentation.</p>
+<h2 id="c--c-example"><a class="header" href="#c--c-example">C / C++ example</a></h2>
+<pre><code class="language-c">#pragma omp parallel for \
+    schedule(dynamic, 4) \
+    private(i, \
+            j)
+</code></pre>
+<p>ROUP merges this directive into <code>#pragma omp parallel for schedule(dynamic, 4) private(i, j)</code>. Clause arguments keep their
+original spacing. Comments (<code>/* */</code> or <code>//</code>) may appear between continued lines and are ignored during merging.</p>
+<h3 id="tips-for-c--c"><a class="header" href="#tips-for-c--c">Tips for C / C++</a></h3>
+<ul>
+<li>The backslash must be the final character on the line (aside from trailing spaces or tabs).</li>
+<li>Windows line endings (<code>\r\n</code>) are handled automatically.</li>
+<li>Keep at least one space between the directive name and the first clause on subsequent lines.</li>
+</ul>
+<h2 id="fortran-free-form-example"><a class="header" href="#fortran-free-form-example">Fortran free-form example</a></h2>
+<pre><code class="language-fortran">!$omp target teams distribute &amp;
+!$omp parallel do &amp;
+!$omp&amp; private(i, j)
+</code></pre>
+<p>The parser removes the continuation markers and produces <code>!$omp target teams distribute parallel do private(i, j)</code>.</p>
+<h3 id="fortran-fixed-form-example"><a class="header" href="#fortran-fixed-form-example">Fortran fixed-form example</a></h3>
+<pre><code class="language-fortran">      C$OMP   DO &amp;
+      !$OMP&amp; SCHEDULE(DYNAMIC) &amp;
+      !$OMP PRIVATE(I) SHARED(A)
+</code></pre>
+<p>Column prefixes (<code>!</code>, <code>C</code>, or <code>*</code>) are respected. ROUP normalizes the directive to <code>do schedule(DYNAMIC) private(I) shared(A)</code>.</p>
+<h3 id="tips-for-fortran-continuations"><a class="header" href="#tips-for-fortran-continuations">Tips for Fortran continuations</a></h3>
+<ul>
+<li>Terminate every continued line with <code>&amp;</code>. ROUP tolerates trailing comments (e.g., <code>&amp; ! explanation</code>) and skips them automatically.</li>
+<li>You may repeat the sentinel on continuation lines (<code>!$OMP&amp;</code>), or start the next line with only <code>&amp;</code>. Both forms are accepted.</li>
+<li>Blank continuation lines are ignored as long as they contain only whitespace.</li>
+<li>Clause bodies can span multiple lines; nested continuations inside parentheses are collapsed to a single line in the parsed
+clause value.</li>
+</ul>
+<h2 id="troubleshooting-5"><a class="header" href="#troubleshooting-5">Troubleshooting</a></h2>
+<ul>
+<li><strong>Missing continuation marker</strong>: If a line break appears without <code>&amp;</code> (Fortran) or <code>\</code> (C/C++), the parser treats the next line
+as a separate statement and reports an error or unexpected directive name.</li>
+<li><strong>Custom formatting macros</strong>: Preprocessors that insert trailing spaces after <code>\</code> may break continuations. Ensure the backslash
+is the final printable character.</li>
+<li><strong>Compatibility layer</strong>: The ompparser shim mirrors the same behavior. The comprehensive tests in
+<code>compat/ompparser/tests/comprehensive_test.cpp</code> include multi-line inputs for both languages.</li>
+</ul>
+<p>For more examples, refer to the automated tests in <code>tests/openmp_line_continuations.rs</code> and the parser unit tests in
+<code>src/parser/mod.rs</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="architecture-3"><a class="header" href="#architecture-3">Architecture</a></h1>
 <p>This document explains ROUP's internal design, from lexical analysis to the C FFI boundary.</p>
 <hr />
@@ -6307,7 +6358,7 @@ target_link_libraries(myapp roup pthread dl m)
 </ul>
 <p>Regex will fail on edge cases and give incorrect results.</p>
 <hr />
-<h2 id="troubleshooting-5"><a class="header" href="#troubleshooting-5">Troubleshooting</a></h2>
+<h2 id="troubleshooting-6"><a class="header" href="#troubleshooting-6">Troubleshooting</a></h2>
 <h3 id="cannot-find--lroup-when-linking"><a class="header" href="#cannot-find--lroup-when-linking">"cannot find -lroup" when linking</a></h3>
 <p><strong>Problem:</strong> Linker can't find library.</p>
 <p><strong>Solution:</strong></p>

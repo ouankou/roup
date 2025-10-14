@@ -414,18 +414,11 @@ my_program: my_program.f90
 <p>⚠️ <strong>Current limitations in experimental Fortran support:</strong></p>
 <ol>
 <li>
-<p><strong>Single-Line Input Only</strong>: ROUP requires complete directives on a single line</p>
+<p><strong>Continuation Syntax Requirements</strong>: Multi-line directives must use standard continuation markers</p>
 <ul>
-<li><strong>Not supported</strong>: Multi-line directives with <code>&amp;</code> continuation
-<pre><code class="language-fortran">!$OMP PARALLEL DO &amp;
-!$OMP   PRIVATE(I,J)
-</code></pre>
-</li>
-<li><strong>Workaround</strong>: Provide complete directive on one line:
-<pre><code class="language-fortran">!$OMP PARALLEL DO PRIVATE(I,J)
-</code></pre>
-</li>
-<li><strong>Rationale</strong>: This is an architectural design constraint that applies to both C and Fortran. Users must preprocess multi-line directives into single lines before passing to ROUP.</li>
+<li><strong>Fortran</strong>: Terminate continued lines with <code>&amp;</code> and optionally repeat the sentinel on the next line</li>
+<li><strong>C/C++</strong>: Place a trailing <code>\</code> at the end of each continued line</li>
+<li>See <a href="./line-continuations.html">Line Continuations</a> for canonical examples across languages</li>
 </ul>
 </li>
 <li>
