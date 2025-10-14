@@ -305,17 +305,10 @@ my_program: my_program.f90
 
 ⚠️ **Current limitations in experimental Fortran support:**
 
-1. **Single-Line Input Only**: ROUP requires complete directives on a single line
-   - **Not supported**: Multi-line directives with `&` continuation
-     ```fortran
-     !$OMP PARALLEL DO &
-     !$OMP   PRIVATE(I,J)
-     ```
-   - **Workaround**: Provide complete directive on one line:
-     ```fortran
-     !$OMP PARALLEL DO PRIVATE(I,J)
-     ```
-   - **Rationale**: This is an architectural design constraint that applies to both C and Fortran. Users must preprocess multi-line directives into single lines before passing to ROUP.
+1. **Continuation Syntax Requirements**: Multi-line directives must use standard continuation markers
+   - **Fortran**: Terminate continued lines with `&` and optionally repeat the sentinel on the next line
+   - **C/C++**: Place a trailing `\` at the end of each continued line
+   - See [Line Continuations](./line-continuations.md) for canonical examples across languages
 
 2. **End Directives**: `!$OMP END PARALLEL` and similar end directives may not parse correctly
 

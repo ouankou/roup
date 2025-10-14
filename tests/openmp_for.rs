@@ -15,12 +15,18 @@ fn parses_for_with_iteration_clauses() {
     assert_eq!(directive.clauses[0].name, "schedule");
     assert_eq!(
         directive.clauses[0].kind,
-        ClauseKind::Parenthesized("guided,16")
+        ClauseKind::Parenthesized("guided,16".into())
     );
     assert_eq!(directive.clauses[1].name, "ordered");
-    assert_eq!(directive.clauses[1].kind, ClauseKind::Parenthesized("2"));
+    assert_eq!(
+        directive.clauses[1].kind,
+        ClauseKind::Parenthesized("2".into())
+    );
     assert_eq!(directive.clauses[2].name, "private");
-    assert_eq!(directive.clauses[2].kind, ClauseKind::Parenthesized("i, j"));
+    assert_eq!(
+        directive.clauses[2].kind,
+        ClauseKind::Parenthesized("i, j".into())
+    );
 }
 
 #[test]
@@ -31,15 +37,24 @@ fn parses_for_simd_with_linear_clause() {
     assert_eq!(directive.name, "for simd");
     assert_eq!(directive.clauses.len(), 4);
     assert_eq!(directive.clauses[0].name, "linear");
-    assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("x:2"));
+    assert_eq!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized("x:2".into())
+    );
     assert_eq!(directive.clauses[1].name, "safelen");
-    assert_eq!(directive.clauses[1].kind, ClauseKind::Parenthesized("8"));
+    assert_eq!(
+        directive.clauses[1].kind,
+        ClauseKind::Parenthesized("8".into())
+    );
     assert_eq!(directive.clauses[2].name, "simdlen");
-    assert_eq!(directive.clauses[2].kind, ClauseKind::Parenthesized("4"));
+    assert_eq!(
+        directive.clauses[2].kind,
+        ClauseKind::Parenthesized("4".into())
+    );
     assert_eq!(directive.clauses[3].name, "reduction");
     assert_eq!(
         directive.clauses[3].kind,
-        ClauseKind::Parenthesized("-:diff")
+        ClauseKind::Parenthesized("-:diff".into())
     );
 }
 

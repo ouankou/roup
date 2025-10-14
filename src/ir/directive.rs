@@ -558,6 +558,7 @@ impl DirectiveKind {
 /// # use roup::ir::{DirectiveIR, DirectiveKind, ClauseData, DefaultKind, Language, SourceLocation};
 /// let dir = DirectiveIR::new(
 ///     DirectiveKind::Parallel,
+///     "parallel",
 ///     vec![ClauseData::Default(DefaultKind::Shared)],
 ///     SourceLocation::new(10, 1),
 ///     Language::C,
@@ -571,26 +572,47 @@ impl DirectiveKind {
 /// ## Learning: Box for Large Structures
 ///
 /// Since `DirectiveIR` can contain a large `Vec<ClauseData>`, and `ClauseData`
-/// variants can themselves be large, we use `Box<[ClauseData<'a>]>` instead of
-/// `Vec<ClauseData<'a>>` for the final immutable representation. This:
+/// variants can themselves be large, we use `Box<[ClauseData]>` instead of
+/// `Vec<ClauseData>` for the final immutable representation. This:
 ///
 /// 1. Reduces struct size (Box is one pointer)
 /// 2. Signals immutability (boxed slice can't grow/shrink)
 /// 3. Saves memory (no extra capacity like Vec)
 ///
 /// We still accept `Vec` in constructors for convenience, then convert to Box.
+///
+/// ## Memory Model (Safety Fix)
+///
+/// **IMPORTANT**: This struct now stores an owned `name: String` to prevent use-after-free bugs.
+///
+/// **Why?**
+/// - Directive names from line continuations are stored in `Cow::Owned`
+/// - Previously, IR borrowed from this `Cow` via `'a` lifetime
+/// - When `Directive` dropped, `Cow::Owned` was freed → dangling pointers
+/// - **Solution**: DirectiveIR now owns the normalized directive name
+///
+/// **Performance**: Minimal overhead (~50ns String allocation). See `docs/PERFORMANCE_ANALYSIS.md`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct DirectiveIR<'a> {
+pub struct DirectiveIR {
     /// The kind of directive
     kind: DirectiveKind,
 
+    /// The normalized directive name (owned to prevent use-after-free)
+    ///
+    /// This is cloned from the parser's `Cow<'a, str>` during conversion.
+    /// Storing it here ensures the IR is self-contained and doesn't depend
+    /// on the parser's lifetime.
+    ///
+    /// Examples: "parallel", "parallel for", "target teams distribute"
+    name: String,
+
     /// Semantic clause data
     ///
-    /// Using `Box<[ClauseData<'a>]>` instead of `Vec<ClauseData<'a>>` for the final representation:
+    /// Using `Box<[ClauseData]>` instead of `Vec<ClauseData>` for the final representation:
     /// - Smaller size (one pointer vs three)
     /// - Signals immutability (can't grow)
     /// - Saves memory (no unused capacity)
-    clauses: Box<[ClauseData<'a>]>,
+    clauses: Box<[ClauseData]>,
 
     /// Source location where this directive appears
     location: SourceLocation,
@@ -599,7 +621,7 @@ pub struct DirectiveIR<'a> {
     language: Language,
 }
 
-impl<'a> DirectiveIR<'a> {
+impl<'a> DirectiveIR {
     /// Create a new directive IR
     ///
     /// ## Example
@@ -615,21 +637,25 @@ impl<'a> DirectiveIR<'a> {
     ///
     /// let dir = DirectiveIR::new(
     ///     DirectiveKind::ParallelFor,
+    ///     "parallel for",
     ///     clauses,
     ///     SourceLocation::new(42, 1),
     ///     Language::C,
     /// );
     ///
     /// assert_eq!(dir.kind(), DirectiveKind::ParallelFor);
+    /// assert_eq!(dir.name(), "parallel for");
     /// ```
     pub fn new(
         kind: DirectiveKind,
-        clauses: Vec<ClauseData<'a>>,
+        name: &str,
+        clauses: Vec<ClauseData>,
         location: SourceLocation,
         language: Language,
     ) -> Self {
         Self {
             kind,
+            name: name.to_string(),
             clauses: clauses.into_boxed_slice(),
             location,
             language,
@@ -646,11 +672,16 @@ impl<'a> DirectiveIR<'a> {
     ///
     /// ```
     /// # use roup::ir::{DirectiveIR, DirectiveKind, Language, SourceLocation};
-    /// let dir = DirectiveIR::simple(DirectiveKind::Barrier, SourceLocation::start(), Language::C);
+    /// let dir = DirectiveIR::simple(DirectiveKind::Barrier, "barrier", SourceLocation::start(), Language::C);
     /// assert_eq!(dir.clauses().len(), 0);
     /// ```
-    pub fn simple(kind: DirectiveKind, location: SourceLocation, language: Language) -> Self {
-        Self::new(kind, vec![], location, language)
+    pub fn simple(
+        kind: DirectiveKind,
+        name: &str,
+        location: SourceLocation,
+        language: Language,
+    ) -> Self {
+        Self::new(kind, name, vec![], location, language)
     }
 
     /// Create a parallel directive with common clauses
@@ -677,7 +708,13 @@ impl<'a> DirectiveIR<'a> {
         if let Some(kind) = default {
             clauses.push(ClauseData::Default(kind));
         }
-        Self::new(DirectiveKind::Parallel, clauses, location, language)
+        Self::new(
+            DirectiveKind::Parallel,
+            "parallel",
+            clauses,
+            location,
+            language,
+        )
     }
 
     /// Create a for loop directive with schedule
@@ -696,7 +733,7 @@ impl<'a> DirectiveIR<'a> {
     /// ```
     pub fn for_loop(
         schedule: super::ScheduleKind,
-        chunk_size: Option<super::Expression<'a>>,
+        chunk_size: Option<super::Expression>,
         location: SourceLocation,
         language: Language,
     ) -> Self {
@@ -705,7 +742,7 @@ impl<'a> DirectiveIR<'a> {
             modifiers: vec![],
             chunk_size,
         }];
-        Self::new(DirectiveKind::For, clauses, location, language)
+        Self::new(DirectiveKind::For, "for", clauses, location, language)
     }
 
     /// Create a barrier directive (always simple)
@@ -719,17 +756,17 @@ impl<'a> DirectiveIR<'a> {
     /// assert_eq!(dir.clauses().len(), 0);
     /// ```
     pub fn barrier(location: SourceLocation, language: Language) -> Self {
-        Self::simple(DirectiveKind::Barrier, location, language)
+        Self::simple(DirectiveKind::Barrier, "barrier", location, language)
     }
 
     /// Create a taskwait directive (always simple)
     pub fn taskwait(location: SourceLocation, language: Language) -> Self {
-        Self::simple(DirectiveKind::Taskwait, location, language)
+        Self::simple(DirectiveKind::Taskwait, "taskwait", location, language)
     }
 
     /// Create a taskyield directive (always simple)
     pub fn taskyield(location: SourceLocation, language: Language) -> Self {
-        Self::simple(DirectiveKind::Taskyield, location, language)
+        Self::simple(DirectiveKind::Taskyield, "taskyield", location, language)
     }
 
     // ========================================================================
@@ -741,8 +778,24 @@ impl<'a> DirectiveIR<'a> {
         self.kind
     }
 
+    /// Get the normalized directive name
+    ///
+    /// This returns the directive name as it appears in the source,
+    /// after normalization (e.g., line continuations collapsed).
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # use roup::ir::{DirectiveIR, DirectiveKind, Language, SourceLocation};
+    /// let dir = DirectiveIR::simple(DirectiveKind::ParallelFor, "parallel for", SourceLocation::start(), Language::C);
+    /// assert_eq!(dir.name(), "parallel for");
+    /// ```
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     /// Get the clauses
-    pub fn clauses(&self) -> &[ClauseData<'a>] {
+    pub fn clauses(&self) -> &[ClauseData] {
         &self.clauses
     }
 
@@ -764,6 +817,7 @@ impl<'a> DirectiveIR<'a> {
     /// # use roup::ir::{DirectiveIR, DirectiveKind, ClauseData, DefaultKind, Language, SourceLocation};
     /// let dir = DirectiveIR::new(
     ///     DirectiveKind::Parallel,
+    ///     "parallel",
     ///     vec![ClauseData::Default(DefaultKind::Shared)],
     ///     SourceLocation::start(),
     ///     Language::C,
@@ -774,15 +828,15 @@ impl<'a> DirectiveIR<'a> {
     /// ```
     pub fn has_clause<F>(&self, predicate: F) -> bool
     where
-        F: Fn(&ClauseData<'a>) -> bool,
+        F: Fn(&ClauseData) -> bool,
     {
         self.clauses.iter().any(predicate)
     }
 
     /// Find first clause matching predicate
-    pub fn find_clause<F>(&self, predicate: F) -> Option<&ClauseData<'a>>
+    pub fn find_clause<F>(&self, predicate: F) -> Option<&ClauseData>
     where
-        F: Fn(&ClauseData<'a>) -> bool,
+        F: Fn(&ClauseData) -> bool,
     {
         self.clauses.iter().find(|c| predicate(c))
     }
@@ -790,21 +844,21 @@ impl<'a> DirectiveIR<'a> {
     /// Count clauses matching predicate
     pub fn count_clauses<F>(&self, predicate: F) -> usize
     where
-        F: Fn(&ClauseData<'a>) -> bool,
+        F: Fn(&ClauseData) -> bool,
     {
         self.clauses.iter().filter(|c| predicate(c)).count()
     }
 
     /// Get all clauses matching predicate
-    pub fn filter_clauses<F>(&self, predicate: F) -> Vec<&ClauseData<'a>>
+    pub fn filter_clauses<F>(&self, predicate: F) -> Vec<&ClauseData>
     where
-        F: Fn(&ClauseData<'a>) -> bool,
+        F: Fn(&ClauseData) -> bool,
     {
         self.clauses.iter().filter(|c| predicate(c)).collect()
     }
 }
 
-impl<'a> fmt::Display for DirectiveIR<'a> {
+impl<'a> fmt::Display for DirectiveIR {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Write pragma prefix (already includes "omp ")
         write!(f, "{}{}", self.language.pragma_prefix(), self.kind)?;
@@ -931,6 +985,7 @@ mod tests {
     fn test_directive_ir_new() {
         let dir = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![],
             SourceLocation::new(10, 1),
             Language::C,
@@ -953,6 +1008,7 @@ mod tests {
 
         let dir = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             clauses,
             SourceLocation::start(),
             Language::C,
@@ -965,6 +1021,7 @@ mod tests {
     fn test_directive_ir_has_clause() {
         let dir = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![ClauseData::Default(DefaultKind::Shared)],
             SourceLocation::start(),
             Language::C,
@@ -978,6 +1035,7 @@ mod tests {
     fn test_directive_ir_find_clause() {
         let dir = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![
                 ClauseData::Default(DefaultKind::Shared),
                 ClauseData::Private { items: vec![] },
@@ -995,6 +1053,7 @@ mod tests {
     fn test_directive_ir_count_clauses() {
         let dir = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![
                 ClauseData::Private { items: vec![] },
                 ClauseData::Default(DefaultKind::Shared),
@@ -1018,6 +1077,7 @@ mod tests {
     fn test_directive_ir_filter_clauses() {
         let dir = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![
                 ClauseData::Private { items: vec![] },
                 ClauseData::Default(DefaultKind::Shared),
@@ -1035,6 +1095,7 @@ mod tests {
     fn test_directive_ir_display() {
         let dir = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![ClauseData::Default(DefaultKind::Shared)],
             SourceLocation::start(),
             Language::C,
@@ -1056,6 +1117,7 @@ mod tests {
 
         let dir = DirectiveIR::new(
             DirectiveKind::ParallelFor,
+            "parallel for",
             clauses,
             SourceLocation::start(),
             Language::C,
@@ -1072,6 +1134,7 @@ mod tests {
     fn test_directive_ir_clone() {
         let dir1 = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![ClauseData::Default(DefaultKind::Shared)],
             SourceLocation::start(),
             Language::C,
@@ -1085,6 +1148,7 @@ mod tests {
     fn test_directive_ir_equality() {
         let dir1 = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![],
             SourceLocation::start(),
             Language::C,
@@ -1092,6 +1156,7 @@ mod tests {
 
         let dir2 = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![],
             SourceLocation::start(),
             Language::C,
@@ -1099,6 +1164,7 @@ mod tests {
 
         let dir3 = DirectiveIR::new(
             DirectiveKind::For,
+            "for",
             vec![],
             SourceLocation::start(),
             Language::C,
@@ -1134,6 +1200,7 @@ mod tests {
     fn test_directive_ir_no_clauses() {
         let dir = DirectiveIR::new(
             DirectiveKind::Barrier,
+            "barrier",
             vec![],
             SourceLocation::start(),
             Language::C,

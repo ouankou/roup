@@ -154,12 +154,12 @@ impl Default for ParserConfig {
 /// assert_eq!(expr.as_str(), "N * 2");
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expression<'a> {
+pub enum Expression {
     /// Expression was successfully parsed into structured form
     ///
     /// The compiler can analyze the AST structure for optimization,
     /// validation, or transformation.
-    Parsed(Box<ExpressionAst<'a>>),
+    Parsed(Box<ExpressionAst>),
 
     /// Expression kept as raw string
     ///
@@ -169,10 +169,10 @@ pub enum Expression<'a> {
     /// - Parser doesn't support this language construct yet
     ///
     /// The compiler must parse this string according to the source language.
-    Unparsed(&'a str),
+    Unparsed(String),
 }
 
-impl<'a> Expression<'a> {
+impl Expression {
     /// Create a new expression, attempting to parse if enabled
     ///
     /// ## Example
@@ -184,8 +184,9 @@ impl<'a> Expression<'a> {
     /// let expr = Expression::new("100", &config);
     /// assert_eq!(expr.as_str(), "100");
     /// ```
-    pub fn new(raw: &'a str, config: &ParserConfig) -> Self {
-        let trimmed = raw.trim();
+    pub fn new(raw: impl Into<String>, config: &ParserConfig) -> Self {
+        let raw = raw.into();
+        let trimmed = raw.trim().to_string();
 
         // If parsing disabled, return unparsed
         if !config.parse_expressions {
@@ -193,7 +194,7 @@ impl<'a> Expression<'a> {
         }
 
         // Try to parse based on language
-        match parse_expression(trimmed, config.language) {
+        match parse_expression(&trimmed, config.language) {
             Ok(ast) => Expression::Parsed(Box::new(ast)),
             Err(_) => Expression::Unparsed(trimmed),
         }
@@ -202,8 +203,8 @@ impl<'a> Expression<'a> {
     /// Create an unparsed expression directly
     ///
     /// Useful when you know parsing will fail or you want to bypass it.
-    pub const fn unparsed(raw: &'a str) -> Self {
-        Expression::Unparsed(raw)
+    pub fn unparsed(raw: impl Into<String>) -> Self {
+        Expression::Unparsed(raw.into())
     }
 
     /// Get the raw string representation
@@ -212,7 +213,7 @@ impl<'a> Expression<'a> {
     /// The original source is always preserved.
     pub fn as_str(&self) -> &str {
         match self {
-            Expression::Parsed(ast) => ast.original_source,
+            Expression::Parsed(ast) => &ast.original_source,
             Expression::Unparsed(s) => s,
         }
     }
@@ -223,7 +224,7 @@ impl<'a> Expression<'a> {
     }
 
     /// Get the parsed AST if available
-    pub fn as_ast(&self) -> Option<&ExpressionAst<'a>> {
+    pub fn as_ast(&self) -> Option<&ExpressionAst> {
         match self {
             Expression::Parsed(ast) => Some(ast),
             Expression::Unparsed(_) => None,
@@ -231,7 +232,7 @@ impl<'a> Expression<'a> {
     }
 }
 
-impl<'a> fmt::Display for Expression<'a> {
+impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str())
     }
@@ -268,12 +269,12 @@ impl<'a> fmt::Display for Expression<'a> {
 /// }
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct ExpressionAst<'a> {
+pub struct ExpressionAst {
     /// Original source text (always preserved)
-    pub original_source: &'a str,
+    pub original_source: String,
 
     /// Parsed structure (best-effort)
-    pub kind: ExpressionKind<'a>,
+    pub kind: ExpressionKind,
 }
 
 /// Common expression patterns in OpenMP directives
@@ -283,58 +284,58 @@ pub struct ExpressionAst<'a> {
 /// This enum demonstrates Rust's powerful enum system. Each variant
 /// can carry different data:
 /// - `IntLiteral(i64)` - carries an integer
-/// - `Identifier(&str)` - carries a string reference
+/// - `Identifier(String)` - carries an owned string
 /// - `BinaryOp { ... }` - carries multiple fields
 ///
 /// This is much more powerful than C enums, which can only be simple tags.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ExpressionKind<'a> {
+pub enum ExpressionKind {
     /// Integer literal: `42`, `0x10`, `0b1010`
     IntLiteral(i64),
 
     /// Identifier: `N`, `num_threads`, `my_var`
-    Identifier(&'a str),
+    Identifier(String),
 
     /// Binary operation: `a + b`, `N * 2`, `i < 10`
     BinaryOp {
-        left: Box<ExpressionAst<'a>>,
+        left: Box<ExpressionAst>,
         op: BinaryOperator,
-        right: Box<ExpressionAst<'a>>,
+        right: Box<ExpressionAst>,
     },
 
     /// Unary operation: `-x`, `!flag`, `*ptr`
     UnaryOp {
         op: UnaryOperator,
-        operand: Box<ExpressionAst<'a>>,
+        operand: Box<ExpressionAst>,
     },
 
     /// Function call: `foo(a, b)`, `omp_get_num_threads()`
     Call {
-        function: &'a str,
-        args: Vec<ExpressionAst<'a>>,
+        function: String,
+        args: Vec<ExpressionAst>,
     },
 
     /// Array subscript: `arr[i]`, `matrix[i][j]`
     ArrayAccess {
-        array: Box<ExpressionAst<'a>>,
-        indices: Vec<ExpressionAst<'a>>,
+        array: Box<ExpressionAst>,
+        indices: Vec<ExpressionAst>,
     },
 
     /// Ternary conditional: `cond ? a : b`
     Conditional {
-        condition: Box<ExpressionAst<'a>>,
-        then_expr: Box<ExpressionAst<'a>>,
-        else_expr: Box<ExpressionAst<'a>>,
+        condition: Box<ExpressionAst>,
+        then_expr: Box<ExpressionAst>,
+        else_expr: Box<ExpressionAst>,
     },
 
     /// Parenthesized: `(expr)`
-    Parenthesized(Box<ExpressionAst<'a>>),
+    Parenthesized(Box<ExpressionAst>),
 
     /// Too complex to parse, kept as string
     ///
     /// This is our escape hatch for expressions that are valid
     /// but not yet supported by the parser.
-    Complex(&'a str),
+    Complex(String),
 }
 
 /// Binary operators
@@ -407,10 +408,7 @@ pub struct ParseError {
 /// - `Err(error)` - failure
 ///
 /// The caller must handle both cases (checked at compile time!).
-fn parse_expression<'a>(
-    input: &'a str,
-    language: Language,
-) -> Result<ExpressionAst<'a>, ParseError> {
+fn parse_expression(input: &str, language: Language) -> Result<ExpressionAst, ParseError> {
     match language {
         Language::C | Language::Cpp => parse_c_expression(input),
         Language::Fortran => parse_fortran_expression(input),
@@ -422,7 +420,7 @@ fn parse_expression<'a>(
 ///
 /// Currently falls back to generic parser. In the future, this could
 /// handle C/C++-specific constructs like `->`, `sizeof`, etc.
-fn parse_c_expression<'a>(input: &'a str) -> Result<ExpressionAst<'a>, ParseError> {
+fn parse_c_expression(input: &str) -> Result<ExpressionAst, ParseError> {
     parse_generic_expression(input)
 }
 
@@ -430,7 +428,7 @@ fn parse_c_expression<'a>(input: &'a str) -> Result<ExpressionAst<'a>, ParseErro
 ///
 /// Currently falls back to generic parser. In the future, this could
 /// handle Fortran-specific constructs.
-fn parse_fortran_expression<'a>(input: &'a str) -> Result<ExpressionAst<'a>, ParseError> {
+fn parse_fortran_expression(input: &str) -> Result<ExpressionAst, ParseError> {
     parse_generic_expression(input)
 }
 
@@ -443,13 +441,13 @@ fn parse_fortran_expression<'a>(input: &'a str) -> Result<ExpressionAst<'a>, Par
 ///
 /// This is intentionally simple. Complex parsing can be added later
 /// without changing the IR structure.
-fn parse_generic_expression<'a>(input: &'a str) -> Result<ExpressionAst<'a>, ParseError> {
+fn parse_generic_expression(input: &str) -> Result<ExpressionAst, ParseError> {
     let trimmed = input.trim();
 
     // Try to parse as integer literal
     if let Ok(value) = trimmed.parse::<i64>() {
         return Ok(ExpressionAst {
-            original_source: input,
+            original_source: input.to_string(),
             kind: ExpressionKind::IntLiteral(value),
         });
     }
@@ -457,16 +455,16 @@ fn parse_generic_expression<'a>(input: &'a str) -> Result<ExpressionAst<'a>, Par
     // Try to parse as identifier
     if is_simple_identifier(trimmed) {
         return Ok(ExpressionAst {
-            original_source: input,
-            kind: ExpressionKind::Identifier(trimmed),
+            original_source: input.to_string(),
+            kind: ExpressionKind::Identifier(trimmed.to_string()),
         });
     }
 
     // For everything else, mark as complex
     // The consuming compiler will parse it
     Ok(ExpressionAst {
-        original_source: input,
-        kind: ExpressionKind::Complex(trimmed),
+        original_source: input.to_string(),
+        kind: ExpressionKind::Complex(trimmed.to_string()),
     })
 }
 
@@ -553,7 +551,7 @@ mod tests {
         assert_eq!(expr.as_str(), "my_var");
 
         if let Some(ast) = expr.as_ast() {
-            if let ExpressionKind::Identifier(name) = ast.kind {
+            if let ExpressionKind::Identifier(name) = &ast.kind {
                 assert_eq!(name, "my_var");
             } else {
                 panic!("Should be identifier");

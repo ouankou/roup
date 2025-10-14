@@ -16,10 +16,13 @@ fn parses_clause_with_nested_parentheses() {
     assert_eq!(directive.clauses[0].name, "reduction");
     assert_eq!(
         directive.clauses[0].kind,
-        ClauseKind::Parenthesized("max:(f(a), g(b))")
+        ClauseKind::Parenthesized("max:(f(a), g(b))".into())
     );
     assert_eq!(directive.clauses[1].name, "private");
-    assert_eq!(directive.clauses[1].kind, ClauseKind::Parenthesized("i"));
+    assert_eq!(
+        directive.clauses[1].kind,
+        ClauseKind::Parenthesized("i".into())
+    );
 }
 
 #[test]
@@ -30,5 +33,8 @@ fn parses_pragma_with_comments_inside() {
     assert_eq!(directive.name, "parallel");
     assert_eq!(directive.clauses.len(), 1);
     assert_eq!(directive.clauses[0].name, "private");
-    assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("a"));
+    assert_eq!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized("a".into())
+    );
 }

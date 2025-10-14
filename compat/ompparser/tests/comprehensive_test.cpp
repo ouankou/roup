@@ -198,9 +198,41 @@ TEST(multiple_clauses) {
 TEST(reduction_clause) {
     DirectivePtr dir(parseOpenMP("omp parallel reduction(+:sum)", nullptr));
     ASSERT_NOT_NULL(dir.get());
-    
+
     auto* clauses = dir->getAllClauses();
     ASSERT_NOT_NULL(clauses);
+}
+
+TEST(multiline_c_directive) {
+    const char* input =
+        "#pragma omp parallel for \\\n"
+        "    schedule(dynamic, 4) \\\n"
+        "    private(i, \\\n"
+        "            j)";
+
+    DirectivePtr dir(parseOpenMP(input, nullptr));
+    ASSERT_NOT_NULL(dir.get());
+    ASSERT_EQ(dir->getKind(), OMPD_parallel_for);
+
+    auto* clauses = dir->getAllClauses();
+    ASSERT_NOT_NULL(clauses);
+    ASSERT_EQ(clauses->size(), 2);
+}
+
+TEST(multiline_fortran_directive) {
+    setLang(Lang_Fortran);
+    const char* input =
+        "!$omp target teams distribute &\n"
+        "!$omp parallel do &\n"
+        "!$omp& private(i, j)";
+
+    DirectivePtr dir(parseOpenMP(input, nullptr));
+    ASSERT_NOT_NULL(dir.get());
+    ASSERT_EQ(dir->getKind(), OMPD_target_teams_distribute_parallel_for);
+    auto* clauses = dir->getAllClauses();
+    ASSERT_NOT_NULL(clauses);
+    ASSERT_EQ(clauses->size(), 1);
+    setLang(Lang_C);
 }
 
 TEST(schedule_clause) {

@@ -14,6 +14,8 @@
 /// - Input: &str (string slice to parse)
 /// - Output: &str (parsed token)
 /// - Returns: Ok((remaining_input, parsed_output)) or Err
+use std::borrow::Cow;
+
 use nom::IResult;
 
 /// Learning Rust: Importing from External Crates
@@ -124,28 +126,6 @@ pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
     }
 }
 
-// ============================================================================
-// Fortran Continuation Lines - NOT SUPPORTED BY DESIGN
-// ============================================================================
-//
-// ROUP does NOT support multi-line Fortran directives with continuation (&).
-//
-// Example of UNSUPPORTED input:
-//     !$OMP PARALLEL DO &
-//     !$OMP   PRIVATE(I,J)
-//
-// Design Decision:
-// - Continuation handling requires stateful multi-line parsing
-// - Users must provide complete single-line directives
-// - Applies to BOTH C and Fortran (no multi-line #pragma either)
-//
-// Workaround:
-// - Preprocess multi-line directives into single lines before calling parse()
-// - Example: "!$OMP PARALLEL DO PRIVATE(I,J)" (all on one line)
-//
-// See: src/parser/mod.rs Parser::parse() for rationale
-// ============================================================================
-
 /// Parse an identifier (directive or clause name)
 ///
 /// Learning Rust: Higher-Order Functions
@@ -179,6 +159,18 @@ pub fn skip_space_and_comments(input: &str) -> IResult<&str, &str> {
     let len = bytes.len();
 
     while i < len {
+        // Handle C/C++ line continuations using backslash-newline
+        if let Some(next_idx) = skip_c_line_continuation(input, i) {
+            i = next_idx;
+            continue;
+        }
+
+        // Handle Fortran continuation markers using trailing ampersand
+        if let Some(next_idx) = skip_fortran_continuation(input, i) {
+            i = next_idx;
+            continue;
+        }
+
         // Learning Rust: Working with Bytes
         // ==================================
         // .as_bytes() converts &str to &[u8] (byte slice)
@@ -242,6 +234,188 @@ pub fn skip_space1_and_comments(input: &str) -> IResult<&str, &str> {
 /// Parse an identifier token (exposed publicly)
 pub fn lex_identifier_token(input: &str) -> IResult<&str, &str> {
     lex_identifier(input)
+}
+
+pub(crate) fn collapse_line_continuations<'a>(input: &'a str) -> Cow<'a, str> {
+    // P1 Fix: Preserve whitespace when collapsing line continuations to prevent
+    // token merging (e.g., "parallel\\\n    for" → "parallel for" not "parallelfor").
+    // We insert a space when collapsing unless there's already trailing whitespace.
+    //
+    // For Fortran continuations, we also preserve a space to maintain token separation.
+
+    if !input.contains('\\') && !input.contains('&') {
+        return Cow::Borrowed(input);
+    }
+
+    let mut output = String::with_capacity(input.len());
+    let mut idx = 0;
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    let mut changed = false;
+
+    while idx < len {
+        if bytes[idx] == b'\\' {
+            let mut next = idx + 1;
+            while next < len && matches!(bytes[next], b' ' | b'\t') {
+                next += 1;
+            }
+            if next < len && (bytes[next] == b'\n' || bytes[next] == b'\r') {
+                changed = true;
+                if bytes[next] == b'\r' {
+                    next += 1;
+                    if next < len && bytes[next] == b'\n' {
+                        next += 1;
+                    }
+                } else {
+                    next += 1;
+                }
+                while next < len && matches!(bytes[next], b' ' | b'\t') {
+                    next += 1;
+                }
+                // Insert a space to preserve token separation, but only if
+                // the output doesn't already end with whitespace
+                if !output.is_empty() && !output.ends_with(|c: char| c.is_whitespace()) {
+                    output.push(' ');
+                }
+                idx = next;
+                continue;
+            }
+        } else if bytes[idx] == b'&' {
+            if let Some(next) = skip_fortran_continuation(input, idx) {
+                changed = true;
+                // For Fortran, also preserve token separation
+                if !output.is_empty() && !output.ends_with(|c: char| c.is_whitespace()) {
+                    output.push(' ');
+                }
+                idx = next;
+                continue;
+            }
+        }
+
+        let ch = input[idx..].chars().next().unwrap();
+        output.push(ch);
+        idx += ch.len_utf8();
+    }
+
+    if changed {
+        Cow::Owned(output)
+    } else {
+        Cow::Borrowed(input)
+    }
+}
+
+fn skip_c_line_continuation(input: &str, idx: usize) -> Option<usize> {
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    if idx >= len || bytes[idx] != b'\\' {
+        return None;
+    }
+
+    let mut next = idx + 1;
+    while next < len && matches!(bytes[next], b' ' | b'\t') {
+        next += 1;
+    }
+
+    if next >= len {
+        return Some(len);
+    }
+
+    match bytes[next] {
+        b'\n' => {
+            next += 1;
+        }
+        b'\r' => {
+            next += 1;
+            if next < len && bytes[next] == b'\n' {
+                next += 1;
+            }
+        }
+        _ => return None,
+    }
+
+    while next < len && matches!(bytes[next], b' ' | b'\t') {
+        next += 1;
+    }
+
+    Some(next)
+}
+
+fn skip_fortran_continuation(input: &str, idx: usize) -> Option<usize> {
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    if idx >= len || bytes[idx] != b'&' {
+        return None;
+    }
+
+    let mut next = idx + 1;
+
+    while next < len {
+        match bytes[next] {
+            b' ' | b'\t' => next += 1,
+            b'!' => {
+                next += 1;
+                while next < len && bytes[next] != b'\n' && bytes[next] != b'\r' {
+                    next += 1;
+                }
+                break;
+            }
+            b'\n' | b'\r' => break,
+            _ => return None,
+        }
+    }
+
+    if next >= len {
+        return Some(len);
+    }
+
+    if bytes[next] == b'\r' {
+        next += 1;
+        if next < len && bytes[next] == b'\n' {
+            next += 1;
+        }
+    } else if bytes[next] == b'\n' {
+        next += 1;
+    } else {
+        return None;
+    }
+
+    while next < len {
+        match bytes[next] {
+            b' ' | b'\t' => next += 1,
+            b'\r' | b'\n' => {
+                next += 1;
+            }
+            _ => break,
+        }
+    }
+
+    if let Some(len_sent) = match_fortran_sentinel(&input[next..]) {
+        next += len_sent;
+        while next < len && matches!(bytes[next], b' ' | b'\t') {
+            next += 1;
+        }
+    }
+
+    if next < len && bytes[next] == b'&' {
+        next += 1;
+        while next < len && matches!(bytes[next], b' ' | b'\t') {
+            next += 1;
+        }
+    }
+
+    Some(next)
+}
+
+fn match_fortran_sentinel(input: &str) -> Option<usize> {
+    let candidates = ["!$omp", "c$omp", "*$omp"];
+    for candidate in candidates {
+        if input.len() >= candidate.len()
+            && input[..candidate.len()].eq_ignore_ascii_case(candidate)
+        {
+            return Some(candidate.len());
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -324,6 +498,32 @@ mod tests {
 
         let result = skip_space1_and_comments(" has_space");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn skip_space_handles_c_line_continuations() {
+        let (rest, _) = skip_space_and_comments("\\\n    default(none)").unwrap();
+        assert_eq!(rest, "default(none)");
+    }
+
+    #[test]
+    fn skip_space_handles_fortran_continuations() {
+        let input = "&\n!$omp private(i, j)";
+        let (rest, _) = skip_space_and_comments(input).unwrap();
+        assert_eq!(rest, "private(i, j)");
+    }
+
+    #[test]
+    fn collapse_line_continuations_removes_c_backslash() {
+        let collapsed = collapse_line_continuations(concat!("a, \\\n", "    b"));
+        assert_eq!(collapsed.as_ref(), "a, b");
+    }
+
+    #[test]
+    fn collapse_line_continuations_removes_fortran_ampersand() {
+        let input = "items( i, &\n!$omp& j )";
+        let collapsed = collapse_line_continuations(input);
+        assert_eq!(collapsed.as_ref(), "items( i, j )");
     }
 
     #[test]

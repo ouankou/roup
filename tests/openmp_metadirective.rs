@@ -25,7 +25,7 @@ fn parses_metadirective_with_all_context_selectors() {
     assert!(matches!(first_when.kind, ClauseKind::Parenthesized(_)));
     if let ClauseKind::Parenthesized(body) = &first_when.kind {
         assert_eq!(
-            *body,
+            body.as_ref(),
             "device={kind(cpu), isa(avx512f), arch(gen)}, implementation={vendor(llvm), extension(match_extension), atomic_default_mem_order(seq_cst)}, user={condition(iterations>0)}, construct={parallel, for, simd}: parallel for schedule(static,1)"
         );
     }
@@ -34,7 +34,7 @@ fn parses_metadirective_with_all_context_selectors() {
     assert_eq!(second_when.name, "when");
     if let ClauseKind::Parenthesized(body) = &second_when.kind {
         assert_eq!(
-            *body,
+            body.as_ref(),
             "device={kind(gpu)}, construct={teams, distribute}, implementation={extension(distributed)}, user={condition(flag != 0)}: teams distribute parallel for"
         );
     } else {
@@ -44,7 +44,7 @@ fn parses_metadirective_with_all_context_selectors() {
     let default_clause = &directive.clauses[2];
     assert_eq!(default_clause.name, "default");
     if let ClauseKind::Parenthesized(body) = &default_clause.kind {
-        assert_eq!(*body, "parallel for reduction(task,inscan,+:sum)");
+        assert_eq!(body.as_ref(), "parallel for reduction(task,inscan,+:sum)");
     } else {
         panic!("expected parenthesized clause for default");
     }
@@ -77,7 +77,7 @@ fn parses_metadirective_with_nested_directives_and_qualifiers() {
         .clauses
         .iter()
         .map(|clause| match &clause.kind {
-            ClauseKind::Parenthesized(body) => *body,
+            ClauseKind::Parenthesized(body) => body.as_ref(),
             ClauseKind::Bare => panic!("expected parenthesized clause"),
         })
         .collect();

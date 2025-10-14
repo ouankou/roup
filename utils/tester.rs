@@ -9,7 +9,7 @@ fn main() {
             for clause in directive.clauses {
                 match clause.kind {
                     ClauseKind::Bare => println!("Clause: {}", clause.name),
-                    ClauseKind::Parenthesized(value) => {
+                    ClauseKind::Parenthesized(ref value) => {
                         println!("Clause: {}({})", clause.name, value);
                     }
                 }

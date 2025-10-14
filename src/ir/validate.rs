@@ -397,7 +397,7 @@ impl ValidationContext {
     }
 }
 
-impl DirectiveIR<'_> {
+impl DirectiveIR {
     /// Validate this directive and its clauses
     ///
     /// ## Example
@@ -407,6 +407,7 @@ impl DirectiveIR<'_> {
     ///
     /// let ir = DirectiveIR::new(
     ///     DirectiveKind::Parallel,
+    ///     "parallel",
     ///     vec![ClauseData::Default(DefaultKind::Shared)],
     ///     SourceLocation::start(),
     ///     Language::C,
@@ -598,6 +599,7 @@ mod tests {
     fn test_directive_ir_validate() {
         let ir = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![ClauseData::Default(DefaultKind::Shared)],
             SourceLocation::start(),
             Language::C,
@@ -610,6 +612,7 @@ mod tests {
     fn test_directive_ir_validate_invalid() {
         let ir = DirectiveIR::new(
             DirectiveKind::Parallel,
+            "parallel",
             vec![ClauseData::Bare(Identifier::new("nowait"))],
             SourceLocation::start(),
             Language::C,
