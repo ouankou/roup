@@ -57,6 +57,97 @@
 - ✅ Reference `examples/c/tutorial_basic.c` for correct usage patterns
 - ✅ Check `src/c_api.rs` for the source of truth on all C API functions
 
+## Safe Command Execution with Complex Strings
+
+**CRITICAL**: When using `run_in_terminal` with complex strings or special symbols, ALWAYS use file-based approaches to avoid bash hangs or parsing issues.
+
+### The Problem
+
+Direct heredoc or complex string literals in commands can cause:
+- ❌ Bash hangs waiting for input
+- ❌ Quote escaping nightmares
+- ❌ Special character parsing failures
+- ❌ Multiline string corruption
+- ❌ Tool cancellation by the system
+
+### The Solution: File-Based Approach
+
+**ALWAYS use temporary files for**:
+- Long commit messages
+- PR descriptions with markdown
+- Multi-paragraph text
+- Strings with special characters: `$`, `` ` ``, `"`, `'`, `\`, `!`
+- JSON or structured data
+- Any text over ~200 characters
+
+### Safe Pattern
+
+```bash
+# ✅ CORRECT: Use file-based approach
+cat > /tmp/message.txt << 'EOF'
+Your complex message here
+With $pecial characters
+And "quotes" and 'apostrophes'
+EOF
+
+# Then use the file
+git commit -F /tmp/message.txt
+gh pr create --body-file /tmp/message.txt
+```
+
+```bash
+# ❌ WRONG: Direct heredoc in command (will hang!)
+git commit -F - << 'EOF'
+Message here
+EOF
+```
+
+```bash
+# ❌ WRONG: Complex string in --body argument (will fail!)
+gh pr create --body "Very long text with $vars and \"quotes\""
+```
+
+### Examples of File-Based Commands
+
+**Commit Messages**:
+```bash
+cat > /tmp/commit_msg.txt << 'EOFMSG'
+feat: your changes
+
+Detailed explanation with special chars: $var, "quotes", etc.
+EOFMSG
+git commit -F /tmp/commit_msg.txt
+```
+
+**PR Descriptions**:
+```bash
+cat > /tmp/pr_description.md << 'EOFPR'
+## Summary
+Your markdown here with **bold** and `code`
+EOFPR
+gh pr create --body-file /tmp/pr_description.md
+```
+
+**JSON Data**:
+```bash
+cat > /tmp/data.json << 'EOFJSON'
+{"key": "value with special chars: $, \", etc."}
+EOFJSON
+curl -d @/tmp/data.json https://api.example.com
+```
+
+### Critical Rules
+
+- ✅ **USE FILES**: For any string over 200 chars or with special symbols
+- ✅ **USE UNIQUE EOF MARKERS**: `EOFMSG`, `EOFPR`, `EOFJSON` (not just `EOF`)
+- ✅ **QUOTE EOF MARKERS**: Use `'EOF'` not `EOF` to prevent variable expansion
+- ✅ **VERIFY FILE FIRST**: `cat /tmp/file.txt` before using it
+- ✅ **USE /tmp/**: Temporary files are automatically cleaned up
+
+- ❌ **NEVER use `-F -` or `--body` with complex strings**
+- ❌ **NEVER embed heredocs directly in command arguments**
+- ❌ **NEVER use unquoted EOF markers** (allows `$var` expansion)
+
 ## Pull Request Comment Retrieval
 
 **CRITICAL**: When the user says there are new comments on a PR, THEY EXIST. You MUST use ALL possible methods to find them.
@@ -249,44 +340,6 @@ done
 - ✅ Report total count and per-method breakdown
 - ✅ Persist until ALL methods complete
 
-### Addressing Review Comments - MANDATORY Verification
-
-**CRITICAL**: Before committing changes to address review comments, you MUST verify EVERY SINGLE comment is fully addressed.
-
-**Pre-Commit Review Comment Checklist**:
-
-1. **List ALL review comments** - Create a complete checklist:
-   - Extract every review comment found (from all 5 methods above)
-   - Number each comment for tracking
-   - Include both code review comments AND general issue comments
-
-2. **Address EVERY comment** - No exceptions:
-   - Go through the list one by one
-   - Implement the requested change or provide clear explanation why not
-   - Mark each as addressed in your checklist
-
-3. **Double-check completeness** - BEFORE committing:
-   - Review your checklist: Are ALL items checked off?
-   - Re-read each original comment: Did you actually do what was requested?
-   - Verify no comments were missed or partially addressed
-
-4. **Commit only when 100% complete**:
-   - ✅ Every single feedback item addressed
-   - ✅ All changes tested and working
-   - ✅ No "TODO" or "will fix later" items remaining
-
-**DO NOT**:
-- ❌ Commit partial fixes with some comments unaddressed
-- ❌ Skip "minor" comments thinking they don't matter
-- ❌ Assume you addressed everything without explicit verification
-- ❌ Leave any feedback item for "later" or "next commit"
-
-**DO**:
-- ✅ Create explicit checklist of ALL comments before starting
-- ✅ Verify each item is addressed before marking complete
-- ✅ Re-read original comments to ensure full compliance
-- ✅ Commit only when 100% of feedback is addressed
-
 ## Code Quality
 
 **CRITICAL PRE-COMMIT REQUIREMENTS - MUST BE DONE EVERY TIME**:
@@ -452,55 +505,214 @@ All documentation tools are pre-installed and ready to use.
 
 ## Pull Request & Git Workflow
 
-### THE ONLY CORRECT WAY TO MERGE A PR
+**CRITICAL**: Follow this EXACT sequence. NEVER skip steps. NEVER merge before completing ALL verification.
 
-**CRITICAL**: There is ONLY ONE correct method to merge PRs. NEVER use any other method.
+### PR Workflow - MANDATORY STEPS IN ORDER
 
-**❌ FORBIDDEN METHODS** (NEVER USE THESE):
-- ❌ **NEVER** use `git rebase -i` (interactive rebase) - opens editor, will HANG
-- ❌ **NEVER** manually merge with `git merge` and push to main directly
-- ❌ **NEVER** use GitHub's "Squash and merge" or "Create merge commit" buttons
-- ❌ **NEVER** push identical commits to main separately and manually close PR
-- ❌ **NEVER** do anything other than the method below
+#### Step 1: Check ALL PR Comments (MANDATORY)
 
-**✅ THE ONLY CORRECT METHOD**:
+**CRITICAL**: "ALL comments" means EVERYTHING - review comments, issue comments, general discussions, even "hello" messages.
 
-```bash
-gh pr merge <pr-number> --rebase --delete-branch
+**Comment Retrieval Methods** - Use ALL 15 methods (see "Pull Request Comment Retrieval" section):
+1. GitHub Pull Request Tools (VSCode extensions)
+2. `gh pr view <number> --comments`
+3. `gh api /repos/{owner}/{repo}/pulls/<number>/comments --paginate`
+4. `gh api /repos/{owner}/{repo}/issues/<number>/comments` (general PR comments)
+5. `gh api /repos/{owner}/{repo}/pulls/<number>/reviews`
+6. Review comments by review ID
+7. Timeline events
+8. Specific commit comments
+9. Sort and filter by timestamp
+10. Check for suppressed/low-confidence comments
+11. GraphQL API (comprehensive)
+12. Web UI fallback
+13. Git fetch and check notes
+14. PR files for inline comments
+15. Cross-reference multiple commit hashes
+
+**Comment Types to Check**:
+- ✅ Code review comments (inline file comments)
+- ✅ General PR comments (issue comments)
+- ✅ Review summary comments
+- ✅ Discussion threads
+- ✅ Questions or clarifications
+- ✅ Suggestions or ideas
+- ✅ Even casual messages like "LGTM", "thanks", "hello"
+- ✅ Bot comments (CI results, analysis tools)
+- ✅ Suppressed or low-confidence comments
+
+**Create Comment Checklist**:
+```
+Comment Tracking Checklist for PR #<number>
+============================================
+
+[ ] Comment 1 (from @user, created_at): "Fix the use-after-free bug"
+    Status: Not addressed yet
+    
+[ ] Comment 2 (from @bot, created_at): "CI passed on commit abc123"
+    Status: Informational only, no action needed
+    
+[ ] Comment 3 (from @reviewer, created_at): "Looks good!"
+    Status: Acknowledged, no action needed
+
+... (continue for ALL comments)
+
+Total comments found: X
+Comments requiring action: Y
+Comments addressed: Z
 ```
 
-**That's it. This is the ONLY way to merge PRs. Period.**
+#### Step 2: Address ALL Comments (MANDATORY)
 
-### Why This is the ONLY Correct Method
+**For EACH comment that requires action**:
 
-**What `gh pr merge --rebase` does:**
-1. ✅ Rebases PR commits onto main (clean linear history)
-2. ✅ Merges to main on GitHub (proper merge tracking)
-3. ✅ Closes the PR automatically (updates metadata)
-4. ✅ Deletes remote branch (cleanup)
-5. ✅ Deletes local branch and switches to main
-6. ✅ Updates local main to match remote
-7. ✅ Preserves all GitHub PR information (reviews, CI status, discussions)
+1. **Read the comment carefully** - understand what's being requested
+2. **Implement the fix or change** - make the necessary code changes
+3. **Test the fix** - ensure it works correctly
+4. **Mark as addressed** - check it off your checklist
+5. **Reply if needed** - acknowledge or explain your approach
 
-**What manual methods DO NOT do:**
-- ❌ Don't properly close PR (leaves it "open" even if commits are in main)
-- ❌ Don't update PR metadata
-- ❌ Don't track merge relationship
-- ❌ Require manual branch deletion
-- ❌ Risk pushing to wrong branch
-- ❌ Can cause duplicate commits or merge conflicts
+**NEVER**:
+- ❌ Skip any comment, even minor ones
+- ❌ Say "will fix later" or "TODO"
+- ❌ Assume you can merge with unaddressed comments
+- ❌ Commit partial fixes
 
-### Complete PR Workflow
+**ALWAYS**:
+- ✅ Address 100% of comments before committing
+- ✅ Re-read each comment after making changes to verify full compliance
+- ✅ Mark each comment as addressed in your checklist
 
-**Step 1: Clean up PR commits** (if needed):
+#### Step 3: Run ALL Quality Checks (MANDATORY)
+
+**Code Formatting**:
+```bash
+# Rust formatting
+cargo fmt
+cargo fmt --check  # Verify no diff
+
+# C/C++ formatting (if modified)
+clang-format -i compat/ompparser/**/*.cpp
+clang-format -i compat/ompparser/**/*.h
+clang-format -i examples/c/**/*.c
+```
+
+**Build and Compilation**:
+```bash
+# Clean build
+cargo clean
+cargo build
+
+# Check for warnings (MUST be zero)
+cargo build 2>&1 | grep warning
+# Output should be empty!
+```
+
+**Tests**:
+```bash
+# All Rust tests
+cargo test
+
+# All ompparser compat tests
+cd compat/ompparser/build
+make test
+cd ../../..
+```
+
+**Documentation**:
+```bash
+# Build API docs
+cargo doc --no-deps
+
+# Build mdBook
+mdbook build docs/book
+
+# Test code examples in docs
+mdbook test docs/book
+
+# Verify examples compile
+cargo build --examples
+```
+
+**CI Checks**:
+```bash
+# Check CI status on GitHub
+gh pr checks <pr-number>
+
+# View detailed CI results
+gh pr view <pr-number> --json statusCheckRollup
+```
+
+**Quality Checklist**:
+```
+Quality Verification Checklist
+==============================
+
+Formatting:
+[ ] cargo fmt executed
+[ ] cargo fmt --check passes (no diff)
+[ ] C/C++ code formatted (if applicable)
+
+Build:
+[ ] cargo clean && cargo build succeeds
+[ ] Zero compiler warnings
+[ ] cargo build --examples succeeds
+
+Tests:
+[ ] cargo test passes (all tests green)
+[ ] compat/ompparser tests pass
+[ ] No test failures
+
+Documentation:
+[ ] cargo doc --no-deps succeeds
+[ ] mdbook build docs/book succeeds
+[ ] mdbook test docs/book passes
+[ ] All examples compile
+
+CI:
+[ ] All GitHub Actions checks pass
+[ ] No failing workflows
+```
+
+#### Step 4: Pre-Merge Documentation Audit (MANDATORY)
+
+**CRITICAL**: Check for documentation redundancy and ensure single source of truth BEFORE rewriting commits.
+
+**Documentation checks may reveal needed changes - if so, make changes and START OVER from Step 1.**
+
+**Check for documentation redundancy**:
+
+- [ ] Scan for duplicate content in multiple files
+- [ ] Consolidate overlapping documentation
+- [ ] Delete planning/status docs after completion
+- [ ] Check README.md synced with docs/book/src/
+- [ ] Verify no duplicate tutorials or guides
+- [ ] Remove temporary implementation summaries
+- [ ] Ensure single source of truth per Documentation Philosophy
+- [ ] Update version numbers in docs to match Cargo.toml
+- [ ] Verify API examples in docs match current API
+
+**If documentation issues found**: Fix them, commit, push, then START OVER from Step 1.
+
+**If no issues found**: Proceed to Step 5.
+
+#### Step 5: Rewrite PR Commit History (MANDATORY)
+
+**CRITICAL**: After documentation audit, ALWAYS rewrite PR commits into clean, logical commits. Choose ONE of two approaches:
+
+---
+
+**CHOICE 1: Single Feature Commit** (if all changes belong to one logical feature)
+
+Use when the PR implements a single cohesive feature or fix.
 
 ```bash
-# 1. On PR branch, squash all commits into logical groups
+# 1. On PR branch, squash all commits into one
 git checkout <pr-branch-name>
 git reset --soft main
 
-# 2. Create clean commit(s)
-git commit -F - << 'EOF'
+# 2. Create ONE clean commit with comprehensive message
+cat > /tmp/commit_msg.txt << 'EOFMSG'
 feat: descriptive title (50 chars max)
 
 Detailed explanation of what this accomplishes and why.
@@ -508,112 +720,359 @@ Detailed explanation of what this accomplishes and why.
 **Changes**:
 - Specific change 1
 - Specific change 2
+- Specific change 3
+
+**Comments Addressed**:
+- Fixed use-after-free bug (Comment #1 from @reviewer)
+- Updated documentation (Comment #3 from @reviewer)
 
 **Test Results**:
 - ✅ All tests passing
+- ✅ All CI checks green
+- ✅ Zero warnings
 
-Summary of impact.
-EOF
+Summary of impact and rationale.
+EOFMSG
 
-# 3. Force push cleaned PR branch
+git add -A
+git commit -F /tmp/commit_msg.txt
+
+# 3. ⚠️ CRITICAL: Force push to update PR on GitHub!
+#    WITHOUT THIS STEP, PR will still show old history on web!
 git push --force-with-lease origin <pr-branch-name>
 
-# 4. Verify PR has clean commits
+# 4. VERIFY the new history is visible on GitHub web UI
 gh pr view <pr-number> --json commits --jq '.commits[] | "\(.oid[0:7]) \(.messageHeadline)"'
+# Also check PR page on GitHub to confirm clean history
 ```
 
-**Step 2: Test EVERYTHING before merging**:
+---
+
+**CHOICE 2: Multiple Logical Commits** (if PR has multiple independent components)
+
+Use when the PR contains distinct logical changes that should be separate commits.
 
 ```bash
-# Formatting
+# 1. On PR branch, reset to start fresh
+git checkout <pr-branch-name>
+git reset --soft main
+
+# 2. Stage and commit each logical component separately
+
+# First logical component
+git add src/feature1.rs tests/test_feature1.rs
+cat > /tmp/commit1_msg.txt << 'EOFMSG'
+feat: implement feature 1
+
+Detailed explanation of feature 1.
+
+**Changes**:
+- Added feature1.rs
+- Added tests for feature 1
+
+**Addresses**: Comment #1 from @reviewer
+EOFMSG
+git commit -F /tmp/commit1_msg.txt
+
+# Second logical component
+git add src/feature2.rs tests/test_feature2.rs
+cat > /tmp/commit2_msg.txt << 'EOFMSG'
+fix: resolve bug in feature 2
+
+Detailed explanation of the fix.
+
+**Changes**:
+- Fixed bug in feature2.rs
+- Updated tests
+
+**Addresses**: Comment #2 from @reviewer
+EOFMSG
+git commit -F /tmp/commit2_msg.txt
+
+# Third logical component (documentation)
+git add docs/ README.md
+cat > /tmp/commit3_msg.txt << 'EOFMSG'
+docs: update documentation for new features
+
+Updated all relevant documentation.
+
+**Changes**:
+- Updated API docs
+- Updated README examples
+
+**Addresses**: Comment #3 from @reviewer
+EOFMSG
+git commit -F /tmp/commit3_msg.txt
+
+# 3. ⚠️ CRITICAL: Force push to update PR on GitHub!
+#    WITHOUT THIS STEP, PR will still show old history on web!
+git push --force-with-lease origin <pr-branch-name>
+
+# 4. VERIFY the new history is visible on GitHub web UI
+gh pr view <pr-number> --json commits --jq '.commits[] | "\(.oid[0:7]) \(.messageHeadline)"'
+# Also check PR page on GitHub to confirm clean history
+```
+
+---
+
+**Commit Message Format** (for both choices):
+```
+<type>: <subject (50 chars max)>
+
+<body - detailed explanation>
+
+**Changes**:
+- Change 1
+- Change 2
+
+**Comments Addressed**:
+- Comment summary (from @user)
+
+**Test Results**:
+- ✅ cargo test passing
+- ✅ CI checks green
+
+<footer - breaking changes, issue refs>
+```
+
+**Commit Types**: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`
+
+**Critical Rules**:
+- ✅ **ALWAYS** rewrite commits before merge (no exceptions)
+- ✅ **ALWAYS** use file-based commit messages (`-F /tmp/msg.txt`)
+- ✅ **NEVER** merge without clean commit history
+- ✅ **NEVER** use interactive rebase (`git rebase -i` - will hang!)
+- ✅ Each commit must be self-contained and buildable
+- ✅ Commit messages must explain WHY, not just WHAT
+
+#### Step 6: Run EVERY SINGLE TEST (MANDATORY - NO EXCEPTIONS)
+
+**CRITICAL**: After documentation audit and commit rewriting, run EVERY test possible. Do NOT skip ANY test. Do NOT make changes - ONLY run tests.
+
+**If ANY test fails, fix it and START OVER from Step 1 (not just Step 6).**
+
+```bash
+# ===================================================================
+# RUN ALL THESE TESTS - DO NOT SKIP A SINGLE ONE
+# ===================================================================
+
+# 1. Code Formatting Check
+echo "=== 1. Formatting Check ==="
 cargo fmt --check
+# MUST pass with no diff
 
-# Documentation
-mdbook test docs/book
-mdbook build docs/book
+# 2. Rust Build (all targets)
+echo "=== 2. Rust Build ==="
+cargo build --all-targets
+cargo build --release --all-targets
+# MUST complete with ZERO warnings (ignoring harmless build.rs info)
+
+# 3. Rust Unit Tests
+echo "=== 3. Rust Unit Tests ==="
+cargo test --lib
+# ALL unit tests MUST pass
+
+# 4. Rust Integration Tests
+echo "=== 4. Rust Integration Tests ==="
+cargo test --tests
+# ALL integration tests MUST pass
+
+# 5. Rust Doc Tests
+echo "=== 5. Rust Doc Tests ==="
+cargo test --doc
+# ALL doc tests MUST pass
+
+# 6. All Rust Tests Together
+echo "=== 6. All Rust Tests ==="
+cargo test --all-targets
+# Everything together MUST pass
+
+# 7. Rust Examples Build
+echo "=== 7. Examples Build ==="
+cargo build --examples
+# ALL examples MUST compile
+
+# 8. Rust Documentation Build
+echo "=== 8. Rust Documentation ==="
 cargo doc --no-deps
+# MUST build with ZERO warnings
 
-# Tests
-cargo test
+# 9. ompparser Compatibility Tests
+echo "=== 9. ompparser Compat Tests ==="
+cd compat/ompparser/build
+make test
+# or: ctest
+cd ../../..
+# ALL compat tests MUST pass
 
-# Build
-cargo build
+# 10. mdBook Documentation Build
+echo "=== 10. mdBook Documentation ==="
+mdbook build docs/book
+# MUST build with ZERO warnings
+
+# 11. mdBook Code Examples Test
+echo "=== 11. mdBook Code Examples ==="
+mdbook test docs/book
+# ALL code examples in docs MUST work
+
+# 12. C Examples Build (if modified)
+echo "=== 12. C Examples ==="
+cd examples/c
+make clean && make
+cd ../..
+# ALL C examples MUST compile
+
+# 13. Fortran Examples Build (if modified)
+echo "=== 13. Fortran Examples ==="
+cd examples/fortran
+make clean && make
+cd ../..
+# ALL Fortran examples MUST compile
+
+# 14. Check for ANY compiler warnings
+echo "=== 14. Warning Check ==="
+cargo build 2>&1 | grep -i warning | grep -v "build.rs"
+# Output MUST be empty (no warnings except build.rs)
+
+# 15. Verify CI Status on GitHub
+echo "=== 15. CI Status Check ==="
+gh pr checks <pr-number>
+# ALL CI checks MUST be GREEN (successful)
+
+# ===================================================================
+# SUMMARY CHECK
+# ===================================================================
+echo ""
+echo "=== FINAL VERIFICATION ==="
+echo "Did ALL 15 test categories pass? [YES/NO]"
+# You MUST answer YES before proceeding to Step 7
 ```
 
-**Step 3: Merge using THE ONLY CORRECT METHOD**:
+**Test Results Checklist**:
+```
+Required Test Results (ALL must pass)
+======================================
+
+Formatting & Build:
+[ ] cargo fmt --check (no diff)
+[ ] cargo build --all-targets (zero warnings)
+[ ] cargo build --release --all-targets (zero warnings)
+
+Rust Tests:
+[ ] cargo test --lib (all unit tests pass)
+[ ] cargo test --tests (all integration tests pass)
+[ ] cargo test --doc (all doc tests pass)
+[ ] cargo test --all-targets (everything passes)
+[ ] cargo build --examples (all examples compile)
+
+Documentation:
+[ ] cargo doc --no-deps (zero warnings)
+[ ] mdbook build docs/book (zero warnings)
+[ ] mdbook test docs/book (all examples work)
+
+Compatibility:
+[ ] compat/ompparser tests (all pass)
+[ ] examples/c compile (if applicable)
+[ ] examples/fortran compile (if applicable)
+
+CI:
+[ ] gh pr checks - ALL GREEN
+[ ] No failing workflows
+[ ] Latest commit has all checks passing
+```
+
+**CRITICAL RULES**:
+- ✅ Run ALL 15 test categories - NO EXCEPTIONS
+- ✅ If ANY test fails, fix it and START OVER from Step 1
+- ✅ Do NOT skip any test category
+- ✅ Do NOT proceed to Step 7 unless ALL tests pass
+- ✅ Tests must pass on the rewritten PR branch BEFORE merge
+
+#### Step 7: Rebase Merge (MANDATORY - ONLY After All Tests Pass)
+
+**CRITICAL**: This is the FINAL step. Do NOT execute until Steps 4, 5, and 6 are 100% complete.
+
+**Pre-Merge Verification**:
+1. ✅ Documentation audited, no redundancy (Step 4 completed)
+2. ✅ PR commits rewritten into clean logical commits (Step 5 completed)
+3. ✅ ALL 15 test categories passed (Step 6 completed)
+4. ✅ User explicitly approves merge
 
 ```bash
+# DO NOT run this command until:
+# 1. Step 4 complete: Documentation audit done
+# 2. Step 5 complete: PR commits rewritten (Choice 1 or 2)
+# 3. Step 6 complete: ALL tests passing (all 15 categories)
+# 4. User says "yes" to proceed
+
+# Ask user: "Docs audited. All commits rewritten. All tests passing. Ready to rebase merge PR #<number>. Proceed? (yes/no)"
+# ONLY after user says "yes":
+
 gh pr merge <pr-number> --rebase --delete-branch
 ```
 
-**Done. Never do it any other way.**
+**What this command does**:
+1. Rebases the clean PR commits onto main (linear history)
+2. Fast-forwards main to include the rebased commits
+3. Closes the PR with proper merge tracking
+4. Deletes the remote and local PR branch
+5. Switches to main and updates it
 
-### What NOT to Do
+**This is the ONLY correct merge method.**
 
-**WRONG - Manual git merge:**
-```bash
-# ❌ DON'T DO THIS
-git checkout main
-git merge <pr-branch>
-git push origin main
-gh pr close <pr-number>  # PR not properly merged, just closed!
-```
+**CRITICAL RULES**:
+- ✅ **ONLY** use `gh pr merge --rebase --delete-branch`
+- ✅ **NEVER** commit directly to main
+- ✅ **NEVER** use regular merge (`git merge`)
+- ✅ **NEVER** use GitHub UI buttons ("Squash and merge", "Merge commit")
+- ✅ **ONLY** rebase merge from PR after Steps 4, 5, and 6 complete
 
-**WRONG - Interactive rebase:**
-```bash
-# ❌ DON'T DO THIS
-git rebase -i main  # Will hang waiting for editor!
-```
+### The Complete 4-Step Final Workflow
 
-**WRONG - Pushing same commits separately:**
-```bash
-# ❌ DON'T DO THIS
-git checkout main
-git cherry-pick <commits>
-git push origin main  # PR still open, commits duplicated!
-```
+**Summary of the ONLY correct approach**:
 
-### Old Workflow Documentation (DEPRECATED - DO NOT USE)
+1. **Step 4: Documentation Audit**
+   - Check for redundancy and ensure single source of truth
+   - If issues found → fix and START OVER from Step 1
+   - Verify documentation is clean
 
-The following section is kept for historical reference ONLY. **DO NOT USE THESE METHODS.**
+2. **Step 5: Rewrite Commits** 
+   - Choose: Single commit (Choice 1) OR Multiple logical commits (Choice 2)
+   - Force push rewritten branch
+   - Verify clean commit history
 
-  **CRITICAL RULES** (DEPRECATED):
-  - ❌ **NEVER use `git rebase -i`** (interactive rebase) - opens editor, waits for human input, WILL HANG
-  - ❌ **NEVER use GitHub squash-and-merge button** - creates messy concatenated commit messages
-  - ❌ **NEVER write "Merge PR #XX" or "Merges branch X into Y"** in commit messages - just describe the changes
-  - ✅ **ALWAYS use `git reset --soft main`** for squashing - fully automated, no editor
-  - ✅ **ALWAYS use `git commit -F - << 'EOF'`** for multi-line messages - no editor needed
-  - ✅ **ALWAYS describe WHAT changed**, not meta information about merging
+3. **Step 6: Run EVERY Test**
+   - Execute ALL 15 test categories
+   - If ANY fails → fix and START OVER from Step 1
+   - Verify ALL tests pass
 
-  **OLD Workflow (DEPRECATED - Use `gh pr merge --rebase` instead)**:
-  1. **Rewrite PR commits** using automated git commands (NO interactive rebase)
-  2. **Force push** the rewritten PR branch
-  3. **Verify** clean history on GitHub
-  4. **Merge** to main with `git merge --no-ff --no-commit` + comprehensive commit message
+4. **Step 7: Rebase Merge**
+   - Get user confirmation
+   - Execute: `gh pr merge --rebase --delete-branch`
+   - **ONLY** method allowed - no alternatives
 
-- **Commit Message Format**:
-  ```
-  <type>: <subject>
-  
-  <body>
-  
-  <footer>
-  ```
-  - Types: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`
-  - Subject: Concise summary (50 chars or less)
-  - Body: Detailed explanation of changes, motivation, and impact
-  - Footer: Breaking changes, issue references
-- **Pre-Merge Documentation Audit**: Before final merge, check for documentation redundancy:
-  - **Scan for duplicate content**: Review all documentation files for overlapping information
-  - **Consolidate or remove**: Merge duplicate content into canonical locations or delete redundant files
-  - **Check specific areas**:
-    - Multiple README files with similar content
-    - Duplicate tutorials or guides (e.g., `docs/QUICK_START.md` vs `docs/book/src/getting-started.md`)
-    - Planning/status documents that should be deleted after completion
-    - Old summary files (e.g., `FORTRAN_SUPPORT_SUMMARY.md`) that duplicate information in other docs
-  - **Apply documentation hierarchy**: Ensure content lives in the right place per the Documentation Philosophy section
-  - **Cross-reference instead of duplicate**: Replace duplicated content with links to canonical source
-  - **Clean up temporary files**: Remove implementation summaries, status files, and planning documents after merging
+**Result**: Main branch has clean, logical, linear history with all tests passing.
+
+### Forbidden Merge Methods
+
+**❌ NEVER USE THESE - ONLY USE Step 7 (`gh pr merge --rebase --delete-branch`)**:
+
+- ❌ `git commit` directly to main branch
+- ❌ `git merge <pr-branch>` then push to main
+- ❌ `git rebase -i` (interactive rebase - will hang!)
+- ❌ GitHub UI "Squash and merge" button
+- ❌ GitHub UI "Merge commit" button  
+- ❌ `git cherry-pick` to main then close PR
+- ❌ Any method other than: **Step 4 → Step 5 → Step 6 → Step 7**
+
+**Why these are WRONG**:
+- Don't properly close/track PR
+- Create messy commit history
+- Skip the 3-step verification process
+- Risk duplicate commits or conflicts
+- Manual cleanup required
+
+
 
 ## Testing Requirements
 
