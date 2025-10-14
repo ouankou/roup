@@ -630,16 +630,16 @@ impl fmt::Display for OrderKind {
 ///
 /// This is like a tagged union in C, but type-safe.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ClauseItem<'a> {
+pub enum ClauseItem {
     /// Simple identifier (e.g., `x` in `private(x)`)
-    Identifier(Identifier<'a>),
+    Identifier(Identifier),
     /// Variable with optional array sections (e.g., `arr[0:N]` in `map(to: arr[0:N])`)
-    Variable(Variable<'a>),
+    Variable(Variable),
     /// Expression (e.g., `n > 100` in `if(n > 100)`)
-    Expression(Expression<'a>),
+    Expression(Expression),
 }
 
-impl<'a> fmt::Display for ClauseItem<'a> {
+impl fmt::Display for ClauseItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ClauseItem::Identifier(id) => write!(f, "{}", id),
@@ -649,20 +649,20 @@ impl<'a> fmt::Display for ClauseItem<'a> {
     }
 }
 
-impl<'a> From<Identifier<'a>> for ClauseItem<'a> {
-    fn from(id: Identifier<'a>) -> Self {
+impl From<Identifier> for ClauseItem {
+    fn from(id: Identifier) -> Self {
         ClauseItem::Identifier(id)
     }
 }
 
-impl<'a> From<Variable<'a>> for ClauseItem<'a> {
-    fn from(var: Variable<'a>) -> Self {
+impl From<Variable> for ClauseItem {
+    fn from(var: Variable) -> Self {
         ClauseItem::Variable(var)
     }
 }
 
-impl<'a> From<Expression<'a>> for ClauseItem<'a> {
-    fn from(expr: Expression<'a>) -> Self {
+impl From<Expression> for ClauseItem {
+    fn from(expr: Expression) -> Self {
         ClauseItem::Expression(expr)
     }
 }
@@ -713,42 +713,42 @@ impl<'a> From<Expression<'a>> for ClauseItem<'a> {
 ///
 /// This is much richer than the parser's string-based representation.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ClauseData<'a> {
+pub enum ClauseData {
     // ========================================================================
     // Bare clauses (no parameters)
     // ========================================================================
     /// Clause with no parameters (e.g., `nowait`, `nogroup`)
-    Bare(Identifier<'a>),
+    Bare(Identifier),
 
     // ========================================================================
     // Simple expression clauses
     // ========================================================================
     /// Single expression parameter (e.g., `num_threads(4)`)
-    Expression(Expression<'a>),
+    Expression(Expression),
 
     // ========================================================================
     // Item list clauses
     // ========================================================================
     /// List of items (e.g., `private(x, y, z)`)
-    ItemList(Vec<ClauseItem<'a>>),
+    ItemList(Vec<ClauseItem>),
 
     // ========================================================================
     // Data-sharing attribute clauses
     // ========================================================================
     /// `private(list)` - Variables are private to each thread
-    Private { items: Vec<ClauseItem<'a>> },
+    Private { items: Vec<ClauseItem> },
 
     /// `firstprivate(list)` - Variables initialized from master thread
-    Firstprivate { items: Vec<ClauseItem<'a>> },
+    Firstprivate { items: Vec<ClauseItem> },
 
     /// `lastprivate([modifier:] list)` - Variables updated from last iteration
     Lastprivate {
         modifier: Option<LastprivateModifier>,
-        items: Vec<ClauseItem<'a>>,
+        items: Vec<ClauseItem>,
     },
 
     /// `shared(list)` - Variables shared among all threads
-    Shared { items: Vec<ClauseItem<'a>> },
+    Shared { items: Vec<ClauseItem> },
 
     /// `default(shared|none|...)` - Default data-sharing attribute
     Default(DefaultKind),
@@ -759,7 +759,7 @@ pub enum ClauseData<'a> {
     /// `reduction([modifier,]operator: list)` - Reduction operation
     Reduction {
         operator: ReductionOperator,
-        items: Vec<ClauseItem<'a>>,
+        items: Vec<ClauseItem>,
     },
 
     // ========================================================================
@@ -768,21 +768,21 @@ pub enum ClauseData<'a> {
     /// `map([[mapper(id),] map-type:] list)` - Map variables to device
     Map {
         map_type: Option<MapType>,
-        mapper: Option<Identifier<'a>>,
-        items: Vec<ClauseItem<'a>>,
+        mapper: Option<Identifier>,
+        items: Vec<ClauseItem>,
     },
 
     /// `use_device_ptr(list)` - Use device pointers
-    UseDevicePtr { items: Vec<ClauseItem<'a>> },
+    UseDevicePtr { items: Vec<ClauseItem> },
 
     /// `use_device_addr(list)` - Use device addresses
-    UseDeviceAddr { items: Vec<ClauseItem<'a>> },
+    UseDeviceAddr { items: Vec<ClauseItem> },
 
     /// `is_device_ptr(list)` - Variables are device pointers
-    IsDevicePtr { items: Vec<ClauseItem<'a>> },
+    IsDevicePtr { items: Vec<ClauseItem> },
 
     /// `has_device_addr(list)` - Variables have device addresses
-    HasDeviceAddr { items: Vec<ClauseItem<'a>> },
+    HasDeviceAddr { items: Vec<ClauseItem> },
 
     // ========================================================================
     // Task clauses
@@ -790,14 +790,14 @@ pub enum ClauseData<'a> {
     /// `depend([modifier,] type: list)` - Task dependencies
     Depend {
         depend_type: DependType,
-        items: Vec<ClauseItem<'a>>,
+        items: Vec<ClauseItem>,
     },
 
     /// `priority(expression)` - Task priority
-    Priority { priority: Expression<'a> },
+    Priority { priority: Expression },
 
     /// `affinity([modifier:] list)` - Task affinity
-    Affinity { items: Vec<ClauseItem<'a>> },
+    Affinity { items: Vec<ClauseItem> },
 
     // ========================================================================
     // Loop scheduling clauses
@@ -806,14 +806,14 @@ pub enum ClauseData<'a> {
     Schedule {
         kind: ScheduleKind,
         modifiers: Vec<ScheduleModifier>,
-        chunk_size: Option<Expression<'a>>,
+        chunk_size: Option<Expression>,
     },
 
     /// `collapse(n)` - Collapse nested loops
-    Collapse { n: Expression<'a> },
+    Collapse { n: Expression },
 
     /// `ordered[(n)]` - Ordered iterations
-    Ordered { n: Option<Expression<'a>> },
+    Ordered { n: Option<Expression> },
 
     // ========================================================================
     // SIMD clauses
@@ -821,29 +821,29 @@ pub enum ClauseData<'a> {
     /// `linear(list[:step])` - Linear variables in SIMD
     Linear {
         modifier: Option<LinearModifier>,
-        items: Vec<ClauseItem<'a>>,
-        step: Option<Expression<'a>>,
+        items: Vec<ClauseItem>,
+        step: Option<Expression>,
     },
 
     /// `aligned(list[:alignment])` - Aligned variables
     Aligned {
-        items: Vec<ClauseItem<'a>>,
-        alignment: Option<Expression<'a>>,
+        items: Vec<ClauseItem>,
+        alignment: Option<Expression>,
     },
 
     /// `safelen(length)` - Safe SIMD vector length
-    Safelen { length: Expression<'a> },
+    Safelen { length: Expression },
 
     /// `simdlen(length)` - Preferred SIMD vector length
-    Simdlen { length: Expression<'a> },
+    Simdlen { length: Expression },
 
     // ========================================================================
     // Conditional clauses
     // ========================================================================
     /// `if([directive-name-modifier:] expression)` - Conditional execution
     If {
-        directive_name: Option<Identifier<'a>>,
-        condition: Expression<'a>,
+        directive_name: Option<Identifier>,
+        condition: Expression,
     },
 
     // ========================================================================
@@ -853,13 +853,13 @@ pub enum ClauseData<'a> {
     ProcBind(ProcBind),
 
     /// `num_threads(expression)` - Number of threads
-    NumThreads { num: Expression<'a> },
+    NumThreads { num: Expression },
 
     // ========================================================================
     // Device clauses
     // ========================================================================
     /// `device(expression)` - Target device
-    Device { device_num: Expression<'a> },
+    Device { device_num: Expression },
 
     /// `device_type(host|nohost|any)` - Device type specifier
     DeviceType(DeviceType),
@@ -886,55 +886,55 @@ pub enum ClauseData<'a> {
     // Teams clauses
     // ========================================================================
     /// `num_teams(expression)` - Number of teams
-    NumTeams { num: Expression<'a> },
+    NumTeams { num: Expression },
 
     /// `thread_limit(expression)` - Thread limit per team
-    ThreadLimit { limit: Expression<'a> },
+    ThreadLimit { limit: Expression },
 
     // ========================================================================
     // Allocator clauses
     // ========================================================================
     /// `allocate([allocator:] list)` - Memory allocator
     Allocate {
-        allocator: Option<Identifier<'a>>,
-        items: Vec<ClauseItem<'a>>,
+        allocator: Option<Identifier>,
+        items: Vec<ClauseItem>,
     },
 
     /// `allocator(allocator-handle)` - Specify allocator
-    Allocator { allocator: Identifier<'a> },
+    Allocator { allocator: Identifier },
 
     // ========================================================================
     // Other clauses
     // ========================================================================
     /// `copyin(list)` - Copy master thread value to team threads
-    Copyin { items: Vec<ClauseItem<'a>> },
+    Copyin { items: Vec<ClauseItem> },
 
     /// `copyprivate(list)` - Broadcast value from one thread
-    Copyprivate { items: Vec<ClauseItem<'a>> },
+    Copyprivate { items: Vec<ClauseItem> },
 
     /// `dist_schedule(kind[, chunk_size])` - Distribute schedule
     DistSchedule {
         kind: ScheduleKind,
-        chunk_size: Option<Expression<'a>>,
+        chunk_size: Option<Expression>,
     },
 
     /// `grainsize(expression)` - Taskloop grainsize
-    Grainsize { grain: Expression<'a> },
+    Grainsize { grain: Expression },
 
     /// `num_tasks(expression)` - Number of tasks
-    NumTasks { num: Expression<'a> },
+    NumTasks { num: Expression },
 
     /// `filter(thread-num)` - Thread filter for masked construct
-    Filter { thread_num: Expression<'a> },
+    Filter { thread_num: Expression },
 
     /// Generic clause with unparsed data (fallback for unknown clauses)
     Generic {
-        name: Identifier<'a>,
-        data: Option<&'a str>,
+        name: Identifier,
+        data: Option<String>,
     },
 }
 
-impl<'a> fmt::Display for ClauseData<'a> {
+impl fmt::Display for ClauseData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ClauseData::Bare(name) => write!(f, "{}", name),
@@ -1101,7 +1101,7 @@ impl<'a> fmt::Display for ClauseData<'a> {
     }
 }
 
-impl<'a> ClauseData<'a> {
+impl<'a> ClauseData {
     /// Check if this is a default clause
     pub fn is_default(&self) -> bool {
         matches!(self, ClauseData::Default(_))

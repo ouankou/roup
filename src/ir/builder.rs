@@ -33,12 +33,13 @@ use super::{
 };
 
 /// Builder for constructing DirectiveIR with a fluent API
-pub struct DirectiveBuilder<'a> {
+pub struct DirectiveBuilder {
     kind: DirectiveKind,
-    clauses: Vec<ClauseData<'a>>,
+    name: String,
+    clauses: Vec<ClauseData>,
 }
 
-impl<'a> DirectiveBuilder<'a> {
+impl<'a> DirectiveBuilder {
     /// Create a new builder for a parallel directive
     ///
     /// ## Example
@@ -55,6 +56,7 @@ impl<'a> DirectiveBuilder<'a> {
     pub fn parallel() -> Self {
         Self {
             kind: DirectiveKind::Parallel,
+            name: "parallel".to_string(),
             clauses: Vec::new(),
         }
     }
@@ -63,6 +65,7 @@ impl<'a> DirectiveBuilder<'a> {
     pub fn parallel_for() -> Self {
         Self {
             kind: DirectiveKind::ParallelFor,
+            name: "parallel for".to_string(),
             clauses: Vec::new(),
         }
     }
@@ -71,6 +74,7 @@ impl<'a> DirectiveBuilder<'a> {
     pub fn for_loop() -> Self {
         Self {
             kind: DirectiveKind::For,
+            name: "for".to_string(),
             clauses: Vec::new(),
         }
     }
@@ -79,6 +83,7 @@ impl<'a> DirectiveBuilder<'a> {
     pub fn task() -> Self {
         Self {
             kind: DirectiveKind::Task,
+            name: "task".to_string(),
             clauses: Vec::new(),
         }
     }
@@ -87,6 +92,7 @@ impl<'a> DirectiveBuilder<'a> {
     pub fn target() -> Self {
         Self {
             kind: DirectiveKind::Target,
+            name: "target".to_string(),
             clauses: Vec::new(),
         }
     }
@@ -95,14 +101,17 @@ impl<'a> DirectiveBuilder<'a> {
     pub fn teams() -> Self {
         Self {
             kind: DirectiveKind::Teams,
+            name: "teams".to_string(),
             clauses: Vec::new(),
         }
     }
 
     /// Create a new builder for any directive kind
     pub fn new(kind: DirectiveKind) -> Self {
+        let name = format!("{:?}", kind).to_lowercase();
         Self {
             kind,
+            name,
             clauses: Vec::new(),
         }
     }
@@ -334,8 +343,8 @@ impl<'a> DirectiveBuilder<'a> {
     ///
     /// assert_eq!(directive.clauses().len(), 2);
     /// ```
-    pub fn build(self, location: SourceLocation, language: Language) -> DirectiveIR<'a> {
-        DirectiveIR::new(self.kind, self.clauses, location, language)
+    pub fn build(self, location: SourceLocation, language: Language) -> DirectiveIR {
+        DirectiveIR::new(self.kind, &self.name, self.clauses, location, language)
     }
 }
 

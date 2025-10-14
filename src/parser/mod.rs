@@ -37,25 +37,14 @@ impl Parser {
     }
 
     pub fn parse<'a>(&self, input: &'a str) -> IResult<&'a str, Directive<'a>> {
-        // IMPORTANT: ROUP requires complete single-line directive input
+        // IMPORTANT: ROUP normalizes continuation markers before parsing
         //
-        // Design Constraint: Multi-line directives are NOT supported
-        // - C: Users must not split #pragma omp across multiple lines
-        // - Fortran: Users must not use & continuation characters
+        // Supported continuation forms:
+        // - C / C++: trailing backslash (`\`) merges the next line
+        // - Fortran: trailing `&` with optional sentinel on the following line
         //
-        // Example of UNSUPPORTED multi-line Fortran input:
-        //     !$OMP PARALLEL DO &
-        //     !$OMP   PRIVATE(I,J)
-        //
-        // Users must provide complete directives on ONE line:
-        //     !$OMP PARALLEL DO PRIVATE(I,J)
-        //
-        // Rationale: Continuation handling would require:
-        // - State tracking across multiple parse() calls
-        // - Sentinel prefix stripping on continuation lines
-        // - Complex line merging logic
-        // This significantly complicates the parser API and is beyond ROUP's scope.
-        // Users should preprocess multi-line directives before calling parse().
+        // The lexer collapses these continuations into a single logical line so the
+        // directive and clause registries operate on canonical whitespace.
 
         let input = match self.language {
             Language::C => {
@@ -103,7 +92,8 @@ pub fn parse_omp_directive(input: &str) -> IResult<&str, Directive<'_>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lexer;
+    use crate::lexer::{self, Language};
+    use std::borrow::Cow;
 
     #[test]
     fn parses_full_pragma_with_default_registries() {
@@ -115,14 +105,17 @@ mod tests {
         assert_eq!(directive.name, "parallel");
         assert_eq!(directive.clauses.len(), 2);
         assert_eq!(directive.clauses[0].name, "private");
-        assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("a, b"));
+        assert_eq!(
+            directive.clauses[0].kind,
+            ClauseKind::Parenthesized("a, b".into())
+        );
         assert_eq!(directive.clauses[1].name, "nowait");
         assert_eq!(directive.clauses[1].kind, ClauseKind::Bare);
     }
 
     #[test]
     fn parser_uses_custom_registries() {
-        fn parse_only_bare<'a>(name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
+        fn parse_only_bare<'a>(name: Cow<'a, str>, input: &'a str) -> IResult<&'a str, Clause<'a>> {
             let (input, _) = nom::character::complete::char('(')(input)?;
             let (input, value) = lexer::lex_clause(input)?;
             let (input, _) = nom::character::complete::char(')')(input)?;
@@ -131,7 +124,7 @@ mod tests {
                 input,
                 Clause {
                     name,
-                    kind: ClauseKind::Parenthesized(value),
+                    kind: ClauseKind::Parenthesized(value.into()),
                 },
             ))
         }
@@ -141,7 +134,7 @@ mod tests {
             .build();
 
         fn parse_prefixed<'a>(
-            name: &'a str,
+            name: Cow<'a, str>,
             input: &'a str,
             clause_registry: &ClauseRegistry,
         ) -> IResult<&'a str, Directive<'a>> {
@@ -170,6 +163,82 @@ mod tests {
         assert_eq!(directive.name, "target");
         assert_eq!(directive.clauses.len(), 1);
         assert_eq!(directive.clauses[0].name, "device");
-        assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("gpu"));
+        assert_eq!(
+            directive.clauses[0].kind,
+            ClauseKind::Parenthesized("gpu".into())
+        );
+    }
+
+    #[test]
+    fn parses_c_multiline_directive_with_backslash() {
+        let input = "#pragma omp parallel for \
+            private(a, \
+                    b) \
+            nowait";
+        let parser = Parser::default();
+        let (_, directive) = parser.parse(input).expect("directive should parse");
+
+        assert_eq!(directive.name, "parallel for");
+        assert_eq!(directive.clauses.len(), 2);
+        assert_eq!(directive.clauses[0].name, "private");
+        assert_eq!(
+            directive.clauses[0].kind,
+            ClauseKind::Parenthesized("a, b".into())
+        );
+        assert_eq!(directive.clauses[1].name, "nowait");
+        assert_eq!(directive.clauses[1].kind, ClauseKind::Bare);
+    }
+
+    #[test]
+    fn parses_fortran_free_multiline_directive() {
+        let parser = Parser::default().with_language(Language::FortranFree);
+        let input = "!$omp target teams distribute &\n!$omp parallel do &\n!$omp& private(i, j)";
+
+        let (_, directive) = parser.parse(input).expect("directive should parse");
+
+        assert_eq!(directive.name, "target teams distribute parallel do");
+        assert_eq!(directive.clauses.len(), 1);
+        assert_eq!(directive.clauses[0].name, "private");
+        assert_eq!(
+            directive.clauses[0].kind,
+            ClauseKind::Parenthesized("i, j".into())
+        );
+    }
+
+    #[test]
+    fn parses_fortran_parenthesized_clause_with_continuation() {
+        let parser = Parser::default().with_language(Language::FortranFree);
+        let input = "!$omp parallel do private(i, &\n!$omp& j, &\n!$omp& k)";
+
+        let (_, directive) = parser.parse(input).expect("directive should parse");
+
+        assert_eq!(directive.name, "parallel do");
+        assert_eq!(directive.clauses.len(), 1);
+        assert_eq!(directive.clauses[0].name, "private");
+        assert_eq!(
+            directive.clauses[0].kind,
+            ClauseKind::Parenthesized("i, j, k".into())
+        );
+    }
+
+    #[test]
+    fn parses_fortran_fixed_multiline_directive() {
+        let parser = Parser::default().with_language(Language::FortranFixed);
+        let input = "      C$OMP   DO &\n      !$OMP& SCHEDULE(DYNAMIC) &\n      !$OMP PRIVATE(I)";
+
+        let (_, directive) = parser.parse(input).expect("directive should parse");
+
+        assert_eq!(directive.name, "do");
+        assert_eq!(directive.clauses.len(), 2);
+        assert_eq!(directive.clauses[0].name, "schedule");
+        assert_eq!(
+            directive.clauses[0].kind,
+            ClauseKind::Parenthesized("DYNAMIC".into())
+        );
+        assert_eq!(directive.clauses[1].name, "private");
+        assert_eq!(
+            directive.clauses[1].kind,
+            ClauseKind::Parenthesized("I".into())
+        );
     }
 }

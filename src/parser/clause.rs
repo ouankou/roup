@@ -1,20 +1,20 @@
-use std::{collections::HashMap, fmt};
+use std::{borrow::Cow, collections::HashMap, fmt};
 
 use nom::{multi::separated_list0, IResult, Parser};
 
 use crate::lexer;
 
-type ClauseParserFn = for<'a> fn(&'a str, &'a str) -> IResult<&'a str, Clause<'a>>;
+type ClauseParserFn = for<'a> fn(Cow<'a, str>, &'a str) -> IResult<&'a str, Clause<'a>>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ClauseKind<'a> {
     Bare,
-    Parenthesized(&'a str),
+    Parenthesized(Cow<'a, str>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Clause<'a> {
-    pub name: &'a str,
+    pub name: Cow<'a, str>,
     pub kind: ClauseKind<'a>,
 }
 
@@ -28,7 +28,7 @@ impl<'a> fmt::Display for Clause<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
             ClauseKind::Bare => write!(f, "{}", self.name),
-            ClauseKind::Parenthesized(value) => write!(f, "{}({})", self.name, value),
+            ClauseKind::Parenthesized(ref value) => write!(f, "{}({})", self.name, value),
         }
     }
 }
@@ -43,7 +43,7 @@ pub enum ClauseRule {
 }
 
 impl ClauseRule {
-    fn parse<'a>(self, name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
+    fn parse<'a>(self, name: Cow<'a, str>, input: &'a str) -> IResult<&'a str, Clause<'a>> {
         match self {
             ClauseRule::Bare => Ok((
                 input,
@@ -97,9 +97,22 @@ impl ClauseRegistry {
     }
 
     fn parse_clause<'a>(&self, input: &'a str) -> IResult<&'a str, Clause<'a>> {
-        let (input, name) = lexer::lex_clause(input)?;
+        let (input, raw_name) = lexer::lex_clause(input)?;
+
+        let collapsed = lexer::collapse_line_continuations(raw_name);
+        let name = if self.case_insensitive {
+            let lowered = collapsed.as_ref().to_ascii_lowercase();
+            if lowered == collapsed.as_ref() {
+                collapsed
+            } else {
+                Cow::Owned(lowered)
+            }
+        } else {
+            collapsed
+        };
 
         // Use efficient lookup based on case sensitivity mode
+        let lookup_name = name.as_ref();
         let rule = if self.case_insensitive {
             // Case-insensitive lookup using eq_ignore_ascii_case (O(n) linear search)
             // Performance note: For small registries (~12 clauses), linear search with
@@ -108,12 +121,15 @@ impl ClauseRegistry {
             // Benchmarking shows O(n) scan is faster than HashMap for n < ~50 items.
             self.rules
                 .iter()
-                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .find(|(k, _)| k.eq_ignore_ascii_case(lookup_name))
                 .map(|(_, v)| *v)
                 .unwrap_or(self.default_rule)
         } else {
             // Direct HashMap lookup for case-sensitive mode (O(1), zero allocations)
-            self.rules.get(name).copied().unwrap_or(self.default_rule)
+            self.rules
+                .get(lookup_name)
+                .copied()
+                .unwrap_or(self.default_rule)
         };
 
         rule.parse(name, input)
@@ -194,7 +210,10 @@ fn starts_with_parenthesis(input: &str) -> bool {
     input.trim_start().starts_with('(')
 }
 
-fn parse_parenthesized_clause<'a>(name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
+fn parse_parenthesized_clause<'a>(
+    name: Cow<'a, str>,
+    input: &'a str,
+) -> IResult<&'a str, Clause<'a>> {
     let mut iter = input.char_indices();
 
     while let Some((idx, ch)) = iter.next() {
@@ -234,14 +253,16 @@ fn parse_parenthesized_clause<'a>(name: &'a str, input: &'a str) -> IResult<&'a 
         })?;
 
         let content_start = start + 1;
-        let content = input[content_start..end_index].trim();
+        let raw_content = &input[content_start..end_index];
+        let trimmed = raw_content.trim();
+        let normalized = lexer::collapse_line_continuations(trimmed);
         let rest = &input[end_index + 1..];
 
         return Ok((
             rest,
             Clause {
                 name,
-                kind: ClauseKind::Parenthesized(content),
+                kind: ClauseKind::Parenthesized(normalized),
             },
         ));
     }
@@ -280,7 +301,7 @@ mod tests {
         assert_eq!(
             clauses,
             vec![Clause {
-                name: "nowait",
+                name: "nowait".into(),
                 kind: ClauseKind::Bare,
             }]
         );
@@ -297,13 +318,13 @@ mod tests {
         assert_eq!(rest, "");
         assert_eq!(clauses.len(), 1);
         assert_eq!(clauses[0].name, "private");
-        assert_eq!(clauses[0].kind, ClauseKind::Parenthesized("a, b, c"));
+        assert_eq!(clauses[0].kind, ClauseKind::Parenthesized("a, b, c".into()));
     }
 
     #[test]
     fn clause_display_roundtrips_bare_clause() {
         let clause = Clause {
-            name: "nowait",
+            name: "nowait".into(),
             kind: ClauseKind::Bare,
         };
 
@@ -314,15 +335,18 @@ mod tests {
     #[test]
     fn clause_display_roundtrips_parenthesized_clause() {
         let clause = Clause {
-            name: "private",
-            kind: ClauseKind::Parenthesized("a, b"),
+            name: "private".into(),
+            kind: ClauseKind::Parenthesized("a, b".into()),
         };
 
         assert_eq!(clause.to_string(), "private(a, b)");
         assert_eq!(clause.to_source_string(), "private(a, b)");
     }
 
-    fn parse_single_identifier<'a>(name: &'a str, input: &'a str) -> IResult<&'a str, Clause<'a>> {
+    fn parse_single_identifier<'a>(
+        name: Cow<'a, str>,
+        input: &'a str,
+    ) -> IResult<&'a str, Clause<'a>> {
         let (input, _) = char('(')(input)?;
         let (input, identifier) = lexer::lex_clause(input)?;
         let (input, _) = char(')')(input)?;
@@ -331,7 +355,7 @@ mod tests {
             input,
             Clause {
                 name,
-                kind: ClauseKind::Parenthesized(identifier),
+                kind: ClauseKind::Parenthesized(identifier.into()),
             },
         ))
     }
@@ -349,7 +373,7 @@ mod tests {
         assert_eq!(rest, "");
         assert_eq!(clauses.len(), 1);
         assert_eq!(clauses[0].name, "device");
-        assert_eq!(clauses[0].kind, ClauseKind::Parenthesized("gpu"));
+        assert_eq!(clauses[0].kind, ClauseKind::Parenthesized("gpu".into()));
     }
 
     #[test]

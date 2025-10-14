@@ -13,13 +13,19 @@ fn parses_teams_with_reductions() {
     assert_eq!(directive.name, "teams");
     assert_eq!(directive.clauses.len(), 3);
     assert_eq!(directive.clauses[0].name, "num_teams");
-    assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("8"));
+    assert_eq!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized("8".into())
+    );
     assert_eq!(directive.clauses[1].name, "thread_limit");
-    assert_eq!(directive.clauses[1].kind, ClauseKind::Parenthesized("32"));
+    assert_eq!(
+        directive.clauses[1].kind,
+        ClauseKind::Parenthesized("32".into())
+    );
     assert_eq!(directive.clauses[2].name, "reduction");
     assert_eq!(
         directive.clauses[2].kind,
-        ClauseKind::Parenthesized("+:total")
+        ClauseKind::Parenthesized("+:total".into())
     );
 }
 
@@ -32,16 +38,19 @@ fn parses_teams_distribute_parallel_loop() {
     assert_eq!(directive.name, "teams distribute parallel loop");
     assert_eq!(directive.clauses.len(), 3);
     assert_eq!(directive.clauses[0].name, "collapse");
-    assert_eq!(directive.clauses[0].kind, ClauseKind::Parenthesized("3"));
+    assert_eq!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized("3".into())
+    );
     assert_eq!(directive.clauses[1].name, "allocate");
     assert_eq!(
         directive.clauses[1].kind,
-        ClauseKind::Parenthesized("pmem:buf")
+        ClauseKind::Parenthesized("pmem:buf".into())
     );
     assert_eq!(directive.clauses[2].name, "order");
     assert_eq!(
         directive.clauses[2].kind,
-        ClauseKind::Parenthesized("concurrent")
+        ClauseKind::Parenthesized("concurrent".into())
     );
 }
 
@@ -54,8 +63,11 @@ fn parses_teams_distribute_with_dist_schedule() {
     assert_eq!(directive.clauses[0].name, "dist_schedule");
     assert_eq!(
         directive.clauses[0].kind,
-        ClauseKind::Parenthesized("static,4"),
+        ClauseKind::Parenthesized("static,4".into()),
     );
     assert_eq!(directive.clauses[1].name, "collapse");
-    assert_eq!(directive.clauses[1].kind, ClauseKind::Parenthesized("2"));
+    assert_eq!(
+        directive.clauses[1].kind,
+        ClauseKind::Parenthesized("2".into())
+    );
 }

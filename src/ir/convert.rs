@@ -27,7 +27,7 @@
 //!   Directive { name: "parallel for",
 //!               clauses: [
 //!                 Clause { name: "private", kind: Parenthesized("x, y") },
-//!                 Clause { name: "reduction", kind: Parenthesized("+: sum") }
+//!                 Clause { name: "reduction".into(), kind: Parenthesized("+: sum") }
 //!               ] }
 //!
 //! IR output:
@@ -209,7 +209,7 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
 /// let items = parse_identifier_list("x, y, z");
 /// assert_eq!(items.len(), 3);
 /// ```
-pub fn parse_identifier_list(content: &str) -> Vec<ClauseItem<'_>> {
+pub fn parse_identifier_list(content: &str) -> Vec<ClauseItem> {
     content
         .split(',')
         .map(|s| s.trim())
@@ -260,7 +260,7 @@ pub fn parse_reduction_operator(op_str: &str) -> Result<ReductionOperator, Conve
 /// let clause = parse_schedule_clause("static, 10").unwrap();
 /// // Returns ClauseData::Schedule with kind=Static, chunk_size=Some(10)
 /// ```
-pub fn parse_schedule_clause(content: &str) -> Result<ClauseData<'_>, ConversionError> {
+pub fn parse_schedule_clause(content: &str) -> Result<ClauseData, ConversionError> {
     // Check for modifiers (they end with a colon)
     let (modifiers, rest) = if let Some(colon_pos) = content.find(':') {
         let (mod_str, kind_str) = content.split_at(colon_pos);
@@ -309,7 +309,7 @@ pub fn parse_schedule_clause(content: &str) -> Result<ClauseData<'_>, Conversion
         }
     };
 
-    let chunk_size = parts.get(1).map(|s| Expression::unparsed(s));
+    let chunk_size = parts.get(1).map(|s| Expression::unparsed(*s));
 
     Ok(ClauseData::Schedule {
         kind,
@@ -329,7 +329,7 @@ pub fn parse_schedule_clause(content: &str) -> Result<ClauseData<'_>, Conversion
 /// let clause = parse_map_clause("to: arr").unwrap();
 /// // Returns ClauseData::Map with map_type=To, items=[arr]
 /// ```
-pub fn parse_map_clause(content: &str) -> Result<ClauseData<'_>, ConversionError> {
+pub fn parse_map_clause(content: &str) -> Result<ClauseData, ConversionError> {
     // Simplified implementation: just handle "map-type: list"
     // Full implementation would need to handle mapper(...) prefix
 
@@ -407,7 +407,7 @@ pub fn parse_depend_type(type_str: &str) -> Result<DependType, ConversionError> 
 /// let clause = parse_linear_clause("x, y: 2").unwrap();
 /// // Returns ClauseData::Linear with items=[x, y], step=Some(2)
 /// ```
-pub fn parse_linear_clause(content: &str) -> Result<ClauseData<'_>, ConversionError> {
+pub fn parse_linear_clause(content: &str) -> Result<ClauseData, ConversionError> {
     // Simplified implementation: handle "list: step" or just "list"
     // Full implementation would handle modifier(list): syntax
 
@@ -427,7 +427,7 @@ pub fn parse_linear_clause(content: &str) -> Result<ClauseData<'_>, ConversionEr
         let step_str = &step_str[1..].trim(); // Skip the ':'
 
         let items = parse_identifier_list(items_str);
-        let step = Some(Expression::unparsed(step_str));
+        let step = Some(Expression::unparsed(*step_str));
 
         Ok(ClauseData::Linear {
             modifier: None,
@@ -454,17 +454,20 @@ pub fn parse_linear_clause(content: &str) -> Result<ClauseData<'_>, ConversionEr
 /// For now, we'll implement a subset of clauses and mark others as
 /// unsupported. This allows incremental development.
 pub fn parse_clause_data<'a>(
-    clause: &Clause<'a>,
+    clause: &'a Clause<'a>,
     _config: &ParserConfig,
-) -> Result<ClauseData<'a>, ConversionError> {
-    match clause.name {
+) -> Result<ClauseData, ConversionError> {
+    let clause_name = clause.name.as_ref();
+
+    match clause_name {
         // Bare clauses (no parameters)
         "nowait" | "nogroup" | "untied" | "mergeable" | "seq_cst" | "relaxed" | "release"
-        | "acquire" | "acq_rel" => Ok(ClauseData::Bare(Identifier::new(clause.name))),
+        | "acquire" | "acq_rel" => Ok(ClauseData::Bare(Identifier::new(clause_name))),
 
         // default(kind)
         "default" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 let kind_str = content.trim();
                 let kind = match kind_str {
                     "shared" => DefaultKind::Shared,
@@ -488,7 +491,8 @@ pub fn parse_clause_data<'a>(
 
         // private(list)
         "private" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 let items = parse_identifier_list(content);
                 Ok(ClauseData::Private { items })
             } else {
@@ -498,7 +502,8 @@ pub fn parse_clause_data<'a>(
 
         // firstprivate(list)
         "firstprivate" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 let items = parse_identifier_list(content);
                 Ok(ClauseData::Firstprivate { items })
             } else {
@@ -508,7 +513,8 @@ pub fn parse_clause_data<'a>(
 
         // shared(list)
         "shared" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 let items = parse_identifier_list(content);
                 Ok(ClauseData::Shared { items })
             } else {
@@ -518,7 +524,8 @@ pub fn parse_clause_data<'a>(
 
         // num_threads(expr)
         "num_threads" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 Ok(ClauseData::NumThreads {
                     num: Expression::unparsed(content.trim()),
                 })
@@ -531,14 +538,15 @@ pub fn parse_clause_data<'a>(
 
         // if(expr)
         "if" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 // Check for directive-name modifier: "if(parallel: condition)"
                 if let Some(colon_pos) = content.find(':') {
                     let (modifier, condition) = content.split_at(colon_pos);
                     let condition = &condition[1..].trim(); // Skip the ':'
                     Ok(ClauseData::If {
                         directive_name: Some(Identifier::new(modifier.trim())),
-                        condition: Expression::unparsed(condition),
+                        condition: Expression::unparsed(*condition),
                     })
                 } else {
                     Ok(ClauseData::If {
@@ -555,7 +563,8 @@ pub fn parse_clause_data<'a>(
 
         // collapse(n)
         "collapse" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 Ok(ClauseData::Collapse {
                     n: Expression::unparsed(content.trim()),
                 })
@@ -569,14 +578,15 @@ pub fn parse_clause_data<'a>(
         // ordered or ordered(n)
         "ordered" => match clause.kind {
             ClauseKind::Bare => Ok(ClauseData::Ordered { n: None }),
-            ClauseKind::Parenthesized(content) => Ok(ClauseData::Ordered {
-                n: Some(Expression::unparsed(content.trim())),
+            ClauseKind::Parenthesized(ref content) => Ok(ClauseData::Ordered {
+                n: Some(Expression::unparsed(content.as_ref().trim())),
             }),
         },
 
         // reduction(operator: list)
         "reduction" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 // Find the colon separator between operator and list
                 if let Some(colon_pos) = content.find(':') {
                     let (op_str, items_str) = content.split_at(colon_pos);
@@ -603,7 +613,8 @@ pub fn parse_clause_data<'a>(
 
         // schedule([modifier[, modifier]:] kind[, chunk_size])
         "schedule" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 parse_schedule_clause(content)
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
@@ -614,7 +625,8 @@ pub fn parse_clause_data<'a>(
 
         // map([[mapper(mapper-identifier),] map-type:] list)
         "map" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 parse_map_clause(content)
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
@@ -625,7 +637,8 @@ pub fn parse_clause_data<'a>(
 
         // depend(dependence-type: list)
         "depend" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 // Find the colon separator
                 if let Some(colon_pos) = content.find(':') {
                     let (type_str, items_str) = content.split_at(colon_pos);
@@ -652,7 +665,8 @@ pub fn parse_clause_data<'a>(
 
         // linear([modifier(list):] list[:step])
         "linear" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 parse_linear_clause(content)
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
@@ -663,7 +677,8 @@ pub fn parse_clause_data<'a>(
 
         // proc_bind(master|close|spread|primary)
         "proc_bind" => {
-            if let ClauseKind::Parenthesized(content) = clause.kind {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
                 let kind_str = content.trim();
                 let proc_bind = match kind_str {
                     "master" => ProcBind::Master,
@@ -687,10 +702,10 @@ pub fn parse_clause_data<'a>(
 
         // For unsupported clauses, return a generic representation
         _ => Ok(ClauseData::Generic {
-            name: Identifier::new(clause.name),
+            name: Identifier::new(clause_name),
             data: match clause.kind {
                 ClauseKind::Bare => None,
-                ClauseKind::Parenthesized(content) => Some(content),
+                ClauseKind::Parenthesized(ref content) => Some(content.as_ref().to_string()),
             },
         }),
     }
@@ -704,9 +719,12 @@ pub fn parse_clause_data<'a>(
 /// # use roup::parser::{Directive, Clause, ClauseKind};
 /// # use roup::ir::{convert::convert_directive, Language, SourceLocation, ParserConfig};
 /// let directive = Directive {
-///     name: "parallel",
+///     name: "parallel".into(),
 ///     clauses: vec![
-///         Clause { name: "default", kind: ClauseKind::Parenthesized("shared") },
+///         Clause {
+///             name: "default".into(),
+///             kind: ClauseKind::Parenthesized("shared".into()),
+///         },
 ///     ],
 /// };
 ///
@@ -715,13 +733,18 @@ pub fn parse_clause_data<'a>(
 /// assert!(ir.kind().is_parallel());
 /// ```
 pub fn convert_directive<'a>(
-    directive: &Directive<'a>,
+    directive: &'a Directive<'a>,
     location: SourceLocation,
     language: Language,
     config: &ParserConfig,
-) -> Result<DirectiveIR<'a>, ConversionError> {
+) -> Result<DirectiveIR, ConversionError> {
+    // SAFETY FIX: Clone the directive name from Cow to owned String
+    // This prevents use-after-free when Cow::Owned is dropped.
+    // The normalized name (from line continuations) is now owned by DirectiveIR.
+    let directive_name = directive.name.to_string();
+
     // Convert directive kind
-    let kind = parse_directive_kind(directive.name)?;
+    let kind = parse_directive_kind(&directive_name)?;
 
     // Convert clauses
     let mut clauses = Vec::new();
@@ -730,7 +753,13 @@ pub fn convert_directive<'a>(
         clauses.push(clause_data);
     }
 
-    Ok(DirectiveIR::new(kind, clauses, location, language))
+    Ok(DirectiveIR::new(
+        kind,
+        &directive_name,
+        clauses,
+        location,
+        language,
+    ))
 }
 
 // ============================================================================
@@ -805,7 +834,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_bare() {
         let clause = Clause {
-            name: "nowait",
+            name: "nowait".into(),
             kind: ClauseKind::Bare,
         };
         let config = ParserConfig::default();
@@ -817,8 +846,8 @@ mod tests {
     #[test]
     fn test_parse_clause_data_default_shared() {
         let clause = Clause {
-            name: "default",
-            kind: ClauseKind::Parenthesized("shared"),
+            name: "default".into(),
+            kind: ClauseKind::Parenthesized("shared".into()),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -828,8 +857,8 @@ mod tests {
     #[test]
     fn test_parse_clause_data_private() {
         let clause = Clause {
-            name: "private",
-            kind: ClauseKind::Parenthesized("x, y"),
+            name: "private".into(),
+            kind: ClauseKind::Parenthesized("x, y".into()),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -843,8 +872,8 @@ mod tests {
     #[test]
     fn test_parse_clause_data_num_threads() {
         let clause = Clause {
-            name: "num_threads",
-            kind: ClauseKind::Parenthesized("4"),
+            name: "num_threads".into(),
+            kind: ClauseKind::Parenthesized("4".into()),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -854,8 +883,8 @@ mod tests {
     #[test]
     fn test_parse_clause_data_if_simple() {
         let clause = Clause {
-            name: "if",
-            kind: ClauseKind::Parenthesized("n > 100"),
+            name: "if".into(),
+            kind: ClauseKind::Parenthesized("n > 100".into()),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -874,8 +903,8 @@ mod tests {
     #[test]
     fn test_parse_clause_data_if_with_modifier() {
         let clause = Clause {
-            name: "if",
-            kind: ClauseKind::Parenthesized("parallel: n > 100"),
+            name: "if".into(),
+            kind: ClauseKind::Parenthesized("parallel: n > 100".into()),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -895,7 +924,7 @@ mod tests {
     #[test]
     fn test_convert_directive_simple() {
         let directive = Directive {
-            name: "parallel",
+            name: "parallel".into(),
             clauses: vec![],
         };
         let config = ParserConfig::default();
@@ -908,15 +937,15 @@ mod tests {
     #[test]
     fn test_convert_directive_with_clauses() {
         let directive = Directive {
-            name: "parallel",
+            name: "parallel".into(),
             clauses: vec![
                 Clause {
-                    name: "default",
-                    kind: ClauseKind::Parenthesized("shared"),
+                    name: "default".into(),
+                    kind: ClauseKind::Parenthesized("shared".into()),
                 },
                 Clause {
-                    name: "private",
-                    kind: ClauseKind::Parenthesized("x"),
+                    name: "private".into(),
+                    kind: ClauseKind::Parenthesized("x".into()),
                 },
             ],
         };
@@ -993,8 +1022,8 @@ mod tests {
     #[test]
     fn test_parse_clause_data_reduction() {
         let clause = Clause {
-            name: "reduction",
-            kind: ClauseKind::Parenthesized("+: sum"),
+            name: "reduction".into(),
+            kind: ClauseKind::Parenthesized("+: sum".into()),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1009,8 +1038,8 @@ mod tests {
     #[test]
     fn test_parse_clause_data_reduction_multiple_items() {
         let clause = Clause {
-            name: "reduction",
-            kind: ClauseKind::Parenthesized("*: a, b, c"),
+            name: "reduction".into(),
+            kind: ClauseKind::Parenthesized("*: a, b, c".into()),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1025,8 +1054,8 @@ mod tests {
     #[test]
     fn test_parse_clause_data_reduction_minmax() {
         let clause = Clause {
-            name: "reduction",
-            kind: ClauseKind::Parenthesized("min: value"),
+            name: "reduction".into(),
+            kind: ClauseKind::Parenthesized("min: value".into()),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1172,8 +1201,8 @@ mod tests {
     #[test]
     fn test_parse_clause_data_depend() {
         let clause = Clause {
-            name: "depend",
-            kind: ClauseKind::Parenthesized("in: x, y"),
+            name: "depend".into(),
+            kind: ClauseKind::Parenthesized("in: x, y".into()),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1225,8 +1254,8 @@ mod tests {
     #[test]
     fn test_parse_clause_data_proc_bind() {
         let clause = Clause {
-            name: "proc_bind",
-            kind: ClauseKind::Parenthesized("close"),
+            name: "proc_bind".into(),
+            kind: ClauseKind::Parenthesized("close".into()),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();

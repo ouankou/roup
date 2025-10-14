@@ -59,12 +59,12 @@ use super::Expression;
 /// assert_eq!(id.name(), "my_var");
 /// assert_eq!(format!("{}", id), "my_var");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Identifier<'a> {
-    name: &'a str,
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Identifier {
+    name: String,
 }
 
-impl<'a> Identifier<'a> {
+impl Identifier {
     /// Create a new identifier
     ///
     /// The name is trimmed of whitespace.
@@ -77,28 +77,37 @@ impl<'a> Identifier<'a> {
     /// let id = Identifier::new("  my_var  ");
     /// assert_eq!(id.name(), "my_var");
     /// ```
-    pub fn new(name: &'a str) -> Self {
-        Self { name: name.trim() }
+    pub fn new(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            name: name.trim().to_string(),
+        }
     }
 
     /// Get the identifier name
-    pub const fn name(self) -> &'a str {
-        self.name
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Get the identifier as a string slice
-    pub const fn as_str(self) -> &'a str {
-        self.name
+    pub fn as_str(&self) -> &str {
+        &self.name
     }
 }
 
-impl<'a> From<&'a str> for Identifier<'a> {
-    fn from(s: &'a str) -> Self {
+impl From<&str> for Identifier {
+    fn from(s: &str) -> Self {
         Identifier::new(s)
     }
 }
 
-impl<'a> fmt::Display for Identifier<'a> {
+impl From<String> for Identifier {
+    fn from(s: String) -> Self {
+        Identifier::new(s)
+    }
+}
+
+impl fmt::Display for Identifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
     }
@@ -146,29 +155,29 @@ impl<'a> fmt::Display for Identifier<'a> {
 /// };
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct ArraySection<'a> {
+pub struct ArraySection {
     /// Lower bound (starting index)
     ///
     /// If `None`, starts at beginning (equivalent to 0)
-    pub lower_bound: Option<Expression<'a>>,
+    pub lower_bound: Option<Expression>,
 
     /// Length (number of elements)
     ///
     /// If `None`, goes to end of dimension
-    pub length: Option<Expression<'a>>,
+    pub length: Option<Expression>,
 
     /// Stride (spacing between elements)
     ///
     /// If `None`, defaults to 1 (consecutive elements)
-    pub stride: Option<Expression<'a>>,
+    pub stride: Option<Expression>,
 }
 
-impl<'a> ArraySection<'a> {
+impl ArraySection {
     /// Create a new array section with all fields
     pub fn new(
-        lower_bound: Option<Expression<'a>>,
-        length: Option<Expression<'a>>,
-        stride: Option<Expression<'a>>,
+        lower_bound: Option<Expression>,
+        length: Option<Expression>,
+        stride: Option<Expression>,
     ) -> Self {
         Self {
             lower_bound,
@@ -188,7 +197,7 @@ impl<'a> ArraySection<'a> {
     /// let section = ArraySection::single_index(Expression::new("i", &config));
     /// // Represents arr[i]
     /// ```
-    pub fn single_index(index: Expression<'a>) -> Self {
+    pub fn single_index(index: Expression) -> Self {
         Self {
             lower_bound: Some(index),
             length: None,
@@ -225,7 +234,7 @@ impl<'a> ArraySection<'a> {
     }
 }
 
-impl<'a> fmt::Display for ArraySection<'a> {
+impl fmt::Display for ArraySection {
     /// Format as OpenMP array section syntax
     ///
     /// ## Example
@@ -314,9 +323,9 @@ impl<'a> fmt::Display for ArraySection<'a> {
 /// assert!(!array.is_scalar());
 /// ```
 #[derive(Debug, Clone, PartialEq)]
-pub struct Variable<'a> {
+pub struct Variable {
     /// Variable name
-    name: &'a str,
+    name: String,
 
     /// Array sections (empty for scalar variables)
     ///
@@ -324,10 +333,10 @@ pub struct Variable<'a> {
     /// - `arr[i]` → 1 section
     /// - `matrix[i][j]` → 2 sections
     /// - `tensor[i][j][k]` → 3 sections
-    pub array_sections: Vec<ArraySection<'a>>,
+    pub array_sections: Vec<ArraySection>,
 }
 
-impl<'a> Variable<'a> {
+impl Variable {
     /// Create a new variable without array sections (scalar)
     ///
     /// ## Example
@@ -339,9 +348,10 @@ impl<'a> Variable<'a> {
     /// assert_eq!(var.name(), "x");
     /// assert!(var.is_scalar());
     /// ```
-    pub fn new(name: &'a str) -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
+        let name = name.into();
         Self {
-            name: name.trim(),
+            name: name.trim().to_string(),
             array_sections: Vec::new(),
         }
     }
@@ -360,16 +370,17 @@ impl<'a> Variable<'a> {
     /// assert_eq!(var.name(), "arr");
     /// assert!(!var.is_scalar());
     /// ```
-    pub fn with_sections(name: &'a str, sections: Vec<ArraySection<'a>>) -> Self {
+    pub fn with_sections(name: impl Into<String>, sections: Vec<ArraySection>) -> Self {
+        let name = name.into();
         Self {
-            name: name.trim(),
+            name: name.trim().to_string(),
             array_sections: sections,
         }
     }
 
     /// Get the variable name
-    pub const fn name(&self) -> &'a str {
-        self.name
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Check if this is a scalar (no array sections)
@@ -390,19 +401,25 @@ impl<'a> Variable<'a> {
     }
 }
 
-impl<'a> From<&'a str> for Variable<'a> {
-    fn from(name: &'a str) -> Self {
+impl From<&str> for Variable {
+    fn from(name: &str) -> Self {
         Variable::new(name)
     }
 }
 
-impl<'a> From<Identifier<'a>> for Variable<'a> {
-    fn from(id: Identifier<'a>) -> Self {
+impl From<String> for Variable {
+    fn from(name: String) -> Self {
+        Variable::new(name)
+    }
+}
+
+impl From<Identifier> for Variable {
+    fn from(id: Identifier) -> Self {
         Variable::new(id.name())
     }
 }
 
-impl<'a> fmt::Display for Variable<'a> {
+impl fmt::Display for Variable {
     /// Format as OpenMP variable syntax
     ///
     /// ## Example

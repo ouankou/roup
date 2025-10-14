@@ -22,7 +22,7 @@ fn parses_reduction_clause_with_modifiers_and_operators() {
     for (clause, expected_body) in directive.clauses.iter().zip(expected.into_iter()) {
         assert_eq!(clause.name, "reduction");
         match &clause.kind {
-            ClauseKind::Parenthesized(body) => assert_eq!(*body, expected_body),
+            ClauseKind::Parenthesized(body) => assert_eq!(body.as_ref(), expected_body),
             ClauseKind::Bare => panic!("reduction clauses should be parenthesized"),
         }
     }
@@ -43,7 +43,7 @@ fn parses_reduction_clause_with_user_defined_identifier() {
     assert_eq!(directive.clauses[0].name, "reduction");
     match &directive.clauses[0].kind {
         ClauseKind::Parenthesized(body) => {
-            assert_eq!(*body, "user_addition:accumulator");
+            assert_eq!(body.as_ref(), "user_addition:accumulator");
         }
         ClauseKind::Bare => panic!("reduction clause should be parenthesized"),
     }
@@ -51,7 +51,7 @@ fn parses_reduction_clause_with_user_defined_identifier() {
     assert_eq!(directive.clauses[1].name, "reduction");
     match &directive.clauses[1].kind {
         ClauseKind::Parenthesized(body) => {
-            assert_eq!(*body, "task, custom_reducer:list");
+            assert_eq!(body.as_ref(), "task, custom_reducer:list");
         }
         ClauseKind::Bare => panic!("reduction clause should be parenthesized"),
     }
