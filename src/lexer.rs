@@ -236,20 +236,44 @@ pub fn lex_identifier_token(input: &str) -> IResult<&str, &str> {
     lex_identifier(input)
 }
 
-pub(crate) fn collapse_line_continuations<'a>(input: &'a str) -> Cow<'a, str> {
+/// Check if input contains continuation markers (optimized single-pass)
+///
+/// Performance optimization (Issue #29): Replaces 2× O(n) scans from
+/// `contains('\\') + contains('&')` with single O(n) pass.
+///
+/// The compiler can vectorize this loop for SIMD performance on modern CPUs.
+#[inline]
+fn has_continuation_markers(bytes: &[u8]) -> bool {
+    for &b in bytes {
+        if b == b'\\' || b == b'&' {
+            return true;
+        }
+    }
+    false
+}
+
+/// Collapse line continuations in input string
+///
+/// This function is public for benchmarking purposes but should be considered
+/// an internal implementation detail.
+#[doc(hidden)]
+pub fn collapse_line_continuations<'a>(input: &'a str) -> Cow<'a, str> {
     // P1 Fix: Preserve whitespace when collapsing line continuations to prevent
     // token merging (e.g., "parallel\\\n    for" → "parallel for" not "parallelfor").
     // We insert a space when collapsing unless there's already trailing whitespace.
     //
     // For Fortran continuations, we also preserve a space to maintain token separation.
+    //
+    // Performance optimization (Issue #29): Use single-pass byte scan instead of
+    // 2× contains() calls to check for continuation markers.
 
-    if !input.contains('\\') && !input.contains('&') {
+    let bytes = input.as_bytes();
+    if !has_continuation_markers(bytes) {
         return Cow::Borrowed(input);
     }
 
     let mut output = String::with_capacity(input.len());
     let mut idx = 0;
-    let bytes = input.as_bytes();
     let len = bytes.len();
     let mut changed = false;
 
@@ -559,5 +583,37 @@ mod tests {
         assert_eq!(normalize_fortran_identifier("PARALLEL"), "parallel");
         assert_eq!(normalize_fortran_identifier("Private"), "private");
         assert_eq!(normalize_fortran_identifier("num_threads"), "num_threads");
+    }
+
+    #[test]
+    fn optimized_single_pass_no_markers() {
+        // Test optimized single-pass scan for inputs without continuation markers
+        let inputs = vec![
+            "parallel",
+            "parallel for private(i)",
+            "target teams distribute",
+            "simd reduction(+:sum) private(i,j,k)",
+        ];
+
+        for input in inputs {
+            let result = collapse_line_continuations(input);
+            // Should return borrowed (no markers detected, no allocation)
+            assert!(matches!(result, Cow::Borrowed(_)));
+            assert_eq!(result.as_ref(), input);
+        }
+    }
+
+    #[test]
+    fn single_pass_with_markers() {
+        // Test that single-pass scan correctly detects markers
+        let has_backslash = "parallel \\\n num_threads(4)";
+        let has_ampersand = "parallel do &\n!$omp private(i)";
+
+        // Both should be detected and processed
+        let r1 = collapse_line_continuations(has_backslash);
+        let r2 = collapse_line_continuations(has_ampersand);
+
+        assert!(matches!(r1, Cow::Owned(_)));
+        assert!(matches!(r2, Cow::Owned(_)));
     }
 }

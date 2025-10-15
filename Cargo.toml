@@ -22,6 +22,7 @@ syn = { version = "2", features = ["full", "parsing"] }
 [dev-dependencies]
 # Test-only dependencies
 serial_test = "3.0" # Serialize tests that share global state
+criterion = "0.5"   # Benchmarking framework
 
 [build-dependencies]
 # Build script dependencies (build.rs only) - syn also in main dependencies for `gen` binary
@@ -47,3 +48,8 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 [[bin]]
 name = "tester"
 path = "utils/tester.rs"
+
+# Benchmark configuration
+[[bench]]
+name = "line_continuations"
+harness = false
