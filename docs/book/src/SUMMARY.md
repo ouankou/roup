@@ -19,6 +19,9 @@
 
 - [API Reference](./api-reference.md)
 - [OpenMP Support Matrix](./openmp-support.md)
+- [OpenMP 6.0 Directive Catalogue](./openmp60-directives-clauses.md)
+- [OpenMP 6.0 Directive–Clause Components](./openmp60-directive-clause-components.md)
+- [OpenMP 6.0 Restrictions](./openmp60-restrictions.md)
 - [Line Continuations](./line-continuations.md)
 
 # Developer Guide
