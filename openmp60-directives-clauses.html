@@ -1,0 +1,674 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>OpenMP 6.0 Directive Catalogue - ROUP Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ROUP Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/openmp60-directives-clauses.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="openmp-60-directives-and-clauses"><a class="header" href="#openmp-60-directives-and-clauses">OpenMP 6.0 Directives and Clauses</a></h1>
+<p>This comprehensive reference catalogue documents <strong>all</strong> OpenMP 6.0 keywords from the <a href="https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf">OpenMP Application Programming Interface Version 6.0</a> specification.</p>
+<h2 id="purpose"><a class="header" href="#purpose">Purpose</a></h2>
+<p>This document serves as a complete keyword inventory for development and reference. Each entry includes:</p>
+<ul>
+<li>Specification section and page numbers</li>
+<li>Categorization and properties</li>
+<li>No duplication - each keyword appears once</li>
+</ul>
+<h2 id="coverage"><a class="header" href="#coverage">Coverage</a></h2>
+<ul>
+<li><strong>66 Directives/Constructs</strong> - All executable, declarative, and meta directives</li>
+<li><strong>125 Clauses</strong> - All clause keywords</li>
+<li><strong>Modifiers</strong> - Map-type, dependence-type, schedule, and other modifiers</li>
+<li><strong>Keywords &amp; Values</strong> - Memory orders, atomic operations, schedule types, allocators, and more</li>
+<li><strong>Reduction Operators</strong> - All supported reduction operations</li>
+<li><strong>Special Identifiers</strong> - Reserved locators, device identifiers, and constants</li>
+</ul>
+<h2 id="directives-and-constructs"><a class="header" href="#directives-and-constructs">Directives and Constructs</a></h2>
+<ul>
+<li><code>allocate</code> (Section 8.5; pp. 341–342; category: declarative; association: explicit; properties: pure)</li>
+<li><code>allocators</code> (Section 8.7; category: executable; association: block : allocator; properties: default)</li>
+<li><code>assume</code> (Section 10.6.3; category: informational; association: block; properties: pure)</li>
+<li><code>assumes</code> (Section 10.6.2; p. 399; category: informational; association: unassociated; properties: pure)</li>
+<li><code>atomic</code> (Section 17.8.5; pp. 525–528; category: executable; association: block : atomic; properties: mutual-exclusion, order-concurrent-nestable, simdizable)</li>
+<li><code>barrier</code> (Section 17.3.1; pp. 506–508; category: executable; association: unassociated; properties: team-executed)</li>
+<li><code>begin assumes</code> (Section 10.6.4; p. 399; category: informational; association: delimited; properties: default)</li>
+<li><code>begin declare_target</code> (Section 9.9.2; p. 380; category: declarative; association: delimited; properties: declare-target, device, variant-generating)</li>
+<li><code>begin declare_variant</code> (Section 9.6.5; p. 367; category: declarative; association: delimited; properties: default)</li>
+<li><code>cancel</code> (Section 18.2; pp. 551–554; category: executable; association: unassociated; properties: default)</li>
+<li><code>cancellation_point</code> (Section 18.3; pp. 555–556; category: executable; association: unassociated; properties: default)</li>
+<li><code>critical</code> (Section 17.2; pp. 504–505; category: executable; association: block; properties: mutual-exclusion, thread-limiting, thread-exclusive)</li>
+<li><code>declare_induction</code> (Section 7.6.17; pp. 294–295; category: declarative; association: unassociated; properties: pure)</li>
+<li><code>declare_mapper</code> (Section 7.9.10; pp. 324–327; category: declarative; association: unassociated; properties: pure)</li>
+<li><code>declare_reduction</code> (Section 7.6.14; pp. 291–292; category: declarative; association: unassociated; properties: pure)</li>
+<li><code>declare_simd</code> (Section 9.8; pp. 372–373; category: declarative; association: declaration; properties: pure, variant-generating)</li>
+<li><code>declare_target</code> (Section 9.9.1; pp. 377–379; category: declarative; association: explicit; properties: declare-target, device, pure, variant-generating)</li>
+<li><code>declare_variant</code> (Section 9.6.4; pp. 365–366; category: declarative; association: declaration; properties: pure)</li>
+<li><code>depobj</code> (Section 17.9.3; p. 536; category: executable; association: unassociated; properties: default)</li>
+<li><code>dispatch</code> (Section 9.7; pp. 368–369; category: executable; association: block : function-dispatch; properties: context-matching)</li>
+<li><code>distribute</code> (Section 13.7; pp. 451–452; category: executable; association: loop nest; properties: SIMD-partitionable, teams-nestable, work-distribution, partitioned)</li>
+<li><code>do</code> (Section 13.6.2; p. 448; category: executable; association: loop nest; properties: work-distribution, team-executed, partitioned, SIMD-partitionable, worksharing, worksharing-loop, cancellable, context-matching)</li>
+<li><code>error</code> (Section 10.1; p. 383; category: utility; association: unassociated; properties: pure)</li>
+<li><code>flush</code> (Section 17.8.6; pp. 529–535; category: executable; association: unassociated; properties: default)</li>
+<li><code>for</code> (Section 13.6.1; p. 447; category: executable; association: loop nest; properties: work-distribution, team-executed, partitioned, SIMD-partitionable, worksharing, worksharing-loop, cancellable, context-matching)</li>
+<li><code>fuse</code> (Section 11.3; p. 405; category: executable; association: loop sequence; properties: loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)</li>
+<li><code>groupprivate</code> (Section 7.13; pp. 332–333; category: declarative; association: explicit; properties: pure)</li>
+<li><code>interchange</code> (Section 11.4; p. 406; category: executable; association: loop nest; properties: loop-transforming, nonrectangular-compatible, order-concurrent-nestable, pure, simdizable, teams-nestable)</li>
+<li><code>interop</code> (Section 16.1; p. 499; category: executable; association: unassociated; properties: device)</li>
+<li><code>loop</code> (Section 13.8; p. 454; category: executable; association: loop nest; properties: order-concurrent-nestable, partitioned, simdizable, team-executed, teams-nestable, work-distribution, worksharing)</li>
+<li><code>masked</code> (Section 12.5; p. 433; category: executable; association: block; properties: thread-limiting, thread-selecting)</li>
+<li><code>begin metadirective</code> (Section 9.4.4; p. 327; category: meta; association: delimited; properties: pure)</li>
+<li><code>metadirective</code> (Section 9.4.3; p. 327; category: meta; association: unassociated; properties: pure)</li>
+<li><code>nothing</code> (Section 10.7; pp. 400–402; category: utility; association: unassociated; properties: pure, loop-transforming)</li>
+<li><code>ordered</code> (Section 17.10.2; pp. 546–547; category: executable; association: block; properties: mutual-exclusion, simdizable, thread-limiting, thread-exclusive)</li>
+<li><code>parallel</code> (Section 12.1; pp. 415–418; category: executable; association: block; properties: cancellable, context-matching, order-concurrent-nestable, parallelism-generating, team-generating, teams-nestable, thread-limiting)</li>
+<li><code>requires</code> (Section 10.5; p. 386; category: informational; association: unassociated; properties: default)</li>
+<li><code>reverse</code> (Section 11.5; p. 407; category: executable; association: loop nest; properties: generally-composable, loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)</li>
+<li><code>scan</code> (Section 7.7; pp. 297–299; category: subsidiary; association: separating; properties: pure)</li>
+<li><code>scope</code> (Section 13.2; p. 437; category: executable; association: block; properties: work-distribution, team-executed, worksharing, thread-limiting)</li>
+<li><code>section</code> (Section 13.3.1; p. 439; category: subsidiary; association: separating; properties: default)</li>
+<li><code>sections</code> (Section 13.3; p. 438; category: executable; association: block; properties: work-distribution, team-executed, partitioned, worksharing, thread-limiting, cancellable)</li>
+<li><code>simd</code> (Section 12.4; p. 430; category: executable; association: loop nest; properties: context-matching, order-concurrent-nestable, parallelism-generating, pure, simdizable)</li>
+<li><code>single</code> (Section 13.1; p. 436; category: executable; association: block; properties: work-distribution, team-executed, partitioned, worksharing, thread-limiting, thread-selecting)</li>
+<li><code>split</code> (Section 11.6; p. 408; category: executable; association: loop nest; properties: generally-composable, loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)</li>
+<li><code>stripe</code> (Section 11.7; p. 410; category: executable; association: loop nest; properties: loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)</li>
+<li><code>target</code> (Section 15.8; pp. 491–495; category: executable; association: block; properties: parallelism-generating, team-generating, thread-limiting, exception-aborting, task-generating, device, device-affecting, data-mapping, map-entering, map-exiting, context-matching)</li>
+<li><code>target_data</code> (Section 15.7; pp. 489–490; category: executable; association: block; properties: device, device-affecting, data-mapping, map-entering, map-exiting, parallelism-generating, sharing-task, task-generating)</li>
+<li><code>target_enter_data</code> (Section 15.5; pp. 485–486; category: executable; association: unassociated; properties: parallelism-generating, task-generating, device, device-affecting, data-mapping, map-entering)</li>
+<li><code>target_exit_data</code> (Section 15.6; pp. 487–488; category: executable; association: unassociated; properties: parallelism-generating, task-generating, device, device-affecting, data-mapping, map-exiting)</li>
+<li><code>target_update</code> (Section 15.9; pp. 496–498; category: executable; association: unassociated; properties: parallelism-generating, task-generating, device, device-affecting)</li>
+<li><code>task</code> (Section 14.1; pp. 457–459; category: executable; association: block; properties: parallelism-generating, thread-limiting, task-generating)</li>
+<li><code>task_iteration</code> (Section 14.2.3; p. 465; category: subsidiary; association: unassociated; properties: default)</li>
+<li><code>taskgraph</code> (Section 14.3; pp. 466–468; category: executable; association: block; properties: default)</li>
+<li><code>taskgroup</code> (Section 17.4; p. 509; category: executable; association: block; properties: cancellable)</li>
+<li><code>taskloop</code> (Section 14.2; pp. 460–462; category: executable; association: loop nest; properties: parallelism-generating, SIMD-partitionable, task-generating)</li>
+<li><code>taskwait</code> (Section 17.5; pp. 510–511; category: executable; association: unassociated; properties: default)</li>
+<li><code>taskyield</code> (Section 14.12; pp. 477–480; category: executable; association: unassociated; properties: default)</li>
+<li><code>teams</code> (Section 12.2; pp. 425–427; category: executable; association: block; properties: parallelism-generating, team-generating, thread-limiting, context-matching)</li>
+<li><code>threadprivate</code> (Section 7.3; pp. 246–253; category: declarative; association: explicit; properties: pure)</li>
+<li><code>tile</code> (Section 11.8; p. 411; category: executable; association: loop nest; properties: loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)</li>
+<li><code>unroll</code> (Section 11.9; p. 412; category: executable; association: loop nest; properties: generally-composable, loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)</li>
+<li><code>workdistribute</code> (Section 13.5; pp. 443–446; category: executable; association: block; properties: work-distribution, partitioned)</li>
+<li><code>workshare</code> (Section 13.4; pp. 440–442; category: executable; association: block; properties: work-distribution, team-executed, partitioned, worksharing)</li>
+</ul>
+<h2 id="clauses"><a class="header" href="#clauses">Clauses</a></h2>
+<ul>
+<li><code>absent</code> (Section 10.6.1.1; p. 394)</li>
+<li><code>acq_rel</code> (Section 17.8.1.1; p. 515)</li>
+<li><code>acquire</code> (Section 17.8.1.2; p. 516)</li>
+<li><code>adjust_args</code> (Section 9.6.2; pp. 362–363)</li>
+<li><code>affinity</code> (Section 14.10; p. 475)</li>
+<li><code>align</code> (Section 8.3; p. 340)</li>
+<li><code>aligned</code> (Section 7.12; p. 331)</li>
+<li><code>allocate</code> (Section 8.6; pp. 343–345)</li>
+<li><code>allocator</code> (Section 8.4; p. 340)</li>
+<li><code>append_args</code> (Section 9.6.3; p. 364)</li>
+<li><code>apply</code> (Section 11.1; pp. 403–404)</li>
+<li><code>at</code> (Section 10.2; p. 383)</li>
+<li><code>atomic_default_mem_order</code> (Section 10.5.1.1; p. 387)</li>
+<li><code>bind</code> (Section 13.8.1; pp. 455–456)</li>
+<li><code>capture</code> (Section 17.8.3.1; p. 521)</li>
+<li><code>collapse</code> (Section 6.4.5; p. 236)</li>
+<li><code>collector</code> (Section 7.6.19; p. 296)</li>
+<li><code>combiner</code> (Section 7.6.15; p. 292)</li>
+<li><code>compare</code> (Section 17.8.3.2; p. 522)</li>
+<li><code>contains</code> (Section 10.6.1.2; p. 394)</li>
+<li><code>copyin</code> (Section 7.8.1; p. 302)</li>
+<li><code>copyprivate</code> (Section 7.8.2; pp. 303–309)</li>
+<li><code>counts</code> (Section 11.6.1; p. 409)</li>
+<li><code>default</code> (Section 7.5.1; p. 254)</li>
+<li><code>defaultmap</code> (Section 7.9.9; pp. 322–323)</li>
+<li><code>depend</code> (Section 17.9.5; pp. 538–540)</li>
+<li><code>destroy</code> (Section 5.7; pp. 213–235)</li>
+<li><code>detach</code> (Section 14.11; p. 476)</li>
+<li><code>device</code> (Section 15.2; p. 482)</li>
+<li><code>device_safesync</code> (Section 10.5.1.7; p. 393; properties: required, unique Members:)</li>
+<li><code>device_type</code> (Section 15.1; p. 481)</li>
+<li><code>dist_schedule</code> (Section 13.7.1; p. 453)</li>
+<li><code>doacross</code> (Section 17.9.7; pp. 542–544)</li>
+<li><code>dynamic_allocators</code> (Section 10.5.1.2; p. 388)</li>
+<li><code>enter</code> (Section 7.9.7; p. 320)</li>
+<li><code>exclusive</code> (Section 7.7.2; p. 300)</li>
+<li><code>fail</code> (Section 17.8.3.3; p. 522)</li>
+<li><code>filter</code> (Section 12.5.1; pp. 434–435)</li>
+<li><code>final</code> (Section 14.7; p. 472)</li>
+<li><code>firstprivate</code> (Section 7.5.4; pp. 258–259)</li>
+<li><code>from</code> (Section 7.10.2; p. 329)</li>
+<li><code>full</code> (Section 11.9.1; p. 413)</li>
+<li><code>grainsize</code> (Section 14.2.1; p. 463)</li>
+<li><code>graph_id</code> (Section 14.3.1; p. 468)</li>
+<li><code>graph_reset</code> (Section 14.3.2; p. 469)</li>
+<li><code>has_device_addr</code> (Section 7.5.9; p. 268)</li>
+<li><code>hint</code> (Section 17.1; p. 503)</li>
+<li><code>holds</code> (Section 10.6.1.3; p. 395)</li>
+<li><code>if</code> (Section 5.5; p. 210)</li>
+<li><code>in_reduction</code> (Section 7.6.12; p. 287)</li>
+<li><code>inbranch</code> (Section 9.8.1.1; p. 374)</li>
+<li><code>inclusive</code> (Section 7.7.1; p. 299)</li>
+<li><code>indirect</code> (Section 9.9.3; pp. 381–382)</li>
+<li><code>induction</code> (Section 7.6.13; pp. 288–290)</li>
+<li><code>inductor</code> (Section 7.6.18; p. 296)</li>
+<li><code>init</code> (Section 5.6; pp. 211–212)</li>
+<li><code>init_complete</code> (Section 7.7.3; p. 301)</li>
+<li><code>initializer</code> (Section 7.6.16; p. 293)</li>
+<li><code>interop</code> (Section 9.7.1; p. 370)</li>
+<li><code>is_device_ptr</code> (Section 7.5.7; p. 266)</li>
+<li><code>lastprivate</code> (Section 7.5.5; pp. 260–262)</li>
+<li><code>linear</code> (Section 7.5.6; pp. 263–265)</li>
+<li><code>link</code> (Section 7.9.8; p. 321)</li>
+<li><code>local</code> (Section 7.14; pp. 334–339)</li>
+<li><code>looprange</code> (Section 6.4.7; pp. 238–245)</li>
+<li><code>map</code> (Section 7.9.6; pp. 310–319)</li>
+<li><code>match</code> (Section 9.6.1; p. 361)</li>
+<li><code>memscope</code> (Section 17.8.4; p. 524)</li>
+<li><code>mergeable</code> (Section 14.5; p. 470)</li>
+<li><code>message</code> (Section 10.3; p. 384)</li>
+<li><code>no_openmp</code> (Section 10.6.1.4; p. 396)</li>
+<li><code>no_openmp_constructs</code> (Section 10.6.1.5; p. 396)</li>
+<li><code>no_openmp_routines</code> (Section 10.6.1.6; p. 397)</li>
+<li><code>no_parallelism</code> (Section 10.6.1.7; p. 398)</li>
+<li><code>nocontext</code> (Section 9.7.3; p. 371)</li>
+<li><code>nogroup</code> (Section 17.7; p. 514; properties: exclusive, unique Members:)</li>
+<li><code>nontemporal</code> (Section 12.4.1; p. 431)</li>
+<li><code>notinbranch</code> (Section 9.8.1.2; pp. 375–376)</li>
+<li><code>novariants</code> (Section 9.7.2; p. 370)</li>
+<li><code>nowait</code> (Section 17.6; pp. 512–513)</li>
+<li><code>num_tasks</code> (Section 14.2.2; p. 464)</li>
+<li><code>num_teams</code> (Section 12.2.1; p. 427)</li>
+<li><code>num_threads</code> (Section 12.1.2; pp. 419–422)</li>
+<li><code>order</code> (Section 12.3; pp. 428–429)</li>
+<li><code>ordered</code> (Section 6.4.6; p. 237)</li>
+<li><code>otherwise</code> (Section 9.4.2; pp. 357–360; properties: pure)</li>
+<li><code>partial</code> (Section 11.9.2; p. 414)</li>
+<li><code>permutation</code> (Section 11.4.1; p. 407)</li>
+<li><code>priority</code> (Section 14.9; p. 474)</li>
+<li><code>private</code> (Section 7.5.3; pp. 256–257)</li>
+<li><code>proc_bind</code> (Section 12.1.4; p. 423)</li>
+<li><code>read</code> (Section 17.8.2.1; p. 519)</li>
+<li><code>reduction</code> (Section 7.6.10; pp. 283–285)</li>
+<li><code>relaxed</code> (Section 17.8.1.3; p. 516)</li>
+<li><code>release</code> (Section 17.8.1.4; p. 517)</li>
+<li><code>replayable</code> (Section 14.6; p. 471)</li>
+<li><code>reverse_offload</code> (Section 10.5.1.3; p. 389)</li>
+<li><code>safelen</code> (Section 12.4.2; p. 431)</li>
+<li><code>safesync</code> (Section 12.1.5; p. 424)</li>
+<li><code>schedule</code> (Section 13.6.3; pp. 449–450)</li>
+<li><code>self_maps</code> (Section 10.5.1.6; p. 392)</li>
+<li><code>seq_cst</code> (Section 17.8.1.5; p. 518; properties: exclusive, unique Members:)</li>
+<li><code>severity</code> (Section 10.4; p. 385)</li>
+<li><code>shared</code> (Section 7.5.2; p. 255)</li>
+<li><code>simd</code> (Section 17.10.3.2; pp. 549–550; properties: exclusive, required, unique Members:)</li>
+<li><code>simdlen</code> (Section 12.4.3; p. 432)</li>
+<li><code>sizes</code> (Section 11.2; p. 404)</li>
+<li><code>task_reduction</code> (Section 7.6.11; p. 286)</li>
+<li><code>thread_limit</code> (Section 15.3; pp. 483–484)</li>
+<li><code>threads</code> (Section 17.10.3.1; p. 548)</li>
+<li><code>threadset</code> (Section 14.8; p. 473)</li>
+<li><code>to</code> (Section 7.10.1; p. 328)</li>
+<li><code>transparent</code> (Section 17.9.6; p. 541)</li>
+<li><code>unified_address</code> (Section 10.5.1.4; p. 390)</li>
+<li><code>unified_shared_memory</code> (Section 10.5.1.5; p. 391)</li>
+<li><code>uniform</code> (Section 7.11; p. 330)</li>
+<li><code>untied</code> (Section 14.4; p. 470)</li>
+<li><code>update</code> (Section 17.9.4; p. 537)</li>
+<li><code>use</code> (Section 16.1.2; pp. 500–502)</li>
+<li><code>use_device_addr</code> (Section 7.5.10; pp. 269–282)</li>
+<li><code>use_device_ptr</code> (Section 7.5.8; p. 267)</li>
+<li><code>uses_allocators</code> (Section 8.8; pp. 346–355)</li>
+<li><code>weak</code> (Section 17.8.3.4; p. 523)</li>
+<li><code>when</code> (Section 9.4.1; p. 356)</li>
+<li><code>write</code> (Section 17.8.2.3; p. 520; properties: unique Members:)</li>
+</ul>
+<h2 id="modifiers"><a class="header" href="#modifiers">Modifiers</a></h2>
+<p>Modifiers are keywords that modify the behavior of clauses. They appear as part of clause syntax to refine clause semantics.</p>
+<h3 id="map-type-modifiers"><a class="header" href="#map-type-modifiers">Map-Type Modifiers</a></h3>
+<ul>
+<li><code>storage</code> (Section 7.9.1; p. 305; map-type modifier; default value)</li>
+<li><code>to</code> (Section 7.9.1; p. 305; map-type modifier; map-entering, assigning)</li>
+<li><code>from</code> (Section 7.9.1; p. 305; map-type modifier; map-exiting, assigning)</li>
+<li><code>tofrom</code> (Section 7.9.1; p. 305; map-type modifier; map-entering, map-exiting, assigning)</li>
+<li><code>alloc</code> (Section 7.9.1; p. 305; map-type modifier; alias for storage on map-entering constructs)</li>
+<li><code>release</code> (Section 7.9.1; p. 305; map-type modifier; alias for storage on map-exiting constructs)</li>
+<li><code>delete</code> (Section 7.9.1; p. 305; map-type modifier; used with delete-modifier)</li>
+</ul>
+<h3 id="task-dependence-type-modifiers"><a class="header" href="#task-dependence-type-modifiers">Task-Dependence-Type Modifiers</a></h3>
+<ul>
+<li><code>in</code> (Section 17.9.1; p. 535; task-dependence-type modifier; input dependence)</li>
+<li><code>out</code> (Section 17.9.1; p. 535; task-dependence-type modifier; output dependence)</li>
+<li><code>inout</code> (Section 17.9.1; p. 535; task-dependence-type modifier; input-output dependence)</li>
+<li><code>inoutset</code> (Section 17.9.1; p. 535; task-dependence-type modifier; inout with set semantics)</li>
+<li><code>mutexinoutset</code> (Section 17.9.1; p. 535; task-dependence-type modifier; mutual exclusion inout)</li>
+<li><code>depobj</code> (Section 17.9.1; p. 535; task-dependence-type modifier; depend object)</li>
+</ul>
+<h3 id="schedule-modifiers"><a class="header" href="#schedule-modifiers">Schedule Modifiers</a></h3>
+<ul>
+<li><code>monotonic</code> (Section 13.6.3; p. 449; ordering-modifier for schedule clause)</li>
+<li><code>nonmonotonic</code> (Section 13.6.3; p. 449; ordering-modifier for schedule clause)</li>
+<li><code>simd</code> (Section 13.6.3; p. 449; chunk-modifier for schedule clause)</li>
+</ul>
+<h3 id="reduction-and-induction-modifiers"><a class="header" href="#reduction-and-induction-modifiers">Reduction and Induction Modifiers</a></h3>
+<ul>
+<li><code>reduction-identifier</code> (Section 7.6.9; p. 282; modifier specifying reduction operation)</li>
+<li><code>iterator</code> (Section 5.2.6; p. 200; modifier for creating iterator expressions)</li>
+</ul>
+<h3 id="other-clause-modifiers"><a class="header" href="#other-clause-modifiers">Other Clause Modifiers</a></h3>
+<ul>
+<li><code>ref</code> (Section 7.9.5; ref-modifier for map clause; indicates referencing variable)</li>
+<li><code>mapper</code> (Section 7.9.4; mapper-modifier for map clause; specifies custom mapper)</li>
+<li><code>allocator-simple-modifier</code> (Section 8.6; allocator modifier; simple allocator specification)</li>
+<li><code>allocator-complex-modifier</code> (Section 8.6; allocator modifier; complex allocator specification)</li>
+<li><code>prefer-type</code> (Section 16.1.3; p. 501; prefer-type modifier for interop clause)</li>
+<li><code>directive-name-modifier</code> (Section 5.4; p. 204; conditional modifier using directive name)</li>
+</ul>
+<h3 id="map-clause-modifiers"><a class="header" href="#map-clause-modifiers">Map Clause Modifiers</a></h3>
+<ul>
+<li><code>always</code> (Section 7.9.6; always-modifier; forces data transfer)</li>
+<li><code>close</code> (Section 7.9.6; close-modifier; allocates in fastest memory)</li>
+<li><code>present</code> (Section 7.9.6; present-modifier; data must be present)</li>
+<li><code>self</code> (Section 7.9.6; self-modifier; for device-host data mapping)</li>
+</ul>
+<h3 id="lastprivate-modifiers"><a class="header" href="#lastprivate-modifiers">Lastprivate Modifiers</a></h3>
+<ul>
+<li><code>conditional</code> (Section 7.5.5; p. 261; modifier for lastprivate clause; conditional assignment)</li>
+</ul>
+<h3 id="original-sharing-modifiers"><a class="header" href="#original-sharing-modifiers">Original-Sharing Modifiers</a></h3>
+<ul>
+<li><code>original</code> (Section 7.6.10; original-sharing-modifier; preserves original data-sharing)</li>
+</ul>
+<h2 id="keywords-and-values"><a class="header" href="#keywords-and-values">Keywords and Values</a></h2>
+<p>Keywords and values used as arguments to clauses and directives.</p>
+<h3 id="memory-order-keywords"><a class="header" href="#memory-order-keywords">Memory Order Keywords</a></h3>
+<ul>
+<li><code>seq_cst</code> (Section 17.8.1.5; p. 518; sequentially consistent memory ordering)</li>
+<li><code>acq_rel</code> (Section 17.8.1.1; p. 515; acquire-release memory ordering)</li>
+<li><code>acquire</code> (Section 17.8.1.2; p. 516; acquire memory ordering)</li>
+<li><code>release</code> (Section 17.8.1.4; p. 517; release memory ordering)</li>
+<li><code>relaxed</code> (Section 17.8.1.3; p. 516; relaxed memory ordering)</li>
+</ul>
+<h3 id="atomic-operation-keywords"><a class="header" href="#atomic-operation-keywords">Atomic Operation Keywords</a></h3>
+<ul>
+<li><code>read</code> (Section 17.8.2.1; p. 519; atomic read operation)</li>
+<li><code>write</code> (Section 17.8.2.3; p. 520; atomic write operation)</li>
+<li><code>update</code> (Section 17.8.2.2; atomic update operation)</li>
+<li><code>capture</code> (Section 17.8.3.1; p. 521; atomic capture operation)</li>
+<li><code>compare</code> (Section 17.8.3.2; p. 522; atomic compare operation)</li>
+<li><code>weak</code> (Section 17.8.3.4; p. 523; weak compare semantics)</li>
+<li><code>fail</code> (Section 17.8.3.3; fail memory order for atomic compare)</li>
+</ul>
+<h3 id="schedule-types"><a class="header" href="#schedule-types">Schedule Types</a></h3>
+<ul>
+<li><code>static</code> (Section 13.6.3; p. 449; static loop schedule)</li>
+<li><code>dynamic</code> (Section 13.6.3; p. 449; dynamic loop schedule)</li>
+<li><code>guided</code> (Section 13.6.3; p. 449; guided loop schedule)</li>
+<li><code>auto</code> (Section 13.6.3; p. 449; implementation-defined loop schedule)</li>
+<li><code>runtime</code> (Section 13.6.3; p. 449; runtime-determined loop schedule)</li>
+</ul>
+<h3 id="proc_bind-values"><a class="header" href="#proc_bind-values">Proc_bind Values</a></h3>
+<ul>
+<li><code>primary</code> (Section 12.1.4; p. 423; bind to primary thread's place)</li>
+<li><code>close</code> (Section 12.1.4; p. 423; bind close to parent thread)</li>
+<li><code>spread</code> (Section 12.1.4; p. 423; spread across places)</li>
+<li><code>master</code> (deprecated; use <code>primary</code> instead)</li>
+</ul>
+<h3 id="order-values"><a class="header" href="#order-values">Order Values</a></h3>
+<ul>
+<li><code>concurrent</code> (Section 12.3; p. 428; concurrent execution ordering)</li>
+<li><code>reproducible</code> (Section 12.3; p. 428; reproducible ordering)</li>
+<li><code>unconstrained</code> (Section 12.3; p. 428; unconstrained ordering)</li>
+</ul>
+<h3 id="device-type-values"><a class="header" href="#device-type-values">Device-Type Values</a></h3>
+<ul>
+<li><code>host</code> (Section 15.1; p. 481; host device type)</li>
+<li><code>nohost</code> (Section 15.1; p. 481; non-host device type)</li>
+<li><code>any</code> (Section 15.1; p. 481; any device type)</li>
+</ul>
+<h3 id="bind-values"><a class="header" href="#bind-values">Bind Values</a></h3>
+<ul>
+<li><code>thread</code> (Section 13.8.1; p. 455; bind to thread)</li>
+<li><code>parallel</code> (Section 13.8.1; p. 455; bind to parallel region)</li>
+<li><code>teams</code> (Section 13.8.1; p. 455; bind to teams region)</li>
+</ul>
+<h3 id="default-values"><a class="header" href="#default-values">Default Values</a></h3>
+<ul>
+<li><code>shared</code> (Section 7.5.1; p. 254; default shared data-sharing)</li>
+<li><code>private</code> (Section 7.5.1; p. 254; default private data-sharing)</li>
+<li><code>firstprivate</code> (Section 7.5.1; p. 254; default firstprivate data-sharing)</li>
+<li><code>none</code> (Section 7.5.1; p. 254; no default data-sharing)</li>
+</ul>
+<h3 id="error-directive-values"><a class="header" href="#error-directive-values">Error Directive Values</a></h3>
+<ul>
+<li><code>compilation</code> (Section 10.2; at clause value; error at compilation time)</li>
+<li><code>execution</code> (Section 10.2; at clause value; error at execution time)</li>
+<li><code>fatal</code> (Section 10.4; p. 385; severity clause value; fatal error)</li>
+<li><code>warning</code> (Section 10.4; p. 385; severity clause value; warning)</li>
+</ul>
+<h3 id="defaultmap-values"><a class="header" href="#defaultmap-values">Defaultmap Values</a></h3>
+<ul>
+<li><code>alloc</code> (Section 7.9.9; p. 322; defaultmap behavior)</li>
+<li><code>to</code> (Section 7.9.9; p. 322; defaultmap behavior)</li>
+<li><code>from</code> (Section 7.9.9; p. 322; defaultmap behavior)</li>
+<li><code>tofrom</code> (Section 7.9.9; p. 322; defaultmap behavior)</li>
+<li><code>firstprivate</code> (Section 7.9.9; p. 322; defaultmap behavior)</li>
+<li><code>none</code> (Section 7.9.9; p. 322; defaultmap behavior)</li>
+<li><code>default</code> (Section 7.9.9; p. 322; defaultmap behavior)</li>
+<li><code>present</code> (Section 7.9.9; p. 322; defaultmap behavior)</li>
+</ul>
+<h3 id="variable-categories-for-defaultmap"><a class="header" href="#variable-categories-for-defaultmap">Variable Categories (for defaultmap)</a></h3>
+<ul>
+<li><code>scalar</code> (Section 7.9.9; p. 322; scalar variable category)</li>
+<li><code>aggregate</code> (Section 7.9.9; p. 322; aggregate variable category)</li>
+<li><code>allocatable</code> (Section 7.9.9; p. 322; allocatable variable category)</li>
+<li><code>pointer</code> (Section 7.9.9; p. 322; pointer variable category)</li>
+</ul>
+<h2 id="predefined-allocators"><a class="header" href="#predefined-allocators">Predefined Allocators</a></h2>
+<p>OpenMP defines several predefined memory allocators for different memory spaces.</p>
+<h3 id="standard-allocators"><a class="header" href="#standard-allocators">Standard Allocators</a></h3>
+<ul>
+<li><code>omp_default_mem_alloc</code> (Section 8.2; p. 336; default memory allocator)</li>
+<li><code>omp_large_cap_mem_alloc</code> (Section 8.2; p. 336; large capacity memory allocator)</li>
+<li><code>omp_const_mem_alloc</code> (Section 8.2; p. 336; constant memory allocator)</li>
+<li><code>omp_high_bw_mem_alloc</code> (Section 8.2; p. 336; high bandwidth memory allocator)</li>
+<li><code>omp_low_lat_mem_alloc</code> (Section 8.2; p. 336; low latency memory allocator)</li>
+<li><code>omp_cgroup_mem_alloc</code> (Section 8.2; p. 336; contention group memory allocator)</li>
+<li><code>omp_pteam_mem_alloc</code> (Section 8.2; p. 336; parallel team memory allocator)</li>
+<li><code>omp_thread_mem_alloc</code> (Section 8.2; p. 336; thread-private memory allocator)</li>
+</ul>
+<h3 id="special-allocator-values"><a class="header" href="#special-allocator-values">Special Allocator Values</a></h3>
+<ul>
+<li><code>omp_null_allocator</code> (Section 8.2; p. 336; null allocator value)</li>
+</ul>
+<h3 id="allocator-traits"><a class="header" href="#allocator-traits">Allocator Traits</a></h3>
+<ul>
+<li><code>sync_hint</code> (Section 8.2; p. 336; allocator trait; contended, uncontended, serialized, private)</li>
+<li><code>alignment</code> (Section 8.2; p. 336; allocator trait; byte alignment)</li>
+<li><code>access</code> (Section 8.2; p. 336; allocator trait; all, memspace, device, cgroup, pteam, thread)</li>
+<li><code>pool_size</code> (Section 8.2; p. 336; allocator trait; pool size limit)</li>
+<li><code>fallback</code> (Section 8.2; p. 336; allocator trait; default_mem_fb, null_fb, abort_fb, allocator_fb)</li>
+<li><code>fb_data</code> (Section 8.2; p. 336; allocator trait; fallback allocator handle)</li>
+<li><code>pinned</code> (Section 8.2; p. 336; allocator trait; true, false)</li>
+<li><code>partition</code> (Section 8.2; p. 336; allocator trait; environment, nearest, blocked, interleaved, partitioner)</li>
+</ul>
+<h2 id="reserved-locators"><a class="header" href="#reserved-locators">Reserved Locators</a></h2>
+<p>Reserved locators are special OpenMP identifiers representing system storage.</p>
+<ul>
+<li><code>omp_all_memory</code> (Section 5.2.2; p. 195; reserved locator representing all memory)</li>
+</ul>
+<h2 id="reduction-operators"><a class="header" href="#reduction-operators">Reduction Operators</a></h2>
+<p>Reduction operators used with reduction clauses.</p>
+<h3 id="arithmetic-operators"><a class="header" href="#arithmetic-operators">Arithmetic Operators</a></h3>
+<ul>
+<li><code>+</code> (Section 7.6.3; addition reduction)</li>
+<li><code>-</code> (Section 7.6.3; subtraction reduction)</li>
+<li><code>*</code> (Section 7.6.3; multiplication reduction)</li>
+</ul>
+<h3 id="bitwise-operators"><a class="header" href="#bitwise-operators">Bitwise Operators</a></h3>
+<ul>
+<li><code>&amp;</code> (Section 7.6.3; bitwise AND reduction)</li>
+<li><code>|</code> (Section 7.6.3; bitwise OR reduction)</li>
+<li><code>^</code> (Section 7.6.3; bitwise XOR reduction)</li>
+</ul>
+<h3 id="logical-operators"><a class="header" href="#logical-operators">Logical Operators</a></h3>
+<ul>
+<li><code>&amp;&amp;</code> (Section 7.6.3; logical AND reduction)</li>
+<li><code>||</code> (Section 7.6.3; logical OR reduction)</li>
+</ul>
+<h3 id="minmax-operators"><a class="header" href="#minmax-operators">Min/Max Operators</a></h3>
+<ul>
+<li><code>min</code> (Section 7.6.3; minimum reduction)</li>
+<li><code>max</code> (Section 7.6.3; maximum reduction)</li>
+</ul>
+<h3 id="language-specific-operators"><a class="header" href="#language-specific-operators">Language-Specific Operators</a></h3>
+<ul>
+<li><code>.eqv.</code> (Fortran; Section 7.6.3; logical equivalence reduction)</li>
+<li><code>.neqv.</code> (Fortran; Section 7.6.3; logical non-equivalence reduction)</li>
+<li><code>.and.</code> (Fortran; Section 7.6.3; logical AND reduction)</li>
+<li><code>.or.</code> (Fortran; Section 7.6.3; logical OR reduction)</li>
+<li><code>iand</code> (Fortran; Section 7.6.3; bitwise AND reduction)</li>
+<li><code>ior</code> (Fortran; Section 7.6.3; bitwise OR reduction)</li>
+<li><code>ieor</code> (Fortran; Section 7.6.3; bitwise XOR reduction)</li>
+</ul>
+<h2 id="special-constants-and-identifiers"><a class="header" href="#special-constants-and-identifiers">Special Constants and Identifiers</a></h2>
+<h3 id="device-identifiers"><a class="header" href="#device-identifiers">Device Identifiers</a></h3>
+<ul>
+<li><code>omp_invalid_device</code> (Section 15.2; invalid device number)</li>
+<li><code>omp_initial_device</code> (Section 15.2; initial device identifier)</li>
+</ul>
+<h3 id="interop-type-identifiers"><a class="header" href="#interop-type-identifiers">Interop Type Identifiers</a></h3>
+<ul>
+<li><code>targetsync</code> (Section 16.1.2; p. 500; target synchronization interop type)</li>
+<li><code>target</code> (Section 16.1.2; p. 500; target interop type)</li>
+</ul>
+<h3 id="doacross-keywords"><a class="header" href="#doacross-keywords">Doacross Keywords</a></h3>
+<ul>
+<li><code>source</code> (Section 17.9.7; p. 543; doacross source)</li>
+<li><code>sink</code> (Section 17.9.7; p. 543; doacross sink)</li>
+<li><code>source_omp_cur_iteration</code> (Section 17.9.7; p. 543; current iteration source)</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="openmp-support.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="openmp60-directive-clause-components.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="openmp-support.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="openmp60-directive-clause-components.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
