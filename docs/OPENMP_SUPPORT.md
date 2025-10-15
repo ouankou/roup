@@ -1,6 +1,8 @@
 # OpenMP 6.0 Support Matrix
 
 This document catalogues the OpenMP 6.0 surface area for C and C++ and records what the ROUP parser currently understands.  The
+
+For the canonical, clause-by-clause breakdown of the OpenMP 6.0 surface area, see the [OpenMP 6.0 directive catalogue](../docs/book/src/openmp60-directives-clauses.md) and the [directive–clause component index](../docs/book/src/openmp60-directive-clause-components.md).
 lists below are derived from the [OpenMP Application Programming Interface Version 6.0 specification](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf).  The focus is on directive
 keywords, the standard combined forms, and the clauses that may appear on those directives.
 
