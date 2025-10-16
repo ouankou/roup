@@ -9,8 +9,8 @@ ROUP provides comprehensive support for **OpenMP 6.0** directives and clauses fo
 | Feature | Support |
 |---------|---------|
 | **OpenMP Version** | 3.0 - 6.0 |
-| **Directives** | 95 directives (core + combined forms) |
-| **Clauses** | 91 clauses |
+| **Directives** | 127 directives (core + combined forms) |
+| **Clauses** | 125 clauses |
 | **Languages** | C, C++, Fortran |
 | **Test Coverage** | 355 automated tests |
 | **Specification** | [OpenMP 6.0 PDF](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf) |
@@ -52,6 +52,7 @@ ROUP provides comprehensive support for **OpenMP 6.0** directives and clauses fo
 | `taskloop` | `#pragma omp taskloop` | Task-generating loop |
 | `taskloop simd` | `#pragma omp taskloop simd` | SIMD taskloop |
 | `taskgraph` | `#pragma omp taskgraph` | Task graph (OpenMP 6.0) |
+| `task iteration` | `#pragma omp task iteration` | Subsidiary task construct |
 | `cancel` | `#pragma omp cancel` | Cancel construct |
 | `cancellation point` | `#pragma omp cancellation point` | Cancellation check |
 | `depobj` | `#pragma omp depobj` | Dependency object |
@@ -114,22 +115,38 @@ ROUP supports all standard combined directives:
 | `declare reduction` | `#pragma omp declare reduction` | Custom reduction |
 | `declare mapper` | `#pragma omp declare mapper` | Custom mapper |
 
-### Utility Directives (6 directives)
+### Utility Directives (7 directives)
 
 | Directive | Example | Notes |
 |-----------|---------|-------|
 | `threadprivate` | `#pragma omp threadprivate(var)` | Thread-private data |
 | `assume` | `#pragma omp assume` | Compiler hints (OpenMP 5.1+) |
+| `assumes` | `#pragma omp assumes` | Global assumption set |
 | `nothing` | `#pragma omp nothing` | No-op directive |
 | `error` | `#pragma omp error` | Compilation error |
 | `requires` | `#pragma omp requires` | Implementation requirements |
 | `allocate` | `#pragma omp allocate` | Memory allocation |
 
+### Loop Transformation Directives (8 directives)
+
+| Directive | Example | Notes |
+|-----------|---------|-------|
+| `fuse` | `#pragma omp fuse` | Fuse adjacent loops |
+| `interchange` | `#pragma omp interchange` | Loop interchange |
+| `reverse` | `#pragma omp reverse` | Iterate in reverse order |
+| `split` | `#pragma omp split` | Split loop iterations |
+| `stripe` | `#pragma omp stripe` | Strip-mine loop iterations |
+| `tile` | `#pragma omp tile` | Tile loop nests |
+| `unroll` | `#pragma omp unroll` | Loop unrolling |
+| `workdistribute` | `#pragma omp workdistribute` | Worksharing loop distribution |
+
 ---
 
-## Clause Support (92 clauses)
+## Clause Support (highlights)
 
-### Data-Sharing Clauses (8)
+The tables below highlight common clauses. The parser registers **all 125 OpenMP 6.0 clause keywords**; see the [OpenMP 6.0 directive reference](./openmp60-directives-clauses.md) for the exhaustive catalogue and directive applicability.
+
+### Data-Sharing Clauses
 
 | Clause | Example | Description |
 |--------|---------|-------------|
@@ -142,7 +159,7 @@ ROUP supports all standard combined directives:
 | `task_reduction` | `task_reduction(*:product)` | Task reduction |
 | `copyin` | `copyin(global_var)` | Copy to private |
 
-### Control Clauses (15)
+### Control Clauses
 
 | Clause | Example | Description |
 |--------|---------|-------------|
@@ -162,7 +179,7 @@ ROUP supports all standard combined directives:
 | `nogroup` | `nogroup` | No taskgroup |
 | `filter` | `filter(thread_num)` | Masked filter |
 
-### Device Clauses (15)
+### Device Clauses
 
 | Clause | Example | Description |
 |--------|---------|-------------|
@@ -174,15 +191,16 @@ ROUP supports all standard combined directives:
 | `is_device_ptr` | `is_device_ptr(ptr)` | Device pointer |
 | `use_device_ptr` | `use_device_ptr(ptr)` | Use device pointer |
 | `use_device_addr` | `use_device_addr(var)` | Use device address |
-| `device_resident` | `device_resident(var)` | Device-resident data |
+| `has_device_addr` | `has_device_addr(ptr)` | Use existing device address |
 | `num_teams` | `num_teams(16)` | Number of teams |
 | `thread_limit` | `thread_limit(256)` | Threads per team |
 | `dist_schedule` | `dist_schedule(static)` | Distribution schedule |
 | `interop` | `interop(...)` | Interoperability |
 | `device_type` | `device_type(gpu)` | Device type selector |
 | `init` | `init(...)` | Initialize interop |
+| `device_safesync` | `device_safesync` | Force device-safe synchronisation |
 
-### SIMD Clauses (8)
+### SIMD Clauses
 
 | Clause | Example | Description |
 |--------|---------|-------------|
@@ -195,7 +213,7 @@ ROUP supports all standard combined directives:
 | `inbranch` | `inbranch` | In-branch SIMD |
 | `notinbranch` | `notinbranch` | Not-in-branch SIMD |
 
-### Synchronization & Memory (12)
+### Synchronization & Memory Clauses
 
 | Clause | Example | Description |
 |--------|---------|-------------|
@@ -226,35 +244,31 @@ ROUP supports all standard combined directives:
 
 | Clause | Example | Description |
 |--------|---------|-------------|
-| `allocate` | `allocate(allocator:ptr)` | Memory allocator |
-| `allocator` | `allocator(omp_default_mem_alloc)` | Allocator |
-| `uses_allocators` | `uses_allocators(...)` | Allocator list |
-| `affinity` | `affinity(...)` | Thread affinity |
-| `proc_bind` | `proc_bind(close)` | Processor binding |
-| `order` | `order(concurrent)` | Loop iteration order |
-| `partial` | `partial(4)` | Partial unroll |
-| `sizes` | `sizes(8, 16)` | Tile sizes |
-| `tile` | `tile(...)` | Loop tiling |
-| `unroll` | `unroll(4)` | Loop unrolling |
-| `label` | `label(...)` | Dispatch label |
-| `message` | `message("error text")` | Error message |
-| `copyprivate` | `copyprivate(x)` | Copy-private |
-| `link` | `link(...)` | Declare target link |
-| `capture` | `capture` | Atomic capture |
-| `update` | `update` | Atomic update |
-| `hint` | `hint(...)` | Performance hint |
-| `destroy` | `destroy` | Destroy clause |
-| `reverse` | `reverse` | Reverse dependencies |
-| `inclusive` | `inclusive(...)` | Inclusive scan |
-| `exclusive` | `exclusive(...)` | Exclusive scan |
-| `unified_address` | `unified_address` | Requires clause |
-| `unified_shared_memory` | `unified_shared_memory` | Requires clause |
-| `dynamic_allocators` | `dynamic_allocators` | Requires clause |
-| `reproducible` | `reproducible` | Order modifier |
-| `no_openmp` | `no_openmp` | Variant selector |
-| `no_openmp_routines` | `no_openmp_routines` | Variant selector |
-| `no_parallelism` | `no_parallelism` | Variant selector |
-| `public` | `public` | Declare mapper |
+| `absent` | `absent(parallel)` | Assume absence of constructs |
+| `adjust_args` | `adjust_args(append:foo)` | Variant argument adjustments |
+| `append_args` | `append_args(... )` | Append variant arguments |
+| `apply` | `apply(loop) permutation(...)` | Loop transformation directive selector |
+| `contains` | `contains(construct={parallel})` | Assumption clause |
+| `counts` | `counts(expand:2)` | Split loop partitioning |
+| `graph_id` | `graph_id(my_graph)` | Taskgraph identifier |
+| `graph_reset` | `graph_reset` | Reset taskgraph data |
+| `induction` | `induction(i = 0 : n : 1)` | Declare induction variables |
+| `inductor` | `inductor(i)` | Induction helper clause |
+| `looprange` | `looprange(0:n:1)` | Explicit loop bounds |
+| `memscope` | `memscope(seq)` | Atomic memory scope |
+| `no_openmp_constructs` | `no_openmp_constructs` | Variant selector |
+| `nocontext` | `nocontext` | Variant selector |
+| `otherwise` | `otherwise` | Metadirective fall-back |
+| `permutation` | `permutation(2,1)` | Loop permutation |
+| `replayable` | `replayable` | Task replay control |
+| `reverse_offload` | `reverse_offload` | Reverse offload control |
+| `self_maps` | `self_maps` | Map list modifier |
+| `severity` | `severity(fatal)` | Error directive severity |
+| `threadset` | `threadset(team)` | Task set selector |
+| `transparent` | `transparent` | Dependence transparency |
+| `uniform` | `uniform(step)` | SIMD uniform variable |
+| `use` | `use(my_interop)` | Interop use |
+| `write` | `write` | Atomic write form |
 
 ---
 

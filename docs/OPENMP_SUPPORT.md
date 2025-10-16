@@ -1,23 +1,23 @@
 # OpenMP 6.0 Support Matrix
 
 This document catalogues the OpenMP 6.0 surface area for C and C++ and records what the ROUP parser currently understands.  The
-
-For the canonical, clause-by-clause breakdown of the OpenMP 6.0 surface area, see the [OpenMP 6.0 directive catalogue](../docs/book/src/openmp60-directives-clauses.md) and the [directive–clause component index](../docs/book/src/openmp60-directive-clause-components.md).
 lists below are derived from the [OpenMP Application Programming Interface Version 6.0 specification](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf).  The focus is on directive
-keywords, the standard combined forms, and the clauses that may appear on those directives.
+keywords, the standard combined forms, and the clauses that may appear on those directives.  For the canonical directive, clause, and modifier catalogue see the [OpenMP 6.0 directive reference](../docs/book/src/openmp60-directives-clauses.md) and the [directive–clause component index](../docs/book/src/openmp60-directive-clause-components.md).
 
 **Legend**: ✅ Supported in the parser & tests · ❌ Not yet implemented in the parser
 
 All directive and clause keywords from the OpenMP 6.0 specification are registered with the parser and covered by automated tests.
-Unsupported clause keywords are rejected by the OpenMP clause registry to avoid
-silently accepting directives outside the documented coverage.
+The OpenMP parser exposes 127 directive spellings (the 64 canonical directives plus all OpenMP-standard combined forms and Fortran aliases) and registers all 125 clause keywords.  The `tests/openmp_support_matrix.rs` integration test iterates over these registries to ensure every keyword parses successfully.
 
 ## Directive Support (C/C++)
 
 ### Core execution and worksharing directives
 | Directive | Status | Notes |
 | --- | --- | --- |
+| `allocate` | ✅ | Registered via the OpenMP directive registry. |
+| `allocators` | ✅ | Registered via the OpenMP directive registry. |
 | `assume` | ✅ | Registered via the OpenMP directive registry. |
+| `assumes` | ✅ | Registered via the OpenMP directive registry. |
 | `atomic` | ✅ | Registered via the OpenMP directive registry. |
 | `atomic read` | ✅ | Registered via the OpenMP directive registry. |
 | `atomic write` | ✅ | Registered via the OpenMP directive registry. |
@@ -25,9 +25,11 @@ silently accepting directives outside the documented coverage.
 | `atomic capture` | ✅ | Registered via the OpenMP directive registry. |
 | `atomic compare capture` | ✅ | Registered via the OpenMP directive registry. |
 | `barrier` | ✅ | Registered via the OpenMP directive registry. |
+| `begin assumes` | ✅ | Registered via the OpenMP directive registry. |
 | `cancel` | ✅ | Registered via the OpenMP directive registry. |
 | `cancellation point` | ✅ | Registered via the OpenMP directive registry. |
 | `critical` | ✅ | Registered via the OpenMP directive registry. |
+| `declare induction` | ✅ | Registered via the OpenMP directive registry. |
 | `depobj` | ✅ | Registered via the OpenMP directive registry. |
 | `dispatch` | ✅ | Registered via the OpenMP directive registry. |
 | `distribute` | ✅ | Registered via the OpenMP directive registry. |
@@ -38,9 +40,12 @@ silently accepting directives outside the documented coverage.
 | `distribute simd` | ✅ | Registered via the OpenMP directive registry. |
 | `error` | ✅ | Registered via the OpenMP directive registry. |
 | `flush` | ✅ | Registered via the OpenMP directive registry. |
+| `fuse` | ✅ | Registered via the OpenMP directive registry. |
 | `for` | ✅ | Recognized via the OpenMP directive registry. |
 | `for simd` | ✅ | Recognized via the OpenMP directive registry. |
+| `groupprivate` | ✅ | Registered via the OpenMP directive registry. |
 | `interop` | ✅ | Registered via the OpenMP directive registry. |
+| `interchange` | ✅ | Registered via the OpenMP directive registry. |
 | `loop` | ✅ | Registered via the OpenMP directive registry. |
 | `masked` | ✅ | Registered via the OpenMP directive registry. |
 | `masked taskloop` | ✅ | Registered via the OpenMP directive registry. |
@@ -62,12 +67,18 @@ silently accepting directives outside the documented coverage.
 | `parallel master taskloop simd` | ✅ | Recognized via the OpenMP directive registry. |
 | `parallel sections` | ✅ | Registered via the OpenMP directive registry. |
 | `requires` | ✅ | Registered via the OpenMP directive registry. |
+| `reverse` | ✅ | Registered via the OpenMP directive registry. |
+| `scan` | ✅ | Registered via the OpenMP directive registry. |
 | `scope` | ✅ | Registered via the OpenMP directive registry. |
+| `section` | ✅ | Registered via the OpenMP directive registry. |
 | `sections` | ✅ | Registered via the OpenMP directive registry. |
 | `simd` | ✅ | Registered via the OpenMP directive registry. |
 | `single` | ✅ | Registered via the OpenMP directive registry. |
+| `split` | ✅ | Registered via the OpenMP directive registry. |
+| `stripe` | ✅ | Registered via the OpenMP directive registry. |
 | `target` | ✅ | Recognized via the OpenMP directive registry. |
 | `task` | ✅ | Recognized via the OpenMP directive registry. |
+| `task iteration` | ✅ | Registered via the OpenMP directive registry. |
 | `taskgroup` | ✅ | Registered via the OpenMP directive registry. |
 | `taskgraph` | ✅ | Registered via the OpenMP directive registry. |
 | `taskloop` | ✅ | Recognized via the OpenMP directive registry. |
@@ -84,11 +95,17 @@ silently accepting directives outside the documented coverage.
 | `teams loop` | ✅ | Recognized via the OpenMP directive registry. |
 | `teams loop simd` | ✅ | Recognized via the OpenMP directive registry. |
 | `threadprivate` | ✅ | Registered via the OpenMP directive registry. |
+| `tile` | ✅ | Registered via the OpenMP directive registry. |
+| `unroll` | ✅ | Registered via the OpenMP directive registry. |
+| `workdistribute` | ✅ | Registered via the OpenMP directive registry. |
+| `workshare` | ✅ | Registered via the OpenMP directive registry. |
 
 ### Target and combined offloading directives
 | Directive | Status | Notes |
 | --- | --- | --- |
 | `begin declare target` | ✅ | Registered via the OpenMP directive registry. |
+| `begin declare variant` | ✅ | Registered via the OpenMP directive registry. |
+| `begin metadirective` | ✅ | Registered via the OpenMP directive registry. |
 | `declare mapper` | ✅ | Registered via the OpenMP directive registry. |
 | `declare reduction` | ✅ | Registered via the OpenMP directive registry. |
 | `declare simd` | ✅ | Registered via the OpenMP directive registry. |
@@ -120,101 +137,7 @@ silently accepting directives outside the documented coverage.
 
 ## Clause Support (C/C++)
 
-The table below enumerates every OpenMP 6.0 clause keyword for C and C++.  Clauses are marked supported when the parser accepts
-them through the `OpenMpClause` enum.
-
-| Clause | Status | Notes |
-| --- | --- | --- |
-| `acq_rel` | ✅ | Memory-order clause for `atomic`; registered as a bare clause. |
-| `acquire` | ✅ | Memory-order clause for `atomic`; registered as a bare clause. |
-| `affinity` | ✅ | Registered with the clause registry. |
-| `aligned` | ✅ | Registered with the clause registry. |
-| `allocate` | ✅ | Registered with the clause registry. |
-| `allocator` | ✅ | Registered with the clause registry. |
-| `atomic_default_mem_order` | ✅ | Registered with the clause registry. |
-| `bind` | ✅ | Registered with the clause registry. |
-| `capture` | ✅ | Registered with the clause registry. |
-| `collapse` | ✅ | Registered with the clause registry. |
-| `compare` | ✅ | Registered with the clause registry. |
-| `copyin` | ✅ | Registered with the clause registry. |
-| `copyprivate` | ✅ | Registered with the clause registry. |
-| `default` | ✅ | Registered with the clause registry. |
-| `defaultmap` | ✅ | Registered with the clause registry. |
-| `depend` | ✅ | Registered with the clause registry. |
-| `destroy` | ✅ | Registered with the clause registry. |
-| `detach` | ✅ | Registered with the clause registry. |
-| `device` | ✅ | Registered with the clause registry. |
-| `device_resident` | ✅ | Registered with the clause registry. |
-| `device_type` | ✅ | Registered with the clause registry. |
-| `dist_schedule` | ✅ | Registered with the clause registry. |
-| `doacross` | ✅ | Registered with the clause registry. |
-| `dynamic_allocators` | ✅ | Registered with the clause registry. |
-| `exclusive` | ✅ | Registered with the clause registry. |
-| `fail` | ✅ | Registered with the clause registry. |
-| `final` | ✅ | Registered with the clause registry. |
-| `filter` | ✅ | Registered with the clause registry. |
-| `firstprivate` | ✅ | Registered with the clause registry. |
-| `from` | ✅ | Registered with the clause registry. |
-| `grainsize` | ✅ | Registered with the clause registry. |
-| `hint` | ✅ | Registered with the clause registry. |
-| `holds` | ✅ | Registered with the clause registry. |
-| `if` | ✅ | Registered with the clause registry. |
-| `in_reduction` | ✅ | Registered with the clause registry. |
-| `inbranch` | ✅ | Registered with the clause registry. |
-| `inclusive` | ✅ | Registered with the clause registry. |
-| `init` | ✅ | Registered with the clause registry. |
-| `interop` | ✅ | Registered with the clause registry. |
-| `is_device_ptr` | ✅ | Registered with the clause registry. |
-| `label` | ✅ | Registered with the clause registry. |
-| `lastprivate` | ✅ | Registered with the clause registry. |
-| `linear` | ✅ | Registered with the clause registry. |
-| `link` | ✅ | Registered with the clause registry. |
-| `map` | ✅ | Registered with the clause registry. |
-| `match` | ✅ | Registered with the clause registry. |
-| `message` | ✅ | Registered with the clause registry. |
-| `mergeable` | ✅ | Registered with the clause registry. |
-| `nontemporal` | ✅ | Registered with the clause registry. |
-| `no_openmp` | ✅ | Registered with the clause registry. |
-| `no_openmp_routines` | ✅ | Registered with the clause registry. |
-| `no_parallelism` | ✅ | Registered with the clause registry. |
-| `nogroup` | ✅ | Registered with the clause registry. |
-| `novariants` | ✅ | Registered with the clause registry. |
-| `nowait` | ✅ | Registered with the clause registry. |
-| `num_tasks` | ✅ | Registered with the clause registry. |
-| `num_teams` | ✅ | Registered with the clause registry. |
-| `num_threads` | ✅ | Registered with the clause registry. |
-| `order` | ✅ | Registered with the clause registry. |
-| `ordered` | ✅ | Registered with the clause registry. |
-| `partial` | ✅ | Registered with the clause registry. |
-| `priority` | ✅ | Registered with the clause registry. |
-| `private` | ✅ | Registered with the clause registry. |
-| `proc_bind` | ✅ | Registered with the clause registry. |
-| `public` | ✅ | Registered with the clause registry. |
-| `reduction` | ✅ | Registered with the clause registry. |
-| `release` | ✅ | Memory-order clause for `atomic`; registered as a bare clause. |
-| `relaxed` | ✅ | Memory-order clause for `atomic`; registered as a bare clause. |
-| `reverse` | ✅ | Registered with the clause registry. |
-| `reproducible` | ✅ | Registered with the clause registry. |
-| `safelen` | ✅ | Registered with the clause registry. |
-| `schedule` | ✅ | Registered with the clause registry. |
-| `seq_cst` | ✅ | Memory-order clause for `atomic`; registered as a bare clause. |
-| `shared` | ✅ | Registered with the clause registry. |
-| `simdlen` | ✅ | Registered with the clause registry. |
-| `sizes` | ✅ | Registered with the clause registry. |
-| `task_reduction` | ✅ | Registered with the clause registry. |
-| `thread_limit` | ✅ | Registered with the clause registry. |
-| `tile` | ✅ | Registered with the clause registry. |
-| `to` | ✅ | Registered with the clause registry. |
-| `unified_address` | ✅ | Registered with the clause registry. |
-| `unified_shared_memory` | ✅ | Registered with the clause registry. |
-| `unroll` | ✅ | Registered with the clause registry. |
-| `untied` | ✅ | Registered with the clause registry. |
-| `update` | ✅ | Registered with the clause registry. |
-| `use_device_addr` | ✅ | Registered with the clause registry. |
-| `use_device_ptr` | ✅ | Registered with the clause registry. |
-| `uses_allocators` | ✅ | Registered with the clause registry. |
-| `weak` | ✅ | Registered with the clause registry. |
-| `when` | ✅ | Registered with the clause registry. |
+All 125 OpenMP 6.0 clause keywords are registered with the parser.  The clause registry now includes the new 6.0 additions such as `absent`, `adjust_args`, `align`, `append_args`, `device_safesync`, `graph_id`, `graph_reset`, `has_device_addr`, `looprange`, `memscope`, `no_openmp_constructs`, `reverse_offload`, `self_maps`, `threadset`, `transparent`, `uniform`, and many others.  The support matrix test exercises each clause in both bare and parenthesized form (when applicable) to guard against regressions.  For the clause-by-clause breakdown, including directive applicability and argument syntax, consult the [OpenMP 6.0 directive reference](../docs/book/src/openmp60-directives-clauses.md).
 
 ## Other specification items
 

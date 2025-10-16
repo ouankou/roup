@@ -11,7 +11,7 @@ This document serves as a complete keyword inventory for development and referen
 
 ## Coverage
 
-- **66 Directives/Constructs** - All executable, declarative, and meta directives
+- **64 Directives/Constructs** - All executable, declarative, and meta directives
 - **125 Clauses** - All clause keywords
 - **Modifiers** - Map-type, dependence-type, schedule, and other modifiers
 - **Keywords & Values** - Memory orders, atomic operations, schedule types, allocators, and more
