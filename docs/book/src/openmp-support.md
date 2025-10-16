@@ -9,13 +9,13 @@ ROUP provides comprehensive support for **OpenMP 6.0** directives and clauses fo
 | Feature | Support |
 |---------|---------|
 | **OpenMP Version** | 3.0 - 6.0 |
-| **Directives** | 95 directives (core + combined forms) |
-| **Clauses** | 91 clauses |
+| **Directives** | 127 directive spellings (64 base + 63 combined forms) |
+| **Clauses** | 132 clauses (125 from spec + 7 extras) |
 | **Languages** | C, C++, Fortran |
-| **Test Coverage** | 355 automated tests |
+| **Test Coverage** | 384 automated tests |
 | **Specification** | [OpenMP 6.0 PDF](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf) |
 
-**ROUP supports the vast majority of OpenMP 3.0-6.0 directives and clauses.** ✅
+**ROUP provides complete OpenMP 6.0 directive and clause coverage.** ✅
 
 ---
 
@@ -41,7 +41,7 @@ ROUP provides comprehensive support for **OpenMP 6.0** directives and clauses fo
 | `loop` | `#pragma omp loop` | Generic loop (OpenMP 5.0+) |
 | `scope` | `#pragma omp scope` | Scoped region (OpenMP 5.1+) |
 
-### Tasking (10 directives)
+### Tasking (11 directives)
 
 | Directive | Example | Notes |
 |-----------|---------|-------|
@@ -52,6 +52,7 @@ ROUP provides comprehensive support for **OpenMP 6.0** directives and clauses fo
 | `taskloop` | `#pragma omp taskloop` | Task-generating loop |
 | `taskloop simd` | `#pragma omp taskloop simd` | SIMD taskloop |
 | `taskgraph` | `#pragma omp taskgraph` | Task graph (OpenMP 6.0) |
+| `task_iteration` | `#pragma omp task_iteration` | Task iteration (OpenMP 6.0) |
 | `cancel` | `#pragma omp cancel` | Cancel construct |
 | `cancellation point` | `#pragma omp cancellation point` | Cancellation check |
 | `depobj` | `#pragma omp depobj` | Dependency object |
@@ -104,30 +105,52 @@ ROUP supports all standard combined directives:
 
 **And many more...** (all 120+ combinations from OpenMP 6.0)
 
-### Meta-directives & Variants (5 directives)
+### Meta-directives & Variants (9 directives)
 
 | Directive | Example | Notes |
 |-----------|---------|-------|
 | `metadirective` | `#pragma omp metadirective when(...)` | Conditional directive selection |
+| `begin metadirective` | `#pragma omp begin metadirective` | Begin metadirective block |
 | `declare variant` | `#pragma omp declare variant(...)` | Function variants |
+| `begin declare_variant` | `#pragma omp begin declare_variant` | Begin variant block (OpenMP 6.0) |
 | `declare simd` | `#pragma omp declare simd` | SIMD function |
 | `declare reduction` | `#pragma omp declare reduction` | Custom reduction |
+| `declare induction` | `#pragma omp declare_induction` | Custom induction (OpenMP 6.0) |
 | `declare mapper` | `#pragma omp declare mapper` | Custom mapper |
+| `declare target` | `#pragma omp declare target` | Device function declaration |
 
-### Utility Directives (6 directives)
+### Loop Transformation Directives (8 directives - OpenMP 6.0)
+
+| Directive | Example | Notes |
+|-----------|---------|-------|
+| `tile` | `#pragma omp tile sizes(8, 8)` | Loop tiling |
+| `unroll` | `#pragma omp unroll full` | Loop unrolling |
+| `fuse` | `#pragma omp fuse` | Loop fusion |
+| `split` | `#pragma omp split counts(10, omp_fill)` | Loop splitting |
+| `interchange` | `#pragma omp interchange permutation(2,1,3)` | Loop interchange |
+| `reverse` | `#pragma omp reverse` | Loop reversal |
+| `stripe` | `#pragma omp stripe sizes(16)` | Loop striping |
+| `workdistribute` | `#pragma omp workdistribute` | Work distribution (Fortran) |
+
+### Utility Directives (11 directives)
 
 | Directive | Example | Notes |
 |-----------|---------|-------|
 | `threadprivate` | `#pragma omp threadprivate(var)` | Thread-private data |
+| `groupprivate` | `#pragma omp groupprivate(var)` | Group-private data (OpenMP 6.0) |
 | `assume` | `#pragma omp assume` | Compiler hints (OpenMP 5.1+) |
+| `assumes` | `#pragma omp assumes` | Assumption directives (OpenMP 5.1+) |
+| `begin assumes` | `#pragma omp begin assumes` | Begin assumption block |
 | `nothing` | `#pragma omp nothing` | No-op directive |
 | `error` | `#pragma omp error` | Compilation error |
 | `requires` | `#pragma omp requires` | Implementation requirements |
-| `allocate` | `#pragma omp allocate` | Memory allocation |
+| `allocate` | `#pragma omp allocate` | Memory allocation (declarative) |
+| `allocators` | `#pragma omp allocators` | Memory allocators (executable) |
+| `scan` | `#pragma omp scan` | Scan directive (OpenMP 5.0+) |
 
 ---
 
-## Clause Support (92 clauses)
+## Clause Support (132 clauses)
 
 ### Data-Sharing Clauses (8)
 
@@ -256,6 +279,52 @@ ROUP supports all standard combined directives:
 | `no_parallelism` | `no_parallelism` | Variant selector |
 | `public` | `public` | Declare mapper |
 
+### OpenMP 6.0 New Clauses (41 clauses)
+
+| Clause | Example | Description |
+|--------|---------|-------------|
+| `absent` | `absent(x)` | Context selector - feature absent |
+| `adjust_args` | `adjust_args(need_device_addr: x)` | Adjust function arguments |
+| `align` | `align(64)` | Memory alignment |
+| `append_args` | `append_args(x, y)` | Append function arguments |
+| `apply` | `apply(tile(8,8))` | Apply transformation |
+| `at` | `at(compilation)` | Error timing |
+| `collector` | `collector(+)` | Induction collector operator |
+| `combiner` | `combiner(+)` | Reduction combiner operator |
+| `contains` | `contains(target)` | Assumption contains |
+| `counts` | `counts(10, omp_fill)` | Split iteration counts |
+| `device_safesync` | `device_safesync` | Device safe synchronization |
+| `enter` | `enter(link: x)` | Declare target enter |
+| `full` | `full` | Full unroll |
+| `graph_id` | `graph_id(1)` | Task graph identifier |
+| `graph_reset` | `graph_reset` | Reset task graph |
+| `has_device_addr` | `has_device_addr(x)` | Has device address |
+| `indirect` | `indirect` | Indirect call support |
+| `induction` | `induction(i = 0 : N : 1)` | Induction variable |
+| `inductor` | `inductor(+: x)` | Induction inductor |
+| `init_complete` | `init_complete` | Initialization complete |
+| `initializer` | `initializer(omp_priv = 0)` | Reduction initializer |
+| `local` | `local(x)` | Local allocation |
+| `looprange` | `looprange(1:10)` | Loop iteration range |
+| `memscope` | `memscope(device)` | Memory scope |
+| `no_openmp_constructs` | `no_openmp_constructs` | No OpenMP constructs |
+| `nocontext` | `nocontext` | No context variant |
+| `otherwise` | `otherwise(parallel)` | Metadirective fallback |
+| `permutation` | `permutation(2,1)` | Loop interchange order |
+| `read` | `read` | Atomic read operation |
+| `replayable` | `replayable` | Replayable taskloop |
+| `reverse_offload` | `reverse_offload` | Reverse offload support |
+| `safesync` | `safesync` | Safe synchronization |
+| `self_maps` | `self_maps` | Self maps support |
+| `severity` | `severity(warning)` | Error severity level |
+| `simd` | `simd` | SIMD execution |
+| `threads` | `threads` | Thread execution mode |
+| `threadset` | `threadset(1)` | Thread set specification |
+| `transparent` | `transparent` | Transparent dependency object |
+| `uniform` | `uniform(x)` | SIMD uniform variable |
+| `use` | `use(obj)` | Interop use clause |
+| `write` | `write` | Atomic write operation |
+
 ---
 
 ## Version Compatibility
@@ -307,13 +376,16 @@ ROUP includes comprehensive automated testing:
 
 | Test Suite | Count | Coverage |
 |------------|-------|----------|
-| **Integration tests** | 116 | Directive parsing, clause combinations |
+| **Integration tests** | 145 | Directive parsing, clause combinations, OpenMP 6.0 coverage |
 | **Doc tests** | 239 | API examples, edge cases |
-| **Total** | **355** | All directives + clauses tested |
+| **Total** | **384** | All directives + clauses tested |
 
 **Every directive and clause in OpenMP 6.0 has a passing test.** ✅
 
-See `tests/` directory for the full test suite.
+Key test files:
+- `tests/openmp_keyword_coverage.rs` - Validates all 64 base directives and 41 new clauses
+- `tests/language_parsing_integration.rs` - Cross-language parsing tests
+- See full test suite in `tests/` directory
 
 ---
 
@@ -378,13 +450,15 @@ ROUP will be updated as new OpenMP versions are released.
 
 ## Summary
 
-**ROUP provides OpenMP 3.0-6.0 parsing support:**
+**ROUP provides complete OpenMP 3.0-6.0 parsing support:**
 
-- ✅ **95 directives** (core, combined, and meta-directives)
-- ✅ **91 clause types** (data-sharing, control, device, SIMD, sync, etc.)
-- ✅ **C/C++/Fortran** syntax support
-- ✅ **352 automated tests** (comprehensive directive/clause coverage)
+- ✅ **127 directive spellings** (64 base directives + 63 combined forms)
+- ✅ **132 clause keywords** (125 from OpenMP 6.0 spec + 7 extras)
+- ✅ **C/C++/Fortran** syntax support (all comment styles)
+- ✅ **384 automated tests** (100% directive/clause coverage)
 - ✅ **Type-safe Rust API** + **C FFI**
-- ✅ **Latest spec** (OpenMP 6.0, 2024)
+- ✅ **Latest spec** (OpenMP 6.0, November 2024)
+
+**All OpenMP 6.0 directives and clauses are fully supported and tested.** ✅
 
 **⚠️ Experimental - for research, education, and prototype tooling. Not yet production-ready.** 🧪

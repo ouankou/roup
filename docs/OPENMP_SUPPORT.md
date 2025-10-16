@@ -118,6 +118,34 @@ silently accepting directives outside the documented coverage.
 | `target teams loop simd` | ✅ | Recognized via the OpenMP directive registry. |
 | `target update` | ✅ | Registered via the OpenMP directive registry. |
 
+### Loop Transformation Directives (OpenMP 6.0)
+
+| Directive | Status | Notes |
+| --- | --- | --- |
+| `tile` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `unroll` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `fuse` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `split` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `interchange` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `reverse` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `stripe` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `workdistribute` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0; Fortran) |
+
+### Declarative Directives (OpenMP 6.0)
+
+| Directive | Status | Notes |
+| --- | --- | --- |
+| `allocate` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0; declarative form) |
+| `allocators` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0; executable form) |
+| `assumes` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `begin assumes` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `begin metadirective` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `begin declare_variant` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `declare_induction` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `groupprivate` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `scan` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+| `task_iteration` | ✅ | Registered via the OpenMP directive registry. (OpenMP 6.0) |
+
 ## Clause Support (C/C++)
 
 The table below enumerates every OpenMP 6.0 clause keyword for C and C++.  Clauses are marked supported when the parser accepts
@@ -215,6 +243,47 @@ them through the `OpenMpClause` enum.
 | `uses_allocators` | ✅ | Registered with the clause registry. |
 | `weak` | ✅ | Registered with the clause registry. |
 | `when` | ✅ | Registered with the clause registry. |
+| `absent` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `adjust_args` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `align` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `append_args` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `apply` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `at` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `collector` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `combiner` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `contains` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `counts` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `device_safesync` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `enter` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `full` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `graph_id` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `graph_reset` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `has_device_addr` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `indirect` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `induction` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `inductor` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `init_complete` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `initializer` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `local` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `looprange` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `memscope` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `no_openmp_constructs` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `nocontext` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `otherwise` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `permutation` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `read` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `replayable` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `reverse_offload` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `safesync` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `self_maps` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `severity` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `simd` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `threads` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `threadset` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `transparent` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `uniform` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `use` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
+| `write` | ✅ | Registered with the clause registry. (OpenMP 6.0) |
 
 ## Other specification items
 
