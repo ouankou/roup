@@ -49,8 +49,8 @@ pub use clause::{
     LinearModifier, MapType, MemoryOrder, OrderKind, ProcBind, ReductionOperator, ScheduleKind,
     ScheduleModifier,
 };
-pub use convert::ConversionError;
 pub use directive::{DirectiveIR, DirectiveKind};
+pub use error::ConversionError;
 pub use expression::{
     BinaryOperator, Expression, ExpressionAst, ExpressionKind, ParserConfig, UnaryOperator,
 };
@@ -62,7 +62,9 @@ mod builder;
 mod clause;
 pub mod convert;
 mod directive;
+mod error;
 mod expression;
+mod lang;
 mod types;
 pub mod validate;
 mod variable;
