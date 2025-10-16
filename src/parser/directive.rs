@@ -17,13 +17,13 @@ pub struct Directive<'a> {
     pub clauses: Vec<Clause<'a>>,
 }
 
-impl<'a> Directive<'a> {
+impl Directive<'_> {
     pub fn to_pragma_string(&self) -> String {
         self.to_string()
     }
 }
 
-impl<'a> fmt::Display for Directive<'a> {
+impl fmt::Display for Directive<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "#pragma omp {}", self.name.as_ref())?;
         if !self.clauses.is_empty() {
@@ -32,7 +32,7 @@ impl<'a> fmt::Display for Directive<'a> {
                 if idx > 0 {
                     write!(f, " ")?;
                 }
-                write!(f, "{}", clause)?;
+                write!(f, "{clause}")?;
             }
         }
         Ok(())

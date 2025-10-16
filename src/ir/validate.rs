@@ -66,8 +66,7 @@ impl fmt::Display for ValidationError {
             } => {
                 write!(
                     f,
-                    "Clause '{}' not allowed on '{}' directive: {}",
-                    clause_name, directive, reason
+                    "Clause '{clause_name}' not allowed on '{directive}' directive: {reason}"
                 )
             }
             ValidationError::ConflictingClauses {
@@ -77,8 +76,7 @@ impl fmt::Display for ValidationError {
             } => {
                 write!(
                     f,
-                    "Conflicting clauses '{}' and '{}': {}",
-                    clause1, clause2, reason
+                    "Conflicting clauses '{clause1}' and '{clause2}': {reason}"
                 )
             }
             ValidationError::MissingRequiredClause {
@@ -87,8 +85,7 @@ impl fmt::Display for ValidationError {
             } => {
                 write!(
                     f,
-                    "Directive '{}' requires clause '{}'",
-                    directive, required_clause
+                    "Directive '{directive}' requires clause '{required_clause}'"
                 )
             }
             ValidationError::InvalidCombination { clauses, reason } => {

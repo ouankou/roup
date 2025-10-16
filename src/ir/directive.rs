@@ -621,7 +621,7 @@ pub struct DirectiveIR {
     language: Language,
 }
 
-impl<'a> DirectiveIR {
+impl DirectiveIR {
     /// Create a new directive IR
     ///
     /// ## Example
@@ -858,14 +858,14 @@ impl<'a> DirectiveIR {
     }
 }
 
-impl<'a> fmt::Display for DirectiveIR {
+impl fmt::Display for DirectiveIR {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Write pragma prefix (already includes "omp ")
         write!(f, "{}{}", self.language.pragma_prefix(), self.kind)?;
 
         // Write clauses
         for clause in self.clauses.iter() {
-            write!(f, " {}", clause)?;
+            write!(f, " {clause}")?;
         }
 
         Ok(())

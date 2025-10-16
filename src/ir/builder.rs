@@ -108,7 +108,7 @@ impl<'a> DirectiveBuilder {
 
     /// Create a new builder for any directive kind
     pub fn new(kind: DirectiveKind) -> Self {
-        let name = format!("{:?}", kind).to_lowercase();
+        let name = format!("{kind:?}").to_lowercase();
         Self {
             kind,
             name,

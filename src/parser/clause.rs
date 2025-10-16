@@ -18,13 +18,13 @@ pub struct Clause<'a> {
     pub kind: ClauseKind<'a>,
 }
 
-impl<'a> Clause<'a> {
+impl Clause<'_> {
     pub fn to_source_string(&self) -> String {
         self.to_string()
     }
 }
 
-impl<'a> fmt::Display for Clause<'a> {
+impl fmt::Display for Clause<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
             ClauseKind::Bare => write!(f, "{}", self.name),

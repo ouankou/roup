@@ -6,7 +6,7 @@
 /// - Parsers are functions that consume input and return results
 /// - Combine small parsers to build complex ones
 /// - Type: IResult<Input, Output, Error>
-
+///
 /// Learning Rust: Type Aliases
 /// ============================
 /// IResult is nom's result type for parser functions
@@ -25,20 +25,15 @@ use nom::IResult;
 use nom::bytes::complete::{tag, take_while1};
 
 /// Language format for parsing
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Language {
     /// C/C++ language with #pragma omp
+    #[default]
     C,
     /// Fortran free-form with !$OMP sentinel
     FortranFree,
     /// Fortran fixed-form with !$OMP or C$OMP in columns 1-6
     FortranFixed,
-}
-
-impl Default for Language {
-    fn default() -> Self {
-        Language::C
-    }
 }
 
 /// Check if a character is valid in an identifier
@@ -85,7 +80,7 @@ pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
     // Optimize: check only first 5 characters instead of entire input
     let matches = after_space
         .get(..5)
-        .map_or(false, |s| s.eq_ignore_ascii_case("!$omp"));
+        .is_some_and(|s| s.eq_ignore_ascii_case("!$omp"));
 
     if matches {
         Ok((&after_space[5..], &after_space[..5]))
@@ -110,7 +105,7 @@ pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
 
     // Optimize: check only first 5 characters instead of entire input
     let first_5 = after_space.get(..5);
-    let matches = first_5.map_or(false, |s| {
+    let matches = first_5.is_some_and(|s| {
         s.eq_ignore_ascii_case("!$omp")
             || s.eq_ignore_ascii_case("c$omp")
             || s.eq_ignore_ascii_case("*$omp")
@@ -257,7 +252,7 @@ fn has_continuation_markers(bytes: &[u8]) -> bool {
 /// This function is public for benchmarking purposes but should be considered
 /// an internal implementation detail.
 #[doc(hidden)]
-pub fn collapse_line_continuations<'a>(input: &'a str) -> Cow<'a, str> {
+pub fn collapse_line_continuations(input: &str) -> Cow<'_, str> {
     // P1 Fix: Preserve whitespace when collapsing line continuations to prevent
     // token merging (e.g., "parallel\\\n    for" → "parallel for" not "parallelfor").
     // We insert a space when collapsing unless there's already trailing whitespace.

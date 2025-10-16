@@ -255,7 +255,7 @@ impl fmt::Display for ArraySection {
         // Omitted parts are skipped, but colons are preserved
 
         if let Some(lower) = &self.lower_bound {
-            write!(f, "{}", lower)?;
+            write!(f, "{lower}")?;
         }
 
         if self.length.is_some() || self.stride.is_some() {
@@ -263,7 +263,7 @@ impl fmt::Display for ArraySection {
         }
 
         if let Some(length) = &self.length {
-            write!(f, "{}", length)?;
+            write!(f, "{length}")?;
         }
 
         if self.stride.is_some() {
@@ -271,7 +271,7 @@ impl fmt::Display for ArraySection {
         }
 
         if let Some(stride) = &self.stride {
-            write!(f, "{}", stride)?;
+            write!(f, "{stride}")?;
         }
 
         Ok(())
@@ -448,7 +448,7 @@ impl fmt::Display for Variable {
         write!(f, "{}", self.name)?;
 
         for section in &self.array_sections {
-            write!(f, "[{}]", section)?;
+            write!(f, "[{section}]")?;
         }
 
         Ok(())
@@ -483,7 +483,7 @@ mod tests {
     #[test]
     fn identifier_display() {
         let id = Identifier::new("my_var");
-        assert_eq!(format!("{}", id), "my_var");
+        assert_eq!(format!("{id}"), "my_var");
     }
 
     #[test]
@@ -528,7 +528,7 @@ mod tests {
         let config = ParserConfig::default();
         let section = ArraySection::single_index(Expression::new("i", &config));
 
-        assert_eq!(format!("{}", section), "i");
+        assert_eq!(format!("{section}"), "i");
     }
 
     #[test]
@@ -540,7 +540,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(format!("{}", section), "0:N");
+        assert_eq!(format!("{section}"), "0:N");
     }
 
     #[test]
@@ -552,13 +552,13 @@ mod tests {
             Some(Expression::new("2", &config)),
         );
 
-        assert_eq!(format!("{}", section), "0:N:2");
+        assert_eq!(format!("{section}"), "0:N:2");
     }
 
     #[test]
     fn array_section_display_all() {
         let section = ArraySection::all();
-        assert_eq!(format!("{}", section), "");
+        assert_eq!(format!("{section}"), "");
     }
 
     #[test]
@@ -566,7 +566,7 @@ mod tests {
         let config = ParserConfig::default();
         let section = ArraySection::new(None, Some(Expression::new("N", &config)), None);
 
-        assert_eq!(format!("{}", section), ":N");
+        assert_eq!(format!("{section}"), ":N");
     }
 
     // ------------------------------------------------------------------------
@@ -629,7 +629,7 @@ mod tests {
     #[test]
     fn variable_display_scalar() {
         let var = Variable::new("x");
-        assert_eq!(format!("{}", var), "x");
+        assert_eq!(format!("{var}"), "x");
     }
 
     #[test]
@@ -640,7 +640,7 @@ mod tests {
             vec![ArraySection::single_index(Expression::new("i", &config))],
         );
 
-        assert_eq!(format!("{}", var), "arr[i]");
+        assert_eq!(format!("{var}"), "arr[i]");
     }
 
     #[test]
@@ -655,7 +655,7 @@ mod tests {
             )],
         );
 
-        assert_eq!(format!("{}", var), "arr[0:N]");
+        assert_eq!(format!("{var}"), "arr[0:N]");
     }
 
     #[test]
@@ -673,7 +673,7 @@ mod tests {
             ],
         );
 
-        assert_eq!(format!("{}", var), "matrix[i][0:N]");
+        assert_eq!(format!("{var}"), "matrix[i][0:N]");
     }
 
     #[test]
