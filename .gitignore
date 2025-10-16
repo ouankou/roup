@@ -1,9 +1,12 @@
+# Rust build artifacts
 /target
 Cargo.lock
 
 # C/C++/Fortran build artifacts
 *.o
 *.obj
+*.lo
+*.slo
 *.a
 *.so
 *.so.*
@@ -12,13 +15,59 @@ Cargo.lock
 *.lib
 *.exe
 *.out
+*.app
+
+# Fortran module files
 *.mod
 *.smod
 
-# Compiled binaries from examples
+# C/C++ dependency files
+*.d
+
+# CMake build artifacts
+compat/ompparser/build/
+
+# Example binaries (C)
 examples/c/basic_parse
 examples/c/tutorial
 examples/c/tutorial_basic
+
+# Example binaries (C++)
+examples/cpp/basic_parse
+examples/cpp/tutorial
 examples/cpp/tutorial_basic
 examples/cpp/tutorial_cpp
+
+# Example binaries (Fortran)
+examples/fortran/basic_parse
+examples/fortran/tutorial
 examples/fortran/tutorial_basic
+
+# Rust test/benchmark artifacts
+*.profraw
+*.profdata
+
+# macOS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Linux
+*~
+.fuse_hidden*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.iml
+.vs/
+
+# Temporary files
+*.tmp
+*.bak
+*.log
