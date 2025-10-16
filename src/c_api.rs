@@ -54,6 +54,11 @@
 //! - ✅ Pass only valid null-terminated strings
 //! - ✅ Not modify strings returned by this API
 
+// Clippy configuration for FFI module
+// We intentionally wrap unsafe operations in safe public functions for the C API.
+// The C callers are responsible for upholding safety invariants (documented above).
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 use std::ffi::{CStr, CString};
 use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
@@ -389,6 +394,22 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
     unsafe {
         let dir = &*directive;
         directive_name_to_kind(dir.name)
+    }
+}
+
+/// Get directive name as a C string.
+///
+/// Returns NULL if directive is NULL.
+/// Returned pointer is valid until directive is freed.
+#[no_mangle]
+pub extern "C" fn roup_directive_name(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let dir = &*directive;
+        dir.name
     }
 }
 
@@ -1045,11 +1066,7 @@ mod tests {
         );
 
         let kind = roup_directive_kind(directive);
-        assert_eq!(
-            kind, 0,
-            "PARALLEL directive should have kind 0, got {}",
-            kind
-        );
+        assert_eq!(kind, 0, "PARALLEL directive should have kind 0, got {kind}");
 
         roup_directive_free(directive);
 
@@ -1061,8 +1078,7 @@ mod tests {
         let kind = roup_directive_kind(directive);
         assert_eq!(
             kind, 1,
-            "DO directive should have kind 1 (same as FOR), got {}",
-            kind
+            "DO directive should have kind 1 (same as FOR), got {kind}"
         );
 
         roup_directive_free(directive);
@@ -1079,8 +1095,7 @@ mod tests {
         let kind = roup_directive_kind(directive);
         assert_eq!(
             kind, 0,
-            "PARALLEL DO directive should have kind 0 (composite), got {}",
-            kind
+            "PARALLEL DO directive should have kind 0 (composite), got {kind}"
         );
 
         roup_directive_free(directive);
@@ -1100,11 +1115,7 @@ mod tests {
         );
 
         let clause_count = roup_directive_clause_count(directive);
-        assert_eq!(
-            clause_count, 1,
-            "Should have 1 clause, got {}",
-            clause_count
-        );
+        assert_eq!(clause_count, 1, "Should have 1 clause, got {clause_count}");
 
         // Use iterator to get first clause
         let iter = roup_directive_clauses_iter(directive);
@@ -1118,8 +1129,7 @@ mod tests {
         let clause_kind = roup_clause_kind(clause);
         assert_eq!(
             clause_kind, 2,
-            "PRIVATE clause should have kind 2, got {}",
-            clause_kind
+            "PRIVATE clause should have kind 2, got {clause_kind}"
         );
 
         roup_clause_iterator_free(iter);
@@ -1135,11 +1145,7 @@ mod tests {
         );
 
         let clause_count = roup_directive_clause_count(directive);
-        assert_eq!(
-            clause_count, 1,
-            "Should have 1 clause, got {}",
-            clause_count
-        );
+        assert_eq!(clause_count, 1, "Should have 1 clause, got {clause_count}");
 
         let iter = roup_directive_clauses_iter(directive);
         let mut clause: *const OmpClause = ptr::null();
@@ -1149,8 +1155,7 @@ mod tests {
         let clause_kind = roup_clause_kind(clause);
         assert_eq!(
             clause_kind, 6,
-            "REDUCTION clause should have kind 6, got {}",
-            clause_kind
+            "REDUCTION clause should have kind 6, got {clause_kind}"
         );
 
         roup_clause_iterator_free(iter);
@@ -1165,11 +1170,7 @@ mod tests {
         );
 
         let clause_count = roup_directive_clause_count(directive);
-        assert_eq!(
-            clause_count, 1,
-            "Should have 1 clause, got {}",
-            clause_count
-        );
+        assert_eq!(clause_count, 1, "Should have 1 clause, got {clause_count}");
 
         let iter = roup_directive_clauses_iter(directive);
         let mut clause: *const OmpClause = ptr::null();
@@ -1179,8 +1180,7 @@ mod tests {
         let clause_kind = roup_clause_kind(clause);
         assert_eq!(
             clause_kind, 7,
-            "SCHEDULE clause should have kind 7, got {}",
-            clause_kind
+            "SCHEDULE clause should have kind 7, got {clause_kind}"
         );
 
         roup_clause_iterator_free(iter);
@@ -1232,8 +1232,7 @@ mod tests {
         let schedule_kind = roup_clause_schedule_kind(clause);
         assert_eq!(
             schedule_kind, 1,
-            "SCHEDULE(DYNAMIC) should have kind 1 (dynamic), got {}",
-            schedule_kind
+            "SCHEDULE(DYNAMIC) should have kind 1 (dynamic), got {schedule_kind}"
         );
 
         roup_clause_iterator_free(iter);
@@ -1251,8 +1250,7 @@ mod tests {
         let schedule_kind = roup_clause_schedule_kind(clause);
         assert_eq!(
             schedule_kind, 2,
-            "SCHEDULE(GUIDED) should have kind 2, got {}",
-            schedule_kind
+            "SCHEDULE(GUIDED) should have kind 2, got {schedule_kind}"
         );
 
         roup_clause_iterator_free(iter);
@@ -1277,8 +1275,7 @@ mod tests {
         let default_kind = roup_clause_default_data_sharing(clause);
         assert_eq!(
             default_kind, 1,
-            "DEFAULT(NONE) should have kind 1 (none), got {}",
-            default_kind
+            "DEFAULT(NONE) should have kind 1 (none), got {default_kind}"
         );
 
         roup_clause_iterator_free(iter);
@@ -1296,8 +1293,7 @@ mod tests {
         let default_kind = roup_clause_default_data_sharing(clause);
         assert_eq!(
             default_kind, 0,
-            "DEFAULT(SHARED) should have kind 0, got {}",
-            default_kind
+            "DEFAULT(SHARED) should have kind 0, got {default_kind}"
         );
 
         roup_clause_iterator_free(iter);
@@ -1321,8 +1317,7 @@ mod tests {
         let reduction_op = roup_clause_reduction_operator(clause);
         assert_eq!(
             reduction_op, 8,
-            "REDUCTION(MIN:X) should have operator 8 (min), got {}",
-            reduction_op
+            "REDUCTION(MIN:X) should have operator 8 (min), got {reduction_op}"
         );
 
         roup_clause_iterator_free(iter);
@@ -1343,8 +1338,7 @@ mod tests {
         let reduction_op = roup_clause_reduction_operator(clause);
         assert_eq!(
             reduction_op, 9,
-            "REDUCTION(MAX:RESULT) should have operator 9 (max), got {}",
-            reduction_op
+            "REDUCTION(MAX:RESULT) should have operator 9 (max), got {reduction_op}"
         );
 
         roup_clause_iterator_free(iter);
