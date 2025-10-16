@@ -621,7 +621,7 @@
 <a href=#621 id=621 data-nosnippet>621</a>    </span>language: Language,
 <a href=#622 id=622 data-nosnippet>622</a>}
 <a href=#623 id=623 data-nosnippet>623</a>
-<a href=#624 id=624 data-nosnippet>624</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; DirectiveIR {
+<a href=#624 id=624 data-nosnippet>624</a><span class="kw">impl </span>DirectiveIR {
 <a href=#625 id=625 data-nosnippet>625</a>    <span class="doccomment">/// Create a new directive IR
 <a href=#626 id=626 data-nosnippet>626</a>    ///
 <a href=#627 id=627 data-nosnippet>627</a>    /// ## Example
@@ -858,14 +858,14 @@
 <a href=#858 id=858 data-nosnippet>858</a>    }
 <a href=#859 id=859 data-nosnippet>859</a>}
 <a href=#860 id=860 data-nosnippet>860</a>
-<a href=#861 id=861 data-nosnippet>861</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; fmt::Display <span class="kw">for </span>DirectiveIR {
+<a href=#861 id=861 data-nosnippet>861</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>DirectiveIR {
 <a href=#862 id=862 data-nosnippet>862</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
 <a href=#863 id=863 data-nosnippet>863</a>        <span class="comment">// Write pragma prefix (already includes "omp ")
 <a href=#864 id=864 data-nosnippet>864</a>        </span><span class="macro">write!</span>(f, <span class="string">"{}{}"</span>, <span class="self">self</span>.language.pragma_prefix(), <span class="self">self</span>.kind)<span class="question-mark">?</span>;
 <a href=#865 id=865 data-nosnippet>865</a>
 <a href=#866 id=866 data-nosnippet>866</a>        <span class="comment">// Write clauses
 <a href=#867 id=867 data-nosnippet>867</a>        </span><span class="kw">for </span>clause <span class="kw">in </span><span class="self">self</span>.clauses.iter() {
-<a href=#868 id=868 data-nosnippet>868</a>            <span class="macro">write!</span>(f, <span class="string">" {}"</span>, clause)<span class="question-mark">?</span>;
+<a href=#868 id=868 data-nosnippet>868</a>            <span class="macro">write!</span>(f, <span class="string">" {clause}"</span>)<span class="question-mark">?</span>;
 <a href=#869 id=869 data-nosnippet>869</a>        }
 <a href=#870 id=870 data-nosnippet>870</a>
 <a href=#871 id=871 data-nosnippet>871</a>        <span class="prelude-val">Ok</span>(())

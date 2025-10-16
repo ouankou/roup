@@ -642,9 +642,9 @@
 <a href=#642 id=642 data-nosnippet>642</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>ClauseItem {
 <a href=#643 id=643 data-nosnippet>643</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
 <a href=#644 id=644 data-nosnippet>644</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#645 id=645 data-nosnippet>645</a>            ClauseItem::Identifier(id) =&gt; <span class="macro">write!</span>(f, <span class="string">"{}"</span>, id),
-<a href=#646 id=646 data-nosnippet>646</a>            ClauseItem::Variable(var) =&gt; <span class="macro">write!</span>(f, <span class="string">"{}"</span>, var),
-<a href=#647 id=647 data-nosnippet>647</a>            ClauseItem::Expression(expr) =&gt; <span class="macro">write!</span>(f, <span class="string">"{}"</span>, expr),
+<a href=#645 id=645 data-nosnippet>645</a>            ClauseItem::Identifier(id) =&gt; <span class="macro">write!</span>(f, <span class="string">"{id}"</span>),
+<a href=#646 id=646 data-nosnippet>646</a>            ClauseItem::Variable(var) =&gt; <span class="macro">write!</span>(f, <span class="string">"{var}"</span>),
+<a href=#647 id=647 data-nosnippet>647</a>            ClauseItem::Expression(expr) =&gt; <span class="macro">write!</span>(f, <span class="string">"{expr}"</span>),
 <a href=#648 id=648 data-nosnippet>648</a>        }
 <a href=#649 id=649 data-nosnippet>649</a>    }
 <a href=#650 id=650 data-nosnippet>650</a>}
@@ -937,14 +937,14 @@
 <a href=#937 id=937 data-nosnippet>937</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>ClauseData {
 <a href=#938 id=938 data-nosnippet>938</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
 <a href=#939 id=939 data-nosnippet>939</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#940 id=940 data-nosnippet>940</a>            ClauseData::Bare(name) =&gt; <span class="macro">write!</span>(f, <span class="string">"{}"</span>, name),
-<a href=#941 id=941 data-nosnippet>941</a>            ClauseData::Expression(expr) =&gt; <span class="macro">write!</span>(f, <span class="string">"{}"</span>, expr),
+<a href=#940 id=940 data-nosnippet>940</a>            ClauseData::Bare(name) =&gt; <span class="macro">write!</span>(f, <span class="string">"{name}"</span>),
+<a href=#941 id=941 data-nosnippet>941</a>            ClauseData::Expression(expr) =&gt; <span class="macro">write!</span>(f, <span class="string">"{expr}"</span>),
 <a href=#942 id=942 data-nosnippet>942</a>            ClauseData::ItemList(items) =&gt; {
 <a href=#943 id=943 data-nosnippet>943</a>                <span class="kw">for </span>(i, item) <span class="kw">in </span>items.iter().enumerate() {
 <a href=#944 id=944 data-nosnippet>944</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
 <a href=#945 id=945 data-nosnippet>945</a>                        <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
 <a href=#946 id=946 data-nosnippet>946</a>                    }
-<a href=#947 id=947 data-nosnippet>947</a>                    <span class="macro">write!</span>(f, <span class="string">"{}"</span>, item)<span class="question-mark">?</span>;
+<a href=#947 id=947 data-nosnippet>947</a>                    <span class="macro">write!</span>(f, <span class="string">"{item}"</span>)<span class="question-mark">?</span>;
 <a href=#948 id=948 data-nosnippet>948</a>                }
 <a href=#949 id=949 data-nosnippet>949</a>                <span class="prelude-val">Ok</span>(())
 <a href=#950 id=950 data-nosnippet>950</a>            }
@@ -954,7 +954,7 @@
 <a href=#954 id=954 data-nosnippet>954</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
 <a href=#955 id=955 data-nosnippet>955</a>                        <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
 <a href=#956 id=956 data-nosnippet>956</a>                    }
-<a href=#957 id=957 data-nosnippet>957</a>                    <span class="macro">write!</span>(f, <span class="string">"{}"</span>, item)<span class="question-mark">?</span>;
+<a href=#957 id=957 data-nosnippet>957</a>                    <span class="macro">write!</span>(f, <span class="string">"{item}"</span>)<span class="question-mark">?</span>;
 <a href=#958 id=958 data-nosnippet>958</a>                }
 <a href=#959 id=959 data-nosnippet>959</a>                <span class="macro">write!</span>(f, <span class="string">")"</span>)
 <a href=#960 id=960 data-nosnippet>960</a>            }
@@ -964,20 +964,20 @@
 <a href=#964 id=964 data-nosnippet>964</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
 <a href=#965 id=965 data-nosnippet>965</a>                        <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
 <a href=#966 id=966 data-nosnippet>966</a>                    }
-<a href=#967 id=967 data-nosnippet>967</a>                    <span class="macro">write!</span>(f, <span class="string">"{}"</span>, item)<span class="question-mark">?</span>;
+<a href=#967 id=967 data-nosnippet>967</a>                    <span class="macro">write!</span>(f, <span class="string">"{item}"</span>)<span class="question-mark">?</span>;
 <a href=#968 id=968 data-nosnippet>968</a>                }
 <a href=#969 id=969 data-nosnippet>969</a>                <span class="macro">write!</span>(f, <span class="string">")"</span>)
 <a href=#970 id=970 data-nosnippet>970</a>            }
 <a href=#971 id=971 data-nosnippet>971</a>            ClauseData::Lastprivate { modifier, items } =&gt; {
 <a href=#972 id=972 data-nosnippet>972</a>                <span class="macro">write!</span>(f, <span class="string">"lastprivate("</span>)<span class="question-mark">?</span>;
 <a href=#973 id=973 data-nosnippet>973</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(m) = modifier {
-<a href=#974 id=974 data-nosnippet>974</a>                    <span class="macro">write!</span>(f, <span class="string">"{}: "</span>, m)<span class="question-mark">?</span>;
+<a href=#974 id=974 data-nosnippet>974</a>                    <span class="macro">write!</span>(f, <span class="string">"{m}: "</span>)<span class="question-mark">?</span>;
 <a href=#975 id=975 data-nosnippet>975</a>                }
 <a href=#976 id=976 data-nosnippet>976</a>                <span class="kw">for </span>(i, item) <span class="kw">in </span>items.iter().enumerate() {
 <a href=#977 id=977 data-nosnippet>977</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
 <a href=#978 id=978 data-nosnippet>978</a>                        <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
 <a href=#979 id=979 data-nosnippet>979</a>                    }
-<a href=#980 id=980 data-nosnippet>980</a>                    <span class="macro">write!</span>(f, <span class="string">"{}"</span>, item)<span class="question-mark">?</span>;
+<a href=#980 id=980 data-nosnippet>980</a>                    <span class="macro">write!</span>(f, <span class="string">"{item}"</span>)<span class="question-mark">?</span>;
 <a href=#981 id=981 data-nosnippet>981</a>                }
 <a href=#982 id=982 data-nosnippet>982</a>                <span class="macro">write!</span>(f, <span class="string">")"</span>)
 <a href=#983 id=983 data-nosnippet>983</a>            }
@@ -987,18 +987,18 @@
 <a href=#987 id=987 data-nosnippet>987</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
 <a href=#988 id=988 data-nosnippet>988</a>                        <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
 <a href=#989 id=989 data-nosnippet>989</a>                    }
-<a href=#990 id=990 data-nosnippet>990</a>                    <span class="macro">write!</span>(f, <span class="string">"{}"</span>, item)<span class="question-mark">?</span>;
+<a href=#990 id=990 data-nosnippet>990</a>                    <span class="macro">write!</span>(f, <span class="string">"{item}"</span>)<span class="question-mark">?</span>;
 <a href=#991 id=991 data-nosnippet>991</a>                }
 <a href=#992 id=992 data-nosnippet>992</a>                <span class="macro">write!</span>(f, <span class="string">")"</span>)
 <a href=#993 id=993 data-nosnippet>993</a>            }
-<a href=#994 id=994 data-nosnippet>994</a>            ClauseData::Default(kind) =&gt; <span class="macro">write!</span>(f, <span class="string">"default({})"</span>, kind),
+<a href=#994 id=994 data-nosnippet>994</a>            ClauseData::Default(kind) =&gt; <span class="macro">write!</span>(f, <span class="string">"default({kind})"</span>),
 <a href=#995 id=995 data-nosnippet>995</a>            ClauseData::Reduction { operator, items } =&gt; {
-<a href=#996 id=996 data-nosnippet>996</a>                <span class="macro">write!</span>(f, <span class="string">"reduction({}: "</span>, operator)<span class="question-mark">?</span>;
+<a href=#996 id=996 data-nosnippet>996</a>                <span class="macro">write!</span>(f, <span class="string">"reduction({operator}: "</span>)<span class="question-mark">?</span>;
 <a href=#997 id=997 data-nosnippet>997</a>                <span class="kw">for </span>(i, item) <span class="kw">in </span>items.iter().enumerate() {
 <a href=#998 id=998 data-nosnippet>998</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
 <a href=#999 id=999 data-nosnippet>999</a>                        <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
 <a href=#1000 id=1000 data-nosnippet>1000</a>                    }
-<a href=#1001 id=1001 data-nosnippet>1001</a>                    <span class="macro">write!</span>(f, <span class="string">"{}"</span>, item)<span class="question-mark">?</span>;
+<a href=#1001 id=1001 data-nosnippet>1001</a>                    <span class="macro">write!</span>(f, <span class="string">"{item}"</span>)<span class="question-mark">?</span>;
 <a href=#1002 id=1002 data-nosnippet>1002</a>                }
 <a href=#1003 id=1003 data-nosnippet>1003</a>                <span class="macro">write!</span>(f, <span class="string">")"</span>)
 <a href=#1004 id=1004 data-nosnippet>1004</a>            }
@@ -1009,16 +1009,16 @@
 <a href=#1009 id=1009 data-nosnippet>1009</a>            } =&gt; {
 <a href=#1010 id=1010 data-nosnippet>1010</a>                <span class="macro">write!</span>(f, <span class="string">"map("</span>)<span class="question-mark">?</span>;
 <a href=#1011 id=1011 data-nosnippet>1011</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(mapper_id) = mapper {
-<a href=#1012 id=1012 data-nosnippet>1012</a>                    <span class="macro">write!</span>(f, <span class="string">"mapper({}), "</span>, mapper_id)<span class="question-mark">?</span>;
+<a href=#1012 id=1012 data-nosnippet>1012</a>                    <span class="macro">write!</span>(f, <span class="string">"mapper({mapper_id}), "</span>)<span class="question-mark">?</span>;
 <a href=#1013 id=1013 data-nosnippet>1013</a>                }
 <a href=#1014 id=1014 data-nosnippet>1014</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(mt) = map_type {
-<a href=#1015 id=1015 data-nosnippet>1015</a>                    <span class="macro">write!</span>(f, <span class="string">"{}: "</span>, mt)<span class="question-mark">?</span>;
+<a href=#1015 id=1015 data-nosnippet>1015</a>                    <span class="macro">write!</span>(f, <span class="string">"{mt}: "</span>)<span class="question-mark">?</span>;
 <a href=#1016 id=1016 data-nosnippet>1016</a>                }
 <a href=#1017 id=1017 data-nosnippet>1017</a>                <span class="kw">for </span>(i, item) <span class="kw">in </span>items.iter().enumerate() {
 <a href=#1018 id=1018 data-nosnippet>1018</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
 <a href=#1019 id=1019 data-nosnippet>1019</a>                        <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
 <a href=#1020 id=1020 data-nosnippet>1020</a>                    }
-<a href=#1021 id=1021 data-nosnippet>1021</a>                    <span class="macro">write!</span>(f, <span class="string">"{}"</span>, item)<span class="question-mark">?</span>;
+<a href=#1021 id=1021 data-nosnippet>1021</a>                    <span class="macro">write!</span>(f, <span class="string">"{item}"</span>)<span class="question-mark">?</span>;
 <a href=#1022 id=1022 data-nosnippet>1022</a>                }
 <a href=#1023 id=1023 data-nosnippet>1023</a>                <span class="macro">write!</span>(f, <span class="string">")"</span>)
 <a href=#1024 id=1024 data-nosnippet>1024</a>            }
@@ -1033,13 +1033,13 @@
 <a href=#1033 id=1033 data-nosnippet>1033</a>                        <span class="kw">if </span>i &gt; <span class="number">0 </span>{
 <a href=#1034 id=1034 data-nosnippet>1034</a>                            <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
 <a href=#1035 id=1035 data-nosnippet>1035</a>                        }
-<a href=#1036 id=1036 data-nosnippet>1036</a>                        <span class="macro">write!</span>(f, <span class="string">"{}"</span>, m)<span class="question-mark">?</span>;
+<a href=#1036 id=1036 data-nosnippet>1036</a>                        <span class="macro">write!</span>(f, <span class="string">"{m}"</span>)<span class="question-mark">?</span>;
 <a href=#1037 id=1037 data-nosnippet>1037</a>                    }
 <a href=#1038 id=1038 data-nosnippet>1038</a>                    <span class="macro">write!</span>(f, <span class="string">": "</span>)<span class="question-mark">?</span>;
 <a href=#1039 id=1039 data-nosnippet>1039</a>                }
-<a href=#1040 id=1040 data-nosnippet>1040</a>                <span class="macro">write!</span>(f, <span class="string">"{}"</span>, kind)<span class="question-mark">?</span>;
+<a href=#1040 id=1040 data-nosnippet>1040</a>                <span class="macro">write!</span>(f, <span class="string">"{kind}"</span>)<span class="question-mark">?</span>;
 <a href=#1041 id=1041 data-nosnippet>1041</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(chunk) = chunk_size {
-<a href=#1042 id=1042 data-nosnippet>1042</a>                    <span class="macro">write!</span>(f, <span class="string">", {}"</span>, chunk)<span class="question-mark">?</span>;
+<a href=#1042 id=1042 data-nosnippet>1042</a>                    <span class="macro">write!</span>(f, <span class="string">", {chunk}"</span>)<span class="question-mark">?</span>;
 <a href=#1043 id=1043 data-nosnippet>1043</a>                }
 <a href=#1044 id=1044 data-nosnippet>1044</a>                <span class="macro">write!</span>(f, <span class="string">")"</span>)
 <a href=#1045 id=1045 data-nosnippet>1045</a>            }
@@ -1050,16 +1050,16 @@
 <a href=#1050 id=1050 data-nosnippet>1050</a>            } =&gt; {
 <a href=#1051 id=1051 data-nosnippet>1051</a>                <span class="macro">write!</span>(f, <span class="string">"linear("</span>)<span class="question-mark">?</span>;
 <a href=#1052 id=1052 data-nosnippet>1052</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(m) = modifier {
-<a href=#1053 id=1053 data-nosnippet>1053</a>                    <span class="macro">write!</span>(f, <span class="string">"{}: "</span>, m)<span class="question-mark">?</span>;
+<a href=#1053 id=1053 data-nosnippet>1053</a>                    <span class="macro">write!</span>(f, <span class="string">"{m}: "</span>)<span class="question-mark">?</span>;
 <a href=#1054 id=1054 data-nosnippet>1054</a>                }
 <a href=#1055 id=1055 data-nosnippet>1055</a>                <span class="kw">for </span>(i, item) <span class="kw">in </span>items.iter().enumerate() {
 <a href=#1056 id=1056 data-nosnippet>1056</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
 <a href=#1057 id=1057 data-nosnippet>1057</a>                        <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
 <a href=#1058 id=1058 data-nosnippet>1058</a>                    }
-<a href=#1059 id=1059 data-nosnippet>1059</a>                    <span class="macro">write!</span>(f, <span class="string">"{}"</span>, item)<span class="question-mark">?</span>;
+<a href=#1059 id=1059 data-nosnippet>1059</a>                    <span class="macro">write!</span>(f, <span class="string">"{item}"</span>)<span class="question-mark">?</span>;
 <a href=#1060 id=1060 data-nosnippet>1060</a>                }
 <a href=#1061 id=1061 data-nosnippet>1061</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(s) = step {
-<a href=#1062 id=1062 data-nosnippet>1062</a>                    <span class="macro">write!</span>(f, <span class="string">": {}"</span>, s)<span class="question-mark">?</span>;
+<a href=#1062 id=1062 data-nosnippet>1062</a>                    <span class="macro">write!</span>(f, <span class="string">": {s}"</span>)<span class="question-mark">?</span>;
 <a href=#1063 id=1063 data-nosnippet>1063</a>                }
 <a href=#1064 id=1064 data-nosnippet>1064</a>                <span class="macro">write!</span>(f, <span class="string">")"</span>)
 <a href=#1065 id=1065 data-nosnippet>1065</a>            }
@@ -1069,29 +1069,29 @@
 <a href=#1069 id=1069 data-nosnippet>1069</a>            } =&gt; {
 <a href=#1070 id=1070 data-nosnippet>1070</a>                <span class="macro">write!</span>(f, <span class="string">"if("</span>)<span class="question-mark">?</span>;
 <a href=#1071 id=1071 data-nosnippet>1071</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(name) = directive_name {
-<a href=#1072 id=1072 data-nosnippet>1072</a>                    <span class="macro">write!</span>(f, <span class="string">"{}: "</span>, name)<span class="question-mark">?</span>;
+<a href=#1072 id=1072 data-nosnippet>1072</a>                    <span class="macro">write!</span>(f, <span class="string">"{name}: "</span>)<span class="question-mark">?</span>;
 <a href=#1073 id=1073 data-nosnippet>1073</a>                }
-<a href=#1074 id=1074 data-nosnippet>1074</a>                <span class="macro">write!</span>(f, <span class="string">"{})"</span>, condition)
+<a href=#1074 id=1074 data-nosnippet>1074</a>                <span class="macro">write!</span>(f, <span class="string">"{condition})"</span>)
 <a href=#1075 id=1075 data-nosnippet>1075</a>            }
-<a href=#1076 id=1076 data-nosnippet>1076</a>            ClauseData::NumThreads { num } =&gt; <span class="macro">write!</span>(f, <span class="string">"num_threads({})"</span>, num),
-<a href=#1077 id=1077 data-nosnippet>1077</a>            ClauseData::ProcBind(pb) =&gt; <span class="macro">write!</span>(f, <span class="string">"proc_bind({})"</span>, pb),
-<a href=#1078 id=1078 data-nosnippet>1078</a>            ClauseData::Device { device_num } =&gt; <span class="macro">write!</span>(f, <span class="string">"device({})"</span>, device_num),
-<a href=#1079 id=1079 data-nosnippet>1079</a>            ClauseData::DeviceType(dt) =&gt; <span class="macro">write!</span>(f, <span class="string">"device_type({})"</span>, dt),
-<a href=#1080 id=1080 data-nosnippet>1080</a>            ClauseData::Collapse { n } =&gt; <span class="macro">write!</span>(f, <span class="string">"collapse({})"</span>, n),
+<a href=#1076 id=1076 data-nosnippet>1076</a>            ClauseData::NumThreads { num } =&gt; <span class="macro">write!</span>(f, <span class="string">"num_threads({num})"</span>),
+<a href=#1077 id=1077 data-nosnippet>1077</a>            ClauseData::ProcBind(pb) =&gt; <span class="macro">write!</span>(f, <span class="string">"proc_bind({pb})"</span>),
+<a href=#1078 id=1078 data-nosnippet>1078</a>            ClauseData::Device { device_num } =&gt; <span class="macro">write!</span>(f, <span class="string">"device({device_num})"</span>),
+<a href=#1079 id=1079 data-nosnippet>1079</a>            ClauseData::DeviceType(dt) =&gt; <span class="macro">write!</span>(f, <span class="string">"device_type({dt})"</span>),
+<a href=#1080 id=1080 data-nosnippet>1080</a>            ClauseData::Collapse { n } =&gt; <span class="macro">write!</span>(f, <span class="string">"collapse({n})"</span>),
 <a href=#1081 id=1081 data-nosnippet>1081</a>            ClauseData::Ordered { n } =&gt; {
 <a href=#1082 id=1082 data-nosnippet>1082</a>                <span class="macro">write!</span>(f, <span class="string">"ordered"</span>)<span class="question-mark">?</span>;
 <a href=#1083 id=1083 data-nosnippet>1083</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(num) = n {
-<a href=#1084 id=1084 data-nosnippet>1084</a>                    <span class="macro">write!</span>(f, <span class="string">"({})"</span>, num)<span class="question-mark">?</span>;
+<a href=#1084 id=1084 data-nosnippet>1084</a>                    <span class="macro">write!</span>(f, <span class="string">"({num})"</span>)<span class="question-mark">?</span>;
 <a href=#1085 id=1085 data-nosnippet>1085</a>                }
 <a href=#1086 id=1086 data-nosnippet>1086</a>                <span class="prelude-val">Ok</span>(())
 <a href=#1087 id=1087 data-nosnippet>1087</a>            }
 <a href=#1088 id=1088 data-nosnippet>1088</a>            ClauseData::Depend { depend_type, items } =&gt; {
-<a href=#1089 id=1089 data-nosnippet>1089</a>                <span class="macro">write!</span>(f, <span class="string">"depend({}: "</span>, depend_type)<span class="question-mark">?</span>;
+<a href=#1089 id=1089 data-nosnippet>1089</a>                <span class="macro">write!</span>(f, <span class="string">"depend({depend_type}: "</span>)<span class="question-mark">?</span>;
 <a href=#1090 id=1090 data-nosnippet>1090</a>                <span class="kw">for </span>(i, item) <span class="kw">in </span>items.iter().enumerate() {
 <a href=#1091 id=1091 data-nosnippet>1091</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
 <a href=#1092 id=1092 data-nosnippet>1092</a>                        <span class="macro">write!</span>(f, <span class="string">", "</span>)<span class="question-mark">?</span>;
 <a href=#1093 id=1093 data-nosnippet>1093</a>                    }
-<a href=#1094 id=1094 data-nosnippet>1094</a>                    <span class="macro">write!</span>(f, <span class="string">"{}"</span>, item)<span class="question-mark">?</span>;
+<a href=#1094 id=1094 data-nosnippet>1094</a>                    <span class="macro">write!</span>(f, <span class="string">"{item}"</span>)<span class="question-mark">?</span>;
 <a href=#1095 id=1095 data-nosnippet>1095</a>                }
 <a href=#1096 id=1096 data-nosnippet>1096</a>                <span class="macro">write!</span>(f, <span class="string">")"</span>)
 <a href=#1097 id=1097 data-nosnippet>1097</a>            }
@@ -1101,7 +1101,7 @@
 <a href=#1101 id=1101 data-nosnippet>1101</a>    }
 <a href=#1102 id=1102 data-nosnippet>1102</a>}
 <a href=#1103 id=1103 data-nosnippet>1103</a>
-<a href=#1104 id=1104 data-nosnippet>1104</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; ClauseData {
+<a href=#1104 id=1104 data-nosnippet>1104</a><span class="kw">impl </span>ClauseData {
 <a href=#1105 id=1105 data-nosnippet>1105</a>    <span class="doccomment">/// Check if this is a default clause
 <a href=#1106 id=1106 data-nosnippet>1106</a>    </span><span class="kw">pub fn </span>is_default(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
 <a href=#1107 id=1107 data-nosnippet>1107</a>        <span class="macro">matches!</span>(<span class="self">self</span>, ClauseData::Default(<span class="kw">_</span>))
@@ -1214,7 +1214,7 @@
 <a href=#1214 id=1214 data-nosnippet>1214</a>    </span><span class="kw">fn </span>test_reduction_operator_copy_clone() {
 <a href=#1215 id=1215 data-nosnippet>1215</a>        <span class="kw">let </span>op1 = ReductionOperator::Max;
 <a href=#1216 id=1216 data-nosnippet>1216</a>        <span class="kw">let </span>op2 = op1; <span class="comment">// Copy
-<a href=#1217 id=1217 data-nosnippet>1217</a>        </span><span class="kw">let </span>op3 = op1.clone(); <span class="comment">// Clone
+<a href=#1217 id=1217 data-nosnippet>1217</a>        </span><span class="kw">let </span>op3 = op1; <span class="comment">// Copy (no need for .clone() on Copy types)
 <a href=#1218 id=1218 data-nosnippet>1218</a>        </span><span class="macro">assert_eq!</span>(op1, op2);
 <a href=#1219 id=1219 data-nosnippet>1219</a>        <span class="macro">assert_eq!</span>(op1, op3);
 <a href=#1220 id=1220 data-nosnippet>1220</a>    }
@@ -1368,7 +1368,7 @@
 <a href=#1368 id=1368 data-nosnippet>1368</a>    </span><span class="kw">fn </span>test_memory_order_strength() {
 <a href=#1369 id=1369 data-nosnippet>1369</a>        <span class="comment">// SeqCst is strongest, Relaxed is weakest
 <a href=#1370 id=1370 data-nosnippet>1370</a>        // Just verify they all exist
-<a href=#1371 id=1371 data-nosnippet>1371</a>        </span><span class="kw">let </span>all_orders = <span class="macro">vec!</span>[
+<a href=#1371 id=1371 data-nosnippet>1371</a>        </span><span class="kw">let </span>all_orders = [
 <a href=#1372 id=1372 data-nosnippet>1372</a>            MemoryOrder::SeqCst,
 <a href=#1373 id=1373 data-nosnippet>1373</a>            MemoryOrder::AcqRel,
 <a href=#1374 id=1374 data-nosnippet>1374</a>            MemoryOrder::Release,
@@ -1478,7 +1478,7 @@
 <a href=#1478 id=1478 data-nosnippet>1478</a>    </span><span class="attr">#[test]
 <a href=#1479 id=1479 data-nosnippet>1479</a>    </span><span class="kw">fn </span>test_enum_debug_formatting() {
 <a href=#1480 id=1480 data-nosnippet>1480</a>        <span class="kw">let </span>op = ReductionOperator::Add;
-<a href=#1481 id=1481 data-nosnippet>1481</a>        <span class="kw">let </span>debug_str = <span class="macro">format!</span>(<span class="string">"{:?}"</span>, op);
+<a href=#1481 id=1481 data-nosnippet>1481</a>        <span class="kw">let </span>debug_str = <span class="macro">format!</span>(<span class="string">"{op:?}"</span>);
 <a href=#1482 id=1482 data-nosnippet>1482</a>        <span class="macro">assert!</span>(debug_str.contains(<span class="string">"Add"</span>));
 <a href=#1483 id=1483 data-nosnippet>1483</a>    }
 <a href=#1484 id=1484 data-nosnippet>1484</a>
@@ -1930,7 +1930,7 @@
 <a href=#1930 id=1930 data-nosnippet>1930</a>    </span><span class="attr">#[test]
 <a href=#1931 id=1931 data-nosnippet>1931</a>    </span><span class="kw">fn </span>test_clause_data_debug() {
 <a href=#1932 id=1932 data-nosnippet>1932</a>        <span class="kw">let </span>clause = ClauseData::Default(DefaultKind::Shared);
-<a href=#1933 id=1933 data-nosnippet>1933</a>        <span class="kw">let </span>debug_str = <span class="macro">format!</span>(<span class="string">"{:?}"</span>, clause);
+<a href=#1933 id=1933 data-nosnippet>1933</a>        <span class="kw">let </span>debug_str = <span class="macro">format!</span>(<span class="string">"{clause:?}"</span>);
 <a href=#1934 id=1934 data-nosnippet>1934</a>        <span class="macro">assert!</span>(debug_str.contains(<span class="string">"Default"</span>));
 <a href=#1935 id=1935 data-nosnippet>1935</a>        <span class="macro">assert!</span>(debug_str.contains(<span class="string">"Shared"</span>));
 <a href=#1936 id=1936 data-nosnippet>1936</a>    }

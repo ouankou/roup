@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["generate_mode","main","verify_header"],"mod":["constants_gen"]};
+window.SIDEBAR_ITEMS = {"fn":["main"],"mod":["constants_gen"]};
