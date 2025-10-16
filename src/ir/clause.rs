@@ -642,9 +642,9 @@ pub enum ClauseItem {
 impl fmt::Display for ClauseItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ClauseItem::Identifier(id) => write!(f, "{}", id),
-            ClauseItem::Variable(var) => write!(f, "{}", var),
-            ClauseItem::Expression(expr) => write!(f, "{}", expr),
+            ClauseItem::Identifier(id) => write!(f, "{id}"),
+            ClauseItem::Variable(var) => write!(f, "{var}"),
+            ClauseItem::Expression(expr) => write!(f, "{expr}"),
         }
     }
 }
@@ -937,14 +937,14 @@ pub enum ClauseData {
 impl fmt::Display for ClauseData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ClauseData::Bare(name) => write!(f, "{}", name),
-            ClauseData::Expression(expr) => write!(f, "{}", expr),
+            ClauseData::Bare(name) => write!(f, "{name}"),
+            ClauseData::Expression(expr) => write!(f, "{expr}"),
             ClauseData::ItemList(items) => {
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{item}")?;
                 }
                 Ok(())
             }
@@ -954,7 +954,7 @@ impl fmt::Display for ClauseData {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{item}")?;
                 }
                 write!(f, ")")
             }
@@ -964,20 +964,20 @@ impl fmt::Display for ClauseData {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{item}")?;
                 }
                 write!(f, ")")
             }
             ClauseData::Lastprivate { modifier, items } => {
                 write!(f, "lastprivate(")?;
                 if let Some(m) = modifier {
-                    write!(f, "{}: ", m)?;
+                    write!(f, "{m}: ")?;
                 }
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{item}")?;
                 }
                 write!(f, ")")
             }
@@ -987,18 +987,18 @@ impl fmt::Display for ClauseData {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{item}")?;
                 }
                 write!(f, ")")
             }
-            ClauseData::Default(kind) => write!(f, "default({})", kind),
+            ClauseData::Default(kind) => write!(f, "default({kind})"),
             ClauseData::Reduction { operator, items } => {
-                write!(f, "reduction({}: ", operator)?;
+                write!(f, "reduction({operator}: ")?;
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{item}")?;
                 }
                 write!(f, ")")
             }
@@ -1009,16 +1009,16 @@ impl fmt::Display for ClauseData {
             } => {
                 write!(f, "map(")?;
                 if let Some(mapper_id) = mapper {
-                    write!(f, "mapper({}), ", mapper_id)?;
+                    write!(f, "mapper({mapper_id}), ")?;
                 }
                 if let Some(mt) = map_type {
-                    write!(f, "{}: ", mt)?;
+                    write!(f, "{mt}: ")?;
                 }
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{item}")?;
                 }
                 write!(f, ")")
             }
@@ -1033,13 +1033,13 @@ impl fmt::Display for ClauseData {
                         if i > 0 {
                             write!(f, ", ")?;
                         }
-                        write!(f, "{}", m)?;
+                        write!(f, "{m}")?;
                     }
                     write!(f, ": ")?;
                 }
-                write!(f, "{}", kind)?;
+                write!(f, "{kind}")?;
                 if let Some(chunk) = chunk_size {
-                    write!(f, ", {}", chunk)?;
+                    write!(f, ", {chunk}")?;
                 }
                 write!(f, ")")
             }
@@ -1050,16 +1050,16 @@ impl fmt::Display for ClauseData {
             } => {
                 write!(f, "linear(")?;
                 if let Some(m) = modifier {
-                    write!(f, "{}: ", m)?;
+                    write!(f, "{m}: ")?;
                 }
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{item}")?;
                 }
                 if let Some(s) = step {
-                    write!(f, ": {}", s)?;
+                    write!(f, ": {s}")?;
                 }
                 write!(f, ")")
             }
@@ -1069,29 +1069,29 @@ impl fmt::Display for ClauseData {
             } => {
                 write!(f, "if(")?;
                 if let Some(name) = directive_name {
-                    write!(f, "{}: ", name)?;
+                    write!(f, "{name}: ")?;
                 }
-                write!(f, "{})", condition)
+                write!(f, "{condition})")
             }
-            ClauseData::NumThreads { num } => write!(f, "num_threads({})", num),
-            ClauseData::ProcBind(pb) => write!(f, "proc_bind({})", pb),
-            ClauseData::Device { device_num } => write!(f, "device({})", device_num),
-            ClauseData::DeviceType(dt) => write!(f, "device_type({})", dt),
-            ClauseData::Collapse { n } => write!(f, "collapse({})", n),
+            ClauseData::NumThreads { num } => write!(f, "num_threads({num})"),
+            ClauseData::ProcBind(pb) => write!(f, "proc_bind({pb})"),
+            ClauseData::Device { device_num } => write!(f, "device({device_num})"),
+            ClauseData::DeviceType(dt) => write!(f, "device_type({dt})"),
+            ClauseData::Collapse { n } => write!(f, "collapse({n})"),
             ClauseData::Ordered { n } => {
                 write!(f, "ordered")?;
                 if let Some(num) = n {
-                    write!(f, "({})", num)?;
+                    write!(f, "({num})")?;
                 }
                 Ok(())
             }
             ClauseData::Depend { depend_type, items } => {
-                write!(f, "depend({}: ", depend_type)?;
+                write!(f, "depend({depend_type}: ")?;
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{item}")?;
                 }
                 write!(f, ")")
             }
@@ -1101,7 +1101,7 @@ impl fmt::Display for ClauseData {
     }
 }
 
-impl<'a> ClauseData {
+impl ClauseData {
     /// Check if this is a default clause
     pub fn is_default(&self) -> bool {
         matches!(self, ClauseData::Default(_))
@@ -1214,7 +1214,7 @@ mod tests {
     fn test_reduction_operator_copy_clone() {
         let op1 = ReductionOperator::Max;
         let op2 = op1; // Copy
-        let op3 = op1.clone(); // Clone
+        let op3 = op1; // Copy (no need for .clone() on Copy types)
         assert_eq!(op1, op2);
         assert_eq!(op1, op3);
     }
@@ -1368,7 +1368,7 @@ mod tests {
     fn test_memory_order_strength() {
         // SeqCst is strongest, Relaxed is weakest
         // Just verify they all exist
-        let all_orders = vec![
+        let all_orders = [
             MemoryOrder::SeqCst,
             MemoryOrder::AcqRel,
             MemoryOrder::Release,
@@ -1478,7 +1478,7 @@ mod tests {
     #[test]
     fn test_enum_debug_formatting() {
         let op = ReductionOperator::Add;
-        let debug_str = format!("{:?}", op);
+        let debug_str = format!("{op:?}");
         assert!(debug_str.contains("Add"));
     }
 
@@ -1930,7 +1930,7 @@ mod tests {
     #[test]
     fn test_clause_data_debug() {
         let clause = ClauseData::Default(DefaultKind::Shared);
-        let debug_str = format!("{:?}", clause);
+        let debug_str = format!("{clause:?}");
         assert!(debug_str.contains("Default"));
         assert!(debug_str.contains("Shared"));
     }

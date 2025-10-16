@@ -306,7 +306,7 @@ mod tests {
     #[test]
     fn source_location_display_formats_correctly() {
         let loc = SourceLocation::new(42, 5);
-        assert_eq!(format!("{}", loc), "42:5");
+        assert_eq!(format!("{loc}"), "42:5");
     }
 
     #[test]

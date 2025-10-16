@@ -58,10 +58,7 @@ use super::Language;
 /// assert!(default_config.parse_expressions);
 ///
 /// // Custom: disable expression parsing
-/// let string_only = ParserConfig {
-///     parse_expressions: false,
-///     language: Language::C,
-/// };
+/// let string_only = ParserConfig::string_only(Language::C);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParserConfig {
@@ -76,7 +73,10 @@ pub struct ParserConfig {
     /// Different languages have different expression syntax:
     /// - C/C++: `arr[i]`, `*ptr`, `x->y`
     /// - Fortran: `arr(i)`, different operators
-    pub language: Language,
+    language: Language,
+
+    /// Whether to enable language-aware semantic parsing for clause items.
+    language_semantics: bool,
 }
 
 impl ParserConfig {
@@ -85,6 +85,7 @@ impl ParserConfig {
         Self {
             parse_expressions,
             language,
+            language_semantics: true,
         }
     }
 
@@ -97,6 +98,37 @@ impl ParserConfig {
     pub const fn with_parsing(language: Language) -> Self {
         Self::new(true, language)
     }
+
+    /// Override the language for this configuration.
+    pub const fn with_language(mut self, language: Language) -> Self {
+        self.language = language;
+        self
+    }
+
+    /// Enable or disable language semantics for clause parsing.
+    pub const fn with_language_semantics(mut self, enabled: bool) -> Self {
+        self.language_semantics = enabled;
+        self
+    }
+
+    /// Return a copy of this configuration using a specific language.
+    pub const fn for_language(&self, language: Language) -> Self {
+        Self {
+            parse_expressions: self.parse_expressions,
+            language,
+            language_semantics: self.language_semantics,
+        }
+    }
+
+    /// Get the configured language.
+    pub const fn language(&self) -> Language {
+        self.language
+    }
+
+    /// Whether language semantics are enabled.
+    pub const fn language_semantics_enabled(&self) -> bool {
+        self.language_semantics
+    }
 }
 
 impl Default for ParserConfig {
@@ -105,6 +137,7 @@ impl Default for ParserConfig {
         Self {
             parse_expressions: true,
             language: Language::Unknown,
+            language_semantics: true,
         }
     }
 }
@@ -194,7 +227,7 @@ impl Expression {
         }
 
         // Try to parse based on language
-        match parse_expression(&trimmed, config.language) {
+        match parse_expression(&trimmed, config.language()) {
             Ok(ast) => Expression::Parsed(Box::new(ast)),
             Err(_) => Expression::Unparsed(trimmed),
         }
@@ -506,21 +539,21 @@ mod tests {
     fn parser_config_default_enables_parsing() {
         let config = ParserConfig::default();
         assert!(config.parse_expressions);
-        assert_eq!(config.language, Language::Unknown);
+        assert_eq!(config.language(), Language::Unknown);
     }
 
     #[test]
     fn parser_config_string_only_disables_parsing() {
         let config = ParserConfig::string_only(Language::C);
         assert!(!config.parse_expressions);
-        assert_eq!(config.language, Language::C);
+        assert_eq!(config.language(), Language::C);
     }
 
     #[test]
     fn parser_config_with_parsing_enables_parsing() {
         let config = ParserConfig::with_parsing(Language::Fortran);
         assert!(config.parse_expressions);
-        assert_eq!(config.language, Language::Fortran);
+        assert_eq!(config.language(), Language::Fortran);
     }
 
     // ------------------------------------------------------------------------
@@ -600,7 +633,7 @@ mod tests {
     #[test]
     fn expression_display_shows_source() {
         let expr = Expression::unparsed("N * 2");
-        assert_eq!(format!("{}", expr), "N * 2");
+        assert_eq!(format!("{expr}"), "N * 2");
     }
 
     // ------------------------------------------------------------------------

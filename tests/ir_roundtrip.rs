@@ -35,7 +35,9 @@
 //! Output: "#pragma omp parallel default(shared) private(x, y)"
 //! ```
 
-use roup::ir::{convert::convert_directive, Language, ParserConfig, SourceLocation};
+use roup::ir::{
+    convert::convert_directive, ClauseData, ClauseItem, Language, ParserConfig, SourceLocation,
+};
 use roup::parser::parse_omp_directive;
 
 /// Test round-trip for simple parallel directive
@@ -431,7 +433,7 @@ fn roundtrip_for_schedule_with_modifier() {
 /// Test round-trip with map clause
 #[test]
 fn roundtrip_target_with_map() {
-    let input = "#pragma omp target map(to: arr)";
+    let input = "#pragma omp target map(to: arr[0:N])";
 
     let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
     let config = ParserConfig::default();
@@ -439,9 +441,24 @@ fn roundtrip_target_with_map() {
         .expect("Failed to convert to IR");
 
     assert!(ir.kind().is_target());
-    assert!(ir.has_clause(|c| c.is_map()));
+    let map_items = ir
+        .clauses()
+        .iter()
+        .find_map(|clause| match clause {
+            ClauseData::Map { items, .. } => Some(items),
+            _ => None,
+        })
+        .expect("map clause present");
+
+    match &map_items[0] {
+        ClauseItem::Variable(var) => {
+            assert_eq!(var.name(), "arr");
+            assert_eq!(var.array_sections.len(), 1);
+        }
+        other => panic!("expected variable item, got {other:?}"),
+    }
     let output = ir.to_string();
-    assert_eq!(output, "#pragma omp target map(to: arr)");
+    assert_eq!(output, "#pragma omp target map(to: arr[0:N])");
 }
 
 /// Test round-trip with map tofrom
