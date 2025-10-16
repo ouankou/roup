@@ -118,6 +118,30 @@ silently accepting directives outside the documented coverage.
 | `target teams loop simd` | ✅ | Recognized via the OpenMP directive registry. |
 | `target update` | ✅ | Registered via the OpenMP directive registry. |
 
+### Declarative, assumption, and transformation directives
+| Directive | Status | Notes |
+| --- | --- | --- |
+| `allocate` | ✅ | Declarative memory directive (OpenMP 5.0+). |
+| `allocators` | ✅ | Allocator control directive (OpenMP 5.0+). |
+| `assumes` | ✅ | Informational directive for program assumptions. |
+| `begin assumes` | ✅ | Delimited assumption scope opener. |
+| `begin declare variant` | ✅ | Opens a `declare variant` block. |
+| `begin metadirective` | ✅ | Delimited metadirective region (OpenMP 6.0). |
+| `end metadirective` | ✅ | Closes a delimited metadirective region (OpenMP 6.0). |
+| `declare induction` | ✅ | Declares loop induction variables. |
+| `fuse` | ✅ | Loop transformation directive (OpenMP 6.0). |
+| `groupprivate` | ✅ | Declares group-private variables. |
+| `interchange` | ✅ | Loop interchange transformation directive. |
+| `reverse` | ✅ | Loop reversal directive (OpenMP 6.0). |
+| `scan` | ✅ | Scan/collective directive (OpenMP 6.0). |
+| `split` | ✅ | Loop splitting directive (OpenMP 6.0). |
+| `stripe` | ✅ | Loop striping directive (OpenMP 6.0). |
+| `task iteration` | ✅ | Subsidiary directive within `taskloop`. |
+| `tile` | ✅ | Loop tiling directive (OpenMP 6.0). |
+| `unroll` | ✅ | Loop unrolling directive (OpenMP 6.0). |
+| `workdistribute` | ✅ | Work distribution directive (OpenMP 6.0). |
+| `workshare` | ✅ | Work-sharing block directive (OpenMP 6.0). |
+
 ## Clause Support (C/C++)
 
 The table below enumerates every OpenMP 6.0 clause keyword for C and C++.  Clauses are marked supported when the parser accepts
@@ -125,17 +149,27 @@ them through the `OpenMpClause` enum.
 
 | Clause | Status | Notes |
 | --- | --- | --- |
+| `absent` | ✅ | Registered with the clause registry. |
 | `acq_rel` | ✅ | Memory-order clause for `atomic`; registered as a bare clause. |
 | `acquire` | ✅ | Memory-order clause for `atomic`; registered as a bare clause. |
+| `adjust_args` | ✅ | Registered with the clause registry. |
 | `affinity` | ✅ | Registered with the clause registry. |
+| `align` | ✅ | Registered with the clause registry. |
 | `aligned` | ✅ | Registered with the clause registry. |
 | `allocate` | ✅ | Registered with the clause registry. |
 | `allocator` | ✅ | Registered with the clause registry. |
+| `append_args` | ✅ | Registered with the clause registry. |
+| `apply` | ✅ | Registered with the clause registry. |
+| `at` | ✅ | Registered with the clause registry. |
 | `atomic_default_mem_order` | ✅ | Registered with the clause registry. |
 | `bind` | ✅ | Registered with the clause registry. |
+| `collector` | ✅ | Registered with the clause registry. |
 | `capture` | ✅ | Registered with the clause registry. |
 | `collapse` | ✅ | Registered with the clause registry. |
+| `combiner` | ✅ | Registered with the clause registry. |
 | `compare` | ✅ | Registered with the clause registry. |
+| `contains` | ✅ | Registered with the clause registry. |
+| `counts` | ✅ | Registered with the clause registry. |
 | `copyin` | ✅ | Registered with the clause registry. |
 | `copyprivate` | ✅ | Registered with the clause registry. |
 | `default` | ✅ | Registered with the clause registry. |
@@ -144,6 +178,7 @@ them through the `OpenMpClause` enum.
 | `destroy` | ✅ | Registered with the clause registry. |
 | `detach` | ✅ | Registered with the clause registry. |
 | `device` | ✅ | Registered with the clause registry. |
+| `device_safesync` | ✅ | Registered with the clause registry. |
 | `device_resident` | ✅ | Registered with the clause registry. |
 | `device_type` | ✅ | Registered with the clause registry. |
 | `dist_schedule` | ✅ | Registered with the clause registry. |
@@ -154,29 +189,42 @@ them through the `OpenMpClause` enum.
 | `final` | ✅ | Registered with the clause registry. |
 | `filter` | ✅ | Registered with the clause registry. |
 | `firstprivate` | ✅ | Registered with the clause registry. |
+| `full` | ✅ | Registered with the clause registry. |
 | `from` | ✅ | Registered with the clause registry. |
 | `grainsize` | ✅ | Registered with the clause registry. |
+| `graph_id` | ✅ | Registered with the clause registry. |
+| `graph_reset` | ✅ | Registered with the clause registry. |
 | `hint` | ✅ | Registered with the clause registry. |
 | `holds` | ✅ | Registered with the clause registry. |
 | `if` | ✅ | Registered with the clause registry. |
 | `in_reduction` | ✅ | Registered with the clause registry. |
 | `inbranch` | ✅ | Registered with the clause registry. |
 | `inclusive` | ✅ | Registered with the clause registry. |
+| `indirect` | ✅ | Registered with the clause registry. |
+| `induction` | ✅ | Registered with the clause registry. |
+| `inductor` | ✅ | Registered with the clause registry. |
 | `init` | ✅ | Registered with the clause registry. |
+| `init_complete` | ✅ | Registered with the clause registry. |
+| `initializer` | ✅ | Registered with the clause registry. |
 | `interop` | ✅ | Registered with the clause registry. |
 | `is_device_ptr` | ✅ | Registered with the clause registry. |
 | `label` | ✅ | Registered with the clause registry. |
 | `lastprivate` | ✅ | Registered with the clause registry. |
+| `local` | ✅ | Registered with the clause registry. |
 | `linear` | ✅ | Registered with the clause registry. |
 | `link` | ✅ | Registered with the clause registry. |
+| `looprange` | ✅ | Registered with the clause registry. |
 | `map` | ✅ | Registered with the clause registry. |
 | `match` | ✅ | Registered with the clause registry. |
 | `message` | ✅ | Registered with the clause registry. |
+| `memscope` | ✅ | Registered with the clause registry. |
 | `mergeable` | ✅ | Registered with the clause registry. |
 | `nontemporal` | ✅ | Registered with the clause registry. |
 | `no_openmp` | ✅ | Registered with the clause registry. |
+| `no_openmp_constructs` | ✅ | Registered with the clause registry. |
 | `no_openmp_routines` | ✅ | Registered with the clause registry. |
 | `no_parallelism` | ✅ | Registered with the clause registry. |
+| `nocontext` | ✅ | Registered with the clause registry. |
 | `nogroup` | ✅ | Registered with the clause registry. |
 | `novariants` | ✅ | Registered with the clause registry. |
 | `nowait` | ✅ | Registered with the clause registry. |
@@ -185,35 +233,49 @@ them through the `OpenMpClause` enum.
 | `num_threads` | ✅ | Registered with the clause registry. |
 | `order` | ✅ | Registered with the clause registry. |
 | `ordered` | ✅ | Registered with the clause registry. |
+| `otherwise` | ✅ | Registered with the clause registry. |
 | `partial` | ✅ | Registered with the clause registry. |
 | `priority` | ✅ | Registered with the clause registry. |
 | `private` | ✅ | Registered with the clause registry. |
 | `proc_bind` | ✅ | Registered with the clause registry. |
 | `public` | ✅ | Registered with the clause registry. |
 | `reduction` | ✅ | Registered with the clause registry. |
+| `read` | ✅ | Registered with the clause registry. |
 | `release` | ✅ | Memory-order clause for `atomic`; registered as a bare clause. |
 | `relaxed` | ✅ | Memory-order clause for `atomic`; registered as a bare clause. |
 | `reverse` | ✅ | Registered with the clause registry. |
+| `reverse_offload` | ✅ | Registered with the clause registry. |
 | `reproducible` | ✅ | Registered with the clause registry. |
+| `replayable` | ✅ | Registered with the clause registry. |
 | `safelen` | ✅ | Registered with the clause registry. |
 | `schedule` | ✅ | Registered with the clause registry. |
+| `safesync` | ✅ | Registered with the clause registry. |
 | `seq_cst` | ✅ | Memory-order clause for `atomic`; registered as a bare clause. |
 | `shared` | ✅ | Registered with the clause registry. |
+| `self_maps` | ✅ | Registered with the clause registry. |
+| `severity` | ✅ | Registered with the clause registry. |
+| `simd` | ✅ | Registered with the clause registry. |
 | `simdlen` | ✅ | Registered with the clause registry. |
 | `sizes` | ✅ | Registered with the clause registry. |
 | `task_reduction` | ✅ | Registered with the clause registry. |
+| `threads` | ✅ | Registered with the clause registry. |
+| `threadset` | ✅ | Registered with the clause registry. |
 | `thread_limit` | ✅ | Registered with the clause registry. |
+| `transparent` | ✅ | Registered with the clause registry. |
 | `tile` | ✅ | Registered with the clause registry. |
 | `to` | ✅ | Registered with the clause registry. |
+| `uniform` | ✅ | Registered with the clause registry. |
 | `unified_address` | ✅ | Registered with the clause registry. |
 | `unified_shared_memory` | ✅ | Registered with the clause registry. |
 | `unroll` | ✅ | Registered with the clause registry. |
 | `untied` | ✅ | Registered with the clause registry. |
 | `update` | ✅ | Registered with the clause registry. |
+| `use` | ✅ | Registered with the clause registry. |
 | `use_device_addr` | ✅ | Registered with the clause registry. |
 | `use_device_ptr` | ✅ | Registered with the clause registry. |
 | `uses_allocators` | ✅ | Registered with the clause registry. |
 | `weak` | ✅ | Registered with the clause registry. |
+| `write` | ✅ | Registered with the clause registry. |
 | `when` | ✅ | Registered with the clause registry. |
 
 ## Other specification items

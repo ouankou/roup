@@ -52,6 +52,7 @@ This document serves as a complete keyword inventory for development and referen
 - `loop` (Section 13.8; p. 454; category: executable; association: loop nest; properties: order-concurrent-nestable, partitioned, simdizable, team-executed, teams-nestable, work-distribution, worksharing)
 - `masked` (Section 12.5; p. 433; category: executable; association: block; properties: thread-limiting, thread-selecting)
 - `begin metadirective` (Section 9.4.4; p. 327; category: meta; association: delimited; properties: pure)
+- `end metadirective` (Section 9.4.4; p. 327; category: meta; association: delimited; properties: pure)
 - `metadirective` (Section 9.4.3; p. 327; category: meta; association: unassociated; properties: pure)
 - `nothing` (Section 10.7; pp. 400–402; category: utility; association: unassociated; properties: pure, loop-transforming)
 - `ordered` (Section 17.10.2; pp. 546–547; category: executable; association: block; properties: mutual-exclusion, simdizable, thread-limiting, thread-exclusive)

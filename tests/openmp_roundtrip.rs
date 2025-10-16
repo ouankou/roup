@@ -49,3 +49,21 @@ fn roundtrips_all_openmp_clauses() {
         );
     }
 }
+
+#[test]
+fn parses_new_openmp60_entries() {
+    let split = parse("#pragma omp split counts(4)");
+    assert_eq!(split.name, "split");
+    assert_eq!(split.clauses[0].name, "counts");
+
+    let stripe = parse("#pragma omp stripe");
+    assert_eq!(stripe.name, "stripe");
+    assert!(stripe.clauses.is_empty());
+
+    let end_meta = parse("#pragma omp end metadirective");
+    assert_eq!(end_meta.name, "end metadirective");
+    assert!(end_meta.clauses.is_empty());
+
+    let has_device_addr = parse("#pragma omp parallel has_device_addr(ptr)");
+    assert_eq!(has_device_addr.clauses[0].name, "has_device_addr");
+}

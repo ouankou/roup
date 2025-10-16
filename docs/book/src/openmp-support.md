@@ -9,8 +9,8 @@ ROUP provides comprehensive support for **OpenMP 6.0** directives and clauses fo
 | Feature | Support |
 |---------|---------|
 | **OpenMP Version** | 3.0 - 6.0 |
-| **Directives** | 95 directives (core + combined forms) |
-| **Clauses** | 91 clauses |
+| **Directives** | 125 directives (core + combined forms) |
+| **Clauses** | 131 clauses |
 | **Languages** | C, C++, Fortran |
 | **Test Coverage** | 355 automated tests |
 | **Specification** | [OpenMP 6.0 PDF](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf) |
@@ -104,15 +104,19 @@ ROUP supports all standard combined directives:
 
 **And many more...** (all 120+ combinations from OpenMP 6.0)
 
-### Meta-directives & Variants (5 directives)
+### Meta-directives & Variants (8 directives)
 
 | Directive | Example | Notes |
 |-----------|---------|-------|
 | `metadirective` | `#pragma omp metadirective when(...)` | Conditional directive selection |
+| `begin metadirective` | `#pragma omp begin metadirective` ... | Delimited metadirective region |
+| `end metadirective` | `#pragma omp end metadirective` | Closes a scoped metadirective region |
 | `declare variant` | `#pragma omp declare variant(...)` | Function variants |
+| `begin declare variant` | `#pragma omp begin declare variant` ... | Scoped variant region opener |
 | `declare simd` | `#pragma omp declare simd` | SIMD function |
 | `declare reduction` | `#pragma omp declare reduction` | Custom reduction |
 | `declare mapper` | `#pragma omp declare mapper` | Custom mapper |
+| `declare induction` | `#pragma omp declare induction(i)` | Declare induction variables |
 
 ### Utility Directives (6 directives)
 
@@ -120,10 +124,32 @@ ROUP supports all standard combined directives:
 |-----------|---------|-------|
 | `threadprivate` | `#pragma omp threadprivate(var)` | Thread-private data |
 | `assume` | `#pragma omp assume` | Compiler hints (OpenMP 5.1+) |
+| `assumes` | `#pragma omp assumes` | Declarative assumption list |
+| `begin assumes` | `#pragma omp begin assumes` ... `#pragma omp end assumes` | Delimited assumption region |
+| `begin metadirective` | `#pragma omp begin metadirective` ... `#pragma omp end metadirective` | Scoped metadirective region (OpenMP 6.0) |
+| `end metadirective` | `#pragma omp end metadirective` | Closes a scoped metadirective region |
 | `nothing` | `#pragma omp nothing` | No-op directive |
 | `error` | `#pragma omp error` | Compilation error |
 | `requires` | `#pragma omp requires` | Implementation requirements |
 | `allocate` | `#pragma omp allocate` | Memory allocation |
+| `allocators` | `#pragma omp allocators` | Allocator control for blocks |
+| `groupprivate` | `#pragma omp groupprivate(list)` | Declare group-private data |
+
+### Loop transformation & work-distribution directives (11 directives)
+
+| Directive | Example | Notes |
+|-----------|---------|-------|
+| `fuse` | `#pragma omp fuse loop(i,j)` | Fuse adjacent loops |
+| `interchange` | `#pragma omp interchange` | Swap loop nesting order |
+| `reverse` | `#pragma omp reverse` | Reverse loop iteration order |
+| `scan` | `#pragma omp scan inclusive(x)` | Parallel prefix-scan construct |
+| `split` | `#pragma omp split` | Split loop iterations |
+| `stripe` | `#pragma omp stripe` | Stride-based loop partitioning |
+| `tile` | `#pragma omp tile sizes(4)` | Tile loop nests |
+| `unroll` | `#pragma omp unroll full` | Loop unrolling control |
+| `task iteration` | `#pragma omp task iteration` | Subsidiary directive inside `taskloop` |
+| `workdistribute` | `#pragma omp workdistribute` | Work distribution over threads |
+| `workshare` | `#pragma omp workshare` | Work-sharing block (Fortran) |
 
 ---
 
@@ -255,6 +281,51 @@ ROUP supports all standard combined directives:
 | `no_openmp_routines` | `no_openmp_routines` | Variant selector |
 | `no_parallelism` | `no_parallelism` | Variant selector |
 | `public` | `public` | Declare mapper |
+| `adjust_args` | `adjust_args({append})` | Variant argument adjustment |
+| `append_args` | `append_args({var})` | Variant argument append |
+| `apply` | `apply(permutation: ...)` | Apply loop transformation |
+| `at` | `at(execution)` | Error timing |
+| `counts` | `counts(2,3)` | Loop split counts |
+| `device_safesync` | `device_safesync(true)` | Require safe device synchronization |
+| `graph_id` | `graph_id(7)` | Taskgraph identifier |
+| `graph_reset` | `graph_reset(true)` | Reset taskgraph state |
+| `has_device_addr` | `has_device_addr(ptr)` | Assert device address |
+| `indirect` | `indirect(true)` | Declare indirect device call |
+| `induction` | `induction(i:step)` | Induction variable setup |
+| `inductor` | `inductor(expr)` | Reduction inductor expression |
+| `init_complete` | `init_complete(true)` | Scan initialization completion |
+| `initializer` | `initializer(expr)` | Reduction initializer |
+| `looprange` | `looprange(first:0, count:10)` | Loop range subset |
+| `local` | `local(var)` | Declare local mapping |
+| `memscope` | `memscope(parallel)` | Atomic memory scope |
+| `no_openmp_constructs` | `no_openmp_constructs(true)` | Forbid constructs |
+| `nocontext` | `nocontext(true)` | Disable context updates |
+| `permutation` | `permutation({i,j})` | Loop permutation |
+| `read` | `read(seq_cst)` | Atomic read semantics |
+| `replayable` | `replayable(true)` | Replayable task/taskgraph |
+| `reverse_offload` | `reverse_offload(true)` | Request reverse offload |
+| `safesync` | `safesync(width:4)` | Parallel region safe sync |
+| `self_maps` | `self_maps` | Require self-mapping |
+| `severity` | `severity(fatal)` | Error severity |
+| `simd` | `simd(true)` | Ordered region applies to SIMD |
+| `threads` | `threads(true)` | Ordered region applies to threads |
+| `threadset` | `threadset(mask)` | Task thread set |
+| `transparent` | `transparent` | Transparent task data movement |
+| `uniform` | `uniform(expr)` | Uniform arguments |
+| `use` | `use(h)` | Interop `use` clause |
+| `write` | `write(seq_cst)` | Atomic write semantics |
+
+### OpenMP 6.0 clause groups
+
+OpenMP 6.0 added entire families of clauses that ROUP now understands:
+
+- **Assumption clauses** such as `absent`, `contains`, `no_openmp_constructs`, and `nocontext` capture the guarantees made by
+  `assumes` regions.
+- **Loop transformation clauses** (`apply`, `counts`, `looprange`, `permutation`, `full`, `partial`) parameterize the new loop
+  transformation directives.
+- **Taskgraph coordination** is handled with `graph_id`, `graph_reset`, `replayable`, `threads`, and `simd` clauses.
+- **Safety and device-requirement clauses** (`safesync`, `device_safesync`, `reverse_offload`, `self_maps`, `has_device_addr`)
+  allow parsers and runtimes to reason about environment capabilities.
 
 ---
 
