@@ -61,6 +61,7 @@ use super::Language;
 /// let string_only = ParserConfig {
 ///     parse_expressions: false,
 ///     language: Language::C,
+///     enable_language_support: true,
 /// };
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +78,13 @@ pub struct ParserConfig {
     /// - C/C++: `arr[i]`, `*ptr`, `x->y`
     /// - Fortran: `arr(i)`, different operators
     pub language: Language,
+
+    /// Enable best-effort language-specific parsing for clause data
+    ///
+    /// When enabled, ROUP will attempt to parse variables (including
+    /// array sections) and language-specific expressions into the IR.
+    /// When disabled, parsing falls back to simple identifier strings.
+    pub enable_language_support: bool,
 }
 
 impl ParserConfig {
@@ -85,17 +93,43 @@ impl ParserConfig {
         Self {
             parse_expressions,
             language,
+            enable_language_support: true,
         }
     }
 
     /// Create config that keeps all expressions as strings
     pub const fn string_only(language: Language) -> Self {
-        Self::new(false, language)
+        Self {
+            parse_expressions: false,
+            language,
+            enable_language_support: true,
+        }
     }
 
     /// Create config that parses expressions
     pub const fn with_parsing(language: Language) -> Self {
-        Self::new(true, language)
+        Self {
+            parse_expressions: true,
+            language,
+            enable_language_support: true,
+        }
+    }
+
+    /// Return a new configuration with a different source language
+    pub fn with_language(mut self, language: Language) -> Self {
+        self.language = language;
+        self
+    }
+
+    /// Enable or disable language-specific parsing support
+    pub fn with_language_support(mut self, enabled: bool) -> Self {
+        self.enable_language_support = enabled;
+        self
+    }
+
+    /// Check if language support is enabled
+    pub const fn language_support_enabled(&self) -> bool {
+        self.enable_language_support
     }
 }
 
@@ -105,6 +139,7 @@ impl Default for ParserConfig {
         Self {
             parse_expressions: true,
             language: Language::Unknown,
+            enable_language_support: true,
         }
     }
 }
