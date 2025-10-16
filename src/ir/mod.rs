@@ -63,6 +63,8 @@ mod clause;
 pub mod convert;
 mod directive;
 mod expression;
+#[cfg(feature = "language_frontends")]
+pub mod lang;
 mod types;
 pub mod validate;
 mod variable;

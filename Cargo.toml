@@ -4,6 +4,10 @@ version = "0.3.0"
 authors = ["Anjia Wang <anjia@ouankou.com>"]
 edition = "2021"
 
+[features]
+default = ["language_frontends"]
+language_frontends = []
+
 [dependencies]
 # Learning Rust: External Dependencies
 # =====================================

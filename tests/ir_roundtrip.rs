@@ -35,7 +35,9 @@
 //! Output: "#pragma omp parallel default(shared) private(x, y)"
 //! ```
 
-use roup::ir::{convert::convert_directive, Language, ParserConfig, SourceLocation};
+use roup::ir::{
+    convert::convert_directive, ClauseData, ClauseItem, Language, ParserConfig, SourceLocation,
+};
 use roup::parser::parse_omp_directive;
 
 /// Test round-trip for simple parallel directive
@@ -450,12 +452,43 @@ fn roundtrip_target_map_tofrom() {
     let input = "#pragma omp target map(tofrom: x, y, z)";
 
     let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
-    let config = ParserConfig::default();
+    let config = ParserConfig::with_parsing(Language::C);
     let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
         .expect("Failed to convert to IR");
 
     let output = ir.to_string();
     assert_eq!(output, "#pragma omp target map(tofrom: x, y, z)");
+}
+
+#[test]
+fn roundtrip_target_map_with_sections() {
+    let input = "#pragma omp target map(to: matrix[0:N][i])";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::with_parsing(Language::C);
+    let ir = convert_directive(&directive, SourceLocation::start(), Language::C, &config)
+        .expect("Failed to convert to IR");
+
+    let map_items = ir
+        .clauses()
+        .iter()
+        .find_map(|clause| match clause {
+            ClauseData::Map { items, .. } => Some(items),
+            _ => None,
+        })
+        .expect("expected map clause");
+
+    assert_eq!(map_items.len(), 1);
+    match &map_items[0] {
+        ClauseItem::Variable(var) => {
+            assert_eq!(var.name(), "matrix");
+            assert_eq!(var.array_sections.len(), 2);
+        }
+        other => panic!("expected variable, got {:?}", other),
+    }
+
+    let output = ir.to_string();
+    assert_eq!(output, "#pragma omp target map(to: matrix[0:N][i])");
 }
 
 /// Test round-trip with depend clause
