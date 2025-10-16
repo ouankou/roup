@@ -3,6 +3,7 @@ name = "roup"
 version = "0.3.0"
 authors = ["Anjia Wang <anjia@ouankou.com>"]
 edition = "2021"
+rust-version = "1.81.0"  # MSRV: Ubuntu 22.04/24.04 LTS (apt install rustc-1.81) - required by half crate
 
 [dependencies]
 # Learning Rust: External Dependencies
@@ -28,11 +29,9 @@ criterion = "0.5"   # Benchmarking framework
 # Build script dependencies (build.rs only) - syn also in main dependencies for `gen` binary
 syn = { version = "2", features = ["full", "parsing"] }  # Robust Rust AST parser
 
-# Note: build.rs serves dual purposes (build script + standalone binary)
-# This triggers a harmless Cargo warning about multiple build targets - it's expected behavior
 [[bin]]
 name = "gen"
-path = "build.rs"
+path = "src/bin/gen.rs"
 
 [lib]
 # Library configuration for FFI

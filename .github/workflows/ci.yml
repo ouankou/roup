@@ -20,9 +20,26 @@ jobs:
   build:
     name: Build & Tests
     strategy:
+      # Don't cancel all jobs if one fails - we want to see which specific versions/OSes fail
+      fail-fast: false
       matrix:
-        # Version should be guarded with quotes (1.80 -> "1.80"). Otherwise, 1.80 may be recognized as 1.8, which is a much older version.
-        version: ["1.90", "1.89", "1.88", "1.87", "1.86", "1.85"]
+        # MSRV + Stable Testing Approach (Rust ecosystem best practice)
+        #
+        # MSRV (Minimum Supported Rust Version): 1.81
+        # - Available in Ubuntu 22.04/24.04 LTS (apt install rustc-1.81)
+        # - Minimum version supporting Cargo.lock v4 (introduced in Rust 1.78)
+        # - Set in Cargo.toml as rust-version = "1.81.0"
+        #
+        # Stable: Latest stable Rust release
+        # - Ensures compatibility with current Rust ecosystem
+        # - Catches new lints and API changes early
+        #
+        # SINGLE SOURCE OF TRUTH: This version list is automatically read by test_rust_versions.sh
+        # When you update MSRV, also update Cargo.toml rust-version field.
+        #
+        # Version should be guarded with quotes (1.81 -> "1.81"). Otherwise, 1.81 may be recognized as 1.8.
+        # Note: Clippy lints can vary between versions. Test locally with ./test_rust_versions.sh before pushing.
+        version: ["1.81", "stable"]
         # ubuntu-22.04-arm, ubuntu-24.04-arm and windows-11-arm are not supported yet for private repositories
         os: [ubuntu-24.04, windows-2025, macos-15]
         llvm: ["20"]
@@ -54,16 +71,28 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.version }}
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: Check Rust formatting
         run: cargo fmt -- --check
 
-      - name: Build library
+      - name: Run Clippy lints
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build library (debug)
         run: cargo build --verbose
+
+      - name: Build library (release with all targets)
+        run: cargo build --release --all-targets
 
       - name: Run Rust tests
         run: cargo test --verbose
+
+      - name: Run tests with all features
+        run: cargo test --all-features
+
+      - name: Validate benchmarks compile
+        run: cargo bench --no-run
 
       - name: Build C API examples
         if: runner.os == 'Linux'
@@ -87,12 +116,25 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           cd examples/cpp
-          if [ -f Makefile ]; then
-            make clean
-            make all
-          else
-            echo "No C++ examples Makefile found yet"
-          fi
+          make clean
+          make all
+          cd ../..
+        shell: bash
+
+      - name: Run C++ examples
+        if: runner.os == 'Linux'
+        run: |
+          cd examples/cpp
+          make run-all
+          cd ../..
+        shell: bash
+
+      - name: Build Fortran examples
+        if: runner.os == 'Linux'
+        run: |
+          cd examples/fortran
+          make clean
+          make all
           cd ../..
         shell: bash
 
@@ -183,6 +225,8 @@ jobs:
 
       - name: Build rustdoc
         run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: "-D warnings"
 
       - name: Verify examples compile
         run: cargo build --examples
