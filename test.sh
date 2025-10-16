@@ -1,0 +1,394 @@
+#!/usr/bin/env bash
+# Comprehensive test script for ROUP - runs ALL possible tests
+# Based on AGENTS.md requirements
+
+set -e  # Exit on first error
+
+# Color output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo "========================================"
+echo "  ROUP Comprehensive Test Suite"
+echo "========================================"
+echo ""
+echo "Environment:"
+rustc --version
+cargo clippy --version 2>/dev/null || echo "  clippy: not installed"
+echo ""
+
+# ===================================================================
+# 1. Code Formatting Check
+# ===================================================================
+echo "=== 1. Formatting Check ==="
+echo -n "Running cargo fmt --check... "
+if cargo fmt --check > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ PASS${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    echo "Run 'cargo fmt' to fix formatting issues"
+    exit 1
+fi
+
+# ===================================================================
+# 2. Rust Build (all targets)
+# ===================================================================
+echo "=== 2. Rust Build ==="
+echo -n "Building debug (all targets)... "
+if cargo build --all-targets 2>&1 | tee /tmp/build_debug.log | grep -q "Finished"; then
+    warnings=$(grep -i "warning:" /tmp/build_debug.log | grep -v "build.rs" | wc -l)
+    if [ "$warnings" -eq 0 ]; then
+        echo -e "${GREEN}✓ PASS (0 warnings)${NC}"
+    else
+        echo -e "${YELLOW}⚠ PASS with $warnings warnings${NC}"
+    fi
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    exit 1
+fi
+
+echo -n "Building release (all targets)... "
+if cargo build --release --all-targets 2>&1 | tee /tmp/build_release.log | grep -q "Finished"; then
+    warnings=$(grep -i "warning:" /tmp/build_release.log | grep -v "build.rs" | wc -l)
+    if [ "$warnings" -eq 0 ]; then
+        echo -e "${GREEN}✓ PASS (0 warnings)${NC}"
+    else
+        echo -e "${YELLOW}⚠ PASS with $warnings warnings${NC}"
+    fi
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    exit 1
+fi
+
+# ===================================================================
+# 3. Rust Unit Tests
+# ===================================================================
+echo "=== 3. Rust Unit Tests ==="
+echo -n "Running cargo test --lib... "
+if cargo test --lib > /tmp/test_lib.log 2>&1; then
+    passed=$(grep "test result:" /tmp/test_lib.log | grep -o "[0-9]* passed" | grep -o "[0-9]*")
+    echo -e "${GREEN}✓ PASS ($passed tests)${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/test_lib.log
+    exit 1
+fi
+
+# ===================================================================
+# 4. Rust Integration Tests
+# ===================================================================
+echo "=== 4. Rust Integration Tests ==="
+echo -n "Running cargo test --tests... "
+if cargo test --tests > /tmp/test_integration.log 2>&1; then
+    passed=$(grep "test result:" /tmp/test_integration.log | tail -1 | grep -o "[0-9]* passed" | grep -o "[0-9]*")
+    echo -e "${GREEN}✓ PASS ($passed tests)${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/test_integration.log
+    exit 1
+fi
+
+# ===================================================================
+# 5. Rust Doc Tests
+# ===================================================================
+echo "=== 5. Rust Doc Tests ==="
+echo -n "Running cargo test --doc... "
+if cargo test --doc > /tmp/test_doc.log 2>&1; then
+    passed=$(grep "test result:" /tmp/test_doc.log | tail -1 | grep -o "[0-9]* passed" | grep -o "[0-9]*")
+    echo -e "${GREEN}✓ PASS ($passed doctests)${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/test_doc.log
+    exit 1
+fi
+
+# ===================================================================
+# 6. All Rust Tests Together
+# ===================================================================
+echo "=== 6. All Rust Tests Together ==="
+echo -n "Running cargo test --all-targets... "
+if cargo test --all-targets > /tmp/test_all.log 2>&1; then
+    total_passed=$(grep "test result:" /tmp/test_all.log | grep -o "[0-9]* passed" | awk '{sum+=$1} END {print sum}')
+    echo -e "${GREEN}✓ PASS ($total_passed total tests)${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/test_all.log
+    exit 1
+fi
+
+# ===================================================================
+# 7. Rust Examples Build
+# ===================================================================
+echo "=== 7. Examples Build ==="
+echo -n "Building all examples... "
+if cargo build --examples > /tmp/build_examples.log 2>&1; then
+    echo -e "${GREEN}✓ PASS${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/build_examples.log
+    exit 1
+fi
+
+# ===================================================================
+# 8. Rust Documentation Build
+# ===================================================================
+echo "=== 8. Rust Documentation ==="
+echo -n "Building API docs (cargo doc --no-deps --all-features)... "
+if cargo doc --no-deps --all-features > /tmp/doc.log 2>&1; then
+    warnings=$(grep -i "warning:" /tmp/doc.log | wc -l)
+    if [ "$warnings" -eq 0 ]; then
+        echo -e "${GREEN}✓ PASS (0 warnings)${NC}"
+    else
+        echo -e "${RED}✗ FAIL - $warnings warnings found (treating warnings as errors):${NC}"
+        grep -i "warning:" /tmp/doc.log
+        exit 1
+    fi
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/doc.log
+    exit 1
+fi
+
+# ===================================================================
+# 9. ompparser Compatibility Tests
+# ===================================================================
+echo "=== 9. ompparser Compat Tests ==="
+if [ -d "compat/ompparser" ] && [ -f "compat/ompparser/build.sh" ]; then
+    echo -n "Running compat tests... "
+    cd compat/ompparser
+    if ./build.sh > /tmp/compat_test.log 2>&1; then
+        echo -e "${GREEN}✓ PASS${NC}"
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        cat /tmp/compat_test.log
+        cd ../..
+        exit 1
+    fi
+    cd ../..
+else
+    echo -e "${RED}✗ FAIL - ompparser compatibility layer is MANDATORY but not found${NC}"
+    echo "   Expected: compat/ompparser/build.sh"
+    echo "   Run: git submodule update --init --recursive"
+    exit 1
+fi
+
+# ===================================================================
+# 10. mdBook Documentation Build
+# ===================================================================
+echo "=== 10. mdBook Documentation ==="
+if ! command -v mdbook > /dev/null 2>&1; then
+    echo -e "${RED}✗ FAIL - mdbook is MANDATORY but not installed${NC}"
+    echo "   Install: cargo install mdbook"
+    exit 1
+fi
+
+if [ ! -d "docs/book" ]; then
+    echo -e "${RED}✗ FAIL - docs/book directory not found${NC}"
+    exit 1
+fi
+
+echo -n "Building mdBook... "
+if mdbook build docs/book > /tmp/mdbook_build.log 2>&1; then
+    echo -e "${GREEN}✓ PASS${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/mdbook_build.log
+    exit 1
+fi
+
+# ===================================================================
+# 11. mdBook Code Examples Test
+# ===================================================================
+echo "=== 11. mdBook Code Examples ==="
+echo -n "Testing mdBook code examples... "
+if mdbook test docs/book > /tmp/mdbook_test.log 2>&1; then
+    echo -e "${GREEN}✓ PASS${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/mdbook_test.log
+    exit 1
+fi
+
+# ===================================================================
+# 12. C Examples Build and Run
+# ===================================================================
+echo "=== 12. C Examples ==="
+if [ ! -d "examples/c" ] || [ ! -f "examples/c/Makefile" ]; then
+    echo -e "${RED}✗ FAIL - C examples are MANDATORY but not found${NC}"
+    echo "   Expected: examples/c/Makefile"
+    exit 1
+fi
+
+echo -n "Building C examples... "
+if (cd examples/c && make clean > /dev/null 2>&1 && make BUILD_TYPE=release all > /tmp/c_examples_build.log 2>&1); then
+    echo -e "${GREEN}✓ PASS${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/c_examples_build.log
+    exit 1
+fi
+
+echo -n "Running C examples... "
+if (cd examples/c && make BUILD_TYPE=release run-all > /tmp/c_examples_run.log 2>&1); then
+    echo -e "${GREEN}✓ PASS${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/c_examples_run.log
+    exit 1
+fi
+
+# ===================================================================
+# 13. C++ Examples Build and Run
+# ===================================================================
+echo "=== 13. C++ Examples ==="
+if [ -d "examples/cpp" ] && [ -f "examples/cpp/Makefile" ]; then
+    echo -n "Building C++ examples... "
+    if (cd examples/cpp && make clean > /dev/null 2>&1 && make > /tmp/cpp_examples_build.log 2>&1); then
+        echo -e "${GREEN}✓ PASS${NC}"
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        cat /tmp/cpp_examples_build.log
+        exit 1
+    fi
+
+    echo -n "Running C++ examples... "
+    if (cd examples/cpp && make run-all > /tmp/cpp_examples_run.log 2>&1); then
+        echo -e "${GREEN}✓ PASS${NC}"
+    else
+        echo -e "${RED}✗ FAIL${NC}"
+        cat /tmp/cpp_examples_run.log
+        exit 1
+    fi
+else
+    echo -e "${RED}✗ FAIL - C++ examples are MANDATORY but not found${NC}"
+    echo "   Expected: examples/cpp/Makefile"
+    echo "   All example categories (C, C++, Fortran) are required"
+    exit 1
+fi
+
+# ===================================================================
+# 14. Fortran Examples Build
+# ===================================================================
+echo "=== 14. Fortran Examples ==="
+if [ ! -d "examples/fortran" ] || [ ! -f "examples/fortran/Makefile" ]; then
+    echo -e "${RED}✗ FAIL - Fortran examples are MANDATORY but not found${NC}"
+    echo "   Expected: examples/fortran/Makefile"
+    exit 1
+fi
+
+echo -n "Building Fortran examples... "
+if (cd examples/fortran && make clean > /dev/null 2>&1 && make > /tmp/fortran_examples.log 2>&1); then
+    echo -e "${GREEN}✓ PASS${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/fortran_examples.log
+    exit 1
+fi
+
+# ===================================================================
+# 15. Header Verification
+# ===================================================================
+echo "=== 15. Header Verification ==="
+echo -n "Verifying header is up-to-date... "
+if cargo run --bin gen > /tmp/header_verify.log 2>&1; then
+    echo -e "${GREEN}✓ PASS${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/header_verify.log
+    exit 1
+fi
+
+# ===================================================================
+# 16. Check for Compiler Warnings
+# ===================================================================
+echo "=== 16. Warning Check ==="
+echo -n "Checking for unexpected warnings... "
+if cargo build 2>&1 | grep -i "warning:" | grep -v "build.rs" > /tmp/warnings.log; then
+    warning_count=$(wc -l < /tmp/warnings.log)
+    if [ "$warning_count" -eq 0 ]; then
+        echo -e "${GREEN}✓ PASS (0 warnings)${NC}"
+    else
+        echo -e "${RED}✗ FAIL - $warning_count warnings found:${NC}"
+        cat /tmp/warnings.log
+        exit 1
+    fi
+else
+    echo -e "${GREEN}✓ PASS (0 warnings)${NC}"
+fi
+
+# ===================================================================
+# 17. Clippy Lints (MANDATORY)
+# ===================================================================
+echo "=== 17. Clippy Lints ==="
+if command -v cargo-clippy > /dev/null 2>&1 || cargo clippy --version > /dev/null 2>&1; then
+    echo -n "Running clippy (all targets)... "
+    if cargo clippy --all-targets -- -D warnings > /tmp/clippy.log 2>&1; then
+        echo -e "${GREEN}✓ PASS${NC}"
+    else
+        echo -e "${RED}✗ FAIL - Clippy warnings found:${NC}"
+        cat /tmp/clippy.log
+        exit 1
+    fi
+else
+    echo -e "${RED}✗ FAIL - clippy not installed${NC}"
+    echo "Install with: rustup component add clippy"
+    exit 1
+fi
+
+# ===================================================================
+# 18. All Features Test
+# ===================================================================
+echo "=== 18. All Features Test ==="
+echo -n "Running tests with --all-features... "
+if cargo test --all-features > /tmp/test_all_features.log 2>&1; then
+    echo -e "${GREEN}✓ PASS${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/test_all_features.log
+    exit 1
+fi
+
+# ===================================================================
+# 19. Benchmark Tests
+# ===================================================================
+echo "=== 19. Benchmark Tests ==="
+if [ ! -d "benches" ]; then
+    echo -e "${RED}✗ FAIL - Benchmarks are MANDATORY but benches directory not found${NC}"
+    exit 1
+fi
+
+echo -n "Running benchmarks (validation mode)... "
+# Run benchmarks in quick mode for validation (not full performance measurement)
+if cargo bench --no-run > /tmp/bench.log 2>&1; then
+    echo -e "${GREEN}✓ PASS (benchmarks compile)${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/bench.log
+    exit 1
+fi
+
+# ===================================================================
+# SUMMARY
+# ===================================================================
+echo ""
+echo "========================================"
+echo -e "  ${GREEN}ALL 19 TEST CATEGORIES PASSED${NC}"
+echo "========================================"
+echo ""
+echo "Summary:"
+echo "  ✓ Code formatting (cargo fmt)"
+echo "  ✓ Rust builds (debug + release)"
+echo "  ✓ All Rust tests (unit + integration + doc)"
+echo "  ✓ All examples (Rust + C + C++ + Fortran)"
+echo "  ✓ C examples execution (run-all)"
+echo "  ✓ Documentation (rustdoc + mdBook with --all-features)"
+echo "  ✓ Compatibility layer (ompparser)"
+echo "  ✓ Header verification"
+echo "  ✓ Zero compiler warnings"
+echo "  ✓ Clippy lints passed"
+echo "  ✓ All features tested"
+echo "  ✓ Benchmarks validated"
+echo ""
+echo "Ready for commit!"
