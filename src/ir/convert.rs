@@ -42,9 +42,9 @@
 //! ```
 
 use super::{
-    ClauseData, ClauseItem, DefaultKind, DependType, DirectiveIR, DirectiveKind, Expression,
-    Identifier, Language, MapType, ParserConfig, ProcBind, ReductionOperator, ScheduleKind,
-    ScheduleModifier, SourceLocation,
+    language_support, ClauseData, ClauseItem, DefaultKind, DependType, DirectiveIR, DirectiveKind,
+    Expression, Identifier, Language, MapType, ParserConfig, ProcBind, ReductionOperator,
+    ScheduleKind, ScheduleModifier, SourceLocation,
 };
 use crate::parser::{Clause, ClauseKind, Directive};
 
@@ -205,17 +205,17 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
 /// ## Example
 ///
 /// ```
-/// # use roup::ir::convert::parse_identifier_list;
-/// let items = parse_identifier_list("x, y, z");
+/// # use roup::ir::{convert::parse_identifier_list, ParserConfig, Language};
+/// let config = ParserConfig::with_parsing(Language::C);
+/// let items = parse_identifier_list("x, y, z", &config).unwrap();
 /// assert_eq!(items.len(), 3);
 /// ```
-pub fn parse_identifier_list(content: &str) -> Vec<ClauseItem> {
-    content
-        .split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| ClauseItem::Identifier(Identifier::new(s)))
-        .collect()
+pub fn parse_identifier_list(
+    content: &str,
+    config: &ParserConfig,
+) -> Result<Vec<ClauseItem>, ConversionError> {
+    language_support::parse_clause_items(content, config)
+        .map_err(|err| ConversionError::InvalidClauseSyntax(err.message().to_string()))
 }
 
 /// Parse a reduction operator from a string
@@ -325,11 +325,15 @@ pub fn parse_schedule_clause(content: &str) -> Result<ClauseData, ConversionErro
 /// ## Example
 ///
 /// ```
-/// # use roup::ir::convert::parse_map_clause;
-/// let clause = parse_map_clause("to: arr").unwrap();
+/// # use roup::ir::{convert::parse_map_clause, ParserConfig, Language};
+/// let config = ParserConfig::with_parsing(Language::C);
+/// let clause = parse_map_clause("to: arr", &config).unwrap();
 /// // Returns ClauseData::Map with map_type=To, items=[arr]
 /// ```
-pub fn parse_map_clause(content: &str) -> Result<ClauseData, ConversionError> {
+pub fn parse_map_clause(
+    content: &str,
+    config: &ParserConfig,
+) -> Result<ClauseData, ConversionError> {
     // Simplified implementation: just handle "map-type: list"
     // Full implementation would need to handle mapper(...) prefix
 
@@ -353,7 +357,7 @@ pub fn parse_map_clause(content: &str) -> Result<ClauseData, ConversionError> {
             }
         };
 
-        let items = parse_identifier_list(items_str);
+        let items = parse_identifier_list(items_str, config)?;
 
         Ok(ClauseData::Map {
             map_type,
@@ -362,7 +366,7 @@ pub fn parse_map_clause(content: &str) -> Result<ClauseData, ConversionError> {
         })
     } else {
         // No type specified, just items
-        let items = parse_identifier_list(content);
+        let items = parse_identifier_list(content, config)?;
         Ok(ClauseData::Map {
             map_type: None,
             mapper: None,
@@ -403,11 +407,15 @@ pub fn parse_depend_type(type_str: &str) -> Result<DependType, ConversionError> 
 /// ## Example
 ///
 /// ```
-/// # use roup::ir::convert::parse_linear_clause;
-/// let clause = parse_linear_clause("x, y: 2").unwrap();
+/// # use roup::ir::{convert::parse_linear_clause, ParserConfig, Language};
+/// let config = ParserConfig::with_parsing(Language::C);
+/// let clause = parse_linear_clause("x, y: 2", &config).unwrap();
 /// // Returns ClauseData::Linear with items=[x, y], step=Some(2)
 /// ```
-pub fn parse_linear_clause(content: &str) -> Result<ClauseData, ConversionError> {
+pub fn parse_linear_clause(
+    content: &str,
+    config: &ParserConfig,
+) -> Result<ClauseData, ConversionError> {
     // Simplified implementation: handle "list: step" or just "list"
     // Full implementation would handle modifier(list): syntax
 
@@ -426,7 +434,7 @@ pub fn parse_linear_clause(content: &str) -> Result<ClauseData, ConversionError>
         let (items_str, step_str) = content.split_at(last_colon);
         let step_str = &step_str[1..].trim(); // Skip the ':'
 
-        let items = parse_identifier_list(items_str);
+        let items = parse_identifier_list(items_str, config)?;
         let step = Some(Expression::unparsed(*step_str));
 
         Ok(ClauseData::Linear {
@@ -436,7 +444,7 @@ pub fn parse_linear_clause(content: &str) -> Result<ClauseData, ConversionError>
         })
     } else {
         // No step, just items
-        let items = parse_identifier_list(content);
+        let items = parse_identifier_list(content, config)?;
         Ok(ClauseData::Linear {
             modifier: None,
             items,
@@ -455,7 +463,7 @@ pub fn parse_linear_clause(content: &str) -> Result<ClauseData, ConversionError>
 /// unsupported. This allows incremental development.
 pub fn parse_clause_data<'a>(
     clause: &'a Clause<'a>,
-    _config: &ParserConfig,
+    config: &ParserConfig,
 ) -> Result<ClauseData, ConversionError> {
     let clause_name = clause.name.as_ref();
 
@@ -493,7 +501,7 @@ pub fn parse_clause_data<'a>(
         "private" => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
-                let items = parse_identifier_list(content);
+                let items = parse_identifier_list(content, config)?;
                 Ok(ClauseData::Private { items })
             } else {
                 Ok(ClauseData::Private { items: vec![] })
@@ -504,7 +512,7 @@ pub fn parse_clause_data<'a>(
         "firstprivate" => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
-                let items = parse_identifier_list(content);
+                let items = parse_identifier_list(content, config)?;
                 Ok(ClauseData::Firstprivate { items })
             } else {
                 Ok(ClauseData::Firstprivate { items: vec![] })
@@ -515,7 +523,7 @@ pub fn parse_clause_data<'a>(
         "shared" => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
-                let items = parse_identifier_list(content);
+                let items = parse_identifier_list(content, config)?;
                 Ok(ClauseData::Shared { items })
             } else {
                 Ok(ClauseData::Shared { items: vec![] })
@@ -596,7 +604,7 @@ pub fn parse_clause_data<'a>(
                     let operator = parse_reduction_operator(op_str.trim())?;
 
                     // Parse the item list
-                    let items = parse_identifier_list(items_str);
+                    let items = parse_identifier_list(items_str, config)?;
 
                     Ok(ClauseData::Reduction { operator, items })
                 } else {
@@ -627,7 +635,7 @@ pub fn parse_clause_data<'a>(
         "map" => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
-                parse_map_clause(content)
+                parse_map_clause(content, config)
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
                     "map clause requires parenthesized content".to_string(),
@@ -648,7 +656,7 @@ pub fn parse_clause_data<'a>(
                     let depend_type = parse_depend_type(type_str.trim())?;
 
                     // Parse the item list
-                    let items = parse_identifier_list(items_str);
+                    let items = parse_identifier_list(items_str, config)?;
 
                     Ok(ClauseData::Depend { depend_type, items })
                 } else {
@@ -667,7 +675,7 @@ pub fn parse_clause_data<'a>(
         "linear" => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
-                parse_linear_clause(content)
+                parse_linear_clause(content, config)
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
                     "linear clause requires parenthesized content".to_string(),
@@ -809,25 +817,29 @@ mod tests {
 
     #[test]
     fn test_parse_identifier_list_single() {
-        let items = parse_identifier_list("x");
+        let config = ParserConfig::with_parsing(Language::C);
+        let items = parse_identifier_list("x", &config).unwrap();
         assert_eq!(items.len(), 1);
     }
 
     #[test]
     fn test_parse_identifier_list_multiple() {
-        let items = parse_identifier_list("x, y, z");
+        let config = ParserConfig::with_parsing(Language::C);
+        let items = parse_identifier_list("x, y, z", &config).unwrap();
         assert_eq!(items.len(), 3);
     }
 
     #[test]
     fn test_parse_identifier_list_with_spaces() {
-        let items = parse_identifier_list("  x  ,  y  ,  z  ");
+        let config = ParserConfig::with_parsing(Language::C);
+        let items = parse_identifier_list("  x  ,  y  ,  z  ", &config).unwrap();
         assert_eq!(items.len(), 3);
     }
 
     #[test]
     fn test_parse_identifier_list_empty() {
-        let items = parse_identifier_list("");
+        let config = ParserConfig::with_parsing(Language::C);
+        let items = parse_identifier_list("", &config).unwrap();
         assert_eq!(items.len(), 0);
     }
 
@@ -864,6 +876,61 @@ mod tests {
         let data = parse_clause_data(&clause, &config).unwrap();
         if let ClauseData::Private { items } = data {
             assert_eq!(items.len(), 2);
+        } else {
+            panic!("Expected Private clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_clause_data_private_c_array_section() {
+        let clause = Clause {
+            name: "private".into(),
+            kind: ClauseKind::Parenthesized("arr[0:N], matrix[i][j]".into()),
+        };
+        let config = ParserConfig::with_parsing(Language::C);
+        let data = parse_clause_data(&clause, &config).unwrap();
+        if let ClauseData::Private { items } = data {
+            assert_eq!(items.len(), 2);
+            match &items[0] {
+                ClauseItem::Variable(var) => {
+                    assert!(var.is_array());
+                    assert_eq!(var.dimensions(), 1);
+                    assert_eq!(var.name(), "arr");
+                    assert_eq!(format!("{}", var), "arr[0:N]");
+                }
+                other => panic!("Expected variable, got {:?}", other),
+            }
+            match &items[1] {
+                ClauseItem::Variable(var) => {
+                    assert_eq!(var.name(), "matrix");
+                    assert_eq!(var.dimensions(), 2);
+                }
+                other => panic!("Expected variable, got {:?}", other),
+            }
+        } else {
+            panic!("Expected Private clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_clause_data_private_fortran_sections() {
+        let clause = Clause {
+            name: "private".into(),
+            kind: ClauseKind::Parenthesized("a(1:n, :)".into()),
+        };
+        let config = ParserConfig::with_parsing(Language::Fortran);
+        let data = parse_clause_data(&clause, &config).unwrap();
+        if let ClauseData::Private { items } = data {
+            assert_eq!(items.len(), 1);
+            match &items[0] {
+                ClauseItem::Variable(var) => {
+                    assert_eq!(var.name(), "a");
+                    assert_eq!(var.dimensions(), 2);
+                    assert!(var.is_array());
+                    assert_eq!(format!("{}", var), "a[1:n][]");
+                }
+                other => panic!("Expected variable, got {:?}", other),
+            }
         } else {
             panic!("Expected Private clause");
         }
@@ -1141,7 +1208,8 @@ mod tests {
     // Tests for map clause
     #[test]
     fn test_parse_map_clause_with_type() {
-        let data = parse_map_clause("to: arr").unwrap();
+        let config = ParserConfig::with_parsing(Language::C);
+        let data = parse_map_clause("to: arr", &config).unwrap();
         if let ClauseData::Map {
             map_type,
             mapper,
@@ -1151,6 +1219,7 @@ mod tests {
             assert_eq!(map_type, Some(MapType::To));
             assert!(mapper.is_none());
             assert_eq!(items.len(), 1);
+            assert!(matches!(items[0], ClauseItem::Identifier(_)));
         } else {
             panic!("Expected Map clause");
         }
@@ -1158,7 +1227,8 @@ mod tests {
 
     #[test]
     fn test_parse_map_clause_tofrom() {
-        let data = parse_map_clause("tofrom: x, y, z").unwrap();
+        let config = ParserConfig::with_parsing(Language::C);
+        let data = parse_map_clause("tofrom: x, y, z", &config).unwrap();
         if let ClauseData::Map {
             map_type,
             mapper,
@@ -1168,6 +1238,10 @@ mod tests {
             assert_eq!(map_type, Some(MapType::ToFrom));
             assert!(mapper.is_none());
             assert_eq!(items.len(), 3);
+            assert!(matches!(
+                items[0],
+                ClauseItem::Identifier(_) | ClauseItem::Variable(_)
+            ));
         } else {
             panic!("Expected Map clause");
         }
@@ -1175,7 +1249,8 @@ mod tests {
 
     #[test]
     fn test_parse_map_clause_without_type() {
-        let data = parse_map_clause("var1, var2").unwrap();
+        let config = ParserConfig::with_parsing(Language::C);
+        let data = parse_map_clause("var1, var2", &config).unwrap();
         if let ClauseData::Map {
             map_type,
             mapper,
@@ -1185,6 +1260,18 @@ mod tests {
             assert!(map_type.is_none());
             assert!(mapper.is_none());
             assert_eq!(items.len(), 2);
+        } else {
+            panic!("Expected Map clause");
+        }
+    }
+
+    #[test]
+    fn test_parse_map_clause_with_array_section() {
+        let config = ParserConfig::with_parsing(Language::C);
+        let data = parse_map_clause("to: arr[0:N]", &config).unwrap();
+        if let ClauseData::Map { items, .. } = data {
+            assert_eq!(items.len(), 1);
+            assert!(matches!(items[0], ClauseItem::Variable(_)));
         } else {
             panic!("Expected Map clause");
         }
@@ -1217,7 +1304,8 @@ mod tests {
     // Tests for linear clause
     #[test]
     fn test_parse_linear_clause_simple() {
-        let data = parse_linear_clause("x, y").unwrap();
+        let config = ParserConfig::with_parsing(Language::C);
+        let data = parse_linear_clause("x, y", &config).unwrap();
         if let ClauseData::Linear {
             modifier,
             items,
@@ -1234,7 +1322,8 @@ mod tests {
 
     #[test]
     fn test_parse_linear_clause_with_step() {
-        let data = parse_linear_clause("i: 2").unwrap();
+        let config = ParserConfig::with_parsing(Language::C);
+        let data = parse_linear_clause("i: 2", &config).unwrap();
         if let ClauseData::Linear {
             modifier,
             items,

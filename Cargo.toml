@@ -4,6 +4,11 @@ version = "0.3.0"
 authors = ["Anjia Wang <anjia@ouankou.com>"]
 edition = "2021"
 
+# Feature flags
+[features]
+default = ["language-parsing"]
+language-parsing = []
+
 [dependencies]
 # Learning Rust: External Dependencies
 # =====================================

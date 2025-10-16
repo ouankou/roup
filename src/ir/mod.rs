@@ -63,6 +63,7 @@ mod clause;
 pub mod convert;
 mod directive;
 mod expression;
+pub mod language_support;
 mod types;
 pub mod validate;
 mod variable;
