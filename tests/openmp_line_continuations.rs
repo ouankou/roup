@@ -120,7 +120,6 @@ fn parses_fortran_fixed_with_mixed_sentinels() {
 }
 
 #[test]
-#[ignore = "debugging P1 comment"]
 fn preserves_token_separation_in_c_continuations() {
     // Test case for P1 comment: ensure "parallel\n    for" doesn't become "parallelfor"
     let directive = parse_with_language(
@@ -138,7 +137,6 @@ fn preserves_token_separation_in_c_continuations() {
 }
 
 #[test]
-#[ignore = "debugging P1 comment"]
 fn preserves_token_separation_no_trailing_space() {
     // Edge case: backslash immediately after token, all separation via next-line indent
     let directive = parse_with_language(
@@ -149,4 +147,40 @@ fn preserves_token_separation_no_trailing_space() {
     assert_eq!(directive.name, "parallel for");
     assert_eq!(directive.clauses.len(), 1);
     assert_eq!(directive.clauses[0].name, "private");
+}
+
+#[test]
+fn parses_c_multiline_with_multiword_directive_name() {
+    let directive = parse_with_language(
+        concat!(
+            "#pragma omp target teams distribute \\\n",
+            "    parallel for simd nowait"
+        ),
+        Language::C,
+    );
+
+    assert_eq!(directive.name, "target teams distribute parallel for simd");
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "nowait");
+    assert!(matches!(directive.clauses[0].kind, ClauseKind::Bare));
+}
+
+#[test]
+fn parses_fortran_free_multiline_directive_name_segments() {
+    let directive = parse_with_language(
+        concat!(
+            "!$omp target teams &\n",
+            "!$omp distribute &\n",
+            "!$omp& parallel do simd private(i)"
+        ),
+        Language::FortranFree,
+    );
+
+    assert_eq!(directive.name, "target teams distribute parallel do simd");
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "private");
+    assert_eq!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized("i".into())
+    );
 }

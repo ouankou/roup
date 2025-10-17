@@ -180,9 +180,9 @@ impl DirectiveRegistry {
             if let Some((_, next_ch)) = input[idx..].char_indices().next() {
                 if is_ident_char(next_ch) {
                     // check if prefix is registered; if so, continue to extend
-                    let prefix_candidate = input[start..idx].trim_end();
+                    let prefix_candidate_slice = &input[start..idx];
                     let prefix_candidate =
-                        crate::lexer::collapse_line_continuations(prefix_candidate);
+                        crate::lexer::collapse_line_continuations(prefix_candidate_slice);
                     let prefix_candidate_ref = prefix_candidate.as_ref().trim_end();
                     // Check for prefixes
                     let has_prefix = if self.case_insensitive {
