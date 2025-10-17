@@ -226,6 +226,147 @@
 <li><a href="./api/roup/ir/clause/index.html">Clause Types</a></li>
 </ul>
 <hr />
+<h2 id="translation-api"><a class="header" href="#translation-api">Translation API</a></h2>
+<p>ROUP supports <strong>bidirectional translation</strong> between C/C++ and Fortran OpenMP directive syntax. This is useful for automatically porting benchmarks and code between languages.</p>
+<h3 id="rust-translation-api"><a class="header" href="#rust-translation-api">Rust Translation API</a></h3>
+<p>The <code>roup::ir::translate</code> module provides high-level translation functions:</p>
+<pre><code class="language-rust ignore">use roup::ir::translate::{translate_c_to_fortran, translate_fortran_to_c};
+
+// C/C++ → Fortran
+let fortran = translate_c_to_fortran("#pragma omp parallel for private(i)")?;
+// Result: "!$omp parallel do private(i)"
+
+// Fortran → C/C++
+let c_code = translate_fortran_to_c("!$omp parallel do schedule(static, 4)")?;
+// Result: "#pragma omp parallel for schedule(static, 4)"</code></pre>
+<p><strong>Advanced API</strong> (returns IR for further processing):</p>
+<pre><code class="language-rust ignore">use roup::ir::{translate::translate_c_to_fortran_ir, Language, ParserConfig};
+
+let config = ParserConfig::with_parsing(Language::C);
+let ir = translate_c_to_fortran_ir("#pragma omp parallel for", config)?;
+
+// Can query or modify the IR
+println!("Language: {:?}", ir.language());
+println!("Fortran: {}", ir.to_string_for_language(Language::Fortran));</code></pre>
+<h3 id="supported-translations"><a class="header" href="#supported-translations">Supported Translations</a></h3>
+<h4 id="loop-directive-mapping"><a class="header" href="#loop-directive-mapping">Loop Directive Mapping</a></h4>
+<p>The translation correctly maps <strong>loop directive names</strong> between languages:</p>
+<div class="table-wrapper"><table><thead><tr><th>C/C++</th><th>Fortran</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>for</code></td><td><code>do</code></td><td>Basic loop construct</td></tr>
+<tr><td><code>for simd</code></td><td><code>do simd</code></td><td>SIMD loop</td></tr>
+<tr><td><code>parallel for</code></td><td><code>parallel do</code></td><td>Parallel loop</td></tr>
+<tr><td><code>parallel for simd</code></td><td><code>parallel do simd</code></td><td>Parallel SIMD loop</td></tr>
+<tr><td><code>distribute parallel for</code></td><td><code>distribute parallel do</code></td><td>Distributed parallel loop</td></tr>
+<tr><td><code>distribute parallel for simd</code></td><td><code>distribute parallel do simd</code></td><td>All combined forms</td></tr>
+<tr><td><code>teams distribute parallel for</code></td><td><code>teams distribute parallel do</code></td><td>Complex nesting</td></tr>
+<tr><td><code>target teams distribute parallel for simd</code></td><td><code>target teams distribute parallel do simd</code></td><td>Maximum nesting</td></tr>
+</tbody></table>
+</div>
+<p><strong>Complete list</strong>: All 12 loop directive variants are supported in both directions.</p>
+<h4 id="sentinel-translation"><a class="header" href="#sentinel-translation">Sentinel Translation</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>C/C++</th><th>Fortran</th></tr></thead><tbody>
+<tr><td><code>#pragma omp</code></td><td><code>!$omp</code> (free-form)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Note</strong>: Fixed-form Fortran sentinels (<code>c$omp</code>, <code>*$omp</code>) are supported for parsing but output uses free-form only.</p>
+<h4 id="clause-preservation"><a class="header" href="#clause-preservation">Clause Preservation</a></h4>
+<p>✅ <strong>All clauses are preserved as-is</strong> — The OpenMP standard defines clauses identically across languages:</p>
+<pre><code class="language-text">Input (C):
+#pragma omp parallel for private(i,j) schedule(static, 4) collapse(2)
+
+Output (Fortran) - clauses unchanged:
+!$omp parallel do private(i,j) schedule(static, 4) collapse(2)
+</code></pre>
+<h3 id="limitations"><a class="header" href="#limitations">Limitations</a></h3>
+<p>The translation focuses on <strong>directive syntax only</strong>. The following are <strong>intentionally not translated</strong>:</p>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Status</th><th>Reason</th></tr></thead><tbody>
+<tr><td><strong>Expressions in clauses</strong></td><td>❌ Not translated</td><td>Language-specific syntax (e.g., <code>arr[i]</code> vs <code>arr(i)</code>) requires full expression parsing</td></tr>
+<tr><td><strong>Variable names</strong></td><td>✅ Preserved</td><td>Variable identifiers work across languages</td></tr>
+<tr><td><strong>Surrounding code</strong></td><td>❌ Not translated</td><td>Only directive lines are processed</td></tr>
+<tr><td><strong>Fixed-form Fortran output</strong></td><td>❌ Not supported</td><td>Free-form <code>!$omp</code> is the modern standard</td></tr>
+<tr><td><strong>Comments/whitespace</strong></td><td>❌ Not preserved</td><td>Output is normalized</td></tr>
+</tbody></table>
+</div>
+<p><strong>Example limitation:</strong></p>
+<pre><code class="language-c">// Input (C)
+#pragma omp parallel for reduction(+:sum) if(n &gt; 1000)
+
+// Output (Fortran) - expressions NOT translated
+!$omp parallel do reduction(+:sum) if(n &gt; 1000)
+//                                   ^^^^^^^^^^^^
+//                                   Still C syntax! Manual fix needed.
+</code></pre>
+<p><strong>Recommendation</strong>: Use translation for directive structure, then manually adjust expressions for target language.</p>
+<h3 id="c-translation-api"><a class="header" href="#c-translation-api">C Translation API</a></h3>
+<p>The C API provides <code>roup_convert_language()</code> for language conversion:</p>
+<pre><code class="language-c">// Convert C to Fortran
+const char* c_input = "#pragma omp parallel for private(x)";
+char* fortran_output = roup_convert_language(
+    c_input,
+    ROUP_LANG_C,              // from language
+    ROUP_LANG_FORTRAN_FREE    // to language
+);
+
+if (fortran_output != NULL) {
+    printf("Fortran: %s\n", fortran_output);
+    // Result: "!$omp parallel do private(x)"
+
+    // IMPORTANT: Free the returned string
+    roup_string_free(fortran_output);
+}
+</code></pre>
+<p><strong>Language codes:</strong></p>
+<pre><code class="language-c">#define ROUP_LANG_C             0
+#define ROUP_LANG_FORTRAN_FREE  2
+#define ROUP_LANG_FORTRAN_FIXED 3
+</code></pre>
+<p><strong>Function signature:</strong></p>
+<pre><code class="language-c">// Convert directive between languages
+// Returns NULL on error (must free with roup_string_free on success)
+char* roup_convert_language(
+    const char* input,
+    int32_t from_language,
+    int32_t to_language
+);
+
+// Free string returned by roup_convert_language
+void roup_string_free(char* ptr);
+</code></pre>
+<p><strong>Error handling:</strong> Returns <code>NULL</code> if:</p>
+<ul>
+<li>Input is NULL or empty</li>
+<li>Language code is invalid</li>
+<li>Parsing fails</li>
+<li>Conversion fails</li>
+</ul>
+<h3 id="translation-error-handling"><a class="header" href="#translation-error-handling">Translation Error Handling</a></h3>
+<p><strong>Rust API:</strong></p>
+<pre><code class="language-rust ignore">use roup::ir::translate::{translate_c_to_fortran, TranslationError};
+
+match translate_c_to_fortran(input) {
+    Ok(fortran) =&gt; println!("Translated: {}", fortran),
+    Err(TranslationError::EmptyInput) =&gt; eprintln!("Input is empty"),
+    Err(TranslationError::ParseError(msg)) =&gt; eprintln!("Parse failed: {}", msg),
+    Err(TranslationError::ConversionError(err)) =&gt; eprintln!("Conversion failed: {}", err),
+}</code></pre>
+<p><strong>C API:</strong></p>
+<pre><code class="language-c">char* result = roup_convert_language(input, ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+if (result == NULL) {
+    fprintf(stderr, "Translation failed\n");
+    return 1;
+}
+// Use result...
+roup_string_free(result);
+</code></pre>
+<h3 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h3>
+<ol>
+<li><strong>Benchmark porting</strong> - Convert OpenMP benchmarks between languages</li>
+<li><strong>Multi-language codebases</strong> - Generate equivalent directives for polyglot projects</li>
+<li><strong>Documentation</strong> - Show directive equivalents across languages</li>
+<li><strong>Code generation</strong> - Generate language-specific directives from templates</li>
+<li><strong>Migration tools</strong> - Assist in language migration projects</li>
+</ol>
+<hr />
 <h2 id="c-api-reference"><a class="header" href="#c-api-reference">C API Reference</a></h2>
 <p>ROUP exports 16 C functions for FFI integration, providing a minimal C API with unsafe pointer operations only at the FFI boundary. All functions use direct C pointers (<code>*mut OmpDirective</code>, <code>*mut OmpClause</code>) following a standard malloc/free pattern.</p>
 <p><strong>Source</strong>: <code>src/c_api.rs</code> (~60 lines of unsafe code at FFI boundary, ~0.9% of file)</p>

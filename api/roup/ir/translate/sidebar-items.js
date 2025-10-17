@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TranslationError"],"fn":["translate_c_to_fortran","translate_c_to_fortran_ir","translate_fortran_to_c","translate_fortran_to_c_ir"]};
