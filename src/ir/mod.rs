@@ -54,6 +54,7 @@ pub use directive::{DirectiveIR, DirectiveKind};
 pub use expression::{
     BinaryOperator, Expression, ExpressionAst, ExpressionKind, ParserConfig, UnaryOperator,
 };
+pub use translate::{translate_c_to_fortran, translate_c_to_fortran_ir, TranslationError};
 pub use types::{Language, SourceLocation};
 pub use validate::{ValidationContext, ValidationError};
 pub use variable::{ArraySection, Identifier, Variable};
@@ -63,6 +64,7 @@ mod clause;
 pub mod convert;
 mod directive;
 mod expression;
+pub mod translate;
 mod types;
 pub mod validate;
 mod variable;
