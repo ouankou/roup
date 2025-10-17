@@ -97,7 +97,11 @@ pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
     }
 }
 
-/// Parse Fortran fixed-form sentinel "!$OMP" or "C$OMP" in columns 1-6 (case-insensitive)
+/// Parse Fortran fixed-form sentinel variants (case-insensitive)
+///
+/// Supported sentinels in columns 1-6:
+/// - Long form: `!$OMP`, `C$OMP`, `*$OMP`
+/// - Short form: `!$`, `C$`, `*$` (often used on continuation lines)
 ///
 /// Supports leading whitespace before the sentinel:
 /// - "!$OMP PARALLEL" -> matches
@@ -108,16 +112,8 @@ pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
     // Skip optional leading whitespace (common in indented Fortran code)
     let (after_space, _) = skip_space_and_comments(input)?;
 
-    // Optimize: check only first 5 characters instead of entire input
-    let first_5 = after_space.get(..5);
-    let matches = first_5.map_or(false, |s| {
-        s.eq_ignore_ascii_case("!$omp")
-            || s.eq_ignore_ascii_case("c$omp")
-            || s.eq_ignore_ascii_case("*$omp")
-    });
-
-    if matches {
-        Ok((&after_space[5..], &after_space[..5]))
+    if let Some(len) = match_fortran_sentinel(after_space) {
+        Ok((&after_space[len..], &after_space[..len]))
     } else {
         Err(nom::Err::Error(nom::error::Error::new(
             input,
@@ -431,7 +427,9 @@ fn skip_fortran_continuation(input: &str, idx: usize) -> Option<usize> {
 }
 
 fn match_fortran_sentinel(input: &str) -> Option<usize> {
-    let candidates = ["!$omp", "c$omp", "*$omp"];
+    // Order matters: check long-form sentinels before short-form variants so we
+    // always prefer the most specific match when both could apply.
+    let candidates = ["!$omp", "c$omp", "*$omp", "!$", "c$", "*$"];
     for candidate in candidates {
         if input.len() >= candidate.len()
             && input[..candidate.len()].eq_ignore_ascii_case(candidate)
