@@ -59,8 +59,10 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
-use crate::lexer::Language;
+use crate::lexer::Language as LexerLanguage;
 use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
+
+use crate::ir::{convert_directive_language, Language as IrLanguage};
 
 // ============================================================================
 // Language Constants for Fortran Support
@@ -74,6 +76,14 @@ pub const ROUP_LANG_FORTRAN_FREE: i32 = 1;
 
 /// Fortran fixed-form - uses !$OMP or C$OMP in columns 1-6
 pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
+
+fn ir_language_from_code(language: i32) -> Option<IrLanguage> {
+    match language {
+        ROUP_LANG_C => Some(IrLanguage::C),
+        ROUP_LANG_FORTRAN_FREE | ROUP_LANG_FORTRAN_FIXED => Some(IrLanguage::Fortran),
+        _ => None,
+    }
+}
 
 // ============================================================================
 // Constants Documentation
@@ -322,9 +332,9 @@ pub extern "C" fn roup_parse_with_language(
     // Convert language code to Language enum using explicit constants
     // Return NULL for invalid language values
     let lang = match language {
-        ROUP_LANG_C => Language::C,
-        ROUP_LANG_FORTRAN_FREE => Language::FortranFree,
-        ROUP_LANG_FORTRAN_FIXED => Language::FortranFixed,
+        ROUP_LANG_C => LexerLanguage::C,
+        ROUP_LANG_FORTRAN_FREE => LexerLanguage::FortranFree,
+        ROUP_LANG_FORTRAN_FIXED => LexerLanguage::FortranFixed,
         _ => return ptr::null_mut(), // Invalid language value
     };
 
@@ -356,6 +366,57 @@ pub extern "C" fn roup_parse_with_language(
     };
 
     Box::into_raw(Box::new(c_directive))
+}
+
+/// Convert a directive string between languages and return a newly allocated C string.
+///
+/// Caller must free the returned pointer with `roup_string_free`. Returns NULL on error.
+#[no_mangle]
+pub extern "C" fn roup_convert_language(
+    input: *const c_char,
+    from_language: i32,
+    to_language: i32,
+) -> *mut c_char {
+    if input.is_null() {
+        return ptr::null_mut();
+    }
+
+    let from = match ir_language_from_code(from_language) {
+        Some(lang) => lang,
+        None => return ptr::null_mut(),
+    };
+    let to = match ir_language_from_code(to_language) {
+        Some(lang) => lang,
+        None => return ptr::null_mut(),
+    };
+
+    let c_str = unsafe { CStr::from_ptr(input) };
+    let rust_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return ptr::null_mut(),
+    };
+
+    let converted = match convert_directive_language(rust_str, from, to) {
+        Ok(s) => s,
+        Err(_) => return ptr::null_mut(),
+    };
+
+    match CString::new(converted) {
+        Ok(c_string) => c_string.into_raw(),
+        Err(_) => ptr::null_mut(),
+    }
+}
+
+/// Free a C string allocated by `roup_convert_language`.
+#[no_mangle]
+pub extern "C" fn roup_string_free(ptr: *mut c_char) {
+    if ptr.is_null() {
+        return;
+    }
+
+    unsafe {
+        drop(CString::from_raw(ptr));
+    }
 }
 
 /// Free a clause.
@@ -1084,6 +1145,34 @@ mod tests {
         );
 
         roup_directive_free(directive);
+    }
+
+    #[test]
+    fn convert_language_from_c_to_fortran() {
+        let input = CString::new("#pragma omp parallel for private(i)").unwrap();
+        let converted = roup_convert_language(input.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(!converted.is_null());
+
+        let result = unsafe { CStr::from_ptr(converted) }
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(result, "!$omp parallel do private(i)");
+
+        roup_string_free(converted);
+    }
+
+    #[test]
+    fn convert_language_invalid_input_returns_null() {
+        let ptr = roup_convert_language(ptr::null(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(ptr.is_null());
+
+        let bogus = CString::new("not a pragma").unwrap();
+        let ptr = roup_convert_language(bogus.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(ptr.is_null());
+
+        let ptr = roup_convert_language(bogus.as_ptr(), 99, ROUP_LANG_FORTRAN_FREE);
+        assert!(ptr.is_null());
     }
 
     #[test]

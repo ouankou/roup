@@ -20,6 +20,7 @@
  */
 
 #include <OpenMPIR.h>
+#include <roup_constants.h>
 #include "../src/roup_compat.h"
 #include <iostream>
 #include <cassert>
@@ -291,9 +292,52 @@ TEST(generatePragmaString_default) {
 TEST(generatePragmaString_custom_prefix) {
     DirectivePtr dir(parseOpenMP("omp parallel", nullptr));
     ASSERT_NOT_NULL(dir.get());
-    
+
     std::string str = dir->generatePragmaString("!$omp ", "", "");
     ASSERT(str.find("!$omp") != std::string::npos);
+}
+
+// ============================================================================
+// Language Conversion Tests
+// ============================================================================
+
+TEST(convert_c_pragma_to_fortran) {
+    const char* input = "#pragma omp parallel for private(i, j)";
+    char* converted = roup_convert_language(input, ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+    ASSERT_NOT_NULL(converted);
+
+    std::unique_ptr<char, decltype(&roup_string_free)> guard(converted, &roup_string_free);
+    ASSERT_EQ(std::string(converted), "!$omp parallel do private(i, j)");
+}
+
+TEST(convert_c_target_to_fortran) {
+    const char* input =
+        "#pragma omp target teams distribute parallel for simd schedule(static, 4)";
+    char* converted = roup_convert_language(input, ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+    ASSERT_NOT_NULL(converted);
+
+    std::unique_ptr<char, decltype(&roup_string_free)> guard(converted, &roup_string_free);
+    ASSERT_EQ(
+        std::string(converted),
+        "!$omp target teams distribute parallel do simd schedule(static, 4)"
+    );
+}
+
+TEST(convert_fortran_to_c) {
+    const char* input = "!$OMP DO SCHEDULE(DYNAMIC)";
+    char* converted = roup_convert_language(input, ROUP_LANG_FORTRAN_FREE, ROUP_LANG_C);
+    ASSERT_NOT_NULL(converted);
+
+    std::unique_ptr<char, decltype(&roup_string_free)> guard(converted, &roup_string_free);
+    ASSERT_EQ(std::string(converted), "#pragma omp for schedule(DYNAMIC)");
+}
+
+TEST(convert_language_invalid_arguments) {
+    char* converted = roup_convert_language(nullptr, ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+    ASSERT_NULL(converted);
+
+    converted = roup_convert_language("#pragma omp parallel", 99, ROUP_LANG_FORTRAN_FREE);
+    ASSERT_NULL(converted);
 }
 
 // ============================================================================

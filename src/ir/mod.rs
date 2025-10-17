@@ -50,10 +50,11 @@ pub use clause::{
     ScheduleModifier,
 };
 pub use convert::ConversionError;
-pub use directive::{DirectiveIR, DirectiveKind};
+pub use directive::{DirectiveDisplay, DirectiveIR, DirectiveKind};
 pub use expression::{
     BinaryOperator, Expression, ExpressionAst, ExpressionKind, ParserConfig, UnaryOperator,
 };
+pub use language_conversion::{convert_directive_language, LanguageConversionError};
 pub use types::{Language, SourceLocation};
 pub use validate::{ValidationContext, ValidationError};
 pub use variable::{ArraySection, Identifier, Variable};
@@ -63,6 +64,7 @@ mod clause;
 pub mod convert;
 mod directive;
 mod expression;
+mod language_conversion;
 mod types;
 pub mod validate;
 mod variable;

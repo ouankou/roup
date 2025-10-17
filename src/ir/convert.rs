@@ -104,6 +104,8 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         "parallel" => Ok(DirectiveKind::Parallel),
         "parallel for" => Ok(DirectiveKind::ParallelFor),
         "parallel for simd" => Ok(DirectiveKind::ParallelForSimd),
+        "parallel do" => Ok(DirectiveKind::ParallelFor),
+        "parallel do simd" => Ok(DirectiveKind::ParallelForSimd),
         "parallel sections" => Ok(DirectiveKind::ParallelSections),
         "parallel workshare" => Ok(DirectiveKind::ParallelWorkshare),
         "parallel loop" => Ok(DirectiveKind::ParallelLoop),
@@ -113,6 +115,8 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         // Work-sharing constructs
         "for" => Ok(DirectiveKind::For),
         "for simd" => Ok(DirectiveKind::ForSimd),
+        "do" => Ok(DirectiveKind::For),
+        "do simd" => Ok(DirectiveKind::ForSimd),
         "sections" => Ok(DirectiveKind::Sections),
         "section" => Ok(DirectiveKind::Section),
         "single" => Ok(DirectiveKind::Single),
@@ -140,6 +144,8 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         "target parallel" => Ok(DirectiveKind::TargetParallel),
         "target parallel for" => Ok(DirectiveKind::TargetParallelFor),
         "target parallel for simd" => Ok(DirectiveKind::TargetParallelForSimd),
+        "target parallel do" => Ok(DirectiveKind::TargetParallelFor),
+        "target parallel do simd" => Ok(DirectiveKind::TargetParallelForSimd),
         "target parallel loop" => Ok(DirectiveKind::TargetParallelLoop),
         "target simd" => Ok(DirectiveKind::TargetSimd),
         "target teams" => Ok(DirectiveKind::TargetTeams),
@@ -151,6 +157,12 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         "target teams distribute parallel for simd" => {
             Ok(DirectiveKind::TargetTeamsDistributeParallelForSimd)
         }
+        "target teams distribute parallel do" => {
+            Ok(DirectiveKind::TargetTeamsDistributeParallelFor)
+        }
+        "target teams distribute parallel do simd" => {
+            Ok(DirectiveKind::TargetTeamsDistributeParallelForSimd)
+        }
         "target teams loop" => Ok(DirectiveKind::TargetTeamsLoop),
 
         // Teams constructs
@@ -159,6 +171,8 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         "teams distribute simd" => Ok(DirectiveKind::TeamsDistributeSimd),
         "teams distribute parallel for" => Ok(DirectiveKind::TeamsDistributeParallelFor),
         "teams distribute parallel for simd" => Ok(DirectiveKind::TeamsDistributeParallelForSimd),
+        "teams distribute parallel do" => Ok(DirectiveKind::TeamsDistributeParallelFor),
+        "teams distribute parallel do simd" => Ok(DirectiveKind::TeamsDistributeParallelForSimd),
         "teams loop" => Ok(DirectiveKind::TeamsLoop),
 
         // Synchronization constructs
@@ -181,6 +195,8 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         "distribute simd" => Ok(DirectiveKind::DistributeSimd),
         "distribute parallel for" => Ok(DirectiveKind::DistributeParallelFor),
         "distribute parallel for simd" => Ok(DirectiveKind::DistributeParallelForSimd),
+        "distribute parallel do" => Ok(DirectiveKind::DistributeParallelFor),
+        "distribute parallel do simd" => Ok(DirectiveKind::DistributeParallelForSimd),
 
         // Meta-directives
         "metadirective" => Ok(DirectiveKind::Metadirective),

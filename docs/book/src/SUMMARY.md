@@ -20,6 +20,7 @@
 - [API Reference](./api-reference.md)
 - [OpenMP Support Matrix](./openmp-support.md)
 - [Line Continuations](./line-continuations.md)
+- [Directive Language Conversion](./language-conversion.md)
 
 # Developer Guide
 

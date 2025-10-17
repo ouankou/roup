@@ -28,12 +28,15 @@ The complete Rust API documentation is auto-generated from the source code using
 - **`roup::ir::types`** - Common types
   - `Language` - Source language (C, C++, Fortran)
   - `SourceLocation` - Position in source code
+- **`roup::ir::language_conversion`** - Directive language translation helpers
+  - `convert_directive_language()` - Render a directive in a different language
 
 ### Quick Links
 
 - [Parse Functions](./api/roup/parser/index.html)
 - [Directive Types](./api/roup/ir/directive/index.html)
 - [Clause Types](./api/roup/ir/clause/index.html)
+- [Language Conversion](./language-conversion.md)
 
 ---
 
@@ -54,6 +57,12 @@ void roup_directive_free(OmpDirective* directive);
 
 // Free clause (usually not needed - owned by directive)
 void roup_clause_free(OmpClause* clause);
+
+// Convert directive text between languages
+char* roup_convert_language(const char* input, int32_t from_lang, int32_t to_lang);
+
+// Free strings returned by roup_convert_language()
+void roup_string_free(char* ptr);
 ```
 
 ### Directive Query Functions
