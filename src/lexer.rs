@@ -157,18 +157,29 @@ pub fn skip_space_and_comments(input: &str) -> IResult<&str, &str> {
     let mut i = 0;
     let bytes = input.as_bytes();
     let len = bytes.len();
+    let mut saw_newline = false;
 
     while i < len {
         // Handle C/C++ line continuations using backslash-newline
         if let Some(next_idx) = skip_c_line_continuation(input, i) {
             i = next_idx;
+            saw_newline = true;
             continue;
         }
 
         // Handle Fortran continuation markers using trailing ampersand
         if let Some(next_idx) = skip_fortran_continuation(input, i) {
             i = next_idx;
+            saw_newline = true;
             continue;
+        }
+
+        if saw_newline {
+            if let Some((next_idx, still_newline)) = skip_fortran_leading_continuation(input, i) {
+                i = next_idx;
+                saw_newline = still_newline;
+                continue;
+            }
         }
 
         // Learning Rust: Working with Bytes
@@ -181,6 +192,9 @@ pub fn skip_space_and_comments(input: &str) -> IResult<&str, &str> {
             // chars() iterates over Unicode scalar values
             // len_utf8() returns bytes needed for this character
             let ch = input[i..].chars().next().unwrap();
+            if matches!(ch, '\n' | '\r') {
+                saw_newline = true;
+            }
             i += ch.len_utf8();
             continue;
         }
@@ -188,6 +202,10 @@ pub fn skip_space_and_comments(input: &str) -> IResult<&str, &str> {
         // Handle /* */ comments
         if i + 1 < len && &input[i..i + 2] == "/*" {
             if let Some(end) = input[i + 2..].find("*/") {
+                let comment_body = &input[i + 2..i + 2 + end];
+                if comment_body.contains('\n') || comment_body.contains('\r') {
+                    saw_newline = true;
+                }
                 i += 2 + end + 2;
                 continue;
             } else {
@@ -201,6 +219,7 @@ pub fn skip_space_and_comments(input: &str) -> IResult<&str, &str> {
         if i + 1 < len && &input[i..i + 2] == "//" {
             if let Some(end) = input[i + 2..].find('\n') {
                 i += 2 + end + 1;
+                saw_newline = true;
             } else {
                 i = len;
             }
@@ -307,7 +326,26 @@ pub fn collapse_line_continuations<'a>(input: &'a str) -> Cow<'a, str> {
         } else if bytes[idx] == b'&' {
             if let Some(next) = skip_fortran_continuation(input, idx) {
                 changed = true;
-                // For Fortran, also preserve token separation
+                if !output.is_empty() && !output.ends_with(|c: char| c.is_whitespace()) {
+                    output.push(' ');
+                }
+                idx = next;
+                continue;
+            }
+
+            if is_start_of_line(input, idx) {
+                if let Some((next, _)) = skip_fortran_leading_continuation(input, idx) {
+                    changed = true;
+                    if !output.is_empty() && !output.ends_with(|c: char| c.is_whitespace()) {
+                        output.push(' ');
+                    }
+                    idx = next;
+                    continue;
+                }
+            }
+        } else if is_start_of_line(input, idx) {
+            if let Some((next, _)) = skip_fortran_leading_continuation(input, idx) {
+                changed = true;
                 if !output.is_empty() && !output.ends_with(|c: char| c.is_whitespace()) {
                     output.push(' ');
                 }
@@ -341,7 +379,7 @@ fn skip_c_line_continuation(input: &str, idx: usize) -> Option<usize> {
     }
 
     if next >= len {
-        return Some(len);
+        return None;
     }
 
     match bytes[next] {
@@ -389,7 +427,7 @@ fn skip_fortran_continuation(input: &str, idx: usize) -> Option<usize> {
     }
 
     if next >= len {
-        return Some(len);
+        return None;
     }
 
     if bytes[next] == b'\r' {
@@ -425,20 +463,168 @@ fn skip_fortran_continuation(input: &str, idx: usize) -> Option<usize> {
         while next < len && matches!(bytes[next], b' ' | b'\t') {
             next += 1;
         }
+
+        if next >= len {
+            return Some(len);
+        }
+
+        match bytes[next] {
+            b'!' => {
+                next += 1;
+                while next < len && bytes[next] != b'\n' && bytes[next] != b'\r' {
+                    next += 1;
+                }
+                if next < len {
+                    if bytes[next] == b'\r' {
+                        next += 1;
+                        if next < len && bytes[next] == b'\n' {
+                            next += 1;
+                        }
+                    } else if bytes[next] == b'\n' {
+                        next += 1;
+                    }
+                }
+                while next < len && matches!(bytes[next], b' ' | b'\t') {
+                    next += 1;
+                }
+            }
+            b'\r' => {
+                next += 1;
+                if next < len && bytes[next] == b'\n' {
+                    next += 1;
+                }
+                while next < len && matches!(bytes[next], b' ' | b'\t') {
+                    next += 1;
+                }
+            }
+            b'\n' => {
+                next += 1;
+                while next < len && matches!(bytes[next], b' ' | b'\t') {
+                    next += 1;
+                }
+            }
+            _ => {}
+        }
     }
 
     Some(next)
 }
 
+fn skip_fortran_leading_continuation(input: &str, idx: usize) -> Option<(usize, bool)> {
+    let bytes = input.as_bytes();
+    let len = bytes.len();
+    if idx >= len {
+        return None;
+    }
+
+    let mut next = idx;
+
+    if let Some(len_sent) = match_fortran_sentinel(&input[next..]) {
+        next += len_sent;
+        while next < len && matches!(bytes[next], b' ' | b'\t') {
+            next += 1;
+        }
+    }
+
+    if next >= len || bytes[next] != b'&' {
+        return None;
+    }
+
+    next += 1;
+    while next < len && matches!(bytes[next], b' ' | b'\t') {
+        next += 1;
+    }
+
+    if next >= len {
+        return Some((len, true));
+    }
+
+    match bytes[next] {
+        b'!' => {
+            next += 1;
+            while next < len && bytes[next] != b'\n' && bytes[next] != b'\r' {
+                next += 1;
+            }
+            if next < len {
+                if bytes[next] == b'\r' {
+                    next += 1;
+                    if next < len && bytes[next] == b'\n' {
+                        next += 1;
+                    }
+                } else if bytes[next] == b'\n' {
+                    next += 1;
+                }
+            }
+            while next < len && matches!(bytes[next], b' ' | b'\t') {
+                next += 1;
+            }
+            Some((next, true))
+        }
+        b'\r' => {
+            next += 1;
+            if next < len && bytes[next] == b'\n' {
+                next += 1;
+            }
+            while next < len && matches!(bytes[next], b' ' | b'\t') {
+                next += 1;
+            }
+            Some((next, true))
+        }
+        b'\n' => {
+            next += 1;
+            while next < len && matches!(bytes[next], b' ' | b'\t') {
+                next += 1;
+            }
+            Some((next, true))
+        }
+        _ => Some((next, false)),
+    }
+}
+
+fn is_start_of_line(input: &str, idx: usize) -> bool {
+    if idx == 0 {
+        return false;
+    }
+
+    for ch in input[..idx].chars().rev() {
+        match ch {
+            ' ' | '\t' => continue,
+            '\n' | '\r' => return true,
+            _ => return false,
+        }
+    }
+
+    true
+}
+
 fn match_fortran_sentinel(input: &str) -> Option<usize> {
-    let candidates = ["!$omp", "c$omp", "*$omp"];
-    for candidate in candidates {
+    let long_candidates = ["!$omp", "c$omp", "*$omp"];
+    for candidate in long_candidates {
         if input.len() >= candidate.len()
             && input[..candidate.len()].eq_ignore_ascii_case(candidate)
         {
             return Some(candidate.len());
         }
     }
+
+    let short_candidates = ["!$", "c$", "*$"];
+    for candidate in short_candidates {
+        if input.len() >= candidate.len()
+            && input[..candidate.len()].eq_ignore_ascii_case(candidate)
+        {
+            let rest = &input[candidate.len()..];
+            if rest.is_empty() {
+                return Some(candidate.len());
+            }
+
+            if let Some(next) = rest.chars().next() {
+                if matches!(next, ' ' | '\t' | '\r' | '\n' | '&') {
+                    return Some(candidate.len());
+                }
+            }
+        }
+    }
+
     None
 }
 
