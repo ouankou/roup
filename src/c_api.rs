@@ -64,6 +64,7 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
+use crate::ir::{convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
 use crate::lexer::Language;
 use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
 
@@ -361,6 +362,163 @@ pub extern "C" fn roup_parse_with_language(
     };
 
     Box::into_raw(Box::new(c_directive))
+}
+
+// ============================================================================
+// Translation Functions (C/C++ ↔ Fortran)
+// ============================================================================
+
+/// Convert an OpenMP directive from one language to another.
+///
+/// This function translates OpenMP directives between C/C++ and Fortran syntax:
+/// - Sentinel conversion: `#pragma omp` ↔ `!$omp`
+/// - Loop directive names: `for` ↔ `do`, `parallel for` ↔ `parallel do`, etc.
+/// - Clause preservation: All clauses are preserved as-is
+///
+/// ## Parameters
+/// - `input`: Null-terminated string containing the directive
+/// - `from_language`: Source language (ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE, ROUP_LANG_FORTRAN_FIXED)
+/// - `to_language`: Target language (ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE)
+///
+/// ## Returns
+/// - Pointer to null-terminated C string with translated directive on success
+/// - `NULL` on error:
+///   - `input` is NULL
+///   - `from_language` or `to_language` is invalid
+///   - `input` contains invalid UTF-8
+///   - Parse error (invalid OpenMP directive syntax)
+///
+/// ## Memory Management
+/// The returned string is heap-allocated and must be freed by calling `roup_string_free()`.
+///
+/// ## Limitations
+/// - **Expression translation**: Expressions within clauses are NOT translated
+///   (e.g., C syntax like `arr[i]` remains unchanged)
+/// - **Fixed-form output**: Only free-form `!$omp` output is supported (ROUP_LANG_FORTRAN_FIXED not supported as target)
+/// - **Surrounding code**: Only directive lines are translated, not actual source code
+///
+/// ## Example (C to Fortran)
+/// ```c
+/// const char* c_input = "#pragma omp parallel for private(i) schedule(static, 4)";
+/// char* fortran = roup_convert_language(c_input, ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+/// if (fortran) {
+///     printf("%s\n", fortran);  // Output: !$omp parallel do private(i) schedule(static, 4)
+///     roup_string_free(fortran);
+/// }
+/// ```
+///
+/// ## Example (Fortran to C)
+/// ```c
+/// const char* fortran_input = "!$omp parallel do private(i)";
+/// char* c_output = roup_convert_language(fortran_input, ROUP_LANG_FORTRAN_FREE, ROUP_LANG_C);
+/// if (c_output) {
+///     printf("%s\n", c_output);  // Output: #pragma omp parallel for private(i)
+///     roup_string_free(c_output);
+/// }
+/// ```
+#[no_mangle]
+pub extern "C" fn roup_convert_language(
+    input: *const c_char,
+    from_language: i32,
+    to_language: i32,
+) -> *mut c_char {
+    // NULL check
+    if input.is_null() {
+        return ptr::null_mut();
+    }
+
+    // Convert language codes to IR Language enum
+    let from_lang = match language_code_to_ir_language(from_language) {
+        Some(lang) => lang,
+        None => return ptr::null_mut(), // Invalid from_language
+    };
+
+    let to_lang = match language_code_to_ir_language(to_language) {
+        Some(lang) => lang,
+        None => return ptr::null_mut(), // Invalid to_language
+    };
+
+    // Convert C string to Rust &str
+    let c_str = unsafe { CStr::from_ptr(input) };
+
+    let rust_str = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return ptr::null_mut(), // Invalid UTF-8
+    };
+
+    // Return early if input is empty
+    if rust_str.trim().is_empty() {
+        return ptr::null_mut();
+    }
+
+    // Convert from_language code to lexer::Language for parser
+    // IMPORTANT: Map language code directly to preserve fixed-form vs free-form distinction
+    let lexer_lang = match from_language {
+        ROUP_LANG_C => Language::C,
+        ROUP_LANG_FORTRAN_FREE => Language::FortranFree,
+        ROUP_LANG_FORTRAN_FIXED => Language::FortranFixed,
+        _ => return ptr::null_mut(), // Invalid from_language
+    };
+
+    // Parse the directive with the source language
+    let parser = openmp::parser().with_language(lexer_lang);
+    let (rest, directive) = match parser.parse(rust_str) {
+        Ok(result) => result,
+        Err(_) => return ptr::null_mut(), // Parse error
+    };
+
+    // Check for unparsed trailing input
+    if !rest.trim().is_empty() {
+        return ptr::null_mut();
+    }
+
+    // Convert to IR with source language context
+    let config = ParserConfig::with_parsing(from_lang);
+    let ir = match convert_directive(&directive, SourceLocation::start(), from_lang, &config) {
+        Ok(ir) => ir,
+        Err(_) => return ptr::null_mut(), // Conversion error
+    };
+
+    // Translate to target language
+    // Note: We don't modify the IR's language field, just render in target language
+    let output_str = ir.to_string_for_language(to_lang);
+
+    // Allocate C string for return
+    match CString::new(output_str) {
+        Ok(c_string) => c_string.into_raw(),
+        Err(_) => ptr::null_mut(), // String contains null bytes (shouldn't happen)
+    }
+}
+
+/// Free a string allocated by `roup_convert_language()`.
+///
+/// ## Parameters
+/// - `ptr`: Pointer to string returned by `roup_convert_language()`
+///
+/// ## Safety
+/// - Must only be called once per string
+/// - Pointer must be from `roup_convert_language()`
+/// - Do not use pointer after calling this function
+///
+/// ## Example
+/// ```c
+/// char* output = roup_convert_language(input, ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+/// if (output) {
+///     printf("%s\n", output);
+///     roup_string_free(output);
+/// }
+/// ```
+#[no_mangle]
+pub extern "C" fn roup_string_free(ptr: *mut c_char) {
+    if ptr.is_null() {
+        return;
+    }
+
+    // UNSAFE: Convert raw pointer back to CString for deallocation
+    // Safety: Pointer came from CString::into_raw in roup_convert_language
+    unsafe {
+        drop(CString::from_raw(ptr));
+    }
 }
 
 /// Free a clause.
@@ -681,6 +839,28 @@ pub extern "C" fn roup_string_list_free(list: *mut OmpStringList) {
 //
 // These functions handle conversion between Rust and C representations.
 // They're not exported because C doesn't need to call them directly.
+
+/// Convert language code to IR Language enum.
+///
+/// Maps the C API language constants to the ir::Language enum used for
+/// semantic representation and translation.
+///
+/// ## Language Code Mapping:
+/// - 0 (ROUP_LANG_C) → Language::C (use this for both C and C++)
+/// - 1 (ROUP_LANG_FORTRAN_FREE) → Language::Fortran
+/// - 2 (ROUP_LANG_FORTRAN_FIXED) → Language::Fortran
+///
+/// Note: Both Fortran variants map to Language::Fortran in IR, as the
+/// distinction between free-form and fixed-form is a lexical concern,
+/// not a semantic one. There is no separate constant for C++; use ROUP_LANG_C for both C and C++.
+fn language_code_to_ir_language(code: i32) -> Option<IrLanguage> {
+    match code {
+        ROUP_LANG_C => Some(IrLanguage::C), // C/C++ use same OpenMP syntax
+        ROUP_LANG_FORTRAN_FREE => Some(IrLanguage::Fortran),
+        ROUP_LANG_FORTRAN_FIXED => Some(IrLanguage::Fortran),
+        _ => None, // Invalid language code
+    }
+}
 
 /// Allocate a C string from Rust &str.
 ///
@@ -1343,5 +1523,193 @@ mod tests {
 
         roup_clause_iterator_free(iter);
         roup_directive_free(directive);
+    }
+
+    #[test]
+    fn test_convert_c_to_fortran() {
+        // Test basic C to Fortran translation
+        let c_input = CString::new("#pragma omp parallel for").unwrap();
+        let fortran = roup_convert_language(c_input.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(!fortran.is_null(), "Translation should succeed");
+
+        let result = unsafe { CStr::from_ptr(fortran).to_str().unwrap() };
+        assert_eq!(result, "!$omp parallel do");
+
+        roup_string_free(fortran);
+    }
+
+    #[test]
+    fn test_convert_fortran_to_c() {
+        // Test basic Fortran to C translation
+        let fortran_input = CString::new("!$omp parallel do").unwrap();
+        let c_output =
+            roup_convert_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FREE, ROUP_LANG_C);
+        assert!(!c_output.is_null(), "Translation should succeed");
+
+        let result = unsafe { CStr::from_ptr(c_output).to_str().unwrap() };
+        assert_eq!(result, "#pragma omp parallel for");
+
+        roup_string_free(c_output);
+    }
+
+    #[test]
+    fn test_convert_with_clauses() {
+        // Test C to Fortran with clauses
+        let c_input =
+            CString::new("#pragma omp parallel for private(i) schedule(static, 4)").unwrap();
+        let fortran = roup_convert_language(c_input.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(!fortran.is_null(), "Translation should succeed");
+
+        let result = unsafe { CStr::from_ptr(fortran).to_str().unwrap() };
+        assert_eq!(result, "!$omp parallel do private(i) schedule(static, 4)");
+
+        roup_string_free(fortran);
+    }
+
+    #[test]
+    fn test_convert_complex_directive() {
+        // Test complex directive translation
+        let c_input =
+            CString::new("#pragma omp target teams distribute parallel for simd collapse(2)")
+                .unwrap();
+        let fortran = roup_convert_language(c_input.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(!fortran.is_null(), "Translation should succeed");
+
+        let result = unsafe { CStr::from_ptr(fortran).to_str().unwrap() };
+        assert_eq!(
+            result,
+            "!$omp target teams distribute parallel do simd collapse(2)"
+        );
+
+        roup_string_free(fortran);
+    }
+
+    #[test]
+    fn test_convert_for_only() {
+        // Test standalone for/do directive
+        let c_input = CString::new("#pragma omp for nowait").unwrap();
+        let fortran = roup_convert_language(c_input.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(!fortran.is_null(), "Translation should succeed");
+
+        let result = unsafe { CStr::from_ptr(fortran).to_str().unwrap() };
+        assert_eq!(result, "!$omp do nowait");
+
+        roup_string_free(fortran);
+    }
+
+    #[test]
+    fn test_convert_non_loop_directive() {
+        // Test non-loop directives (should remain unchanged)
+        let c_input = CString::new("#pragma omp parallel").unwrap();
+        let fortran = roup_convert_language(c_input.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(!fortran.is_null(), "Translation should succeed");
+
+        let result = unsafe { CStr::from_ptr(fortran).to_str().unwrap() };
+        assert_eq!(result, "!$omp parallel");
+
+        roup_string_free(fortran);
+    }
+
+    #[test]
+    fn test_convert_null_input() {
+        // Test NULL input handling
+        let result = roup_convert_language(ptr::null(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(result.is_null(), "NULL input should return NULL");
+    }
+
+    #[test]
+    fn test_convert_invalid_language() {
+        // Test invalid language codes
+        let c_input = CString::new("#pragma omp parallel").unwrap();
+
+        // Invalid from_language
+        let result = roup_convert_language(c_input.as_ptr(), 999, ROUP_LANG_FORTRAN_FREE);
+        assert!(result.is_null(), "Invalid from_language should return NULL");
+
+        // Invalid to_language
+        let result = roup_convert_language(c_input.as_ptr(), ROUP_LANG_C, 999);
+        assert!(result.is_null(), "Invalid to_language should return NULL");
+    }
+
+    #[test]
+    fn test_convert_empty_input() {
+        // Test empty string handling
+        let empty = CString::new("").unwrap();
+        let result = roup_convert_language(empty.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(result.is_null(), "Empty input should return NULL");
+
+        // Test whitespace-only input
+        let whitespace = CString::new("   ").unwrap();
+        let result =
+            roup_convert_language(whitespace.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(result.is_null(), "Whitespace-only input should return NULL");
+    }
+
+    #[test]
+    fn test_convert_parse_error() {
+        // Test invalid directive syntax
+        let invalid = CString::new("not a pragma").unwrap();
+        let result = roup_convert_language(invalid.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(
+            result.is_null(),
+            "Invalid directive syntax should return NULL"
+        );
+    }
+
+    #[test]
+    fn test_string_free_null() {
+        // Test that roup_string_free handles NULL gracefully
+        roup_string_free(ptr::null_mut());
+        // Should not crash
+    }
+
+    #[test]
+    fn test_convert_fortran_fixed_form_to_c() {
+        // Test uppercase fixed-form sentinel (C$OMP)
+        let fortran_input = CString::new("C$OMP PARALLEL DO").unwrap();
+        let c_output =
+            roup_convert_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FIXED, ROUP_LANG_C);
+        assert!(!c_output.is_null(), "Fixed-form translation should succeed");
+
+        let result = unsafe { CStr::from_ptr(c_output).to_str().unwrap() };
+        assert_eq!(result, "#pragma omp parallel for");
+
+        roup_string_free(c_output);
+
+        // Test lowercase fixed-form sentinel (c$omp)
+        let fortran_input = CString::new("c$omp do schedule(dynamic)").unwrap();
+        let c_output =
+            roup_convert_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FIXED, ROUP_LANG_C);
+        assert!(!c_output.is_null(), "Fixed-form translation should succeed");
+
+        let result = unsafe { CStr::from_ptr(c_output).to_str().unwrap() };
+        assert_eq!(result, "#pragma omp for schedule(dynamic)");
+
+        roup_string_free(c_output);
+
+        // Test asterisk fixed-form sentinel (*$omp)
+        let fortran_input = CString::new("*$omp parallel").unwrap();
+        let c_output =
+            roup_convert_language(fortran_input.as_ptr(), ROUP_LANG_FORTRAN_FIXED, ROUP_LANG_C);
+        assert!(!c_output.is_null(), "Fixed-form translation should succeed");
+
+        let result = unsafe { CStr::from_ptr(c_output).to_str().unwrap() };
+        assert_eq!(result, "#pragma omp parallel");
+
+        roup_string_free(c_output);
+    }
+
+    #[test]
+    fn test_convert_c_to_fortran_free_form() {
+        // Verify C to Fortran always outputs free-form (not fixed-form)
+        let c_input = CString::new("#pragma omp parallel for").unwrap();
+        let fortran_free =
+            roup_convert_language(c_input.as_ptr(), ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+        assert!(!fortran_free.is_null());
+
+        let result = unsafe { CStr::from_ptr(fortran_free).to_str().unwrap() };
+        assert_eq!(result, "!$omp parallel do", "Output should be free-form");
+
+        roup_string_free(fortran_free);
     }
 }
