@@ -37,6 +37,187 @@ The complete Rust API documentation is auto-generated from the source code using
 
 ---
 
+## Translation API
+
+ROUP supports **bidirectional translation** between C/C++ and Fortran OpenMP directive syntax. This is useful for automatically porting benchmarks and code between languages.
+
+### Rust Translation API
+
+The `roup::ir::translate` module provides high-level translation functions:
+
+```rust,ignore
+use roup::ir::translate::{translate_c_to_fortran, translate_fortran_to_c};
+
+// C/C++ → Fortran
+let fortran = translate_c_to_fortran("#pragma omp parallel for private(i)")?;
+// Result: "!$omp parallel do private(i)"
+
+// Fortran → C/C++
+let c_code = translate_fortran_to_c("!$omp parallel do schedule(static, 4)")?;
+// Result: "#pragma omp parallel for schedule(static, 4)"
+```
+
+**Advanced API** (returns IR for further processing):
+
+```rust,ignore
+use roup::ir::{translate::translate_c_to_fortran_ir, Language, ParserConfig};
+
+let config = ParserConfig::with_parsing(Language::C);
+let ir = translate_c_to_fortran_ir("#pragma omp parallel for", config)?;
+
+// Can query or modify the IR
+println!("Language: {:?}", ir.language());
+println!("Fortran: {}", ir.to_string_for_language(Language::Fortran));
+```
+
+### Supported Translations
+
+#### Loop Directive Mapping
+
+The translation correctly maps **loop directive names** between languages:
+
+| C/C++ | Fortran | Notes |
+|-------|---------|-------|
+| `for` | `do` | Basic loop construct |
+| `for simd` | `do simd` | SIMD loop |
+| `parallel for` | `parallel do` | Parallel loop |
+| `parallel for simd` | `parallel do simd` | Parallel SIMD loop |
+| `distribute parallel for` | `distribute parallel do` | Distributed parallel loop |
+| `distribute parallel for simd` | `distribute parallel do simd` | All combined forms |
+| `teams distribute parallel for` | `teams distribute parallel do` | Complex nesting |
+| `target teams distribute parallel for simd` | `target teams distribute parallel do simd` | Maximum nesting |
+
+**Complete list**: All 12 loop directive variants are supported in both directions.
+
+#### Sentinel Translation
+
+| C/C++ | Fortran |
+|-------|---------|
+| `#pragma omp` | `!$omp` (free-form) |
+
+**Note**: Fixed-form Fortran sentinels (`c$omp`, `*$omp`) are supported for parsing but output uses free-form only.
+
+#### Clause Preservation
+
+✅ **All clauses are preserved as-is** — The OpenMP standard defines clauses identically across languages:
+
+```text
+Input (C):
+#pragma omp parallel for private(i,j) schedule(static, 4) collapse(2)
+
+Output (Fortran) - clauses unchanged:
+!$omp parallel do private(i,j) schedule(static, 4) collapse(2)
+```
+
+### Limitations
+
+The translation focuses on **directive syntax only**. The following are **intentionally not translated**:
+
+| Feature | Status | Reason |
+|---------|--------|--------|
+| **Expressions in clauses** | ❌ Not translated | Language-specific syntax (e.g., `arr[i]` vs `arr(i)`) requires full expression parsing |
+| **Variable names** | ✅ Preserved | Variable identifiers work across languages |
+| **Surrounding code** | ❌ Not translated | Only directive lines are processed |
+| **Fixed-form Fortran output** | ❌ Not supported | Free-form `!$omp` is the modern standard |
+| **Comments/whitespace** | ❌ Not preserved | Output is normalized |
+
+**Example limitation:**
+```c
+// Input (C)
+#pragma omp parallel for reduction(+:sum) if(n > 1000)
+
+// Output (Fortran) - expressions NOT translated
+!$omp parallel do reduction(+:sum) if(n > 1000)
+//                                   ^^^^^^^^^^^^
+//                                   Still C syntax! Manual fix needed.
+```
+
+**Recommendation**: Use translation for directive structure, then manually adjust expressions for target language.
+
+### C Translation API
+
+The C API provides `roup_convert_language()` for language conversion:
+
+```c
+// Convert C to Fortran
+const char* c_input = "#pragma omp parallel for private(x)";
+char* fortran_output = roup_convert_language(
+    c_input,
+    ROUP_LANG_C,              // from language
+    ROUP_LANG_FORTRAN_FREE    // to language
+);
+
+if (fortran_output != NULL) {
+    printf("Fortran: %s\n", fortran_output);
+    // Result: "!$omp parallel do private(x)"
+
+    // IMPORTANT: Free the returned string
+    roup_string_free(fortran_output);
+}
+```
+
+**Language codes:**
+```c
+#define ROUP_LANG_C             0
+#define ROUP_LANG_FORTRAN_FREE  2
+#define ROUP_LANG_FORTRAN_FIXED 3
+```
+
+**Function signature:**
+```c
+// Convert directive between languages
+// Returns NULL on error (must free with roup_string_free on success)
+char* roup_convert_language(
+    const char* input,
+    int32_t from_language,
+    int32_t to_language
+);
+
+// Free string returned by roup_convert_language
+void roup_string_free(char* ptr);
+```
+
+**Error handling:** Returns `NULL` if:
+- Input is NULL or empty
+- Language code is invalid
+- Parsing fails
+- Conversion fails
+
+### Translation Error Handling
+
+**Rust API:**
+```rust,ignore
+use roup::ir::translate::{translate_c_to_fortran, TranslationError};
+
+match translate_c_to_fortran(input) {
+    Ok(fortran) => println!("Translated: {}", fortran),
+    Err(TranslationError::EmptyInput) => eprintln!("Input is empty"),
+    Err(TranslationError::ParseError(msg)) => eprintln!("Parse failed: {}", msg),
+    Err(TranslationError::ConversionError(err)) => eprintln!("Conversion failed: {}", err),
+}
+```
+
+**C API:**
+```c
+char* result = roup_convert_language(input, ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE);
+if (result == NULL) {
+    fprintf(stderr, "Translation failed\n");
+    return 1;
+}
+// Use result...
+roup_string_free(result);
+```
+
+### Use Cases
+
+1. **Benchmark porting** - Convert OpenMP benchmarks between languages
+2. **Multi-language codebases** - Generate equivalent directives for polyglot projects
+3. **Documentation** - Show directive equivalents across languages
+4. **Code generation** - Generate language-specific directives from templates
+5. **Migration tools** - Assist in language migration projects
+
+---
+
 ## C API Reference
 
 ROUP exports 16 C functions for FFI integration, providing a minimal C API with unsafe pointer operations only at the FFI boundary. All functions use direct C pointers (`*mut OmpDirective`, `*mut OmpClause`) following a standard malloc/free pattern.
