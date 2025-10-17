@@ -37,7 +37,7 @@ fi
 # ===================================================================
 echo "=== 2. Rust Build ==="
 echo -n "Building debug (all targets)... "
-if cargo build --all-targets 2>&1 | tee /tmp/build_debug.log | grep -q "Finished"; then
+if cargo build --locked --all-targets 2>&1 | tee /tmp/build_debug.log | grep -q "Finished"; then
     warnings=$(grep -i "warning:" /tmp/build_debug.log | grep -v "build.rs" | wc -l)
     if [ "$warnings" -eq 0 ]; then
         echo -e "${GREEN}✓ PASS (0 warnings)${NC}"
@@ -50,7 +50,7 @@ else
 fi
 
 echo -n "Building release (all targets)... "
-if cargo build --release --all-targets 2>&1 | tee /tmp/build_release.log | grep -q "Finished"; then
+if cargo build --locked --release --all-targets 2>&1 | tee /tmp/build_release.log | grep -q "Finished"; then
     warnings=$(grep -i "warning:" /tmp/build_release.log | grep -v "build.rs" | wc -l)
     if [ "$warnings" -eq 0 ]; then
         echo -e "${GREEN}✓ PASS (0 warnings)${NC}"
@@ -67,7 +67,7 @@ fi
 # ===================================================================
 echo "=== 3. Rust Unit Tests ==="
 echo -n "Running cargo test --lib... "
-if cargo test --lib > /tmp/test_lib.log 2>&1; then
+if cargo test --locked --lib > /tmp/test_lib.log 2>&1; then
     passed=$(grep "test result:" /tmp/test_lib.log | grep -o "[0-9]* passed" | grep -o "[0-9]*")
     echo -e "${GREEN}✓ PASS ($passed tests)${NC}"
 else
@@ -81,7 +81,7 @@ fi
 # ===================================================================
 echo "=== 4. Rust Integration Tests ==="
 echo -n "Running cargo test --tests... "
-if cargo test --tests > /tmp/test_integration.log 2>&1; then
+if cargo test --locked --tests > /tmp/test_integration.log 2>&1; then
     passed=$(grep "test result:" /tmp/test_integration.log | tail -1 | grep -o "[0-9]* passed" | grep -o "[0-9]*")
     echo -e "${GREEN}✓ PASS ($passed tests)${NC}"
 else
@@ -95,7 +95,7 @@ fi
 # ===================================================================
 echo "=== 5. Rust Doc Tests ==="
 echo -n "Running cargo test --doc... "
-if cargo test --doc > /tmp/test_doc.log 2>&1; then
+if cargo test --locked --doc > /tmp/test_doc.log 2>&1; then
     passed=$(grep "test result:" /tmp/test_doc.log | tail -1 | grep -o "[0-9]* passed" | grep -o "[0-9]*")
     echo -e "${GREEN}✓ PASS ($passed doctests)${NC}"
 else
@@ -109,7 +109,7 @@ fi
 # ===================================================================
 echo "=== 6. All Rust Tests Together ==="
 echo -n "Running cargo test --all-targets... "
-if cargo test --all-targets > /tmp/test_all.log 2>&1; then
+if cargo test --locked --all-targets > /tmp/test_all.log 2>&1; then
     total_passed=$(grep "test result:" /tmp/test_all.log | grep -o "[0-9]* passed" | awk '{sum+=$1} END {print sum}')
     echo -e "${GREEN}✓ PASS ($total_passed total tests)${NC}"
 else
@@ -123,7 +123,7 @@ fi
 # ===================================================================
 echo "=== 7. Examples Build ==="
 echo -n "Building all examples... "
-if cargo build --examples > /tmp/build_examples.log 2>&1; then
+if cargo build --locked --examples > /tmp/build_examples.log 2>&1; then
     echo -e "${GREEN}✓ PASS${NC}"
 else
     echo -e "${RED}✗ FAIL${NC}"
@@ -136,7 +136,7 @@ fi
 # ===================================================================
 echo "=== 8. Rust Documentation ==="
 echo -n "Building API docs (cargo doc --no-deps --all-features)... "
-if cargo doc --no-deps --all-features > /tmp/doc.log 2>&1; then
+if cargo doc --locked --no-deps --all-features > /tmp/doc.log 2>&1; then
     warnings=$(grep -i "warning:" /tmp/doc.log | wc -l)
     if [ "$warnings" -eq 0 ]; then
         echo -e "${GREEN}✓ PASS (0 warnings)${NC}"
@@ -292,7 +292,7 @@ fi
 # ===================================================================
 echo "=== 15. Header Verification ==="
 echo -n "Verifying header is up-to-date... "
-if cargo run --bin gen > /tmp/header_verify.log 2>&1; then
+if cargo run --locked --bin gen > /tmp/header_verify.log 2>&1; then
     echo -e "${GREEN}✓ PASS${NC}"
 else
     echo -e "${RED}✗ FAIL${NC}"
@@ -305,17 +305,15 @@ fi
 # ===================================================================
 echo "=== 16. Warning Check ==="
 echo -n "Checking for unexpected warnings... "
-if cargo build 2>&1 | grep -i "warning:" | grep -v "build.rs" > /tmp/warnings.log; then
-    warning_count=$(wc -l < /tmp/warnings.log)
-    if [ "$warning_count" -eq 0 ]; then
-        echo -e "${GREEN}✓ PASS (0 warnings)${NC}"
-    else
-        echo -e "${RED}✗ FAIL - $warning_count warnings found:${NC}"
-        cat /tmp/warnings.log
-        exit 1
-    fi
-else
+cargo build --locked 2>&1 | tee /tmp/warnings_raw.log > /dev/null
+grep -i "warning:" /tmp/warnings_raw.log | grep -v "build.rs" > /tmp/warnings.log || true
+warning_count=$(wc -l < /tmp/warnings.log)
+if [ "$warning_count" -eq 0 ]; then
     echo -e "${GREEN}✓ PASS (0 warnings)${NC}"
+else
+    echo -e "${RED}✗ FAIL - $warning_count warnings found:${NC}"
+    cat /tmp/warnings.log
+    exit 1
 fi
 
 # ===================================================================
@@ -324,7 +322,7 @@ fi
 echo "=== 17. Clippy Lints ==="
 if command -v cargo-clippy > /dev/null 2>&1 || cargo clippy --version > /dev/null 2>&1; then
     echo -n "Running clippy (all targets)... "
-    if cargo clippy --all-targets -- -D warnings > /tmp/clippy.log 2>&1; then
+    if cargo clippy --locked --all-targets -- -D warnings > /tmp/clippy.log 2>&1; then
         echo -e "${GREEN}✓ PASS${NC}"
     else
         echo -e "${RED}✗ FAIL - Clippy warnings found:${NC}"
@@ -342,7 +340,7 @@ fi
 # ===================================================================
 echo "=== 18. All Features Test ==="
 echo -n "Running tests with --all-features... "
-if cargo test --all-features > /tmp/test_all_features.log 2>&1; then
+if cargo test --locked --all-features > /tmp/test_all_features.log 2>&1; then
     echo -e "${GREEN}✓ PASS${NC}"
 else
     echo -e "${RED}✗ FAIL${NC}"
@@ -361,7 +359,7 @@ fi
 
 echo -n "Running benchmarks (validation mode)... "
 # Run benchmarks in quick mode for validation (not full performance measurement)
-if cargo bench --no-run > /tmp/bench.log 2>&1; then
+if cargo bench --locked --no-run > /tmp/bench.log 2>&1; then
     echo -e "${GREEN}✓ PASS (benchmarks compile)${NC}"
 else
     echo -e "${RED}✗ FAIL${NC}"

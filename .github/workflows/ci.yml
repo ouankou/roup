@@ -25,10 +25,9 @@ jobs:
       matrix:
         # MSRV + Stable Testing Approach (Rust ecosystem best practice)
         #
-        # MSRV (Minimum Supported Rust Version): 1.81
-        # - Available in Ubuntu 22.04/24.04 LTS (apt install rustc-1.81)
-        # - Minimum version supporting Cargo.lock v4 (introduced in Rust 1.78)
-        # - Set in Cargo.toml as rust-version = "1.81.0"
+        # MSRV (Minimum Supported Rust Version): 1.85
+        # - Required for mdBook dependencies (edition2024 support in ignore crate)
+        # - Set in Cargo.toml as rust-version = "1.85.0"
         #
         # Stable: Latest stable Rust release
         # - Ensures compatibility with current Rust ecosystem
@@ -37,9 +36,9 @@ jobs:
         # SINGLE SOURCE OF TRUTH: This version list is automatically read by test_rust_versions.sh
         # When you update MSRV, also update Cargo.toml rust-version field.
         #
-        # Version should be guarded with quotes (1.81 -> "1.81"). Otherwise, 1.81 may be recognized as 1.8.
+        # Version should be guarded with quotes (1.82 -> "1.82"). Otherwise, 1.82 may be recognized as 1.8.
         # Note: Clippy lints can vary between versions. Test locally with ./test_rust_versions.sh before pushing.
-        version: ["1.81", "stable"]
+        version: ["1.85", "stable"]
         # ubuntu-22.04-arm, ubuntu-24.04-arm and windows-11-arm are not supported yet for private repositories
         os: [ubuntu-24.04, windows-2025, macos-15]
         llvm: ["20"]
@@ -73,78 +72,43 @@ jobs:
           toolchain: ${{ matrix.version }}
           components: rustfmt, clippy
 
-      - name: Check Rust formatting
+      - name: Install mdBook (Linux)
+        if: runner.os == 'Linux'
+        run: cargo install mdbook
+        shell: bash
+
+      - name: Run comprehensive test suite (Linux)
+        if: runner.os == 'Linux'
+        run: ./test.sh
+        shell: bash
+
+      - name: Check Rust formatting (Windows/macOS)
+        if: runner.os != 'Linux'
         run: cargo fmt -- --check
 
-      - name: Run Clippy lints
-        run: cargo clippy --all-targets -- -D warnings
+      - name: Run Clippy lints (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: cargo clippy --locked --all-targets -- -D warnings
 
-      - name: Build library (debug)
-        run: cargo build --verbose
+      - name: Build library debug (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: cargo build --locked --verbose
 
-      - name: Build library (release with all targets)
-        run: cargo build --release --all-targets
+      - name: Build library release (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: cargo build --locked --release --all-targets
 
-      - name: Run Rust tests
-        run: cargo test --verbose
+      - name: Run Rust tests (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: cargo test --locked --verbose
 
-      - name: Run tests with all features
-        run: cargo test --all-features
+      - name: Run tests with all features (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: cargo test --locked --all-features
 
-      - name: Validate benchmarks compile
-        run: cargo bench --no-run
-
-      - name: Build C API examples
-        if: runner.os == 'Linux'
-        run: |
-          cargo build --release
-          cd examples/c
-          make clean
-          make BUILD_TYPE=release all
-          cd ../..
-        shell: bash
-
-      - name: Run C API examples
-        if: runner.os == 'Linux'
-        run: |
-          cd examples/c
-          make BUILD_TYPE=release run-all
-          cd ../..
-        shell: bash
-
-      - name: Build C++ examples
-        if: runner.os == 'Linux'
-        run: |
-          cd examples/cpp
-          make clean
-          make all
-          cd ../..
-        shell: bash
-
-      - name: Run C++ examples
-        if: runner.os == 'Linux'
-        run: |
-          cd examples/cpp
-          make run-all
-          cd ../..
-        shell: bash
-
-      - name: Build Fortran examples
-        if: runner.os == 'Linux'
-        run: |
-          cd examples/fortran
-          make clean
-          make all
-          cd ../..
-        shell: bash
-
-      - name: Verify header is up-to-date (pre-build validation)
-        if: runner.os == 'Linux'
-        run: |
-          # Case 2 validation: Verify committed header matches source WITHOUT regenerating
-          # Uses build.rs in standalone mode with robust syn-based AST parsing
-          cargo run --bin gen
-        shell: bash
+      - name: Validate benchmarks compile (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: cargo bench --locked --no-run
 
       - name: Test ompparser compatibility layer
         if: runner.os == 'Linux'
@@ -224,12 +188,12 @@ jobs:
         run: mdbook build docs/book
 
       - name: Build rustdoc
-        run: cargo doc --no-deps --all-features
+        run: cargo doc --locked --no-deps --all-features
         env:
           RUSTDOCFLAGS: "-D warnings"
 
       - name: Verify examples compile
-        run: cargo build --examples
+        run: cargo build --locked --examples
 
       - name: Combine documentation
         run: |

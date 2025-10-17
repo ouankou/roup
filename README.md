@@ -3,7 +3,7 @@
 **Safe, fast, and comprehensive OpenMP directive parsing**
 
 [![Docs](https://img.shields.io/badge/docs-roup.ouankou.com-blue)](https://roup.ouankou.com)
-[![Tests](https://img.shields.io/badge/tests-405%20passing-green)](https://github.com/ouankou/roup)
+[![Tests](https://img.shields.io/badge/tests-581%20passing-green)](https://github.com/ouankou/roup)
 [![Safety](https://img.shields.io/badge/unsafe-0.9%25-yellow)](https://roup.ouankou.com/architecture.html#safety-boundaries)
 [![Status](https://img.shields.io/badge/status-experimental-orange)](https://github.com/ouankou/roup)
 
@@ -18,7 +18,7 @@
 ### Rust
 ```toml
 [dependencies]
-roup = "0.3"
+roup = "0.4"
 ```
 
 ### C/C++
@@ -34,7 +34,7 @@ cargo build --release
 - ✅ **Multi-Language Support:** Rust, C, and C++ APIs
 - ✅ **OpenMP 3.0-6.0:** 128 directive keywords, 132 clause keywords
 - ✅ **Safe by Default:** 99.1% safe Rust code
-- ✅ **Experimental:** 405 tests, active development
+- ✅ **Experimental:** 581 tests, active development
 - ✅ **Modern C++:** C++17 RAII wrappers
 - ✅ **Well Documented:** [Comprehensive website](https://roup.ouankou.com)
 - 🔄 **ompparser Compatible:** Drop-in replacement layer ([see below](#ompparser-compatibility))
@@ -157,7 +157,7 @@ g++ -std=c++17 example.cpp -L./target/release -lroup -lpthread -ldl -lm -o examp
 # Build library
 cargo build --release
 
-# Run all tests (405 tests)
+# Run all tests (581 tests)
 cargo test
 
 # Build documentation
@@ -191,7 +191,7 @@ src/
 examples/
 ├── c/                  - C examples (tutorial_basic.c)
 └── cpp/                - C++ examples
-tests/                  - 405 integration tests
+tests/                  - integration & doc tests (total 581)
 docs/
 └── book/               - mdBook documentation website
 ```
@@ -219,7 +219,7 @@ ROUP is written in **99.1% safe Rust** with minimal unsafe code (~60 lines).
 
 | Language | Compiler | Version | Standard |
 |----------|----------|---------|----------|
-| Rust | rustc | 1.70+ | Edition 2021 |
+| Rust | rustc | 1.85+ | Edition 2021 |
 | C | Clang | 10+ | C99 |
 | C++ | Clang++ | 10+ | C++17 |
 
@@ -232,7 +232,7 @@ ROUP is written in **99.1% safe Rust** with minimal unsafe code (~60 lines).
 cargo test
 
 # Expected output:
-# test result: ok. 405 passed; 0 failed
+# test result: ok. 581 passed; 0 failed
 ```
 
 **Test Coverage:**
@@ -283,11 +283,8 @@ delete dir;
 **Setup:**
 
 ```bash
-```bash
-```bash
 cd compat/ompparser
 ./build.sh
-```
 
 # Or manual build:
 # 1. Initialize submodule
@@ -338,6 +335,6 @@ ROUP demonstrates Rust concepts from basics to advanced:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+BSD-3-Clause License - see [LICENSE](LICENSE) file for details.
 
 **Copyright © 2024-2025 Anjia Wang**

@@ -12,7 +12,7 @@ ROUP provides comprehensive support for **OpenMP 6.0** directives and clauses fo
 | **Directive keywords** | 128 keywords (core, combined, declarative, and meta) |
 | **Clause keywords** | 132 keywords |
 | **Languages** | C, C++, Fortran |
-| **Test Coverage** | 405 automated tests |
+| **Test Coverage** | 581 automated tests |
 | **Specification** | [OpenMP 6.0 PDF](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf) |
 
 **ROUP supports the complete OpenMP 6.0 directive and clause keyword set.** ✅
@@ -332,9 +332,10 @@ ROUP includes comprehensive automated testing:
 
 | Test Suite | Count | Coverage |
 |------------|-------|----------|
-| **Integration tests** | 143 | Directive parsing, clause combinations |
-| **Doc tests** | 262 | API examples, edge cases |
-| **Total** | **405** | All directives + clauses tested |
+| **Unit tests** | 285 | Core parsing logic |
+| **Integration tests** | 234 | Directive parsing, clause combinations |
+| **Doc tests** | 62 | API examples, edge cases |
+| **Total** | **581** | All directives + clauses tested |
 
 **Every directive and clause in OpenMP 6.0 has a passing test.** ✅
 
@@ -408,7 +409,7 @@ ROUP will be updated as new OpenMP versions are released.
 - ✅ **128 directive keywords** (core, combined, declarative, and meta-directives)
 - ✅ **132 clause keywords** (data-sharing, control, device, SIMD, sync, etc.)
 - ✅ **C/C++/Fortran** syntax support
-- ✅ **405 automated tests** (comprehensive directive/clause coverage)
+- ✅ **581 automated tests** (comprehensive directive/clause coverage)
 - ✅ **Type-safe Rust API** + **C FFI**
 - ✅ **Latest spec** (OpenMP 6.0, 2024)
 

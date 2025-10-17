@@ -35,7 +35,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-roup = "0.3"
+roup = "0.4"
 ```
 
 Then use in your code:

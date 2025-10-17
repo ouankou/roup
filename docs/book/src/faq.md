@@ -31,7 +31,7 @@ ROUP (Rust OpenMP Parser) is a library for parsing OpenMP directives from C, C++
 **No, ROUP is experimental and under active development.**
 
 **Current status:**
-- ✅ 405 tests, all passing
+- ✅ 419 tests, all passing
 - ✅ Supports OpenMP 3.0-6.0 parsing
 - ⚠️ APIs may change between versions
 - ⚠️ Some OpenMP features still being implemented
@@ -61,7 +61,7 @@ See the [OpenMP Support Matrix](./openmp-support.md) for detailed coverage.
 **For Rust projects:**
 ```toml
 [dependencies]
-roup = "0.3"
+roup = "0.4"
 ```
 
 **For C/C++ projects:**
@@ -576,7 +576,7 @@ For `no_std` support, open a [feature request](https://github.com/ouankou/roup/i
 
 **ROUP advantages:**
 - Already supports 128 directives
-- Tested with 405 tests
+- Tested with 419 tests
 - Handles edge cases
 - Active maintenance
 - OpenMP spec compliance

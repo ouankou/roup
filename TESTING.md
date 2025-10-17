@@ -12,7 +12,7 @@ This document describes the testing infrastructure and how to ensure your change
 ./test_rust_versions.sh
 
 # Test specific versions
-./test_rust_versions.sh 1.81 stable
+./test_rust_versions.sh 1.85 stable
 ```
 
 ## Rust Version Support Policy
@@ -21,10 +21,10 @@ This document describes the testing infrastructure and how to ensure your change
 
 ROUP follows the standard Rust ecosystem practice of testing **MSRV (Minimum Supported Rust Version) + stable**:
 
-- **MSRV: 1.81.0**
-  - Available in Ubuntu 22.04/24.04 LTS (`apt install rustc-1.81`)
-  - Minimum version supporting Cargo.lock v4 (required for our dependencies)
-  - Set in `Cargo.toml` as `rust-version = "1.81.0"`
+- **MSRV: 1.85.0**
+  - Minimum version supporting edition2024 (required for mdBook dependencies)
+  - Released February 2025
+  - Set in `Cargo.toml` as `rust-version = "1.85.0"`
   - Only bumped when new language features or tooling requirements needed
 
 - **Stable: Latest stable release**
@@ -34,13 +34,13 @@ ROUP follows the standard Rust ecosystem practice of testing **MSRV (Minimum Sup
 **Why This Approach?**
 
 - ✅ **Industry standard**: Most Rust crates use MSRV + stable
-- ✅ **Ubuntu LTS compatibility**: 1.81 is available via apt on 22.04/24.04
+- ✅ **edition2024 support**: 1.85 is first stable version with edition2024
 - ✅ **Lower maintenance**: Only 2 versions to track instead of 6
 - ✅ **Clear compatibility promise**: Users know minimum version required
 - ✅ **Fewer CI minutes**: 2×3 = 6 jobs instead of 6×3 = 18
 
 **CI Matrix:**
-- **Rust versions:** 1.81 (MSRV), stable (2 versions)
+- **Rust versions:** 1.85 (MSRV), stable (2 versions)
 - **Operating systems:** Ubuntu 24.04, Windows 2025, macOS 15 (3 OSes)
 - **Total combinations:** 6 jobs
 
@@ -76,7 +76,7 @@ $ ./test_rust_versions.sh
 
 # Internally, it parses:
 # .github/workflows/ci.yml
-#   version: ["1.81", "stable"]
+#   version: ["1.85", "stable"]
 #
 # And tests those exact versions locally
 ```
@@ -86,18 +86,18 @@ $ ./test_rust_versions.sh
 1. Update **TWO places** (kept in sync):
    ```yaml
    # .github/workflows/ci.yml
-   version: ["1.81", "stable"]
+   version: ["1.85", "stable"]
    ```
 
    ```toml
    # Cargo.toml
-   rust-version = "1.81.0"
+   rust-version = "1.85.0"
    ```
 
 2. Run `./test_rust_versions.sh` - automatically picks up the new version:
    ```bash
    $ ./test_rust_versions.sh
-   Testing against Rust versions: 1.81 stable
+   Testing against Rust versions: 1.85 stable
    ```
 
 3. Update this TESTING.md documentation.
@@ -164,10 +164,10 @@ Clippy lints evolve across Rust versions. A lint that passes on stable might fai
 ./test_rust_versions.sh
 
 # Test specific versions
-./test_rust_versions.sh 1.81 stable
+./test_rust_versions.sh 1.85 stable
 
 # Test with custom versions (for debugging)
-./test_rust_versions.sh 1.81 1.81 1.85 stable
+./test_rust_versions.sh 1.85 1.86 1.87 stable
 ```
 
 **When to Use:**
@@ -183,7 +183,7 @@ Clippy lints evolve across Rust versions. A lint that passes on stable might fai
 The GitHub Actions CI runs a focused matrix:
 
 **Matrix Dimensions:**
-- **Rust versions:** 1.81 (MSRV), stable (2 versions)
+- **Rust versions:** 1.85 (MSRV), stable (2 versions)
 - **Operating systems:** Ubuntu 24.04, Windows 2025, macOS 15 (3 OSes)
 - **Total combinations:** 6 jobs
 
@@ -244,14 +244,14 @@ Clippy lints change between Rust versions:
 When `test_rust_versions.sh` reports a failure:
 
 ```
-✗ Rust 1.81: FAILED
-Clippy errors for Rust 1.81:
+✗ Rust 1.85: FAILED
+Clippy errors for Rust 1.85:
 error: the following explicit lifetimes could be elided: 'a
   --> src/lexer.rs:255:36
 ```
 
 This tells you:
-1. Which version failed (1.81)
+1. Which version failed (1.85)
 2. What failed (clippy)
 3. The exact error and location
 
@@ -289,8 +289,8 @@ cargo fmt
 1. **Check which version failed** in the CI logs
 2. **Install that version locally:**
    ```bash
-   rustup install 1.81
-   rustup override set 1.81
+   rustup install 1.85
+   rustup override set 1.85
    ```
 3. **Run clippy to see the error:**
    ```bash
@@ -299,7 +299,7 @@ cargo fmt
 4. **Fix the issue** (try `cargo clippy --fix --allow-dirty` first)
 5. **Verify with test_rust_versions.sh:**
    ```bash
-   ./test_rust_versions.sh 1.81
+   ./test_rust_versions.sh 1.85
    ```
 6. **Restore your normal version:**
    ```bash
@@ -336,19 +336,19 @@ The "Environment" section shows which Rust/clippy version you're testing with. T
   Rust Version Compatibility Test
 ========================================
 
-Testing against Rust versions: 1.81 stable
+Testing against Rust versions: 1.85 stable
 
 ========================================
-Testing Rust 1.81
+Testing Rust 1.85
 ========================================
-  rustc: rustc 1.81.0 (82e1608df 2023-12-21)
-  clippy: clippy 0.1.81
+  rustc: rustc 1.85.0 (a28077b28 2025-02-20)
+  clippy: clippy 0.1.85
 
 Running critical checks:
   1. Format check... ✓
   2. Clippy lints... ✗ FAILED
 
-Clippy errors for Rust 1.81:
+Clippy errors for Rust 1.82:
 error: the following explicit lifetimes could be elided: 'a
 ...
 
@@ -360,7 +360,7 @@ Passed: 1
 Failed: 1
 
 Failed versions:
-  - 1.81 (clippy)
+  - 1.82 (clippy)
 ```
 
 This clearly shows which version failed and why.
@@ -371,13 +371,13 @@ This clearly shows which version failed and why.
 A: This is the standard Rust ecosystem practice. It's lower maintenance, clearer to users, and sufficient for catching issues. If it works on MSRV and stable, it almost always works on versions in between.
 
 **Q: What is our MSRV and why?**
-A: 1.81.0 - it's available in Ubuntu 22.04/24.04 LTS via `apt install rustc-1.81`. This is the minimum version supporting Cargo.lock v4, which our dependency tooling requires.
+A: 1.85.0 - it's the first stable Rust version supporting edition2024, which is required by mdBook dependencies (specifically the `ignore` crate 0.4.24+).
 
 **Q: When will MSRV be bumped?**
 A: Only when we need new language features or Ubuntu LTS updates its default. Not for clippy lints or "nice to have" features.
 
 **Q: Which versions should I test locally?**
-A: Run `./test_rust_versions.sh` which automatically tests MSRV (1.81) + stable.
+A: Run `./test_rust_versions.sh` which automatically tests MSRV (1.85) + stable.
 
 **Q: Do I need to test all 6 CI jobs locally?**
 A: No! `test_rust_versions.sh` tests multiple Rust versions but only on your OS. That's usually sufficient since most issues are version-related, not OS-related.
@@ -394,10 +394,10 @@ A: You can, but CI will catch the issue later. Testing locally saves you a round
 
 Use both for maximum confidence!
 
-**Q: Can I test intermediate versions like 1.81 or 1.85?**
+**Q: Can I test intermediate versions like 1.82 or 1.85?**
 A: Yes! While CI only tests MSRV + stable, you can test any version locally:
 ```bash
-./test_rust_versions.sh 1.81 1.81 1.85 stable
+./test_rust_versions.sh 1.85 1.86 1.87 stable
 ```
 This is useful when debugging version-specific issues.
 
