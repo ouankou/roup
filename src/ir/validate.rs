@@ -538,6 +538,26 @@ mod tests {
     }
 
     #[test]
+    fn test_depend_allowed_on_taskgraph() {
+        let context = ValidationContext::new(DirectiveKind::Taskgraph);
+        let clause = ClauseData::Depend {
+            depend_type: DependType::Out,
+            items: vec![ClauseItem::Identifier(Identifier::new("y"))],
+        };
+        assert!(context.is_clause_allowed(&clause).is_ok());
+    }
+
+    #[test]
+    fn test_depend_allowed_on_task_iteration() {
+        let context = ValidationContext::new(DirectiveKind::TaskIteration);
+        let clause = ClauseData::Depend {
+            depend_type: DependType::Inout,
+            items: vec![ClauseItem::Identifier(Identifier::new("z"))],
+        };
+        assert!(context.is_clause_allowed(&clause).is_ok());
+    }
+
+    #[test]
     fn test_private_allowed_on_most_constructs() {
         let clause = ClauseData::Private {
             items: vec![ClauseItem::Identifier(Identifier::new("x"))],
@@ -616,5 +636,31 @@ mod tests {
         );
 
         assert!(ir.validate().is_err());
+    }
+
+    #[test]
+    fn test_nowait_allowed_on_workdistribute() {
+        let context = ValidationContext::new(DirectiveKind::Workdistribute);
+        let clause = ClauseData::Bare(Identifier::new("nowait"));
+        assert!(context.is_clause_allowed(&clause).is_ok());
+    }
+
+    #[test]
+    fn test_reduction_allowed_on_workdistribute() {
+        let context = ValidationContext::new(DirectiveKind::Workdistribute);
+        let clause = ClauseData::Reduction {
+            operator: ReductionOperator::Add,
+            items: vec![ClauseItem::Identifier(Identifier::new("sum"))],
+        };
+        assert!(context.is_clause_allowed(&clause).is_ok());
+    }
+
+    #[test]
+    fn test_collapse_allowed_on_workdistribute() {
+        let context = ValidationContext::new(DirectiveKind::Workdistribute);
+        let clause = ClauseData::Collapse {
+            n: crate::ir::Expression::unparsed("2"),
+        };
+        assert!(context.is_clause_allowed(&clause).is_ok());
     }
 }
