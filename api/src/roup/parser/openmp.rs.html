@@ -31,249 +31,311 @@
 <a href=#31 id=31 data-nosnippet>31</a>}
 <a href=#32 id=32 data-nosnippet>32</a>
 <a href=#33 id=33 data-nosnippet>33</a><span class="macro">openmp_clauses!</span> {
-<a href=#34 id=34 data-nosnippet>34</a>    AcqRel =&gt; { name: <span class="string">"acq_rel"</span>, rule: ClauseRule::Bare },
-<a href=#35 id=35 data-nosnippet>35</a>    Acquire =&gt; { name: <span class="string">"acquire"</span>, rule: ClauseRule::Bare },
-<a href=#36 id=36 data-nosnippet>36</a>    Affinity =&gt; { name: <span class="string">"affinity"</span>, rule: ClauseRule::Parenthesized },
-<a href=#37 id=37 data-nosnippet>37</a>    Aligned =&gt; { name: <span class="string">"aligned"</span>, rule: ClauseRule::Parenthesized },
-<a href=#38 id=38 data-nosnippet>38</a>    Allocate =&gt; { name: <span class="string">"allocate"</span>, rule: ClauseRule::Parenthesized },
-<a href=#39 id=39 data-nosnippet>39</a>    Allocator =&gt; { name: <span class="string">"allocator"</span>, rule: ClauseRule::Parenthesized },
-<a href=#40 id=40 data-nosnippet>40</a>    AtomicDefaultMemOrder =&gt; { name: <span class="string">"atomic_default_mem_order"</span>, rule: ClauseRule::Parenthesized },
-<a href=#41 id=41 data-nosnippet>41</a>    Bind =&gt; { name: <span class="string">"bind"</span>, rule: ClauseRule::Parenthesized },
-<a href=#42 id=42 data-nosnippet>42</a>    Capture =&gt; { name: <span class="string">"capture"</span>, rule: ClauseRule::Flexible },
-<a href=#43 id=43 data-nosnippet>43</a>    Collapse =&gt; { name: <span class="string">"collapse"</span>, rule: ClauseRule::Parenthesized },
-<a href=#44 id=44 data-nosnippet>44</a>    Compare =&gt; { name: <span class="string">"compare"</span>, rule: ClauseRule::Flexible },
-<a href=#45 id=45 data-nosnippet>45</a>    Copyin =&gt; { name: <span class="string">"copyin"</span>, rule: ClauseRule::Parenthesized },
-<a href=#46 id=46 data-nosnippet>46</a>    Copyprivate =&gt; { name: <span class="string">"copyprivate"</span>, rule: ClauseRule::Parenthesized },
-<a href=#47 id=47 data-nosnippet>47</a>    Default =&gt; { name: <span class="string">"default"</span>, rule: ClauseRule::Parenthesized },
-<a href=#48 id=48 data-nosnippet>48</a>    Defaultmap =&gt; { name: <span class="string">"defaultmap"</span>, rule: ClauseRule::Parenthesized },
-<a href=#49 id=49 data-nosnippet>49</a>    Depend =&gt; { name: <span class="string">"depend"</span>, rule: ClauseRule::Parenthesized },
-<a href=#50 id=50 data-nosnippet>50</a>    Destroy =&gt; { name: <span class="string">"destroy"</span>, rule: ClauseRule::Flexible },
-<a href=#51 id=51 data-nosnippet>51</a>    Detach =&gt; { name: <span class="string">"detach"</span>, rule: ClauseRule::Parenthesized },
-<a href=#52 id=52 data-nosnippet>52</a>    Device =&gt; { name: <span class="string">"device"</span>, rule: ClauseRule::Parenthesized },
-<a href=#53 id=53 data-nosnippet>53</a>    DeviceResident =&gt; { name: <span class="string">"device_resident"</span>, rule: ClauseRule::Parenthesized },
-<a href=#54 id=54 data-nosnippet>54</a>    DeviceType =&gt; { name: <span class="string">"device_type"</span>, rule: ClauseRule::Parenthesized },
-<a href=#55 id=55 data-nosnippet>55</a>    DistSchedule =&gt; { name: <span class="string">"dist_schedule"</span>, rule: ClauseRule::Parenthesized },
-<a href=#56 id=56 data-nosnippet>56</a>    Doacross =&gt; { name: <span class="string">"doacross"</span>, rule: ClauseRule::Parenthesized },
-<a href=#57 id=57 data-nosnippet>57</a>    DynamicAllocators =&gt; { name: <span class="string">"dynamic_allocators"</span>, rule: ClauseRule::Bare },
-<a href=#58 id=58 data-nosnippet>58</a>    Exclusive =&gt; { name: <span class="string">"exclusive"</span>, rule: ClauseRule::Bare },
-<a href=#59 id=59 data-nosnippet>59</a>    Fail =&gt; { name: <span class="string">"fail"</span>, rule: ClauseRule::Flexible },
-<a href=#60 id=60 data-nosnippet>60</a>    Final =&gt; { name: <span class="string">"final"</span>, rule: ClauseRule::Parenthesized },
-<a href=#61 id=61 data-nosnippet>61</a>    Filter =&gt; { name: <span class="string">"filter"</span>, rule: ClauseRule::Parenthesized },
-<a href=#62 id=62 data-nosnippet>62</a>    Firstprivate =&gt; { name: <span class="string">"firstprivate"</span>, rule: ClauseRule::Parenthesized },
-<a href=#63 id=63 data-nosnippet>63</a>    From =&gt; { name: <span class="string">"from"</span>, rule: ClauseRule::Parenthesized },
-<a href=#64 id=64 data-nosnippet>64</a>    Grainsize =&gt; { name: <span class="string">"grainsize"</span>, rule: ClauseRule::Parenthesized },
-<a href=#65 id=65 data-nosnippet>65</a>    Hint =&gt; { name: <span class="string">"hint"</span>, rule: ClauseRule::Parenthesized },
-<a href=#66 id=66 data-nosnippet>66</a>    Holds =&gt; { name: <span class="string">"holds"</span>, rule: ClauseRule::Parenthesized },
-<a href=#67 id=67 data-nosnippet>67</a>    If =&gt; { name: <span class="string">"if"</span>, rule: ClauseRule::Parenthesized },
-<a href=#68 id=68 data-nosnippet>68</a>    InReduction =&gt; { name: <span class="string">"in_reduction"</span>, rule: ClauseRule::Parenthesized },
-<a href=#69 id=69 data-nosnippet>69</a>    Inbranch =&gt; { name: <span class="string">"inbranch"</span>, rule: ClauseRule::Bare },
-<a href=#70 id=70 data-nosnippet>70</a>    Inclusive =&gt; { name: <span class="string">"inclusive"</span>, rule: ClauseRule::Bare },
-<a href=#71 id=71 data-nosnippet>71</a>    Init =&gt; { name: <span class="string">"init"</span>, rule: ClauseRule::Parenthesized },
-<a href=#72 id=72 data-nosnippet>72</a>    Interop =&gt; { name: <span class="string">"interop"</span>, rule: ClauseRule::Parenthesized },
-<a href=#73 id=73 data-nosnippet>73</a>    IsDevicePtr =&gt; { name: <span class="string">"is_device_ptr"</span>, rule: ClauseRule::Parenthesized },
-<a href=#74 id=74 data-nosnippet>74</a>    Label =&gt; { name: <span class="string">"label"</span>, rule: ClauseRule::Parenthesized },
-<a href=#75 id=75 data-nosnippet>75</a>    Lastprivate =&gt; { name: <span class="string">"lastprivate"</span>, rule: ClauseRule::Parenthesized },
-<a href=#76 id=76 data-nosnippet>76</a>    Linear =&gt; { name: <span class="string">"linear"</span>, rule: ClauseRule::Parenthesized },
-<a href=#77 id=77 data-nosnippet>77</a>    Link =&gt; { name: <span class="string">"link"</span>, rule: ClauseRule::Parenthesized },
-<a href=#78 id=78 data-nosnippet>78</a>    Map =&gt; { name: <span class="string">"map"</span>, rule: ClauseRule::Parenthesized },
-<a href=#79 id=79 data-nosnippet>79</a>    Match =&gt; { name: <span class="string">"match"</span>, rule: ClauseRule::Parenthesized },
-<a href=#80 id=80 data-nosnippet>80</a>    Message =&gt; { name: <span class="string">"message"</span>, rule: ClauseRule::Parenthesized },
-<a href=#81 id=81 data-nosnippet>81</a>    Mergeable =&gt; { name: <span class="string">"mergeable"</span>, rule: ClauseRule::Bare },
-<a href=#82 id=82 data-nosnippet>82</a>    Nogroup =&gt; { name: <span class="string">"nogroup"</span>, rule: ClauseRule::Bare },
-<a href=#83 id=83 data-nosnippet>83</a>    NoOpenmp =&gt; { name: <span class="string">"no_openmp"</span>, rule: ClauseRule::Flexible },
-<a href=#84 id=84 data-nosnippet>84</a>    NoOpenmpRoutines =&gt; { name: <span class="string">"no_openmp_routines"</span>, rule: ClauseRule::Flexible },
-<a href=#85 id=85 data-nosnippet>85</a>    NoParallelism =&gt; { name: <span class="string">"no_parallelism"</span>, rule: ClauseRule::Flexible },
-<a href=#86 id=86 data-nosnippet>86</a>    Notinbranch =&gt; { name: <span class="string">"notinbranch"</span>, rule: ClauseRule::Bare },
-<a href=#87 id=87 data-nosnippet>87</a>    Novariants =&gt; { name: <span class="string">"novariants"</span>, rule: ClauseRule::Flexible },
-<a href=#88 id=88 data-nosnippet>88</a>    Nowait =&gt; { name: <span class="string">"nowait"</span>, rule: ClauseRule::Bare },
-<a href=#89 id=89 data-nosnippet>89</a>    NumTasks =&gt; { name: <span class="string">"num_tasks"</span>, rule: ClauseRule::Parenthesized },
-<a href=#90 id=90 data-nosnippet>90</a>    NumTeams =&gt; { name: <span class="string">"num_teams"</span>, rule: ClauseRule::Parenthesized },
-<a href=#91 id=91 data-nosnippet>91</a>    NumThreads =&gt; { name: <span class="string">"num_threads"</span>, rule: ClauseRule::Parenthesized },
-<a href=#92 id=92 data-nosnippet>92</a>    Nontemporal =&gt; { name: <span class="string">"nontemporal"</span>, rule: ClauseRule::Parenthesized },
-<a href=#93 id=93 data-nosnippet>93</a>    Order =&gt; { name: <span class="string">"order"</span>, rule: ClauseRule::Parenthesized },
-<a href=#94 id=94 data-nosnippet>94</a>    Ordered =&gt; { name: <span class="string">"ordered"</span>, rule: ClauseRule::Flexible },
-<a href=#95 id=95 data-nosnippet>95</a>    Partial =&gt; { name: <span class="string">"partial"</span>, rule: ClauseRule::Flexible },
-<a href=#96 id=96 data-nosnippet>96</a>    Priority =&gt; { name: <span class="string">"priority"</span>, rule: ClauseRule::Parenthesized },
-<a href=#97 id=97 data-nosnippet>97</a>    Private =&gt; { name: <span class="string">"private"</span>, rule: ClauseRule::Parenthesized },
-<a href=#98 id=98 data-nosnippet>98</a>    ProcBind =&gt; { name: <span class="string">"proc_bind"</span>, rule: ClauseRule::Parenthesized },
-<a href=#99 id=99 data-nosnippet>99</a>    Public =&gt; { name: <span class="string">"public"</span>, rule: ClauseRule::Flexible },
-<a href=#100 id=100 data-nosnippet>100</a>    Reduction =&gt; { name: <span class="string">"reduction"</span>, rule: ClauseRule::Parenthesized },
-<a href=#101 id=101 data-nosnippet>101</a>    Release =&gt; { name: <span class="string">"release"</span>, rule: ClauseRule::Bare },
-<a href=#102 id=102 data-nosnippet>102</a>    Relaxed =&gt; { name: <span class="string">"relaxed"</span>, rule: ClauseRule::Bare },
-<a href=#103 id=103 data-nosnippet>103</a>    Reverse =&gt; { name: <span class="string">"reverse"</span>, rule: ClauseRule::Flexible },
-<a href=#104 id=104 data-nosnippet>104</a>    Reproducible =&gt; { name: <span class="string">"reproducible"</span>, rule: ClauseRule::Bare },
-<a href=#105 id=105 data-nosnippet>105</a>    Safelen =&gt; { name: <span class="string">"safelen"</span>, rule: ClauseRule::Parenthesized },
-<a href=#106 id=106 data-nosnippet>106</a>    Schedule =&gt; { name: <span class="string">"schedule"</span>, rule: ClauseRule::Parenthesized },
-<a href=#107 id=107 data-nosnippet>107</a>    SeqCst =&gt; { name: <span class="string">"seq_cst"</span>, rule: ClauseRule::Bare },
-<a href=#108 id=108 data-nosnippet>108</a>    Shared =&gt; { name: <span class="string">"shared"</span>, rule: ClauseRule::Parenthesized },
-<a href=#109 id=109 data-nosnippet>109</a>    Simdlen =&gt; { name: <span class="string">"simdlen"</span>, rule: ClauseRule::Parenthesized },
-<a href=#110 id=110 data-nosnippet>110</a>    Sizes =&gt; { name: <span class="string">"sizes"</span>, rule: ClauseRule::Parenthesized },
-<a href=#111 id=111 data-nosnippet>111</a>    TaskReduction =&gt; { name: <span class="string">"task_reduction"</span>, rule: ClauseRule::Parenthesized },
-<a href=#112 id=112 data-nosnippet>112</a>    ThreadLimit =&gt; { name: <span class="string">"thread_limit"</span>, rule: ClauseRule::Parenthesized },
-<a href=#113 id=113 data-nosnippet>113</a>    Tile =&gt; { name: <span class="string">"tile"</span>, rule: ClauseRule::Parenthesized },
-<a href=#114 id=114 data-nosnippet>114</a>    To =&gt; { name: <span class="string">"to"</span>, rule: ClauseRule::Parenthesized },
-<a href=#115 id=115 data-nosnippet>115</a>    UnifiedAddress =&gt; { name: <span class="string">"unified_address"</span>, rule: ClauseRule::Flexible },
-<a href=#116 id=116 data-nosnippet>116</a>    UnifiedSharedMemory =&gt; { name: <span class="string">"unified_shared_memory"</span>, rule: ClauseRule::Flexible },
-<a href=#117 id=117 data-nosnippet>117</a>    Unroll =&gt; { name: <span class="string">"unroll"</span>, rule: ClauseRule::Flexible },
-<a href=#118 id=118 data-nosnippet>118</a>    Untied =&gt; { name: <span class="string">"untied"</span>, rule: ClauseRule::Bare },
-<a href=#119 id=119 data-nosnippet>119</a>    Update =&gt; { name: <span class="string">"update"</span>, rule: ClauseRule::Flexible },
-<a href=#120 id=120 data-nosnippet>120</a>    UseDeviceAddr =&gt; { name: <span class="string">"use_device_addr"</span>, rule: ClauseRule::Parenthesized },
-<a href=#121 id=121 data-nosnippet>121</a>    UseDevicePtr =&gt; { name: <span class="string">"use_device_ptr"</span>, rule: ClauseRule::Parenthesized },
-<a href=#122 id=122 data-nosnippet>122</a>    UsesAllocators =&gt; { name: <span class="string">"uses_allocators"</span>, rule: ClauseRule::Parenthesized },
-<a href=#123 id=123 data-nosnippet>123</a>    Weak =&gt; { name: <span class="string">"weak"</span>, rule: ClauseRule::Flexible },
-<a href=#124 id=124 data-nosnippet>124</a>    When =&gt; { name: <span class="string">"when"</span>, rule: ClauseRule::Parenthesized },
-<a href=#125 id=125 data-nosnippet>125</a>}
-<a href=#126 id=126 data-nosnippet>126</a>
-<a href=#127 id=127 data-nosnippet>127</a><span class="macro">macro_rules!</span> openmp_directives {
-<a href=#128 id=128 data-nosnippet>128</a>    ($( <span class="macro-nonterminal">$variant</span>:ident =&gt; <span class="macro-nonterminal">$name</span>:literal ),+ $(,)<span class="question-mark">?</span>) =&gt; {
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-<a href=#130 id=130 data-nosnippet>130</a>        </span><span class="kw">pub enum </span>OpenMpDirective {
-<a href=#131 id=131 data-nosnippet>131</a>            $( <span class="macro-nonterminal">$variant</span>, )+
-<a href=#132 id=132 data-nosnippet>132</a>        }
-<a href=#133 id=133 data-nosnippet>133</a>
-<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">impl </span>OpenMpDirective {
-<a href=#135 id=135 data-nosnippet>135</a>            <span class="kw">pub const </span>ALL: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[OpenMpDirective] = <span class="kw-2">&amp;</span>[ $( OpenMpDirective::<span class="macro-nonterminal">$variant</span>, )+ ];
-<a href=#136 id=136 data-nosnippet>136</a>
-<a href=#137 id=137 data-nosnippet>137</a>            <span class="kw">pub const fn </span>as_str(<span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
-<a href=#138 id=138 data-nosnippet>138</a>                <span class="kw">match </span><span class="self">self </span>{
-<a href=#139 id=139 data-nosnippet>139</a>                    $( OpenMpDirective::<span class="macro-nonterminal">$variant </span>=&gt; <span class="macro-nonterminal">$name</span>, )+
-<a href=#140 id=140 data-nosnippet>140</a>                }
-<a href=#141 id=141 data-nosnippet>141</a>            }
-<a href=#142 id=142 data-nosnippet>142</a>        }
-<a href=#143 id=143 data-nosnippet>143</a>    };
-<a href=#144 id=144 data-nosnippet>144</a>}
-<a href=#145 id=145 data-nosnippet>145</a>
-<a href=#146 id=146 data-nosnippet>146</a><span class="macro">openmp_directives!</span> {
-<a href=#147 id=147 data-nosnippet>147</a>    Assume =&gt; <span class="string">"assume"</span>,
-<a href=#148 id=148 data-nosnippet>148</a>    Atomic =&gt; <span class="string">"atomic"</span>,
-<a href=#149 id=149 data-nosnippet>149</a>    AtomicCapture =&gt; <span class="string">"atomic capture"</span>,
-<a href=#150 id=150 data-nosnippet>150</a>    AtomicCompareCapture =&gt; <span class="string">"atomic compare capture"</span>,
-<a href=#151 id=151 data-nosnippet>151</a>    AtomicRead =&gt; <span class="string">"atomic read"</span>,
-<a href=#152 id=152 data-nosnippet>152</a>    AtomicUpdate =&gt; <span class="string">"atomic update"</span>,
-<a href=#153 id=153 data-nosnippet>153</a>    AtomicWrite =&gt; <span class="string">"atomic write"</span>,
-<a href=#154 id=154 data-nosnippet>154</a>    Barrier =&gt; <span class="string">"barrier"</span>,
-<a href=#155 id=155 data-nosnippet>155</a>    BeginDeclareTarget =&gt; <span class="string">"begin declare target"</span>,
-<a href=#156 id=156 data-nosnippet>156</a>    Cancel =&gt; <span class="string">"cancel"</span>,
-<a href=#157 id=157 data-nosnippet>157</a>    CancellationPoint =&gt; <span class="string">"cancellation point"</span>,
-<a href=#158 id=158 data-nosnippet>158</a>    Critical =&gt; <span class="string">"critical"</span>,
-<a href=#159 id=159 data-nosnippet>159</a>    DeclareMapper =&gt; <span class="string">"declare mapper"</span>,
-<a href=#160 id=160 data-nosnippet>160</a>    DeclareReduction =&gt; <span class="string">"declare reduction"</span>,
-<a href=#161 id=161 data-nosnippet>161</a>    DeclareSimd =&gt; <span class="string">"declare simd"</span>,
-<a href=#162 id=162 data-nosnippet>162</a>    DeclareTarget =&gt; <span class="string">"declare target"</span>,
-<a href=#163 id=163 data-nosnippet>163</a>    DeclareVariant =&gt; <span class="string">"declare variant"</span>,
-<a href=#164 id=164 data-nosnippet>164</a>    Depobj =&gt; <span class="string">"depobj"</span>,
-<a href=#165 id=165 data-nosnippet>165</a>    Dispatch =&gt; <span class="string">"dispatch"</span>,
-<a href=#166 id=166 data-nosnippet>166</a>    Distribute =&gt; <span class="string">"distribute"</span>,
-<a href=#167 id=167 data-nosnippet>167</a>    DistributeParallelFor =&gt; <span class="string">"distribute parallel for"</span>,
-<a href=#168 id=168 data-nosnippet>168</a>    DistributeParallelForSimd =&gt; <span class="string">"distribute parallel for simd"</span>,
-<a href=#169 id=169 data-nosnippet>169</a>    DistributeParallelLoop =&gt; <span class="string">"distribute parallel loop"</span>,
-<a href=#170 id=170 data-nosnippet>170</a>    DistributeParallelLoopSimd =&gt; <span class="string">"distribute parallel loop simd"</span>,
-<a href=#171 id=171 data-nosnippet>171</a>    DistributeSimd =&gt; <span class="string">"distribute simd"</span>,
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="comment">// --- Fortran variants ---
-<a href=#173 id=173 data-nosnippet>173</a>    </span>DistributeParallelDo =&gt; <span class="string">"distribute parallel do"</span>,  <span class="comment">// Fortran variant
-<a href=#174 id=174 data-nosnippet>174</a>    </span>DistributeParallelDoSimd =&gt; <span class="string">"distribute parallel do simd"</span>,  <span class="comment">// Fortran variant
-<a href=#175 id=175 data-nosnippet>175</a>    </span>Do =&gt; <span class="string">"do"</span>,  <span class="comment">// Fortran equivalent of FOR
-<a href=#176 id=176 data-nosnippet>176</a>    </span>DoSimd =&gt; <span class="string">"do simd"</span>,  <span class="comment">// Fortran equivalent of FOR SIMD
-<a href=#177 id=177 data-nosnippet>177</a>    </span>EndDeclareTarget =&gt; <span class="string">"end declare target"</span>,
-<a href=#178 id=178 data-nosnippet>178</a>    Error =&gt; <span class="string">"error"</span>,
-<a href=#179 id=179 data-nosnippet>179</a>    Flush =&gt; <span class="string">"flush"</span>,
-<a href=#180 id=180 data-nosnippet>180</a>    For =&gt; <span class="string">"for"</span>,
-<a href=#181 id=181 data-nosnippet>181</a>    ForSimd =&gt; <span class="string">"for simd"</span>,
-<a href=#182 id=182 data-nosnippet>182</a>    Interop =&gt; <span class="string">"interop"</span>,
-<a href=#183 id=183 data-nosnippet>183</a>    Loop =&gt; <span class="string">"loop"</span>,
-<a href=#184 id=184 data-nosnippet>184</a>    Masked =&gt; <span class="string">"masked"</span>,
-<a href=#185 id=185 data-nosnippet>185</a>    MaskedTaskloop =&gt; <span class="string">"masked taskloop"</span>,
-<a href=#186 id=186 data-nosnippet>186</a>    MaskedTaskloopSimd =&gt; <span class="string">"masked taskloop simd"</span>,
-<a href=#187 id=187 data-nosnippet>187</a>    Master =&gt; <span class="string">"master"</span>,
-<a href=#188 id=188 data-nosnippet>188</a>    Metadirective =&gt; <span class="string">"metadirective"</span>,
-<a href=#189 id=189 data-nosnippet>189</a>    Nothing =&gt; <span class="string">"nothing"</span>,
-<a href=#190 id=190 data-nosnippet>190</a>    Ordered =&gt; <span class="string">"ordered"</span>,
-<a href=#191 id=191 data-nosnippet>191</a>    Parallel =&gt; <span class="string">"parallel"</span>,
-<a href=#192 id=192 data-nosnippet>192</a>    ParallelDo =&gt; <span class="string">"parallel do"</span>,  <span class="comment">// Fortran equivalent of PARALLEL FOR
-<a href=#193 id=193 data-nosnippet>193</a>    </span>ParallelDoSimd =&gt; <span class="string">"parallel do simd"</span>,  <span class="comment">// Fortran equivalent of PARALLEL FOR SIMD
-<a href=#194 id=194 data-nosnippet>194</a>    </span>ParallelFor =&gt; <span class="string">"parallel for"</span>,
-<a href=#195 id=195 data-nosnippet>195</a>    ParallelForSimd =&gt; <span class="string">"parallel for simd"</span>,
-<a href=#196 id=196 data-nosnippet>196</a>    ParallelLoop =&gt; <span class="string">"parallel loop"</span>,
-<a href=#197 id=197 data-nosnippet>197</a>    ParallelLoopSimd =&gt; <span class="string">"parallel loop simd"</span>,
-<a href=#198 id=198 data-nosnippet>198</a>    ParallelMasked =&gt; <span class="string">"parallel masked"</span>,
-<a href=#199 id=199 data-nosnippet>199</a>    ParallelMaskedTaskloop =&gt; <span class="string">"parallel masked taskloop"</span>,
-<a href=#200 id=200 data-nosnippet>200</a>    ParallelMaskedTaskloopSimd =&gt; <span class="string">"parallel masked taskloop simd"</span>,
-<a href=#201 id=201 data-nosnippet>201</a>    ParallelMaster =&gt; <span class="string">"parallel master"</span>,
-<a href=#202 id=202 data-nosnippet>202</a>    ParallelMasterTaskloop =&gt; <span class="string">"parallel master taskloop"</span>,
-<a href=#203 id=203 data-nosnippet>203</a>    ParallelMasterTaskloopSimd =&gt; <span class="string">"parallel master taskloop simd"</span>,
-<a href=#204 id=204 data-nosnippet>204</a>    ParallelSections =&gt; <span class="string">"parallel sections"</span>,
-<a href=#205 id=205 data-nosnippet>205</a>    Requires =&gt; <span class="string">"requires"</span>,
-<a href=#206 id=206 data-nosnippet>206</a>    Scope =&gt; <span class="string">"scope"</span>,
-<a href=#207 id=207 data-nosnippet>207</a>    Sections =&gt; <span class="string">"sections"</span>,
-<a href=#208 id=208 data-nosnippet>208</a>    Simd =&gt; <span class="string">"simd"</span>,
-<a href=#209 id=209 data-nosnippet>209</a>    Single =&gt; <span class="string">"single"</span>,
-<a href=#210 id=210 data-nosnippet>210</a>    Target =&gt; <span class="string">"target"</span>,
-<a href=#211 id=211 data-nosnippet>211</a>    TargetData =&gt; <span class="string">"target data"</span>,
-<a href=#212 id=212 data-nosnippet>212</a>    TargetEnterData =&gt; <span class="string">"target enter data"</span>,
-<a href=#213 id=213 data-nosnippet>213</a>    TargetExitData =&gt; <span class="string">"target exit data"</span>,
-<a href=#214 id=214 data-nosnippet>214</a>    TargetLoop =&gt; <span class="string">"target loop"</span>,
-<a href=#215 id=215 data-nosnippet>215</a>    TargetLoopSimd =&gt; <span class="string">"target loop simd"</span>,
-<a href=#216 id=216 data-nosnippet>216</a>    TargetParallel =&gt; <span class="string">"target parallel"</span>,
-<a href=#217 id=217 data-nosnippet>217</a>    TargetParallelDo =&gt; <span class="string">"target parallel do"</span>,  <span class="comment">// Fortran variant
-<a href=#218 id=218 data-nosnippet>218</a>    </span>TargetParallelDoSimd =&gt; <span class="string">"target parallel do simd"</span>,  <span class="comment">// Fortran variant
-<a href=#219 id=219 data-nosnippet>219</a>    </span>TargetParallelFor =&gt; <span class="string">"target parallel for"</span>,
-<a href=#220 id=220 data-nosnippet>220</a>    TargetParallelForSimd =&gt; <span class="string">"target parallel for simd"</span>,
-<a href=#221 id=221 data-nosnippet>221</a>    TargetParallelLoop =&gt; <span class="string">"target parallel loop"</span>,
-<a href=#222 id=222 data-nosnippet>222</a>    TargetParallelLoopSimd =&gt; <span class="string">"target parallel loop simd"</span>,
-<a href=#223 id=223 data-nosnippet>223</a>    TargetSimd =&gt; <span class="string">"target simd"</span>,
-<a href=#224 id=224 data-nosnippet>224</a>    TargetTeams =&gt; <span class="string">"target teams"</span>,
-<a href=#225 id=225 data-nosnippet>225</a>    TargetTeamsDistribute =&gt; <span class="string">"target teams distribute"</span>,
-<a href=#226 id=226 data-nosnippet>226</a>    TargetTeamsDistributeParallelDo =&gt; <span class="string">"target teams distribute parallel do"</span>,  <span class="comment">// Fortran variant
-<a href=#227 id=227 data-nosnippet>227</a>    </span>TargetTeamsDistributeParallelDoSimd =&gt; <span class="string">"target teams distribute parallel do simd"</span>,  <span class="comment">// Fortran variant
-<a href=#228 id=228 data-nosnippet>228</a>    </span>TargetTeamsDistributeParallelFor =&gt; <span class="string">"target teams distribute parallel for"</span>,
-<a href=#229 id=229 data-nosnippet>229</a>    TargetTeamsDistributeParallelForSimd =&gt; <span class="string">"target teams distribute parallel for simd"</span>,
-<a href=#230 id=230 data-nosnippet>230</a>    TargetTeamsDistributeParallelLoop =&gt; <span class="string">"target teams distribute parallel loop"</span>,
-<a href=#231 id=231 data-nosnippet>231</a>    TargetTeamsDistributeParallelLoopSimd =&gt; <span class="string">"target teams distribute parallel loop simd"</span>,
-<a href=#232 id=232 data-nosnippet>232</a>    TargetTeamsDistributeSimd =&gt; <span class="string">"target teams distribute simd"</span>,
-<a href=#233 id=233 data-nosnippet>233</a>    TargetTeamsLoop =&gt; <span class="string">"target teams loop"</span>,
-<a href=#234 id=234 data-nosnippet>234</a>    TargetTeamsLoopSimd =&gt; <span class="string">"target teams loop simd"</span>,
-<a href=#235 id=235 data-nosnippet>235</a>    TargetUpdate =&gt; <span class="string">"target update"</span>,
-<a href=#236 id=236 data-nosnippet>236</a>    Task =&gt; <span class="string">"task"</span>,
-<a href=#237 id=237 data-nosnippet>237</a>    Taskgroup =&gt; <span class="string">"taskgroup"</span>,
-<a href=#238 id=238 data-nosnippet>238</a>    Taskgraph =&gt; <span class="string">"taskgraph"</span>,
-<a href=#239 id=239 data-nosnippet>239</a>    Taskloop =&gt; <span class="string">"taskloop"</span>,
-<a href=#240 id=240 data-nosnippet>240</a>    TaskloopSimd =&gt; <span class="string">"taskloop simd"</span>,
-<a href=#241 id=241 data-nosnippet>241</a>    Taskwait =&gt; <span class="string">"taskwait"</span>,
-<a href=#242 id=242 data-nosnippet>242</a>    Taskyield =&gt; <span class="string">"taskyield"</span>,
-<a href=#243 id=243 data-nosnippet>243</a>    Teams =&gt; <span class="string">"teams"</span>,
-<a href=#244 id=244 data-nosnippet>244</a>    TeamsDistribute =&gt; <span class="string">"teams distribute"</span>,
-<a href=#245 id=245 data-nosnippet>245</a>    TeamsDistributeParallelDo =&gt; <span class="string">"teams distribute parallel do"</span>,  <span class="comment">// Fortran variant
-<a href=#246 id=246 data-nosnippet>246</a>    </span>TeamsDistributeParallelDoSimd =&gt; <span class="string">"teams distribute parallel do simd"</span>,  <span class="comment">// Fortran variant
-<a href=#247 id=247 data-nosnippet>247</a>    </span>TeamsDistributeParallelFor =&gt; <span class="string">"teams distribute parallel for"</span>,
-<a href=#248 id=248 data-nosnippet>248</a>    TeamsDistributeParallelForSimd =&gt; <span class="string">"teams distribute parallel for simd"</span>,
-<a href=#249 id=249 data-nosnippet>249</a>    TeamsDistributeParallelLoop =&gt; <span class="string">"teams distribute parallel loop"</span>,
-<a href=#250 id=250 data-nosnippet>250</a>    TeamsDistributeParallelLoopSimd =&gt; <span class="string">"teams distribute parallel loop simd"</span>,
-<a href=#251 id=251 data-nosnippet>251</a>    TeamsDistributeSimd =&gt; <span class="string">"teams distribute simd"</span>,
-<a href=#252 id=252 data-nosnippet>252</a>    TeamsLoop =&gt; <span class="string">"teams loop"</span>,
-<a href=#253 id=253 data-nosnippet>253</a>    TeamsLoopSimd =&gt; <span class="string">"teams loop simd"</span>,
-<a href=#254 id=254 data-nosnippet>254</a>    Threadprivate =&gt; <span class="string">"threadprivate"</span>,
-<a href=#255 id=255 data-nosnippet>255</a>}
-<a href=#256 id=256 data-nosnippet>256</a>
-<a href=#257 id=257 data-nosnippet>257</a><span class="kw">pub fn </span>clause_registry() -&gt; ClauseRegistry {
-<a href=#258 id=258 data-nosnippet>258</a>    <span class="kw">let </span><span class="kw-2">mut </span>builder = ClauseRegistryBuilder::new().with_default_rule(OPENMP_DEFAULT_CLAUSE_RULE);
-<a href=#259 id=259 data-nosnippet>259</a>
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="kw">for </span>clause <span class="kw">in </span>OpenMpClause::ALL {
-<a href=#261 id=261 data-nosnippet>261</a>        builder.register_with_rule_mut(clause.name(), clause.rule());
-<a href=#262 id=262 data-nosnippet>262</a>    }
-<a href=#263 id=263 data-nosnippet>263</a>
-<a href=#264 id=264 data-nosnippet>264</a>    builder.build()
-<a href=#265 id=265 data-nosnippet>265</a>}
-<a href=#266 id=266 data-nosnippet>266</a>
-<a href=#267 id=267 data-nosnippet>267</a><span class="kw">pub fn </span>directive_registry() -&gt; DirectiveRegistry {
-<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">let </span><span class="kw-2">mut </span>builder = DirectiveRegistryBuilder::new();
-<a href=#269 id=269 data-nosnippet>269</a>
-<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">for </span>directive <span class="kw">in </span>OpenMpDirective::ALL {
-<a href=#271 id=271 data-nosnippet>271</a>        builder = builder.register_generic(directive.as_str());
-<a href=#272 id=272 data-nosnippet>272</a>    }
-<a href=#273 id=273 data-nosnippet>273</a>
-<a href=#274 id=274 data-nosnippet>274</a>    builder.build()
-<a href=#275 id=275 data-nosnippet>275</a>}
-<a href=#276 id=276 data-nosnippet>276</a>
-<a href=#277 id=277 data-nosnippet>277</a><span class="kw">pub fn </span>parser() -&gt; Parser {
-<a href=#278 id=278 data-nosnippet>278</a>    Parser::new(directive_registry(), clause_registry())
-<a href=#279 id=279 data-nosnippet>279</a>}</code></pre></div></section></main></body></html>
+<a href=#34 id=34 data-nosnippet>34</a>    Absent =&gt; { name: <span class="string">"absent"</span>, rule: ClauseRule::Parenthesized },
+<a href=#35 id=35 data-nosnippet>35</a>    AcqRel =&gt; { name: <span class="string">"acq_rel"</span>, rule: ClauseRule::Bare },
+<a href=#36 id=36 data-nosnippet>36</a>    Acquire =&gt; { name: <span class="string">"acquire"</span>, rule: ClauseRule::Bare },
+<a href=#37 id=37 data-nosnippet>37</a>    AdjustArgs =&gt; { name: <span class="string">"adjust_args"</span>, rule: ClauseRule::Parenthesized },
+<a href=#38 id=38 data-nosnippet>38</a>    Affinity =&gt; { name: <span class="string">"affinity"</span>, rule: ClauseRule::Parenthesized },
+<a href=#39 id=39 data-nosnippet>39</a>    Align =&gt; { name: <span class="string">"align"</span>, rule: ClauseRule::Parenthesized },
+<a href=#40 id=40 data-nosnippet>40</a>    Aligned =&gt; { name: <span class="string">"aligned"</span>, rule: ClauseRule::Parenthesized },
+<a href=#41 id=41 data-nosnippet>41</a>    Allocate =&gt; { name: <span class="string">"allocate"</span>, rule: ClauseRule::Parenthesized },
+<a href=#42 id=42 data-nosnippet>42</a>    Allocator =&gt; { name: <span class="string">"allocator"</span>, rule: ClauseRule::Parenthesized },
+<a href=#43 id=43 data-nosnippet>43</a>    AppendArgs =&gt; { name: <span class="string">"append_args"</span>, rule: ClauseRule::Parenthesized },
+<a href=#44 id=44 data-nosnippet>44</a>    Apply =&gt; { name: <span class="string">"apply"</span>, rule: ClauseRule::Parenthesized },
+<a href=#45 id=45 data-nosnippet>45</a>    At =&gt; { name: <span class="string">"at"</span>, rule: ClauseRule::Parenthesized },
+<a href=#46 id=46 data-nosnippet>46</a>    AtomicDefaultMemOrder =&gt; { name: <span class="string">"atomic_default_mem_order"</span>, rule: ClauseRule::Parenthesized },
+<a href=#47 id=47 data-nosnippet>47</a>    Bind =&gt; { name: <span class="string">"bind"</span>, rule: ClauseRule::Parenthesized },
+<a href=#48 id=48 data-nosnippet>48</a>    Capture =&gt; { name: <span class="string">"capture"</span>, rule: ClauseRule::Flexible },
+<a href=#49 id=49 data-nosnippet>49</a>    Collapse =&gt; { name: <span class="string">"collapse"</span>, rule: ClauseRule::Parenthesized },
+<a href=#50 id=50 data-nosnippet>50</a>    Collector =&gt; { name: <span class="string">"collector"</span>, rule: ClauseRule::Parenthesized },
+<a href=#51 id=51 data-nosnippet>51</a>    Combiner =&gt; { name: <span class="string">"combiner"</span>, rule: ClauseRule::Parenthesized },
+<a href=#52 id=52 data-nosnippet>52</a>    Compare =&gt; { name: <span class="string">"compare"</span>, rule: ClauseRule::Flexible },
+<a href=#53 id=53 data-nosnippet>53</a>    Contains =&gt; { name: <span class="string">"contains"</span>, rule: ClauseRule::Parenthesized },
+<a href=#54 id=54 data-nosnippet>54</a>    Copyin =&gt; { name: <span class="string">"copyin"</span>, rule: ClauseRule::Parenthesized },
+<a href=#55 id=55 data-nosnippet>55</a>    Copyprivate =&gt; { name: <span class="string">"copyprivate"</span>, rule: ClauseRule::Parenthesized },
+<a href=#56 id=56 data-nosnippet>56</a>    Counts =&gt; { name: <span class="string">"counts"</span>, rule: ClauseRule::Parenthesized },
+<a href=#57 id=57 data-nosnippet>57</a>    Default =&gt; { name: <span class="string">"default"</span>, rule: ClauseRule::Parenthesized },
+<a href=#58 id=58 data-nosnippet>58</a>    Defaultmap =&gt; { name: <span class="string">"defaultmap"</span>, rule: ClauseRule::Parenthesized },
+<a href=#59 id=59 data-nosnippet>59</a>    Depend =&gt; { name: <span class="string">"depend"</span>, rule: ClauseRule::Parenthesized },
+<a href=#60 id=60 data-nosnippet>60</a>    Destroy =&gt; { name: <span class="string">"destroy"</span>, rule: ClauseRule::Flexible },
+<a href=#61 id=61 data-nosnippet>61</a>    Detach =&gt; { name: <span class="string">"detach"</span>, rule: ClauseRule::Parenthesized },
+<a href=#62 id=62 data-nosnippet>62</a>    Device =&gt; { name: <span class="string">"device"</span>, rule: ClauseRule::Parenthesized },
+<a href=#63 id=63 data-nosnippet>63</a>    DeviceResident =&gt; { name: <span class="string">"device_resident"</span>, rule: ClauseRule::Parenthesized },
+<a href=#64 id=64 data-nosnippet>64</a>    DeviceSafesync =&gt; { name: <span class="string">"device_safesync"</span>, rule: ClauseRule::Flexible },
+<a href=#65 id=65 data-nosnippet>65</a>    DeviceType =&gt; { name: <span class="string">"device_type"</span>, rule: ClauseRule::Parenthesized },
+<a href=#66 id=66 data-nosnippet>66</a>    DistSchedule =&gt; { name: <span class="string">"dist_schedule"</span>, rule: ClauseRule::Parenthesized },
+<a href=#67 id=67 data-nosnippet>67</a>    Doacross =&gt; { name: <span class="string">"doacross"</span>, rule: ClauseRule::Parenthesized },
+<a href=#68 id=68 data-nosnippet>68</a>    DynamicAllocators =&gt; { name: <span class="string">"dynamic_allocators"</span>, rule: ClauseRule::Bare },
+<a href=#69 id=69 data-nosnippet>69</a>    Enter =&gt; { name: <span class="string">"enter"</span>, rule: ClauseRule::Parenthesized },
+<a href=#70 id=70 data-nosnippet>70</a>    Exclusive =&gt; { name: <span class="string">"exclusive"</span>, rule: ClauseRule::Bare },
+<a href=#71 id=71 data-nosnippet>71</a>    Fail =&gt; { name: <span class="string">"fail"</span>, rule: ClauseRule::Flexible },
+<a href=#72 id=72 data-nosnippet>72</a>    Final =&gt; { name: <span class="string">"final"</span>, rule: ClauseRule::Parenthesized },
+<a href=#73 id=73 data-nosnippet>73</a>    Filter =&gt; { name: <span class="string">"filter"</span>, rule: ClauseRule::Parenthesized },
+<a href=#74 id=74 data-nosnippet>74</a>    Firstprivate =&gt; { name: <span class="string">"firstprivate"</span>, rule: ClauseRule::Parenthesized },
+<a href=#75 id=75 data-nosnippet>75</a>    From =&gt; { name: <span class="string">"from"</span>, rule: ClauseRule::Parenthesized },
+<a href=#76 id=76 data-nosnippet>76</a>    Full =&gt; { name: <span class="string">"full"</span>, rule: ClauseRule::Flexible },
+<a href=#77 id=77 data-nosnippet>77</a>    Grainsize =&gt; { name: <span class="string">"grainsize"</span>, rule: ClauseRule::Parenthesized },
+<a href=#78 id=78 data-nosnippet>78</a>    GraphId =&gt; { name: <span class="string">"graph_id"</span>, rule: ClauseRule::Parenthesized },
+<a href=#79 id=79 data-nosnippet>79</a>    GraphReset =&gt; { name: <span class="string">"graph_reset"</span>, rule: ClauseRule::Parenthesized },
+<a href=#80 id=80 data-nosnippet>80</a>    HasDeviceAddr =&gt; { name: <span class="string">"has_device_addr"</span>, rule: ClauseRule::Parenthesized },
+<a href=#81 id=81 data-nosnippet>81</a>    Hint =&gt; { name: <span class="string">"hint"</span>, rule: ClauseRule::Parenthesized },
+<a href=#82 id=82 data-nosnippet>82</a>    Holds =&gt; { name: <span class="string">"holds"</span>, rule: ClauseRule::Parenthesized },
+<a href=#83 id=83 data-nosnippet>83</a>    If =&gt; { name: <span class="string">"if"</span>, rule: ClauseRule::Parenthesized },
+<a href=#84 id=84 data-nosnippet>84</a>    InReduction =&gt; { name: <span class="string">"in_reduction"</span>, rule: ClauseRule::Parenthesized },
+<a href=#85 id=85 data-nosnippet>85</a>    Induction =&gt; { name: <span class="string">"induction"</span>, rule: ClauseRule::Parenthesized },
+<a href=#86 id=86 data-nosnippet>86</a>    Inductor =&gt; { name: <span class="string">"inductor"</span>, rule: ClauseRule::Parenthesized },
+<a href=#87 id=87 data-nosnippet>87</a>    Inbranch =&gt; { name: <span class="string">"inbranch"</span>, rule: ClauseRule::Bare },
+<a href=#88 id=88 data-nosnippet>88</a>    Inclusive =&gt; { name: <span class="string">"inclusive"</span>, rule: ClauseRule::Bare },
+<a href=#89 id=89 data-nosnippet>89</a>    Init =&gt; { name: <span class="string">"init"</span>, rule: ClauseRule::Parenthesized },
+<a href=#90 id=90 data-nosnippet>90</a>    InitComplete =&gt; { name: <span class="string">"init_complete"</span>, rule: ClauseRule::Flexible },
+<a href=#91 id=91 data-nosnippet>91</a>    Initializer =&gt; { name: <span class="string">"initializer"</span>, rule: ClauseRule::Parenthesized },
+<a href=#92 id=92 data-nosnippet>92</a>    Indirect =&gt; { name: <span class="string">"indirect"</span>, rule: ClauseRule::Flexible },
+<a href=#93 id=93 data-nosnippet>93</a>    Interop =&gt; { name: <span class="string">"interop"</span>, rule: ClauseRule::Parenthesized },
+<a href=#94 id=94 data-nosnippet>94</a>    IsDevicePtr =&gt; { name: <span class="string">"is_device_ptr"</span>, rule: ClauseRule::Parenthesized },
+<a href=#95 id=95 data-nosnippet>95</a>    Label =&gt; { name: <span class="string">"label"</span>, rule: ClauseRule::Parenthesized },
+<a href=#96 id=96 data-nosnippet>96</a>    Lastprivate =&gt; { name: <span class="string">"lastprivate"</span>, rule: ClauseRule::Parenthesized },
+<a href=#97 id=97 data-nosnippet>97</a>    Linear =&gt; { name: <span class="string">"linear"</span>, rule: ClauseRule::Parenthesized },
+<a href=#98 id=98 data-nosnippet>98</a>    Link =&gt; { name: <span class="string">"link"</span>, rule: ClauseRule::Parenthesized },
+<a href=#99 id=99 data-nosnippet>99</a>    Local =&gt; { name: <span class="string">"local"</span>, rule: ClauseRule::Parenthesized },
+<a href=#100 id=100 data-nosnippet>100</a>    Looprange =&gt; { name: <span class="string">"looprange"</span>, rule: ClauseRule::Parenthesized },
+<a href=#101 id=101 data-nosnippet>101</a>    Map =&gt; { name: <span class="string">"map"</span>, rule: ClauseRule::Parenthesized },
+<a href=#102 id=102 data-nosnippet>102</a>    Match =&gt; { name: <span class="string">"match"</span>, rule: ClauseRule::Parenthesized },
+<a href=#103 id=103 data-nosnippet>103</a>    Message =&gt; { name: <span class="string">"message"</span>, rule: ClauseRule::Parenthesized },
+<a href=#104 id=104 data-nosnippet>104</a>    Memscope =&gt; { name: <span class="string">"memscope"</span>, rule: ClauseRule::Parenthesized },
+<a href=#105 id=105 data-nosnippet>105</a>    Mergeable =&gt; { name: <span class="string">"mergeable"</span>, rule: ClauseRule::Bare },
+<a href=#106 id=106 data-nosnippet>106</a>    Nocontext =&gt; { name: <span class="string">"nocontext"</span>, rule: ClauseRule::Parenthesized },
+<a href=#107 id=107 data-nosnippet>107</a>    Nogroup =&gt; { name: <span class="string">"nogroup"</span>, rule: ClauseRule::Bare },
+<a href=#108 id=108 data-nosnippet>108</a>    NoOpenmp =&gt; { name: <span class="string">"no_openmp"</span>, rule: ClauseRule::Flexible },
+<a href=#109 id=109 data-nosnippet>109</a>    NoOpenmpConstructs =&gt; { name: <span class="string">"no_openmp_constructs"</span>, rule: ClauseRule::Flexible },
+<a href=#110 id=110 data-nosnippet>110</a>    NoOpenmpRoutines =&gt; { name: <span class="string">"no_openmp_routines"</span>, rule: ClauseRule::Flexible },
+<a href=#111 id=111 data-nosnippet>111</a>    NoParallelism =&gt; { name: <span class="string">"no_parallelism"</span>, rule: ClauseRule::Flexible },
+<a href=#112 id=112 data-nosnippet>112</a>    Nontemporal =&gt; { name: <span class="string">"nontemporal"</span>, rule: ClauseRule::Parenthesized },
+<a href=#113 id=113 data-nosnippet>113</a>    Notinbranch =&gt; { name: <span class="string">"notinbranch"</span>, rule: ClauseRule::Bare },
+<a href=#114 id=114 data-nosnippet>114</a>    Novariants =&gt; { name: <span class="string">"novariants"</span>, rule: ClauseRule::Flexible },
+<a href=#115 id=115 data-nosnippet>115</a>    Nowait =&gt; { name: <span class="string">"nowait"</span>, rule: ClauseRule::Bare },
+<a href=#116 id=116 data-nosnippet>116</a>    NumTasks =&gt; { name: <span class="string">"num_tasks"</span>, rule: ClauseRule::Parenthesized },
+<a href=#117 id=117 data-nosnippet>117</a>    NumTeams =&gt; { name: <span class="string">"num_teams"</span>, rule: ClauseRule::Parenthesized },
+<a href=#118 id=118 data-nosnippet>118</a>    NumThreads =&gt; { name: <span class="string">"num_threads"</span>, rule: ClauseRule::Parenthesized },
+<a href=#119 id=119 data-nosnippet>119</a>    Order =&gt; { name: <span class="string">"order"</span>, rule: ClauseRule::Parenthesized },
+<a href=#120 id=120 data-nosnippet>120</a>    Ordered =&gt; { name: <span class="string">"ordered"</span>, rule: ClauseRule::Flexible },
+<a href=#121 id=121 data-nosnippet>121</a>    Otherwise =&gt; { name: <span class="string">"otherwise"</span>, rule: ClauseRule::Parenthesized },
+<a href=#122 id=122 data-nosnippet>122</a>    Partial =&gt; { name: <span class="string">"partial"</span>, rule: ClauseRule::Flexible },
+<a href=#123 id=123 data-nosnippet>123</a>    Permutation =&gt; { name: <span class="string">"permutation"</span>, rule: ClauseRule::Parenthesized },
+<a href=#124 id=124 data-nosnippet>124</a>    Priority =&gt; { name: <span class="string">"priority"</span>, rule: ClauseRule::Parenthesized },
+<a href=#125 id=125 data-nosnippet>125</a>    Private =&gt; { name: <span class="string">"private"</span>, rule: ClauseRule::Parenthesized },
+<a href=#126 id=126 data-nosnippet>126</a>    ProcBind =&gt; { name: <span class="string">"proc_bind"</span>, rule: ClauseRule::Parenthesized },
+<a href=#127 id=127 data-nosnippet>127</a>    Public =&gt; { name: <span class="string">"public"</span>, rule: ClauseRule::Flexible },
+<a href=#128 id=128 data-nosnippet>128</a>    Read =&gt; { name: <span class="string">"read"</span>, rule: ClauseRule::Flexible },
+<a href=#129 id=129 data-nosnippet>129</a>    Reduction =&gt; { name: <span class="string">"reduction"</span>, rule: ClauseRule::Parenthesized },
+<a href=#130 id=130 data-nosnippet>130</a>    Release =&gt; { name: <span class="string">"release"</span>, rule: ClauseRule::Bare },
+<a href=#131 id=131 data-nosnippet>131</a>    Relaxed =&gt; { name: <span class="string">"relaxed"</span>, rule: ClauseRule::Bare },
+<a href=#132 id=132 data-nosnippet>132</a>    Replayable =&gt; { name: <span class="string">"replayable"</span>, rule: ClauseRule::Flexible },
+<a href=#133 id=133 data-nosnippet>133</a>    Reproducible =&gt; { name: <span class="string">"reproducible"</span>, rule: ClauseRule::Bare },
+<a href=#134 id=134 data-nosnippet>134</a>    Reverse =&gt; { name: <span class="string">"reverse"</span>, rule: ClauseRule::Flexible },
+<a href=#135 id=135 data-nosnippet>135</a>    ReverseOffload =&gt; { name: <span class="string">"reverse_offload"</span>, rule: ClauseRule::Bare },
+<a href=#136 id=136 data-nosnippet>136</a>    Safelen =&gt; { name: <span class="string">"safelen"</span>, rule: ClauseRule::Parenthesized },
+<a href=#137 id=137 data-nosnippet>137</a>    Safesync =&gt; { name: <span class="string">"safesync"</span>, rule: ClauseRule::Bare },
+<a href=#138 id=138 data-nosnippet>138</a>    Schedule =&gt; { name: <span class="string">"schedule"</span>, rule: ClauseRule::Parenthesized },
+<a href=#139 id=139 data-nosnippet>139</a>    SelfMaps =&gt; { name: <span class="string">"self_maps"</span>, rule: ClauseRule::Bare },
+<a href=#140 id=140 data-nosnippet>140</a>    SeqCst =&gt; { name: <span class="string">"seq_cst"</span>, rule: ClauseRule::Bare },
+<a href=#141 id=141 data-nosnippet>141</a>    Severity =&gt; { name: <span class="string">"severity"</span>, rule: ClauseRule::Parenthesized },
+<a href=#142 id=142 data-nosnippet>142</a>    Shared =&gt; { name: <span class="string">"shared"</span>, rule: ClauseRule::Parenthesized },
+<a href=#143 id=143 data-nosnippet>143</a>    Simd =&gt; { name: <span class="string">"simd"</span>, rule: ClauseRule::Bare },
+<a href=#144 id=144 data-nosnippet>144</a>    Simdlen =&gt; { name: <span class="string">"simdlen"</span>, rule: ClauseRule::Parenthesized },
+<a href=#145 id=145 data-nosnippet>145</a>    Sizes =&gt; { name: <span class="string">"sizes"</span>, rule: ClauseRule::Parenthesized },
+<a href=#146 id=146 data-nosnippet>146</a>    TaskReduction =&gt; { name: <span class="string">"task_reduction"</span>, rule: ClauseRule::Parenthesized },
+<a href=#147 id=147 data-nosnippet>147</a>    ThreadLimit =&gt; { name: <span class="string">"thread_limit"</span>, rule: ClauseRule::Parenthesized },
+<a href=#148 id=148 data-nosnippet>148</a>    Threads =&gt; { name: <span class="string">"threads"</span>, rule: ClauseRule::Bare },
+<a href=#149 id=149 data-nosnippet>149</a>    Threadset =&gt; { name: <span class="string">"threadset"</span>, rule: ClauseRule::Parenthesized },
+<a href=#150 id=150 data-nosnippet>150</a>    Tile =&gt; { name: <span class="string">"tile"</span>, rule: ClauseRule::Parenthesized },
+<a href=#151 id=151 data-nosnippet>151</a>    To =&gt; { name: <span class="string">"to"</span>, rule: ClauseRule::Parenthesized },
+<a href=#152 id=152 data-nosnippet>152</a>    Transparent =&gt; { name: <span class="string">"transparent"</span>, rule: ClauseRule::Flexible },
+<a href=#153 id=153 data-nosnippet>153</a>    UnifiedAddress =&gt; { name: <span class="string">"unified_address"</span>, rule: ClauseRule::Flexible },
+<a href=#154 id=154 data-nosnippet>154</a>    UnifiedSharedMemory =&gt; { name: <span class="string">"unified_shared_memory"</span>, rule: ClauseRule::Flexible },
+<a href=#155 id=155 data-nosnippet>155</a>    Uniform =&gt; { name: <span class="string">"uniform"</span>, rule: ClauseRule::Parenthesized },
+<a href=#156 id=156 data-nosnippet>156</a>    Unroll =&gt; { name: <span class="string">"unroll"</span>, rule: ClauseRule::Flexible },
+<a href=#157 id=157 data-nosnippet>157</a>    Untied =&gt; { name: <span class="string">"untied"</span>, rule: ClauseRule::Bare },
+<a href=#158 id=158 data-nosnippet>158</a>    Update =&gt; { name: <span class="string">"update"</span>, rule: ClauseRule::Flexible },
+<a href=#159 id=159 data-nosnippet>159</a>    Use =&gt; { name: <span class="string">"use"</span>, rule: ClauseRule::Parenthesized },
+<a href=#160 id=160 data-nosnippet>160</a>    UseDeviceAddr =&gt; { name: <span class="string">"use_device_addr"</span>, rule: ClauseRule::Parenthesized },
+<a href=#161 id=161 data-nosnippet>161</a>    UseDevicePtr =&gt; { name: <span class="string">"use_device_ptr"</span>, rule: ClauseRule::Parenthesized },
+<a href=#162 id=162 data-nosnippet>162</a>    UsesAllocators =&gt; { name: <span class="string">"uses_allocators"</span>, rule: ClauseRule::Parenthesized },
+<a href=#163 id=163 data-nosnippet>163</a>    Weak =&gt; { name: <span class="string">"weak"</span>, rule: ClauseRule::Flexible },
+<a href=#164 id=164 data-nosnippet>164</a>    When =&gt; { name: <span class="string">"when"</span>, rule: ClauseRule::Parenthesized },
+<a href=#165 id=165 data-nosnippet>165</a>    Write =&gt; { name: <span class="string">"write"</span>, rule: ClauseRule::Flexible },
+<a href=#166 id=166 data-nosnippet>166</a>}
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a><span class="macro">macro_rules!</span> openmp_directives {
+<a href=#169 id=169 data-nosnippet>169</a>    ($( <span class="macro-nonterminal">$variant</span>:ident =&gt; <span class="macro-nonterminal">$name</span>:literal ),+ $(,)<span class="question-mark">?</span>) =&gt; {
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+<a href=#171 id=171 data-nosnippet>171</a>        </span><span class="kw">pub enum </span>OpenMpDirective {
+<a href=#172 id=172 data-nosnippet>172</a>            $( <span class="macro-nonterminal">$variant</span>, )+
+<a href=#173 id=173 data-nosnippet>173</a>        }
+<a href=#174 id=174 data-nosnippet>174</a>
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">impl </span>OpenMpDirective {
+<a href=#176 id=176 data-nosnippet>176</a>            <span class="kw">pub const </span>ALL: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[OpenMpDirective] = <span class="kw-2">&amp;</span>[ $( OpenMpDirective::<span class="macro-nonterminal">$variant</span>, )+ ];
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a>            <span class="kw">pub const fn </span>as_str(<span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
+<a href=#179 id=179 data-nosnippet>179</a>                <span class="kw">match </span><span class="self">self </span>{
+<a href=#180 id=180 data-nosnippet>180</a>                    $( OpenMpDirective::<span class="macro-nonterminal">$variant </span>=&gt; <span class="macro-nonterminal">$name</span>, )+
+<a href=#181 id=181 data-nosnippet>181</a>                }
+<a href=#182 id=182 data-nosnippet>182</a>            }
+<a href=#183 id=183 data-nosnippet>183</a>        }
+<a href=#184 id=184 data-nosnippet>184</a>    };
+<a href=#185 id=185 data-nosnippet>185</a>}
+<a href=#186 id=186 data-nosnippet>186</a>
+<a href=#187 id=187 data-nosnippet>187</a><span class="macro">openmp_directives!</span> {
+<a href=#188 id=188 data-nosnippet>188</a>    Allocate =&gt; <span class="string">"allocate"</span>,
+<a href=#189 id=189 data-nosnippet>189</a>    Allocators =&gt; <span class="string">"allocators"</span>,
+<a href=#190 id=190 data-nosnippet>190</a>    Assume =&gt; <span class="string">"assume"</span>,
+<a href=#191 id=191 data-nosnippet>191</a>    Assumes =&gt; <span class="string">"assumes"</span>,
+<a href=#192 id=192 data-nosnippet>192</a>    Atomic =&gt; <span class="string">"atomic"</span>,
+<a href=#193 id=193 data-nosnippet>193</a>    AtomicCapture =&gt; <span class="string">"atomic capture"</span>,
+<a href=#194 id=194 data-nosnippet>194</a>    AtomicCompareCapture =&gt; <span class="string">"atomic compare capture"</span>,
+<a href=#195 id=195 data-nosnippet>195</a>    AtomicRead =&gt; <span class="string">"atomic read"</span>,
+<a href=#196 id=196 data-nosnippet>196</a>    AtomicUpdate =&gt; <span class="string">"atomic update"</span>,
+<a href=#197 id=197 data-nosnippet>197</a>    AtomicWrite =&gt; <span class="string">"atomic write"</span>,
+<a href=#198 id=198 data-nosnippet>198</a>    Barrier =&gt; <span class="string">"barrier"</span>,
+<a href=#199 id=199 data-nosnippet>199</a>    BeginAssumes =&gt; <span class="string">"begin assumes"</span>,
+<a href=#200 id=200 data-nosnippet>200</a>    BeginDeclareTarget =&gt; <span class="string">"begin declare target"</span>,
+<a href=#201 id=201 data-nosnippet>201</a>    BeginDeclareVariant =&gt; <span class="string">"begin declare variant"</span>,
+<a href=#202 id=202 data-nosnippet>202</a>    Cancel =&gt; <span class="string">"cancel"</span>,
+<a href=#203 id=203 data-nosnippet>203</a>    CancellationPoint =&gt; <span class="string">"cancellation point"</span>,
+<a href=#204 id=204 data-nosnippet>204</a>    Critical =&gt; <span class="string">"critical"</span>,
+<a href=#205 id=205 data-nosnippet>205</a>    DeclareInduction =&gt; <span class="string">"declare induction"</span>,
+<a href=#206 id=206 data-nosnippet>206</a>    DeclareMapper =&gt; <span class="string">"declare mapper"</span>,
+<a href=#207 id=207 data-nosnippet>207</a>    DeclareReduction =&gt; <span class="string">"declare reduction"</span>,
+<a href=#208 id=208 data-nosnippet>208</a>    DeclareSimd =&gt; <span class="string">"declare simd"</span>,
+<a href=#209 id=209 data-nosnippet>209</a>    DeclareTarget =&gt; <span class="string">"declare target"</span>,
+<a href=#210 id=210 data-nosnippet>210</a>    DeclareVariant =&gt; <span class="string">"declare variant"</span>,
+<a href=#211 id=211 data-nosnippet>211</a>    Depobj =&gt; <span class="string">"depobj"</span>,
+<a href=#212 id=212 data-nosnippet>212</a>    Dispatch =&gt; <span class="string">"dispatch"</span>,
+<a href=#213 id=213 data-nosnippet>213</a>    Distribute =&gt; <span class="string">"distribute"</span>,
+<a href=#214 id=214 data-nosnippet>214</a>    DistributeParallelFor =&gt; <span class="string">"distribute parallel for"</span>,
+<a href=#215 id=215 data-nosnippet>215</a>    DistributeParallelForSimd =&gt; <span class="string">"distribute parallel for simd"</span>,
+<a href=#216 id=216 data-nosnippet>216</a>    DistributeParallelLoop =&gt; <span class="string">"distribute parallel loop"</span>,
+<a href=#217 id=217 data-nosnippet>217</a>    DistributeParallelLoopSimd =&gt; <span class="string">"distribute parallel loop simd"</span>,
+<a href=#218 id=218 data-nosnippet>218</a>    DistributeSimd =&gt; <span class="string">"distribute simd"</span>,
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="comment">// --- Fortran variants ---
+<a href=#220 id=220 data-nosnippet>220</a>    </span>DistributeParallelDo =&gt; <span class="string">"distribute parallel do"</span>,  <span class="comment">// Fortran variant
+<a href=#221 id=221 data-nosnippet>221</a>    </span>DistributeParallelDoSimd =&gt; <span class="string">"distribute parallel do simd"</span>,  <span class="comment">// Fortran variant
+<a href=#222 id=222 data-nosnippet>222</a>    </span>Do =&gt; <span class="string">"do"</span>,  <span class="comment">// Fortran equivalent of FOR
+<a href=#223 id=223 data-nosnippet>223</a>    </span>DoSimd =&gt; <span class="string">"do simd"</span>,  <span class="comment">// Fortran equivalent of FOR SIMD
+<a href=#224 id=224 data-nosnippet>224</a>    </span>EndDeclareTarget =&gt; <span class="string">"end declare target"</span>,
+<a href=#225 id=225 data-nosnippet>225</a>    EndDeclareVariant =&gt; <span class="string">"end declare variant"</span>,
+<a href=#226 id=226 data-nosnippet>226</a>    Error =&gt; <span class="string">"error"</span>,
+<a href=#227 id=227 data-nosnippet>227</a>    Flush =&gt; <span class="string">"flush"</span>,
+<a href=#228 id=228 data-nosnippet>228</a>    Fuse =&gt; <span class="string">"fuse"</span>,
+<a href=#229 id=229 data-nosnippet>229</a>    Groupprivate =&gt; <span class="string">"groupprivate"</span>,
+<a href=#230 id=230 data-nosnippet>230</a>    For =&gt; <span class="string">"for"</span>,
+<a href=#231 id=231 data-nosnippet>231</a>    ForSimd =&gt; <span class="string">"for simd"</span>,
+<a href=#232 id=232 data-nosnippet>232</a>    Interchange =&gt; <span class="string">"interchange"</span>,
+<a href=#233 id=233 data-nosnippet>233</a>    Interop =&gt; <span class="string">"interop"</span>,
+<a href=#234 id=234 data-nosnippet>234</a>    Loop =&gt; <span class="string">"loop"</span>,
+<a href=#235 id=235 data-nosnippet>235</a>    Reverse =&gt; <span class="string">"reverse"</span>,
+<a href=#236 id=236 data-nosnippet>236</a>    Masked =&gt; <span class="string">"masked"</span>,
+<a href=#237 id=237 data-nosnippet>237</a>    MaskedTaskloop =&gt; <span class="string">"masked taskloop"</span>,
+<a href=#238 id=238 data-nosnippet>238</a>    MaskedTaskloopSimd =&gt; <span class="string">"masked taskloop simd"</span>,
+<a href=#239 id=239 data-nosnippet>239</a>    Master =&gt; <span class="string">"master"</span>,
+<a href=#240 id=240 data-nosnippet>240</a>    Metadirective =&gt; <span class="string">"metadirective"</span>,
+<a href=#241 id=241 data-nosnippet>241</a>    BeginMetadirective =&gt; <span class="string">"begin metadirective"</span>,
+<a href=#242 id=242 data-nosnippet>242</a>    Nothing =&gt; <span class="string">"nothing"</span>,
+<a href=#243 id=243 data-nosnippet>243</a>    Ordered =&gt; <span class="string">"ordered"</span>,
+<a href=#244 id=244 data-nosnippet>244</a>    Parallel =&gt; <span class="string">"parallel"</span>,
+<a href=#245 id=245 data-nosnippet>245</a>    ParallelDo =&gt; <span class="string">"parallel do"</span>,  <span class="comment">// Fortran equivalent of PARALLEL FOR
+<a href=#246 id=246 data-nosnippet>246</a>    </span>ParallelDoSimd =&gt; <span class="string">"parallel do simd"</span>,  <span class="comment">// Fortran equivalent of PARALLEL FOR SIMD
+<a href=#247 id=247 data-nosnippet>247</a>    </span>ParallelFor =&gt; <span class="string">"parallel for"</span>,
+<a href=#248 id=248 data-nosnippet>248</a>    ParallelForSimd =&gt; <span class="string">"parallel for simd"</span>,
+<a href=#249 id=249 data-nosnippet>249</a>    ParallelLoop =&gt; <span class="string">"parallel loop"</span>,
+<a href=#250 id=250 data-nosnippet>250</a>    ParallelLoopSimd =&gt; <span class="string">"parallel loop simd"</span>,
+<a href=#251 id=251 data-nosnippet>251</a>    ParallelMasked =&gt; <span class="string">"parallel masked"</span>,
+<a href=#252 id=252 data-nosnippet>252</a>    ParallelMaskedTaskloop =&gt; <span class="string">"parallel masked taskloop"</span>,
+<a href=#253 id=253 data-nosnippet>253</a>    ParallelMaskedTaskloopSimd =&gt; <span class="string">"parallel masked taskloop simd"</span>,
+<a href=#254 id=254 data-nosnippet>254</a>    ParallelMaster =&gt; <span class="string">"parallel master"</span>,
+<a href=#255 id=255 data-nosnippet>255</a>    ParallelMasterTaskloop =&gt; <span class="string">"parallel master taskloop"</span>,
+<a href=#256 id=256 data-nosnippet>256</a>    ParallelMasterTaskloopSimd =&gt; <span class="string">"parallel master taskloop simd"</span>,
+<a href=#257 id=257 data-nosnippet>257</a>    ParallelSections =&gt; <span class="string">"parallel sections"</span>,
+<a href=#258 id=258 data-nosnippet>258</a>    Requires =&gt; <span class="string">"requires"</span>,
+<a href=#259 id=259 data-nosnippet>259</a>    Scope =&gt; <span class="string">"scope"</span>,
+<a href=#260 id=260 data-nosnippet>260</a>    Scan =&gt; <span class="string">"scan"</span>,
+<a href=#261 id=261 data-nosnippet>261</a>    Section =&gt; <span class="string">"section"</span>,
+<a href=#262 id=262 data-nosnippet>262</a>    Sections =&gt; <span class="string">"sections"</span>,
+<a href=#263 id=263 data-nosnippet>263</a>    Simd =&gt; <span class="string">"simd"</span>,
+<a href=#264 id=264 data-nosnippet>264</a>    Single =&gt; <span class="string">"single"</span>,
+<a href=#265 id=265 data-nosnippet>265</a>    Split =&gt; <span class="string">"split"</span>,
+<a href=#266 id=266 data-nosnippet>266</a>    Stripe =&gt; <span class="string">"stripe"</span>,
+<a href=#267 id=267 data-nosnippet>267</a>    Target =&gt; <span class="string">"target"</span>,
+<a href=#268 id=268 data-nosnippet>268</a>    TargetData =&gt; <span class="string">"target data"</span>,
+<a href=#269 id=269 data-nosnippet>269</a>    TargetEnterData =&gt; <span class="string">"target enter data"</span>,
+<a href=#270 id=270 data-nosnippet>270</a>    TargetExitData =&gt; <span class="string">"target exit data"</span>,
+<a href=#271 id=271 data-nosnippet>271</a>    TargetLoop =&gt; <span class="string">"target loop"</span>,
+<a href=#272 id=272 data-nosnippet>272</a>    TargetLoopSimd =&gt; <span class="string">"target loop simd"</span>,
+<a href=#273 id=273 data-nosnippet>273</a>    TargetParallel =&gt; <span class="string">"target parallel"</span>,
+<a href=#274 id=274 data-nosnippet>274</a>    TargetParallelDo =&gt; <span class="string">"target parallel do"</span>,  <span class="comment">// Fortran variant
+<a href=#275 id=275 data-nosnippet>275</a>    </span>TargetParallelDoSimd =&gt; <span class="string">"target parallel do simd"</span>,  <span class="comment">// Fortran variant
+<a href=#276 id=276 data-nosnippet>276</a>    </span>TargetParallelFor =&gt; <span class="string">"target parallel for"</span>,
+<a href=#277 id=277 data-nosnippet>277</a>    TargetParallelForSimd =&gt; <span class="string">"target parallel for simd"</span>,
+<a href=#278 id=278 data-nosnippet>278</a>    TargetParallelLoop =&gt; <span class="string">"target parallel loop"</span>,
+<a href=#279 id=279 data-nosnippet>279</a>    TargetParallelLoopSimd =&gt; <span class="string">"target parallel loop simd"</span>,
+<a href=#280 id=280 data-nosnippet>280</a>    TargetSimd =&gt; <span class="string">"target simd"</span>,
+<a href=#281 id=281 data-nosnippet>281</a>    TargetTeams =&gt; <span class="string">"target teams"</span>,
+<a href=#282 id=282 data-nosnippet>282</a>    TargetTeamsDistribute =&gt; <span class="string">"target teams distribute"</span>,
+<a href=#283 id=283 data-nosnippet>283</a>    TargetTeamsDistributeParallelDo =&gt; <span class="string">"target teams distribute parallel do"</span>,  <span class="comment">// Fortran variant
+<a href=#284 id=284 data-nosnippet>284</a>    </span>TargetTeamsDistributeParallelDoSimd =&gt; <span class="string">"target teams distribute parallel do simd"</span>,  <span class="comment">// Fortran variant
+<a href=#285 id=285 data-nosnippet>285</a>    </span>TargetTeamsDistributeParallelFor =&gt; <span class="string">"target teams distribute parallel for"</span>,
+<a href=#286 id=286 data-nosnippet>286</a>    TargetTeamsDistributeParallelForSimd =&gt; <span class="string">"target teams distribute parallel for simd"</span>,
+<a href=#287 id=287 data-nosnippet>287</a>    TargetTeamsDistributeParallelLoop =&gt; <span class="string">"target teams distribute parallel loop"</span>,
+<a href=#288 id=288 data-nosnippet>288</a>    TargetTeamsDistributeParallelLoopSimd =&gt; <span class="string">"target teams distribute parallel loop simd"</span>,
+<a href=#289 id=289 data-nosnippet>289</a>    TargetTeamsDistributeSimd =&gt; <span class="string">"target teams distribute simd"</span>,
+<a href=#290 id=290 data-nosnippet>290</a>    TargetTeamsLoop =&gt; <span class="string">"target teams loop"</span>,
+<a href=#291 id=291 data-nosnippet>291</a>    TargetTeamsLoopSimd =&gt; <span class="string">"target teams loop simd"</span>,
+<a href=#292 id=292 data-nosnippet>292</a>    TargetUpdate =&gt; <span class="string">"target update"</span>,
+<a href=#293 id=293 data-nosnippet>293</a>    Task =&gt; <span class="string">"task"</span>,
+<a href=#294 id=294 data-nosnippet>294</a>    TaskIteration =&gt; <span class="string">"task iteration"</span>,
+<a href=#295 id=295 data-nosnippet>295</a>    Taskgroup =&gt; <span class="string">"taskgroup"</span>,
+<a href=#296 id=296 data-nosnippet>296</a>    Taskgraph =&gt; <span class="string">"taskgraph"</span>,
+<a href=#297 id=297 data-nosnippet>297</a>    Taskloop =&gt; <span class="string">"taskloop"</span>,
+<a href=#298 id=298 data-nosnippet>298</a>    TaskloopSimd =&gt; <span class="string">"taskloop simd"</span>,
+<a href=#299 id=299 data-nosnippet>299</a>    Taskwait =&gt; <span class="string">"taskwait"</span>,
+<a href=#300 id=300 data-nosnippet>300</a>    Taskyield =&gt; <span class="string">"taskyield"</span>,
+<a href=#301 id=301 data-nosnippet>301</a>    Teams =&gt; <span class="string">"teams"</span>,
+<a href=#302 id=302 data-nosnippet>302</a>    TeamsDistribute =&gt; <span class="string">"teams distribute"</span>,
+<a href=#303 id=303 data-nosnippet>303</a>    TeamsDistributeParallelDo =&gt; <span class="string">"teams distribute parallel do"</span>,  <span class="comment">// Fortran variant
+<a href=#304 id=304 data-nosnippet>304</a>    </span>TeamsDistributeParallelDoSimd =&gt; <span class="string">"teams distribute parallel do simd"</span>,  <span class="comment">// Fortran variant
+<a href=#305 id=305 data-nosnippet>305</a>    </span>TeamsDistributeParallelFor =&gt; <span class="string">"teams distribute parallel for"</span>,
+<a href=#306 id=306 data-nosnippet>306</a>    TeamsDistributeParallelForSimd =&gt; <span class="string">"teams distribute parallel for simd"</span>,
+<a href=#307 id=307 data-nosnippet>307</a>    TeamsDistributeParallelLoop =&gt; <span class="string">"teams distribute parallel loop"</span>,
+<a href=#308 id=308 data-nosnippet>308</a>    TeamsDistributeParallelLoopSimd =&gt; <span class="string">"teams distribute parallel loop simd"</span>,
+<a href=#309 id=309 data-nosnippet>309</a>    TeamsDistributeSimd =&gt; <span class="string">"teams distribute simd"</span>,
+<a href=#310 id=310 data-nosnippet>310</a>    TeamsLoop =&gt; <span class="string">"teams loop"</span>,
+<a href=#311 id=311 data-nosnippet>311</a>    TeamsLoopSimd =&gt; <span class="string">"teams loop simd"</span>,
+<a href=#312 id=312 data-nosnippet>312</a>    Threadprivate =&gt; <span class="string">"threadprivate"</span>,
+<a href=#313 id=313 data-nosnippet>313</a>    Tile =&gt; <span class="string">"tile"</span>,
+<a href=#314 id=314 data-nosnippet>314</a>    Unroll =&gt; <span class="string">"unroll"</span>,
+<a href=#315 id=315 data-nosnippet>315</a>    Workdistribute =&gt; <span class="string">"workdistribute"</span>,
+<a href=#316 id=316 data-nosnippet>316</a>    Workshare =&gt; <span class="string">"workshare"</span>,
+<a href=#317 id=317 data-nosnippet>317</a>}
+<a href=#318 id=318 data-nosnippet>318</a>
+<a href=#319 id=319 data-nosnippet>319</a><span class="kw">pub fn </span>clause_registry() -&gt; ClauseRegistry {
+<a href=#320 id=320 data-nosnippet>320</a>    <span class="kw">let </span><span class="kw-2">mut </span>builder = ClauseRegistryBuilder::new().with_default_rule(OPENMP_DEFAULT_CLAUSE_RULE);
+<a href=#321 id=321 data-nosnippet>321</a>
+<a href=#322 id=322 data-nosnippet>322</a>    <span class="kw">for </span>clause <span class="kw">in </span>OpenMpClause::ALL {
+<a href=#323 id=323 data-nosnippet>323</a>        builder.register_with_rule_mut(clause.name(), clause.rule());
+<a href=#324 id=324 data-nosnippet>324</a>    }
+<a href=#325 id=325 data-nosnippet>325</a>
+<a href=#326 id=326 data-nosnippet>326</a>    builder.build()
+<a href=#327 id=327 data-nosnippet>327</a>}
+<a href=#328 id=328 data-nosnippet>328</a>
+<a href=#329 id=329 data-nosnippet>329</a><span class="kw">pub fn </span>directive_registry() -&gt; DirectiveRegistry {
+<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">let </span><span class="kw-2">mut </span>builder = DirectiveRegistryBuilder::new();
+<a href=#331 id=331 data-nosnippet>331</a>
+<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">for </span>directive <span class="kw">in </span>OpenMpDirective::ALL {
+<a href=#333 id=333 data-nosnippet>333</a>        builder = builder.register_generic(directive.as_str());
+<a href=#334 id=334 data-nosnippet>334</a>    }
+<a href=#335 id=335 data-nosnippet>335</a>
+<a href=#336 id=336 data-nosnippet>336</a>    builder.build()
+<a href=#337 id=337 data-nosnippet>337</a>}
+<a href=#338 id=338 data-nosnippet>338</a>
+<a href=#339 id=339 data-nosnippet>339</a><span class="kw">pub fn </span>parser() -&gt; Parser {
+<a href=#340 id=340 data-nosnippet>340</a>    Parser::new(directive_registry(), clause_registry())
+<a href=#341 id=341 data-nosnippet>341</a>}</code></pre></div></section></main></body></html>

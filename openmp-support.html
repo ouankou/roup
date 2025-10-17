@@ -187,14 +187,17 @@
 <h2 id="quick-summary"><a class="header" href="#quick-summary">Quick Summary</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Support</th></tr></thead><tbody>
 <tr><td><strong>OpenMP Version</strong></td><td>3.0 - 6.0</td></tr>
-<tr><td><strong>Directives</strong></td><td>95 directives (core + combined forms)</td></tr>
-<tr><td><strong>Clauses</strong></td><td>91 clauses</td></tr>
+<tr><td><strong>Directive keywords</strong></td><td>128 keywords (core, combined, declarative, and meta)</td></tr>
+<tr><td><strong>Clause keywords</strong></td><td>132 keywords</td></tr>
 <tr><td><strong>Languages</strong></td><td>C, C++, Fortran</td></tr>
-<tr><td><strong>Test Coverage</strong></td><td>355 automated tests</td></tr>
+<tr><td><strong>Test Coverage</strong></td><td>405 automated tests</td></tr>
 <tr><td><strong>Specification</strong></td><td><a href="https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf">OpenMP 6.0 PDF</a></td></tr>
 </tbody></table>
 </div>
-<p><strong>ROUP supports the vast majority of OpenMP 3.0-6.0 directives and clauses.</strong> ✅</p>
+<p><strong>ROUP supports the complete OpenMP 6.0 directive and clause keyword set.</strong> ✅
+For the machine-generated catalogues see
+<a href="./openmp60-directives-clauses.html"><code>openmp60-directives-clauses.md</code></a> and
+<a href="./openmp60-directive-clause-components.html"><code>openmp60-directive-clause-components.md</code></a>.</p>
 <hr />
 <h2 id="directive-support"><a class="header" href="#directive-support">Directive Support</a></h2>
 <h3 id="core-parallelism-15-directives"><a class="header" href="#core-parallelism-15-directives">Core Parallelism (15 directives)</a></h3>
@@ -208,7 +211,7 @@
 <tr><td><code>masked</code></td><td><code>#pragma omp masked</code></td><td>Masked execution (OpenMP 5.1+)</td></tr>
 <tr><td><code>barrier</code></td><td><code>#pragma omp barrier</code></td><td>Synchronization barrier</td></tr>
 <tr><td><code>critical</code></td><td><code>#pragma omp critical</code></td><td>Critical section</td></tr>
-<tr><td><code>atomic</code></td><td><code>#pragma omp atomic</code></td><td>Atomic operation</td></tr>
+<tr><td><code>atomic</code></td><td><code>#pragma omp atomic</code></td><td>Atomic operation (includes read, write, update, capture, compare capture)</td></tr>
 <tr><td><code>flush</code></td><td><code>#pragma omp flush</code></td><td>Memory fence</td></tr>
 <tr><td><code>ordered</code></td><td><code>#pragma omp ordered</code></td><td>Ordered execution</td></tr>
 <tr><td><code>simd</code></td><td><code>#pragma omp simd</code></td><td>SIMD vectorization</td></tr>
@@ -253,9 +256,14 @@
 <li><code>parallel for</code></li>
 <li><code>parallel for simd</code></li>
 <li><code>parallel loop</code></li>
+<li><code>parallel loop simd</code></li>
 <li><code>parallel sections</code></li>
 <li><code>parallel master</code></li>
 <li><code>parallel masked</code></li>
+<li><code>parallel master taskloop</code></li>
+<li><code>parallel master taskloop simd</code></li>
+<li><code>parallel masked taskloop</code></li>
+<li><code>parallel masked taskloop simd</code></li>
 </ul>
 <p><strong>Target + Parallel:</strong></p>
 <ul>
@@ -263,10 +271,16 @@
 <li><code>target parallel for</code></li>
 <li><code>target parallel for simd</code></li>
 <li><code>target parallel loop</code></li>
+<li><code>target parallel loop simd</code></li>
+<li><code>target loop</code></li>
+<li><code>target loop simd</code></li>
 <li><code>target teams</code></li>
 <li><code>target teams distribute</code></li>
 <li><code>target teams distribute parallel for</code></li>
 <li><code>target teams distribute parallel for simd</code></li>
+<li><code>target teams distribute parallel loop</code></li>
+<li><code>target teams distribute parallel loop simd</code></li>
+<li><code>target teams loop simd</code></li>
 </ul>
 <p><strong>Teams + Distribute:</strong></p>
 <ul>
@@ -274,9 +288,22 @@
 <li><code>teams distribute simd</code></li>
 <li><code>teams distribute parallel for</code></li>
 <li><code>teams distribute parallel for simd</code></li>
+<li><code>teams distribute parallel loop</code></li>
+<li><code>teams distribute parallel loop simd</code></li>
 <li><code>teams loop</code></li>
+<li><code>teams loop simd</code></li>
 </ul>
-<p><strong>And many more...</strong> (all 120+ combinations from OpenMP 6.0)</p>
+<p><strong>Distribute + Loop:</strong></p>
+<ul>
+<li><code>distribute parallel loop</code></li>
+<li><code>distribute parallel loop simd</code></li>
+</ul>
+<p><strong>Masked + Taskloop:</strong></p>
+<ul>
+<li><code>masked taskloop</code></li>
+<li><code>masked taskloop simd</code></li>
+</ul>
+<p><strong>And many more...</strong> (all 128 directive keywords from OpenMP 6.0)</p>
 <h3 id="meta-directives--variants-5-directives"><a class="header" href="#meta-directives--variants-5-directives">Meta-directives &amp; Variants (5 directives)</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Directive</th><th>Example</th><th>Notes</th></tr></thead><tbody>
 <tr><td><code>metadirective</code></td><td><code>#pragma omp metadirective when(...)</code></td><td>Conditional directive selection</td></tr>
@@ -452,9 +479,9 @@ end do
 <h2 id="test-coverage"><a class="header" href="#test-coverage">Test Coverage</a></h2>
 <p>ROUP includes comprehensive automated testing:</p>
 <div class="table-wrapper"><table><thead><tr><th>Test Suite</th><th>Count</th><th>Coverage</th></tr></thead><tbody>
-<tr><td><strong>Integration tests</strong></td><td>116</td><td>Directive parsing, clause combinations</td></tr>
-<tr><td><strong>Doc tests</strong></td><td>239</td><td>API examples, edge cases</td></tr>
-<tr><td><strong>Total</strong></td><td><strong>355</strong></td><td>All directives + clauses tested</td></tr>
+<tr><td><strong>Integration tests</strong></td><td>143</td><td>Directive parsing, clause combinations</td></tr>
+<tr><td><strong>Doc tests</strong></td><td>262</td><td>API examples, edge cases</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>405</strong></td><td>All directives + clauses tested</td></tr>
 </tbody></table>
 </div>
 <p><strong>Every directive and clause in OpenMP 6.0 has a passing test.</strong> ✅</p>
@@ -513,10 +540,10 @@ end do
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <p><strong>ROUP provides OpenMP 3.0-6.0 parsing support:</strong></p>
 <ul>
-<li>✅ <strong>95 directives</strong> (core, combined, and meta-directives)</li>
-<li>✅ <strong>91 clause types</strong> (data-sharing, control, device, SIMD, sync, etc.)</li>
+<li>✅ <strong>128 directive keywords</strong> (core, combined, declarative, and meta-directives)</li>
+<li>✅ <strong>132 clause keywords</strong> (data-sharing, control, device, SIMD, sync, etc.)</li>
 <li>✅ <strong>C/C++/Fortran</strong> syntax support</li>
-<li>✅ <strong>352 automated tests</strong> (comprehensive directive/clause coverage)</li>
+<li>✅ <strong>405 automated tests</strong> (comprehensive directive/clause coverage)</li>
 <li>✅ <strong>Type-safe Rust API</strong> + <strong>C FFI</strong></li>
 <li>✅ <strong>Latest spec</strong> (OpenMP 6.0, 2024)</li>
 </ul>

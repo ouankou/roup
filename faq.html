@@ -209,7 +209,7 @@
 <p><strong>No, ROUP is experimental and under active development.</strong></p>
 <p><strong>Current status:</strong></p>
 <ul>
-<li>✅ 352 tests, all passing</li>
+<li>✅ 405 tests, all passing</li>
 <li>✅ Supports OpenMP 3.0-6.0 parsing</li>
 <li>⚠️ APIs may change between versions</li>
 <li>⚠️ Some OpenMP features still being implemented</li>
@@ -375,7 +375,7 @@ let dir2 = t2.join().unwrap();</code></pre>
 <li><code>firstprivate</code>, <code>lastprivate</code>, <code>reduction</code></li>
 <li><code>schedule</code>, <code>collapse</code>, <code>ordered</code>, <code>nowait</code>, <code>default</code></li>
 </ul>
-<p>This covers 95% of real-world use cases. The complete Rust parser supports all 91 clauses from OpenMP 3.0-6.0 (see <a href="./architecture.html">Architecture</a> for details).</p>
+<p>This covers 95% of real-world use cases. The complete Rust parser supports all 132 clause keywords from OpenMP 3.0-6.0 (see <a href="./architecture.html">Architecture</a> for details).</p>
 <h3 id="whats-the-clause-kind-mapping"><a class="header" href="#whats-the-clause-kind-mapping">What's the clause kind mapping?</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Kind</th><th>Clause</th><th>Kind</th><th>Clause</th></tr></thead><tbody>
 <tr><td>0</td><td>num_threads</td><td>6</td><td>reduction</td></tr>
@@ -637,8 +637,8 @@ target_link_libraries(myapp roup pthread dl m)
 <h3 id="roup-vs-writing-a-custom-parser"><a class="header" href="#roup-vs-writing-a-custom-parser">ROUP vs writing a custom parser?</a></h3>
 <p><strong>ROUP advantages:</strong></p>
 <ul>
-<li>Already supports 120+ directives</li>
-<li>Tested with 342 tests</li>
+<li>Already supports 128 directives</li>
+<li>Tested with 405 tests</li>
 <li>Handles edge cases</li>
 <li>Active maintenance</li>
 <li>OpenMP spec compliance</li>

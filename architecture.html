@@ -974,16 +974,16 @@ ROUP's architecture prioritizes:
 1. **Safety**: 99.1% safe Rust, minimal unsafe only at FFI boundary
 2. **Performance**: Zero-copy lexing, minimal allocations
 3. **Usability**: Standard C patterns, clear error messages
-4. **Correctness**: 352 tests, comprehensive OpenMP support
+4. **Correctness**: 405 tests, comprehensive OpenMP support
 
 The three-layer design (Lexer → Parser → FFI) provides a clean separation of concerns while maintaining excellent performance characteristics.
 
 **Key Metrics:**
 - 16 FFI functions
 - ~60 lines of unsafe code (0.9%)
-- 95 directives
-- 91 clauses
-- 352 tests
+- 128 directive keywords
+- 132 clause keywords
+- 405 tests
 - ~500ns to parse simple directive
 
 For implementation details, see the source code in `src/`.

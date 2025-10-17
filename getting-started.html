@@ -379,18 +379,18 @@ clang++ -std=c++17 example.cpp \
 <p><strong>Next:</strong> See the <a href="./cpp-tutorial.html">C++ Tutorial</a> for a complete real-world example.</p>
 <hr />
 <h2 id="whats-supported"><a class="header" href="#whats-supported">What's Supported?</a></h2>
-<h3 id="directives-95-total"><a class="header" href="#directives-95-total">Directives (95 total)</a></h3>
-<p>✅ Parallelism: <code>parallel</code>, <code>for</code>, <code>sections</code>, <code>single</code>, <code>master</code><br />
-✅ Tasking: <code>task</code>, <code>taskwait</code>, <code>taskgroup</code>, <code>taskloop</code><br />
-✅ Device offloading: <code>target</code>, <code>teams</code>, <code>distribute</code><br />
-✅ Synchronization: <code>barrier</code>, <code>critical</code>, <code>atomic</code><br />
-✅ Advanced: <code>metadirective</code>, <code>declare variant</code>, <code>loop</code></p>
-<h3 id="clauses-91-total"><a class="header" href="#clauses-91-total">Clauses (91 total)</a></h3>
-<p>✅ Scheduling: <code>schedule</code>, <code>collapse</code>, <code>ordered</code><br />
-✅ Data-sharing: <code>private</code>, <code>shared</code>, <code>firstprivate</code>, <code>lastprivate</code><br />
-✅ Reductions: <code>reduction(+|-|*|&amp;|&amp;&amp;|min|max:vars)</code><br />
-✅ Device clauses: <code>device</code>, <code>map</code>, <code>is_device_ptr</code><br />
-✅ Control: <code>if</code>, <code>num_threads</code>, <code>default</code></p>
+<h3 id="directive-keywords-127-total"><a class="header" href="#directive-keywords-127-total">Directive keywords (127 total)</a></h3>
+<p>✅ Parallelism: <code>parallel</code>, <code>for</code>, <code>sections</code>, <code>single</code>, <code>master</code>
+✅ Tasking: <code>task</code>, <code>taskwait</code>, <code>taskgroup</code>, <code>taskloop</code>
+✅ Device offloading: <code>target</code>, <code>teams</code>, <code>distribute</code>
+✅ Synchronization: <code>barrier</code>, <code>critical</code>, <code>atomic</code>
+✅ Advanced: <code>metadirective</code>, <code>declare variant</code>, <code>loop</code>, and every combined form (e.g. <code>target teams distribute parallel for simd</code>)</p>
+<h3 id="clause-keywords-132-total"><a class="header" href="#clause-keywords-132-total">Clause keywords (132 total)</a></h3>
+<p>✅ Scheduling: <code>schedule</code>, <code>collapse</code>, <code>ordered</code>
+✅ Data-sharing: <code>private</code>, <code>shared</code>, <code>firstprivate</code>, <code>lastprivate</code>
+✅ Reductions: <code>reduction(+|-|*|&amp;|&amp;&amp;|min|max:vars)</code>
+✅ Device clauses: <code>device</code>, <code>map</code>, <code>is_device_ptr</code>
+✅ Control: <code>if</code>, <code>num_threads</code>, <code>default</code>, and new OpenMP 6.0 additions such as <code>device_safesync</code></p>
 <p><strong>For the complete support matrix, see <a href="./openmp-support.html">OpenMP Support</a>.</strong></p>
 <hr />
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
