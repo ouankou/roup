@@ -59,7 +59,7 @@ fn parses_all_registered_clauses() {
         };
 
         for (clause_text, expected_kind) in variants {
-            let source = format!("#pragma omp parallel {clause_text}");
+            let source = format!("#pragma omp parallel {}", clause_text);
             let result = parser.parse(&source);
             assert!(
                 result.is_ok(),
