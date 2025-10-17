@@ -41,6 +41,7 @@
 //! - `directive_ir`: Complete directive representation
 //! - `conversion`: Convert parser types to IR
 //! - `display`: Pretty-printing IR back to pragmas
+//! - `translate`: C/C++ ↔ Fortran directive translation
 
 // Re-export main types
 pub use builder::DirectiveBuilder;
@@ -49,6 +50,7 @@ pub use clause::{
     LinearModifier, MapType, MemoryOrder, OrderKind, ProcBind, ReductionOperator, ScheduleKind,
     ScheduleModifier,
 };
+pub use convert::convert_directive;
 pub use directive::{DirectiveIR, DirectiveKind};
 pub use error::ConversionError;
 pub use expression::{
@@ -65,6 +67,7 @@ mod directive;
 mod error;
 mod expression;
 mod lang;
+pub mod translate;
 mod types;
 pub mod validate;
 mod variable;
