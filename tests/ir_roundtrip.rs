@@ -161,6 +161,49 @@ fn roundtrip_parallel_with_num_threads() {
     assert_eq!(output, "#pragma omp parallel num_threads(4)");
 }
 
+/// Convert C/C++ style directive into Fortran output
+#[test]
+fn translates_parallel_for_to_fortran() {
+    let input = "#pragma omp parallel for schedule(dynamic, 4)";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir_fortran = convert_directive(
+        &directive,
+        SourceLocation::start(),
+        Language::Fortran,
+        &config,
+    )
+    .expect("Failed to convert to Fortran IR");
+
+    assert!(ir_fortran.kind().is_parallel());
+    assert_eq!(ir_fortran.language(), Language::Fortran);
+    assert_eq!(
+        ir_fortran.to_string(),
+        "!$omp parallel do schedule(dynamic, 4)"
+    );
+}
+
+/// Verify nested constructs get Fortran spellings
+#[test]
+fn translates_teams_distribute_to_fortran() {
+    let input = "#pragma omp teams distribute parallel for";
+
+    let (_, directive) = parse_omp_directive(input).expect("Failed to parse");
+    let config = ParserConfig::default();
+    let ir_fortran = convert_directive(
+        &directive,
+        SourceLocation::start(),
+        Language::Fortran,
+        &config,
+    )
+    .expect("Failed to convert to Fortran IR");
+
+    assert!(ir_fortran.kind().is_teams());
+    assert_eq!(ir_fortran.language(), Language::Fortran);
+    assert_eq!(ir_fortran.to_string(), "!$omp teams distribute parallel do");
+}
+
 /// Test round-trip for target directive
 #[test]
 fn roundtrip_target() {

@@ -28,6 +28,7 @@ extern "C" {
 
     // Core parsing
     OmpDirective* roup_parse(const char* input);
+    OmpDirective* roup_parse_with_language(const char* input, int32_t language);
     void roup_directive_free(OmpDirective* directive);
 
     // Directive queries
@@ -149,8 +150,17 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     }
 
-    // Call ROUP parser
-    OmpDirective* roup_dir = roup_parse(input_str.c_str());
+    // Call ROUP parser with language-aware mode for Fortran
+    OmpDirective* roup_dir = nullptr;
+    if (current_lang == Lang_Fortran) {
+        roup_dir = roup_parse_with_language(input_str.c_str(), ROUP_LANG_FORTRAN_FREE);
+        if (!roup_dir) {
+            // Fallback to language-neutral parse for mixed inputs (e.g., #pragma strings)
+            roup_dir = roup_parse(input_str.c_str());
+        }
+    } else {
+        roup_dir = roup_parse(input_str.c_str());
+    }
     if (!roup_dir) {
         return nullptr;
     }

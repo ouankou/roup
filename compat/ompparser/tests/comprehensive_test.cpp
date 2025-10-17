@@ -26,6 +26,8 @@
 #include <string>
 #include <cstring>
 #include <memory>
+#include <algorithm>
+#include <cctype>
 
 // Test counter
 static int tests_passed = 0;
@@ -372,15 +374,21 @@ TEST(lang_cpp) {
 }
 
 TEST(lang_fortran) {
-    // TODO: Fortran parsing not yet supported - requires ROUP C API language parameter.
-    // For now, this test only verifies setLang() works; actual parsing is skipped.
     setLang(Lang_Fortran);
-    
-    // This will fail until ROUP's C API supports language parameter
-    // Skipping actual parse test for now
-    std::cout << "  ⚠ SKIP: Fortran parsing requires ROUP C API enhancement" << std::endl;
-    std::cout << "  ✓ PASS (setLang works, parsing TODO)" << std::endl;
-    
+
+    DirectivePtr dir(parseOpenMP("parallel for", nullptr));
+    ASSERT_NOT_NULL(dir.get());
+    ASSERT_EQ(dir->getBaseLang(), Lang_Fortran);
+
+    std::string pragma = dir->toString();
+    std::string lower = pragma;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+
+    ASSERT(lower.rfind("!$omp", 0) == 0);
+    ASSERT_NE(lower.find("parallel do"), std::string::npos);
+
     // Reset to C for subsequent tests
     setLang(Lang_C);
 }

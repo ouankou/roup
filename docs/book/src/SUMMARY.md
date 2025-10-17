@@ -13,6 +13,7 @@
 - [C Tutorial](./c-tutorial.md)
 - [C++ Tutorial](./cpp-tutorial.md)
 - [Fortran Tutorial](./fortran-tutorial.md)
+- [C to Fortran Translation](./c-to-fortran.md)
 - [ompparser Compatibility](./ompparser-compat.md)
 
 # Reference
