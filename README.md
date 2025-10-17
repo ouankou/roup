@@ -3,7 +3,7 @@
 **Safe, fast, and comprehensive OpenMP directive parsing**
 
 [![Docs](https://img.shields.io/badge/docs-roup.ouankou.com-blue)](https://roup.ouankou.com)
-[![Tests](https://img.shields.io/badge/tests-352%20passing-green)](https://github.com/ouankou/roup)
+[![Tests](https://img.shields.io/badge/tests-405%20passing-green)](https://github.com/ouankou/roup)
 [![Safety](https://img.shields.io/badge/unsafe-0.9%25-yellow)](https://roup.ouankou.com/architecture.html#safety-boundaries)
 [![Status](https://img.shields.io/badge/status-experimental-orange)](https://github.com/ouankou/roup)
 
@@ -32,9 +32,9 @@ cargo build --release
 ## Features
 
 - ✅ **Multi-Language Support:** Rust, C, and C++ APIs
-- ✅ **OpenMP 3.0-6.0:** 95 directives, 91 clauses
+- ✅ **OpenMP 3.0-6.0:** 128 directive keywords, 132 clause keywords
 - ✅ **Safe by Default:** 99.1% safe Rust code
-- ✅ **Experimental:** 352 tests, active development
+- ✅ **Experimental:** 405 tests, active development
 - ✅ **Modern C++:** C++17 RAII wrappers
 - ✅ **Well Documented:** [Comprehensive website](https://roup.ouankou.com)
 - 🔄 **ompparser Compatible:** Drop-in replacement layer ([see below](#ompparser-compatibility))
@@ -157,7 +157,7 @@ g++ -std=c++17 example.cpp -L./target/release -lroup -lpthread -ldl -lm -o examp
 # Build library
 cargo build --release
 
-# Run all tests (352 tests)
+# Run all tests (405 tests)
 cargo test
 
 # Build documentation
@@ -170,8 +170,8 @@ cargo doc --no-deps --open
 
 ROUP supports **OpenMP 3.0 through 6.0** with comprehensive coverage:
 
-- **95 directives**: `parallel`, `for`, `task`, `target`, `teams`, `metadirective`, and more
-- **91 clauses**: `private`, `reduction`, `schedule`, `map`, `depend`, and many others
+- **128 directive keywords**: `parallel`, `for`, `task`, `target`, `teams`, `metadirective`, and every combined form from OpenMP 6.0
+- **132 clause keywords**: `private`, `reduction`, `schedule`, `map`, `depend`, and every clause introduced through OpenMP 6.0
 - **Version tracking**: Know which OpenMP version introduced each feature
 
 See the [OpenMP Support Matrix](https://roup.ouankou.com/openmp-support.html) for complete details.
@@ -185,13 +185,13 @@ src/
 ├── lexer.rs            - Tokenizer using nom
 └── parser/             - Parser modules
     ├── mod.rs          - Parser entry points
-    ├── clause.rs       - Clause parsing (91 types)
-    ├── directive.rs    - Directive parsing (95 types)
+    ├── clause.rs       - Clause parsing (132 keywords)
+    ├── directive.rs    - Directive parsing (128 keywords)
     └── openmp.rs       - OpenMP-specific definitions
 examples/
 ├── c/                  - C examples (tutorial_basic.c)
 └── cpp/                - C++ examples
-tests/                  - 342 integration tests
+tests/                  - 405 integration tests
 docs/
 └── book/               - mdBook documentation website
 ```
@@ -232,7 +232,7 @@ ROUP is written in **99.1% safe Rust** with minimal unsafe code (~60 lines).
 cargo test
 
 # Expected output:
-# test result: ok. 352 passed; 0 failed
+# test result: ok. 405 passed; 0 failed
 ```
 
 **Test Coverage:**

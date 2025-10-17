@@ -31,7 +31,7 @@ ROUP (Rust OpenMP Parser) is a library for parsing OpenMP directives from C, C++
 **No, ROUP is experimental and under active development.**
 
 **Current status:**
-- ✅ 352 tests, all passing
+- ✅ 405 tests, all passing
 - ✅ Supports OpenMP 3.0-6.0 parsing
 - ⚠️ APIs may change between versions
 - ⚠️ Some OpenMP features still being implemented
@@ -237,7 +237,7 @@ The C API focuses on the most common clauses for simplicity:
 - `firstprivate`, `lastprivate`, `reduction`
 - `schedule`, `collapse`, `ordered`, `nowait`, `default`
 
-This covers 95% of real-world use cases. The complete Rust parser supports all 91 clauses from OpenMP 3.0-6.0 (see [Architecture](./architecture.md) for details).
+This covers 95% of real-world use cases. The complete Rust parser supports all 132 clause keywords from OpenMP 3.0-6.0 (see [Architecture](./architecture.md) for details).
 
 ### What's the clause kind mapping?
 
@@ -575,8 +575,8 @@ For `no_std` support, open a [feature request](https://github.com/ouankou/roup/i
 ### ROUP vs writing a custom parser?
 
 **ROUP advantages:**
-- Already supports 120+ directives
-- Tested with 342 tests
+- Already supports 128 directives
+- Tested with 405 tests
 - Handles edge cases
 - Active maintenance
 - OpenMP spec compliance

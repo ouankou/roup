@@ -9,13 +9,16 @@ ROUP provides comprehensive support for **OpenMP 6.0** directives and clauses fo
 | Feature | Support |
 |---------|---------|
 | **OpenMP Version** | 3.0 - 6.0 |
-| **Directives** | 95 directives (core + combined forms) |
-| **Clauses** | 91 clauses |
+| **Directive keywords** | 128 keywords (core, combined, declarative, and meta) |
+| **Clause keywords** | 132 keywords |
 | **Languages** | C, C++, Fortran |
-| **Test Coverage** | 355 automated tests |
+| **Test Coverage** | 405 automated tests |
 | **Specification** | [OpenMP 6.0 PDF](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf) |
 
-**ROUP supports the vast majority of OpenMP 3.0-6.0 directives and clauses.** ✅
+**ROUP supports the complete OpenMP 6.0 directive and clause keyword set.** ✅
+For the machine-generated catalogues see
+[`openmp60-directives-clauses.md`](./openmp60-directives-clauses.md) and
+[`openmp60-directive-clause-components.md`](./openmp60-directive-clause-components.md).
 
 ---
 
@@ -34,7 +37,7 @@ ROUP provides comprehensive support for **OpenMP 6.0** directives and clauses fo
 | `masked` | `#pragma omp masked` | Masked execution (OpenMP 5.1+) |
 | `barrier` | `#pragma omp barrier` | Synchronization barrier |
 | `critical` | `#pragma omp critical` | Critical section |
-| `atomic` | `#pragma omp atomic` | Atomic operation |
+| `atomic` | `#pragma omp atomic` | Atomic operation (includes read, write, update, capture, compare capture) |
 | `flush` | `#pragma omp flush` | Memory fence |
 | `ordered` | `#pragma omp ordered` | Ordered execution |
 | `simd` | `#pragma omp simd` | SIMD vectorization |
@@ -81,28 +84,50 @@ ROUP supports all standard combined directives:
 - `parallel for`
 - `parallel for simd`
 - `parallel loop`
+- `parallel loop simd`
 - `parallel sections`
 - `parallel master`
 - `parallel masked`
+- `parallel master taskloop`
+- `parallel master taskloop simd`
+- `parallel masked taskloop`
+- `parallel masked taskloop simd`
 
 **Target + Parallel:**
 - `target parallel`
 - `target parallel for`
 - `target parallel for simd`
 - `target parallel loop`
+- `target parallel loop simd`
+- `target loop`
+- `target loop simd`
 - `target teams`
 - `target teams distribute`
 - `target teams distribute parallel for`
 - `target teams distribute parallel for simd`
+- `target teams distribute parallel loop`
+- `target teams distribute parallel loop simd`
+- `target teams loop simd`
 
 **Teams + Distribute:**
 - `teams distribute`
 - `teams distribute simd`
 - `teams distribute parallel for`
 - `teams distribute parallel for simd`
+- `teams distribute parallel loop`
+- `teams distribute parallel loop simd`
 - `teams loop`
+- `teams loop simd`
 
-**And many more...** (all 120+ combinations from OpenMP 6.0)
+**Distribute + Loop:**
+- `distribute parallel loop`
+- `distribute parallel loop simd`
+
+**Masked + Taskloop:**
+- `masked taskloop`
+- `masked taskloop simd`
+
+**And many more...** (all 128 directive keywords from OpenMP 6.0)
 
 ### Meta-directives & Variants (5 directives)
 
@@ -307,9 +332,9 @@ ROUP includes comprehensive automated testing:
 
 | Test Suite | Count | Coverage |
 |------------|-------|----------|
-| **Integration tests** | 116 | Directive parsing, clause combinations |
-| **Doc tests** | 239 | API examples, edge cases |
-| **Total** | **355** | All directives + clauses tested |
+| **Integration tests** | 143 | Directive parsing, clause combinations |
+| **Doc tests** | 262 | API examples, edge cases |
+| **Total** | **405** | All directives + clauses tested |
 
 **Every directive and clause in OpenMP 6.0 has a passing test.** ✅
 
@@ -380,10 +405,10 @@ ROUP will be updated as new OpenMP versions are released.
 
 **ROUP provides OpenMP 3.0-6.0 parsing support:**
 
-- ✅ **95 directives** (core, combined, and meta-directives)
-- ✅ **91 clause types** (data-sharing, control, device, SIMD, sync, etc.)
+- ✅ **128 directive keywords** (core, combined, declarative, and meta-directives)
+- ✅ **132 clause keywords** (data-sharing, control, device, SIMD, sync, etc.)
 - ✅ **C/C++/Fortran** syntax support
-- ✅ **352 automated tests** (comprehensive directive/clause coverage)
+- ✅ **405 automated tests** (comprehensive directive/clause coverage)
 - ✅ **Type-safe Rust API** + **C FFI**
 - ✅ **Latest spec** (OpenMP 6.0, 2024)
 

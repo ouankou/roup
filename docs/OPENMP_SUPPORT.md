@@ -1,10 +1,8 @@
 # OpenMP 6.0 Support Matrix
 
-This document catalogues the OpenMP 6.0 surface area for C and C++ and records what the ROUP parser currently understands.  The
+This document catalogues the OpenMP 6.0 surface area for C and C++ and records what the ROUP parser currently understands.
 
-For the canonical, clause-by-clause breakdown of the OpenMP 6.0 surface area, see the [OpenMP 6.0 directive catalogue](../docs/book/src/openmp60-directives-clauses.md) and the [directive–clause component index](../docs/book/src/openmp60-directive-clause-components.md).
-lists below are derived from the [OpenMP Application Programming Interface Version 6.0 specification](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf).  The focus is on directive
-keywords, the standard combined forms, and the clauses that may appear on those directives.
+For the canonical, clause-by-clause breakdown see the [OpenMP 6.0 directive catalogue](../docs/book/src/openmp60-directives-clauses.md) and the [directive–clause component index](../docs/book/src/openmp60-directive-clause-components.md).  The lists below are derived from the [OpenMP Application Programming Interface Version 6.0 specification](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf) and focus on directive keywords, the standard combined forms, and the clauses that may appear on those directives.
 
 **Legend**: ✅ Supported in the parser & tests · ❌ Not yet implemented in the parser
 
@@ -117,6 +115,31 @@ silently accepting directives outside the documented coverage.
 | `target teams loop` | ✅ | Recognized via the OpenMP directive registry. |
 | `target teams loop simd` | ✅ | Recognized via the OpenMP directive registry. |
 | `target update` | ✅ | Registered via the OpenMP directive registry. |
+
+### OpenMP 6.0 transformations and declarative additions
+
+| Directive | Status | Notes |
+| --- | --- | --- |
+| `allocate` | ✅ | Declarative directive supported via the registry. |
+| `allocators` | ✅ | Declarative directive supported via the registry. |
+| `assumes` | ✅ | Informational directive (OpenMP 6.0) registered via the directive registry. |
+| `begin assumes` | ✅ | Delimited informational directive supported via the registry. |
+| `begin declare variant` | ✅ | Delimited directive supported via the registry. |
+| `begin metadirective` | ✅ | Delimited metadirective form registered in the directive registry. |
+| `declare induction` | ✅ | Declarative directive supported via the registry. |
+| `fuse` | ✅ | Loop transformation directive registered via the directive registry. |
+| `groupprivate` | ✅ | Declarative directive registered via the directive registry. |
+| `interchange` | ✅ | Loop transformation directive registered via the directive registry. |
+| `reverse` | ✅ | Loop transformation directive registered via the directive registry. |
+| `scan` | ✅ | Clause-oriented directive registered via the directive registry. |
+| `section` | ✅ | Subsidiary directive registered via the directive registry. |
+| `split` | ✅ | Loop transformation directive registered via the directive registry. |
+| `stripe` | ✅ | Loop transformation directive registered via the directive registry. |
+| `task iteration` | ✅ | Subsidiary task directive registered via the directive registry. |
+| `tile` | ✅ | Loop transformation directive registered via the directive registry. |
+| `unroll` | ✅ | Loop transformation directive registered via the directive registry. |
+| `workdistribute` | ✅ | Worksharing directive registered via the directive registry. |
+| `workshare` | ✅ | Fortran worksharing directive registered via the directive registry. |
 
 ## Clause Support (C/C++)
 
