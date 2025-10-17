@@ -4321,7 +4321,7 @@ do i = 1, n
 end do
 !$omp end parallel do
 </code></pre>
-<p>✅ <strong>Supported:</strong> Free-form (<code>!$omp</code>), Fixed-form (<code>c$omp</code>, <code>*$omp</code>)<br />
+<p>✅ <strong>Supported:</strong> Free-form (<code>!$omp</code>), Fixed-form (<code>!$omp</code>, <code>c$omp</code>, <code>*$omp</code>), Short forms (<code>!$</code>, <code>c$</code>, <code>*$</code>)
 ✅ <strong>Case insensitive:</strong> <code>!$OMP</code>, <code>!$Omp</code>, <code>!$omp</code> all work</p>
 <hr />
 <h2 id="test-coverage"><a class="header" href="#test-coverage">Test Coverage</a></h2>
