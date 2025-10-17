@@ -257,108 +257,137 @@ pub enum DirectiveKind {
 
 impl fmt::Display for DirectiveKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.canonical_name())
+    }
+}
+
+impl DirectiveKind {
+    /// Get the canonical (C/C++) name for this directive kind.
+    pub const fn canonical_name(self) -> &'static str {
         match self {
             // Parallel constructs
-            DirectiveKind::Parallel => write!(f, "parallel"),
-            DirectiveKind::ParallelFor => write!(f, "parallel for"),
-            DirectiveKind::ParallelForSimd => write!(f, "parallel for simd"),
-            DirectiveKind::ParallelSections => write!(f, "parallel sections"),
-            DirectiveKind::ParallelWorkshare => write!(f, "parallel workshare"),
-            DirectiveKind::ParallelLoop => write!(f, "parallel loop"),
-            DirectiveKind::ParallelMasked => write!(f, "parallel masked"),
-            DirectiveKind::ParallelMaster => write!(f, "parallel master"),
+            DirectiveKind::Parallel => "parallel",
+            DirectiveKind::ParallelFor => "parallel for",
+            DirectiveKind::ParallelForSimd => "parallel for simd",
+            DirectiveKind::ParallelSections => "parallel sections",
+            DirectiveKind::ParallelWorkshare => "parallel workshare",
+            DirectiveKind::ParallelLoop => "parallel loop",
+            DirectiveKind::ParallelMasked => "parallel masked",
+            DirectiveKind::ParallelMaster => "parallel master",
 
             // Work-sharing constructs
-            DirectiveKind::For => write!(f, "for"),
-            DirectiveKind::ForSimd => write!(f, "for simd"),
-            DirectiveKind::Sections => write!(f, "sections"),
-            DirectiveKind::Section => write!(f, "section"),
-            DirectiveKind::Single => write!(f, "single"),
-            DirectiveKind::Workshare => write!(f, "workshare"),
-            DirectiveKind::Loop => write!(f, "loop"),
+            DirectiveKind::For => "for",
+            DirectiveKind::ForSimd => "for simd",
+            DirectiveKind::Sections => "sections",
+            DirectiveKind::Section => "section",
+            DirectiveKind::Single => "single",
+            DirectiveKind::Workshare => "workshare",
+            DirectiveKind::Loop => "loop",
 
             // SIMD constructs
-            DirectiveKind::Simd => write!(f, "simd"),
-            DirectiveKind::DeclareSimd => write!(f, "declare simd"),
+            DirectiveKind::Simd => "simd",
+            DirectiveKind::DeclareSimd => "declare simd",
 
             // Task constructs
-            DirectiveKind::Task => write!(f, "task"),
-            DirectiveKind::Taskloop => write!(f, "taskloop"),
-            DirectiveKind::TaskloopSimd => write!(f, "taskloop simd"),
-            DirectiveKind::Taskyield => write!(f, "taskyield"),
-            DirectiveKind::Taskwait => write!(f, "taskwait"),
-            DirectiveKind::Taskgroup => write!(f, "taskgroup"),
+            DirectiveKind::Task => "task",
+            DirectiveKind::Taskloop => "taskloop",
+            DirectiveKind::TaskloopSimd => "taskloop simd",
+            DirectiveKind::Taskyield => "taskyield",
+            DirectiveKind::Taskwait => "taskwait",
+            DirectiveKind::Taskgroup => "taskgroup",
 
             // Target constructs
-            DirectiveKind::Target => write!(f, "target"),
-            DirectiveKind::TargetData => write!(f, "target data"),
-            DirectiveKind::TargetEnterData => write!(f, "target enter data"),
-            DirectiveKind::TargetExitData => write!(f, "target exit data"),
-            DirectiveKind::TargetUpdate => write!(f, "target update"),
-            DirectiveKind::TargetParallel => write!(f, "target parallel"),
-            DirectiveKind::TargetParallelFor => write!(f, "target parallel for"),
-            DirectiveKind::TargetParallelForSimd => write!(f, "target parallel for simd"),
-            DirectiveKind::TargetParallelLoop => write!(f, "target parallel loop"),
-            DirectiveKind::TargetSimd => write!(f, "target simd"),
-            DirectiveKind::TargetTeams => write!(f, "target teams"),
-            DirectiveKind::TargetTeamsDistribute => write!(f, "target teams distribute"),
-            DirectiveKind::TargetTeamsDistributeSimd => write!(f, "target teams distribute simd"),
+            DirectiveKind::Target => "target",
+            DirectiveKind::TargetData => "target data",
+            DirectiveKind::TargetEnterData => "target enter data",
+            DirectiveKind::TargetExitData => "target exit data",
+            DirectiveKind::TargetUpdate => "target update",
+            DirectiveKind::TargetParallel => "target parallel",
+            DirectiveKind::TargetParallelFor => "target parallel for",
+            DirectiveKind::TargetParallelForSimd => "target parallel for simd",
+            DirectiveKind::TargetParallelLoop => "target parallel loop",
+            DirectiveKind::TargetSimd => "target simd",
+            DirectiveKind::TargetTeams => "target teams",
+            DirectiveKind::TargetTeamsDistribute => "target teams distribute",
+            DirectiveKind::TargetTeamsDistributeSimd => "target teams distribute simd",
             DirectiveKind::TargetTeamsDistributeParallelFor => {
-                write!(f, "target teams distribute parallel for")
+                "target teams distribute parallel for"
             }
             DirectiveKind::TargetTeamsDistributeParallelForSimd => {
-                write!(f, "target teams distribute parallel for simd")
+                "target teams distribute parallel for simd"
             }
-            DirectiveKind::TargetTeamsLoop => write!(f, "target teams loop"),
+            DirectiveKind::TargetTeamsLoop => "target teams loop",
 
             // Teams constructs
-            DirectiveKind::Teams => write!(f, "teams"),
-            DirectiveKind::TeamsDistribute => write!(f, "teams distribute"),
-            DirectiveKind::TeamsDistributeSimd => write!(f, "teams distribute simd"),
-            DirectiveKind::TeamsDistributeParallelFor => {
-                write!(f, "teams distribute parallel for")
-            }
-            DirectiveKind::TeamsDistributeParallelForSimd => {
-                write!(f, "teams distribute parallel for simd")
-            }
-            DirectiveKind::TeamsLoop => write!(f, "teams loop"),
+            DirectiveKind::Teams => "teams",
+            DirectiveKind::TeamsDistribute => "teams distribute",
+            DirectiveKind::TeamsDistributeSimd => "teams distribute simd",
+            DirectiveKind::TeamsDistributeParallelFor => "teams distribute parallel for",
+            DirectiveKind::TeamsDistributeParallelForSimd => "teams distribute parallel for simd",
+            DirectiveKind::TeamsLoop => "teams loop",
 
             // Synchronization constructs
-            DirectiveKind::Barrier => write!(f, "barrier"),
-            DirectiveKind::Critical => write!(f, "critical"),
-            DirectiveKind::Atomic => write!(f, "atomic"),
-            DirectiveKind::Flush => write!(f, "flush"),
-            DirectiveKind::Ordered => write!(f, "ordered"),
-            DirectiveKind::Master => write!(f, "master"),
-            DirectiveKind::Masked => write!(f, "masked"),
+            DirectiveKind::Barrier => "barrier",
+            DirectiveKind::Critical => "critical",
+            DirectiveKind::Atomic => "atomic",
+            DirectiveKind::Flush => "flush",
+            DirectiveKind::Ordered => "ordered",
+            DirectiveKind::Master => "master",
+            DirectiveKind::Masked => "masked",
 
             // Declare constructs
-            DirectiveKind::DeclareReduction => write!(f, "declare reduction"),
-            DirectiveKind::DeclareMapper => write!(f, "declare mapper"),
-            DirectiveKind::DeclareTarget => write!(f, "declare target"),
-            DirectiveKind::DeclareVariant => write!(f, "declare variant"),
+            DirectiveKind::DeclareReduction => "declare reduction",
+            DirectiveKind::DeclareMapper => "declare mapper",
+            DirectiveKind::DeclareTarget => "declare target",
+            DirectiveKind::DeclareVariant => "declare variant",
 
             // Distribute constructs
-            DirectiveKind::Distribute => write!(f, "distribute"),
-            DirectiveKind::DistributeSimd => write!(f, "distribute simd"),
-            DirectiveKind::DistributeParallelFor => write!(f, "distribute parallel for"),
-            DirectiveKind::DistributeParallelForSimd => {
-                write!(f, "distribute parallel for simd")
-            }
+            DirectiveKind::Distribute => "distribute",
+            DirectiveKind::DistributeSimd => "distribute simd",
+            DirectiveKind::DistributeParallelFor => "distribute parallel for",
+            DirectiveKind::DistributeParallelForSimd => "distribute parallel for simd",
 
             // Meta-directives
-            DirectiveKind::Metadirective => write!(f, "metadirective"),
+            DirectiveKind::Metadirective => "metadirective",
 
             // Other constructs
-            DirectiveKind::Threadprivate => write!(f, "threadprivate"),
-            DirectiveKind::Allocate => write!(f, "allocate"),
-            DirectiveKind::Requires => write!(f, "requires"),
-            DirectiveKind::Scan => write!(f, "scan"),
-            DirectiveKind::Depobj => write!(f, "depobj"),
-            DirectiveKind::Nothing => write!(f, "nothing"),
-            DirectiveKind::Error => write!(f, "error"),
+            DirectiveKind::Threadprivate => "threadprivate",
+            DirectiveKind::Allocate => "allocate",
+            DirectiveKind::Requires => "requires",
+            DirectiveKind::Scan => "scan",
+            DirectiveKind::Depobj => "depobj",
+            DirectiveKind::Nothing => "nothing",
+            DirectiveKind::Error => "error",
 
-            DirectiveKind::Unknown => write!(f, "unknown"),
+            DirectiveKind::Unknown => "unknown",
+        }
+    }
+
+    /// Return the directive name appropriate for a given language.
+    pub const fn name_for_language(self, language: Language) -> &'static str {
+        match language {
+            Language::Fortran => match self {
+                DirectiveKind::For => "do",
+                DirectiveKind::ForSimd => "do simd",
+                DirectiveKind::ParallelFor => "parallel do",
+                DirectiveKind::ParallelForSimd => "parallel do simd",
+                DirectiveKind::DistributeParallelFor => "distribute parallel do",
+                DirectiveKind::DistributeParallelForSimd => "distribute parallel do simd",
+                DirectiveKind::TargetParallelFor => "target parallel do",
+                DirectiveKind::TargetParallelForSimd => "target parallel do simd",
+                DirectiveKind::TargetTeamsDistributeParallelFor => {
+                    "target teams distribute parallel do"
+                }
+                DirectiveKind::TargetTeamsDistributeParallelForSimd => {
+                    "target teams distribute parallel do simd"
+                }
+                DirectiveKind::TeamsDistributeParallelFor => "teams distribute parallel do",
+                DirectiveKind::TeamsDistributeParallelForSimd => {
+                    "teams distribute parallel do simd"
+                }
+                _ => self.canonical_name(),
+            },
+            _ => self.canonical_name(),
         }
     }
 }
@@ -861,7 +890,12 @@ impl<'a> DirectiveIR {
 impl<'a> fmt::Display for DirectiveIR {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Write pragma prefix (already includes "omp ")
-        write!(f, "{}{}", self.language.pragma_prefix(), self.kind)?;
+        write!(
+            f,
+            "{}{}",
+            self.language.pragma_prefix(),
+            self.kind.name_for_language(self.language)
+        )?;
 
         // Write clauses
         for clause in self.clauses.iter() {
@@ -869,6 +903,25 @@ impl<'a> fmt::Display for DirectiveIR {
         }
 
         Ok(())
+    }
+}
+
+impl DirectiveIR {
+    /// Render the directive as a string for a specific language.
+    ///
+    /// This enables cross-language unparsing, e.g. parsing C/C++ input and
+    /// emitting Fortran directives for downstream tools.
+    pub fn to_string_in_language(&self, language: Language) -> String {
+        let mut out = String::new();
+        out.push_str(language.pragma_prefix());
+        out.push_str(self.kind.name_for_language(language));
+
+        for clause in self.clauses.iter() {
+            out.push(' ');
+            out.push_str(&clause.to_string());
+        }
+
+        out
     }
 }
 
@@ -891,6 +944,68 @@ mod tests {
         assert_eq!(
             DirectiveKind::TargetTeamsDistributeParallelForSimd.to_string(),
             "target teams distribute parallel for simd"
+        );
+    }
+
+    #[test]
+    fn test_directive_kind_name_for_language_fortran_variants() {
+        assert_eq!(
+            DirectiveKind::For.name_for_language(Language::Fortran),
+            "do"
+        );
+        assert_eq!(
+            DirectiveKind::ParallelFor.name_for_language(Language::Fortran),
+            "parallel do"
+        );
+        assert_eq!(
+            DirectiveKind::TargetTeamsDistributeParallelForSimd
+                .name_for_language(Language::Fortran),
+            "target teams distribute parallel do simd"
+        );
+    }
+
+    #[test]
+    fn test_directive_kind_name_for_language_non_fortran() {
+        assert_eq!(
+            DirectiveKind::ParallelFor.name_for_language(Language::C),
+            "parallel for"
+        );
+        assert_eq!(
+            DirectiveKind::ParallelFor.name_for_language(Language::Cpp),
+            "parallel for"
+        );
+    }
+
+    #[test]
+    fn directive_ir_to_string_in_language_fortran() {
+        let dir = DirectiveIR::simple(
+            DirectiveKind::ParallelFor,
+            "parallel for",
+            SourceLocation::start(),
+            Language::C,
+        );
+
+        assert_eq!(dir.to_string(), "#pragma omp parallel for");
+        assert_eq!(
+            dir.to_string_in_language(Language::Fortran),
+            "!$omp parallel do"
+        );
+    }
+
+    #[test]
+    fn directive_ir_to_string_in_language_preserves_clauses() {
+        let dir = DirectiveIR::new(
+            DirectiveKind::For,
+            "for",
+            vec![ClauseData::Bare(Identifier::new("nowait"))],
+            SourceLocation::start(),
+            Language::C,
+        );
+
+        assert_eq!(dir.to_string(), "#pragma omp for nowait");
+        assert_eq!(
+            dir.to_string_in_language(Language::Fortran),
+            "!$omp do nowait"
         );
     }
 
