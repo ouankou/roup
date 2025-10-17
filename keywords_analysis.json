@@ -1,0 +1,1165 @@
+{
+  "doc_clauses": {
+    "absent": {
+      "section": "10.6.1.1",
+      "line": "- `absent` (Section 10.6.1.1; p. 394)"
+    },
+    "acq_rel": {
+      "section": "17.8.1.1",
+      "line": "- `acq_rel` (Section 17.8.1.1; p. 515)"
+    },
+    "acquire": {
+      "section": "17.8.1.2",
+      "line": "- `acquire` (Section 17.8.1.2; p. 516)"
+    },
+    "adjust_args": {
+      "section": "9.6.2",
+      "line": "- `adjust_args` (Section 9.6.2; pp. 362\u2013363)"
+    },
+    "affinity": {
+      "section": "14.10",
+      "line": "- `affinity` (Section 14.10; p. 475)"
+    },
+    "align": {
+      "section": "8.3",
+      "line": "- `align` (Section 8.3; p. 340)"
+    },
+    "aligned": {
+      "section": "7.12",
+      "line": "- `aligned` (Section 7.12; p. 331)"
+    },
+    "allocate": {
+      "section": "8.6",
+      "line": "- `allocate` (Section 8.6; pp. 343\u2013345)"
+    },
+    "allocator": {
+      "section": "8.4",
+      "line": "- `allocator` (Section 8.4; p. 340)"
+    },
+    "append_args": {
+      "section": "9.6.3",
+      "line": "- `append_args` (Section 9.6.3; p. 364)"
+    },
+    "apply": {
+      "section": "11.1",
+      "line": "- `apply` (Section 11.1; pp. 403\u2013404)"
+    },
+    "at": {
+      "section": "10.2",
+      "line": "- `at` (Section 10.2; p. 383)"
+    },
+    "atomic_default_mem_order": {
+      "section": "10.5.1.1",
+      "line": "- `atomic_default_mem_order` (Section 10.5.1.1; p. 387)"
+    },
+    "bind": {
+      "section": "13.8.1",
+      "line": "- `bind` (Section 13.8.1; pp. 455\u2013456)"
+    },
+    "capture": {
+      "section": "17.8.3.1",
+      "line": "- `capture` (Section 17.8.3.1; p. 521)"
+    },
+    "collapse": {
+      "section": "6.4.5",
+      "line": "- `collapse` (Section 6.4.5; p. 236)"
+    },
+    "collector": {
+      "section": "7.6.19",
+      "line": "- `collector` (Section 7.6.19; p. 296)"
+    },
+    "combiner": {
+      "section": "7.6.15",
+      "line": "- `combiner` (Section 7.6.15; p. 292)"
+    },
+    "compare": {
+      "section": "17.8.3.2",
+      "line": "- `compare` (Section 17.8.3.2; p. 522)"
+    },
+    "contains": {
+      "section": "10.6.1.2",
+      "line": "- `contains` (Section 10.6.1.2; p. 394)"
+    },
+    "copyin": {
+      "section": "7.8.1",
+      "line": "- `copyin` (Section 7.8.1; p. 302)"
+    },
+    "copyprivate": {
+      "section": "7.8.2",
+      "line": "- `copyprivate` (Section 7.8.2; pp. 303\u2013309)"
+    },
+    "counts": {
+      "section": "11.6.1",
+      "line": "- `counts` (Section 11.6.1; p. 409)"
+    },
+    "default": {
+      "section": "7.5.1",
+      "line": "- `default` (Section 7.5.1; p. 254)"
+    },
+    "defaultmap": {
+      "section": "7.9.9",
+      "line": "- `defaultmap` (Section 7.9.9; pp. 322\u2013323)"
+    },
+    "depend": {
+      "section": "17.9.5",
+      "line": "- `depend` (Section 17.9.5; pp. 538\u2013540)"
+    },
+    "destroy": {
+      "section": "5.7",
+      "line": "- `destroy` (Section 5.7; pp. 213\u2013235)"
+    },
+    "detach": {
+      "section": "14.11",
+      "line": "- `detach` (Section 14.11; p. 476)"
+    },
+    "device": {
+      "section": "15.2",
+      "line": "- `device` (Section 15.2; p. 482)"
+    },
+    "device_safesync": {
+      "section": "10.5.1.7",
+      "line": "- `device_safesync` (Section 10.5.1.7; p. 393; properties: required, unique Members:)"
+    },
+    "device_type": {
+      "section": "15.1",
+      "line": "- `device_type` (Section 15.1; p. 481)"
+    },
+    "dist_schedule": {
+      "section": "13.7.1",
+      "line": "- `dist_schedule` (Section 13.7.1; p. 453)"
+    },
+    "doacross": {
+      "section": "17.9.7",
+      "line": "- `doacross` (Section 17.9.7; pp. 542\u2013544)"
+    },
+    "dynamic_allocators": {
+      "section": "10.5.1.2",
+      "line": "- `dynamic_allocators` (Section 10.5.1.2; p. 388)"
+    },
+    "enter": {
+      "section": "7.9.7",
+      "line": "- `enter` (Section 7.9.7; p. 320)"
+    },
+    "exclusive": {
+      "section": "7.7.2",
+      "line": "- `exclusive` (Section 7.7.2; p. 300)"
+    },
+    "fail": {
+      "section": "17.8.3.3",
+      "line": "- `fail` (Section 17.8.3.3; p. 522)"
+    },
+    "filter": {
+      "section": "12.5.1",
+      "line": "- `filter` (Section 12.5.1; pp. 434\u2013435)"
+    },
+    "final": {
+      "section": "14.7",
+      "line": "- `final` (Section 14.7; p. 472)"
+    },
+    "firstprivate": {
+      "section": "7.5.4",
+      "line": "- `firstprivate` (Section 7.5.4; pp. 258\u2013259)"
+    },
+    "from": {
+      "section": "7.10.2",
+      "line": "- `from` (Section 7.10.2; p. 329)"
+    },
+    "full": {
+      "section": "11.9.1",
+      "line": "- `full` (Section 11.9.1; p. 413)"
+    },
+    "grainsize": {
+      "section": "14.2.1",
+      "line": "- `grainsize` (Section 14.2.1; p. 463)"
+    },
+    "graph_id": {
+      "section": "14.3.1",
+      "line": "- `graph_id` (Section 14.3.1; p. 468)"
+    },
+    "graph_reset": {
+      "section": "14.3.2",
+      "line": "- `graph_reset` (Section 14.3.2; p. 469)"
+    },
+    "has_device_addr": {
+      "section": "7.5.9",
+      "line": "- `has_device_addr` (Section 7.5.9; p. 268)"
+    },
+    "hint": {
+      "section": "17.1",
+      "line": "- `hint` (Section 17.1; p. 503)"
+    },
+    "holds": {
+      "section": "10.6.1.3",
+      "line": "- `holds` (Section 10.6.1.3; p. 395)"
+    },
+    "if": {
+      "section": "5.5",
+      "line": "- `if` (Section 5.5; p. 210)"
+    },
+    "in_reduction": {
+      "section": "7.6.12",
+      "line": "- `in_reduction` (Section 7.6.12; p. 287)"
+    },
+    "inbranch": {
+      "section": "9.8.1.1",
+      "line": "- `inbranch` (Section 9.8.1.1; p. 374)"
+    },
+    "inclusive": {
+      "section": "7.7.1",
+      "line": "- `inclusive` (Section 7.7.1; p. 299)"
+    },
+    "indirect": {
+      "section": "9.9.3",
+      "line": "- `indirect` (Section 9.9.3; pp. 381\u2013382)"
+    },
+    "induction": {
+      "section": "7.6.13",
+      "line": "- `induction` (Section 7.6.13; pp. 288\u2013290)"
+    },
+    "inductor": {
+      "section": "7.6.18",
+      "line": "- `inductor` (Section 7.6.18; p. 296)"
+    },
+    "init": {
+      "section": "5.6",
+      "line": "- `init` (Section 5.6; pp. 211\u2013212)"
+    },
+    "init_complete": {
+      "section": "7.7.3",
+      "line": "- `init_complete` (Section 7.7.3; p. 301)"
+    },
+    "initializer": {
+      "section": "7.6.16",
+      "line": "- `initializer` (Section 7.6.16; p. 293)"
+    },
+    "interop": {
+      "section": "9.7.1",
+      "line": "- `interop` (Section 9.7.1; p. 370)"
+    },
+    "is_device_ptr": {
+      "section": "7.5.7",
+      "line": "- `is_device_ptr` (Section 7.5.7; p. 266)"
+    },
+    "lastprivate": {
+      "section": "7.5.5",
+      "line": "- `lastprivate` (Section 7.5.5; pp. 260\u2013262)"
+    },
+    "linear": {
+      "section": "7.5.6",
+      "line": "- `linear` (Section 7.5.6; pp. 263\u2013265)"
+    },
+    "link": {
+      "section": "7.9.8",
+      "line": "- `link` (Section 7.9.8; p. 321)"
+    },
+    "local": {
+      "section": "7.14",
+      "line": "- `local` (Section 7.14; pp. 334\u2013339)"
+    },
+    "looprange": {
+      "section": "6.4.7",
+      "line": "- `looprange` (Section 6.4.7; pp. 238\u2013245)"
+    },
+    "map": {
+      "section": "7.9.6",
+      "line": "- `map` (Section 7.9.6; pp. 310\u2013319)"
+    },
+    "match": {
+      "section": "9.6.1",
+      "line": "- `match` (Section 9.6.1; p. 361)"
+    },
+    "memscope": {
+      "section": "17.8.4",
+      "line": "- `memscope` (Section 17.8.4; p. 524)"
+    },
+    "mergeable": {
+      "section": "14.5",
+      "line": "- `mergeable` (Section 14.5; p. 470)"
+    },
+    "message": {
+      "section": "10.3",
+      "line": "- `message` (Section 10.3; p. 384)"
+    },
+    "no_openmp": {
+      "section": "10.6.1.4",
+      "line": "- `no_openmp` (Section 10.6.1.4; p. 396)"
+    },
+    "no_openmp_constructs": {
+      "section": "10.6.1.5",
+      "line": "- `no_openmp_constructs` (Section 10.6.1.5; p. 396)"
+    },
+    "no_openmp_routines": {
+      "section": "10.6.1.6",
+      "line": "- `no_openmp_routines` (Section 10.6.1.6; p. 397)"
+    },
+    "no_parallelism": {
+      "section": "10.6.1.7",
+      "line": "- `no_parallelism` (Section 10.6.1.7; p. 398)"
+    },
+    "nocontext": {
+      "section": "9.7.3",
+      "line": "- `nocontext` (Section 9.7.3; p. 371)"
+    },
+    "nogroup": {
+      "section": "17.7",
+      "line": "- `nogroup` (Section 17.7; p. 514; properties: exclusive, unique Members:)"
+    },
+    "nontemporal": {
+      "section": "12.4.1",
+      "line": "- `nontemporal` (Section 12.4.1; p. 431)"
+    },
+    "notinbranch": {
+      "section": "9.8.1.2",
+      "line": "- `notinbranch` (Section 9.8.1.2; pp. 375\u2013376)"
+    },
+    "novariants": {
+      "section": "9.7.2",
+      "line": "- `novariants` (Section 9.7.2; p. 370)"
+    },
+    "nowait": {
+      "section": "17.6",
+      "line": "- `nowait` (Section 17.6; pp. 512\u2013513)"
+    },
+    "num_tasks": {
+      "section": "14.2.2",
+      "line": "- `num_tasks` (Section 14.2.2; p. 464)"
+    },
+    "num_teams": {
+      "section": "12.2.1",
+      "line": "- `num_teams` (Section 12.2.1; p. 427)"
+    },
+    "num_threads": {
+      "section": "12.1.2",
+      "line": "- `num_threads` (Section 12.1.2; pp. 419\u2013422)"
+    },
+    "order": {
+      "section": "12.3",
+      "line": "- `order` (Section 12.3; pp. 428\u2013429)"
+    },
+    "ordered": {
+      "section": "6.4.6",
+      "line": "- `ordered` (Section 6.4.6; p. 237)"
+    },
+    "otherwise": {
+      "section": "9.4.2",
+      "line": "- `otherwise` (Section 9.4.2; pp. 357\u2013360; properties: pure)"
+    },
+    "partial": {
+      "section": "11.9.2",
+      "line": "- `partial` (Section 11.9.2; p. 414)"
+    },
+    "permutation": {
+      "section": "11.4.1",
+      "line": "- `permutation` (Section 11.4.1; p. 407)"
+    },
+    "priority": {
+      "section": "14.9",
+      "line": "- `priority` (Section 14.9; p. 474)"
+    },
+    "private": {
+      "section": "7.5.3",
+      "line": "- `private` (Section 7.5.3; pp. 256\u2013257)"
+    },
+    "proc_bind": {
+      "section": "12.1.4",
+      "line": "- `proc_bind` (Section 12.1.4; p. 423)"
+    },
+    "read": {
+      "section": "17.8.2.1",
+      "line": "- `read` (Section 17.8.2.1; p. 519)"
+    },
+    "reduction": {
+      "section": "7.6.10",
+      "line": "- `reduction` (Section 7.6.10; pp. 283\u2013285)"
+    },
+    "relaxed": {
+      "section": "17.8.1.3",
+      "line": "- `relaxed` (Section 17.8.1.3; p. 516)"
+    },
+    "release": {
+      "section": "17.8.1.4",
+      "line": "- `release` (Section 17.8.1.4; p. 517)"
+    },
+    "replayable": {
+      "section": "14.6",
+      "line": "- `replayable` (Section 14.6; p. 471)"
+    },
+    "reverse_offload": {
+      "section": "10.5.1.3",
+      "line": "- `reverse_offload` (Section 10.5.1.3; p. 389)"
+    },
+    "safelen": {
+      "section": "12.4.2",
+      "line": "- `safelen` (Section 12.4.2; p. 431)"
+    },
+    "safesync": {
+      "section": "12.1.5",
+      "line": "- `safesync` (Section 12.1.5; p. 424)"
+    },
+    "schedule": {
+      "section": "13.6.3",
+      "line": "- `schedule` (Section 13.6.3; pp. 449\u2013450)"
+    },
+    "self_maps": {
+      "section": "10.5.1.6",
+      "line": "- `self_maps` (Section 10.5.1.6; p. 392)"
+    },
+    "seq_cst": {
+      "section": "17.8.1.5",
+      "line": "- `seq_cst` (Section 17.8.1.5; p. 518; properties: exclusive, unique Members:)"
+    },
+    "severity": {
+      "section": "10.4",
+      "line": "- `severity` (Section 10.4; p. 385)"
+    },
+    "shared": {
+      "section": "7.5.2",
+      "line": "- `shared` (Section 7.5.2; p. 255)"
+    },
+    "simd": {
+      "section": "17.10.3.2",
+      "line": "- `simd` (Section 17.10.3.2; pp. 549\u2013550; properties: exclusive, required, unique Members:)"
+    },
+    "simdlen": {
+      "section": "12.4.3",
+      "line": "- `simdlen` (Section 12.4.3; p. 432)"
+    },
+    "sizes": {
+      "section": "11.2",
+      "line": "- `sizes` (Section 11.2; p. 404)"
+    },
+    "task_reduction": {
+      "section": "7.6.11",
+      "line": "- `task_reduction` (Section 7.6.11; p. 286)"
+    },
+    "thread_limit": {
+      "section": "15.3",
+      "line": "- `thread_limit` (Section 15.3; pp. 483\u2013484)"
+    },
+    "threads": {
+      "section": "17.10.3.1",
+      "line": "- `threads` (Section 17.10.3.1; p. 548)"
+    },
+    "threadset": {
+      "section": "14.8",
+      "line": "- `threadset` (Section 14.8; p. 473)"
+    },
+    "to": {
+      "section": "7.10.1",
+      "line": "- `to` (Section 7.10.1; p. 328)"
+    },
+    "transparent": {
+      "section": "17.9.6",
+      "line": "- `transparent` (Section 17.9.6; p. 541)"
+    },
+    "unified_address": {
+      "section": "10.5.1.4",
+      "line": "- `unified_address` (Section 10.5.1.4; p. 390)"
+    },
+    "unified_shared_memory": {
+      "section": "10.5.1.5",
+      "line": "- `unified_shared_memory` (Section 10.5.1.5; p. 391)"
+    },
+    "uniform": {
+      "section": "7.11",
+      "line": "- `uniform` (Section 7.11; p. 330)"
+    },
+    "untied": {
+      "section": "14.4",
+      "line": "- `untied` (Section 14.4; p. 470)"
+    },
+    "update": {
+      "section": "17.9.4",
+      "line": "- `update` (Section 17.9.4; p. 537)"
+    },
+    "use": {
+      "section": "16.1.2",
+      "line": "- `use` (Section 16.1.2; pp. 500\u2013502)"
+    },
+    "use_device_addr": {
+      "section": "7.5.10",
+      "line": "- `use_device_addr` (Section 7.5.10; pp. 269\u2013282)"
+    },
+    "use_device_ptr": {
+      "section": "7.5.8",
+      "line": "- `use_device_ptr` (Section 7.5.8; p. 267)"
+    },
+    "uses_allocators": {
+      "section": "8.8",
+      "line": "- `uses_allocators` (Section 8.8; pp. 346\u2013355)"
+    },
+    "weak": {
+      "section": "17.8.3.4",
+      "line": "- `weak` (Section 17.8.3.4; p. 523)"
+    },
+    "when": {
+      "section": "9.4.1",
+      "line": "- `when` (Section 9.4.1; p. 356)"
+    },
+    "write": {
+      "section": "17.8.2.3",
+      "line": "- `write` (Section 17.8.2.3; p. 520; properties: unique Members:)"
+    }
+  },
+  "doc_directives": {
+    "allocate": {
+      "section": "8.5",
+      "category": "declarative",
+      "line": "- `allocate` (Section 8.5; pp. 341\u2013342; category: declarative; association: explicit; properties: pure)"
+    },
+    "allocators": {
+      "section": "8.7",
+      "category": "executable",
+      "line": "- `allocators` (Section 8.7; category: executable; association: block : allocator; properties: default)"
+    },
+    "assume": {
+      "section": "10.6.3",
+      "category": "informational",
+      "line": "- `assume` (Section 10.6.3; category: informational; association: block; properties: pure)"
+    },
+    "assumes": {
+      "section": "10.6.2",
+      "category": "informational",
+      "line": "- `assumes` (Section 10.6.2; p. 399; category: informational; association: unassociated; properties: pure)"
+    },
+    "atomic": {
+      "section": "17.8.5",
+      "category": "executable",
+      "line": "- `atomic` (Section 17.8.5; pp. 525\u2013528; category: executable; association: block : atomic; properties: mutual-exclusion, order-concurrent-nestable, simdizable)"
+    },
+    "barrier": {
+      "section": "17.3.1",
+      "category": "executable",
+      "line": "- `barrier` (Section 17.3.1; pp. 506\u2013508; category: executable; association: unassociated; properties: team-executed)"
+    },
+    "begin assumes": {
+      "section": "10.6.4",
+      "category": "informational",
+      "line": "- `begin assumes` (Section 10.6.4; p. 399; category: informational; association: delimited; properties: default)"
+    },
+    "begin declare_target": {
+      "section": "9.9.2",
+      "category": "declarative",
+      "line": "- `begin declare_target` (Section 9.9.2; p. 380; category: declarative; association: delimited; properties: declare-target, device, variant-generating)"
+    },
+    "begin declare_variant": {
+      "section": "9.6.5",
+      "category": "declarative",
+      "line": "- `begin declare_variant` (Section 9.6.5; p. 367; category: declarative; association: delimited; properties: default)"
+    },
+    "cancel": {
+      "section": "18.2",
+      "category": "executable",
+      "line": "- `cancel` (Section 18.2; pp. 551\u2013554; category: executable; association: unassociated; properties: default)"
+    },
+    "cancellation_point": {
+      "section": "18.3",
+      "category": "executable",
+      "line": "- `cancellation_point` (Section 18.3; pp. 555\u2013556; category: executable; association: unassociated; properties: default)"
+    },
+    "critical": {
+      "section": "17.2",
+      "category": "executable",
+      "line": "- `critical` (Section 17.2; pp. 504\u2013505; category: executable; association: block; properties: mutual-exclusion, thread-limiting, thread-exclusive)"
+    },
+    "declare_induction": {
+      "section": "7.6.17",
+      "category": "declarative",
+      "line": "- `declare_induction` (Section 7.6.17; pp. 294\u2013295; category: declarative; association: unassociated; properties: pure)"
+    },
+    "declare_mapper": {
+      "section": "7.9.10",
+      "category": "declarative",
+      "line": "- `declare_mapper` (Section 7.9.10; pp. 324\u2013327; category: declarative; association: unassociated; properties: pure)"
+    },
+    "declare_reduction": {
+      "section": "7.6.14",
+      "category": "declarative",
+      "line": "- `declare_reduction` (Section 7.6.14; pp. 291\u2013292; category: declarative; association: unassociated; properties: pure)"
+    },
+    "declare_simd": {
+      "section": "9.8",
+      "category": "declarative",
+      "line": "- `declare_simd` (Section 9.8; pp. 372\u2013373; category: declarative; association: declaration; properties: pure, variant-generating)"
+    },
+    "declare_target": {
+      "section": "9.9.1",
+      "category": "declarative",
+      "line": "- `declare_target` (Section 9.9.1; pp. 377\u2013379; category: declarative; association: explicit; properties: declare-target, device, pure, variant-generating)"
+    },
+    "declare_variant": {
+      "section": "9.6.4",
+      "category": "declarative",
+      "line": "- `declare_variant` (Section 9.6.4; pp. 365\u2013366; category: declarative; association: declaration; properties: pure)"
+    },
+    "depobj": {
+      "section": "17.9.3",
+      "category": "executable",
+      "line": "- `depobj` (Section 17.9.3; p. 536; category: executable; association: unassociated; properties: default)"
+    },
+    "dispatch": {
+      "section": "9.7",
+      "category": "executable",
+      "line": "- `dispatch` (Section 9.7; pp. 368\u2013369; category: executable; association: block : function-dispatch; properties: context-matching)"
+    },
+    "distribute": {
+      "section": "13.7",
+      "category": "executable",
+      "line": "- `distribute` (Section 13.7; pp. 451\u2013452; category: executable; association: loop nest; properties: SIMD-partitionable, teams-nestable, work-distribution, partitioned)"
+    },
+    "do": {
+      "section": "13.6.2",
+      "category": "executable",
+      "line": "- `do` (Section 13.6.2; p. 448; category: executable; association: loop nest; properties: work-distribution, team-executed, partitioned, SIMD-partitionable, worksharing, worksharing-loop, cancellable, context-matching)"
+    },
+    "error": {
+      "section": "10.1",
+      "category": "utility",
+      "line": "- `error` (Section 10.1; p. 383; category: utility; association: unassociated; properties: pure)"
+    },
+    "flush": {
+      "section": "17.8.6",
+      "category": "executable",
+      "line": "- `flush` (Section 17.8.6; pp. 529\u2013535; category: executable; association: unassociated; properties: default)"
+    },
+    "for": {
+      "section": "13.6.1",
+      "category": "executable",
+      "line": "- `for` (Section 13.6.1; p. 447; category: executable; association: loop nest; properties: work-distribution, team-executed, partitioned, SIMD-partitionable, worksharing, worksharing-loop, cancellable, context-matching)"
+    },
+    "fuse": {
+      "section": "11.3",
+      "category": "executable",
+      "line": "- `fuse` (Section 11.3; p. 405; category: executable; association: loop sequence; properties: loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)"
+    },
+    "groupprivate": {
+      "section": "7.13",
+      "category": "declarative",
+      "line": "- `groupprivate` (Section 7.13; pp. 332\u2013333; category: declarative; association: explicit; properties: pure)"
+    },
+    "interchange": {
+      "section": "11.4",
+      "category": "executable",
+      "line": "- `interchange` (Section 11.4; p. 406; category: executable; association: loop nest; properties: loop-transforming, nonrectangular-compatible, order-concurrent-nestable, pure, simdizable, teams-nestable)"
+    },
+    "interop": {
+      "section": "16.1",
+      "category": "executable",
+      "line": "- `interop` (Section 16.1; p. 499; category: executable; association: unassociated; properties: device)"
+    },
+    "loop": {
+      "section": "13.8",
+      "category": "executable",
+      "line": "- `loop` (Section 13.8; p. 454; category: executable; association: loop nest; properties: order-concurrent-nestable, partitioned, simdizable, team-executed, teams-nestable, work-distribution, worksharing)"
+    },
+    "masked": {
+      "section": "12.5",
+      "category": "executable",
+      "line": "- `masked` (Section 12.5; p. 433; category: executable; association: block; properties: thread-limiting, thread-selecting)"
+    },
+    "begin metadirective": {
+      "section": "9.4.4",
+      "category": "meta",
+      "line": "- `begin metadirective` (Section 9.4.4; p. 327; category: meta; association: delimited; properties: pure)"
+    },
+    "metadirective": {
+      "section": "9.4.3",
+      "category": "meta",
+      "line": "- `metadirective` (Section 9.4.3; p. 327; category: meta; association: unassociated; properties: pure)"
+    },
+    "nothing": {
+      "section": "10.7",
+      "category": "utility",
+      "line": "- `nothing` (Section 10.7; pp. 400\u2013402; category: utility; association: unassociated; properties: pure, loop-transforming)"
+    },
+    "ordered": {
+      "section": "17.10.2",
+      "category": "executable",
+      "line": "- `ordered` (Section 17.10.2; pp. 546\u2013547; category: executable; association: block; properties: mutual-exclusion, simdizable, thread-limiting, thread-exclusive)"
+    },
+    "parallel": {
+      "section": "12.1",
+      "category": "executable",
+      "line": "- `parallel` (Section 12.1; pp. 415\u2013418; category: executable; association: block; properties: cancellable, context-matching, order-concurrent-nestable, parallelism-generating, team-generating, teams-nestable, thread-limiting)"
+    },
+    "requires": {
+      "section": "10.5",
+      "category": "informational",
+      "line": "- `requires` (Section 10.5; p. 386; category: informational; association: unassociated; properties: default)"
+    },
+    "reverse": {
+      "section": "11.5",
+      "category": "executable",
+      "line": "- `reverse` (Section 11.5; p. 407; category: executable; association: loop nest; properties: generally-composable, loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)"
+    },
+    "scan": {
+      "section": "7.7",
+      "category": "subsidiary",
+      "line": "- `scan` (Section 7.7; pp. 297\u2013299; category: subsidiary; association: separating; properties: pure)"
+    },
+    "scope": {
+      "section": "13.2",
+      "category": "executable",
+      "line": "- `scope` (Section 13.2; p. 437; category: executable; association: block; properties: work-distribution, team-executed, worksharing, thread-limiting)"
+    },
+    "section": {
+      "section": "13.3.1",
+      "category": "subsidiary",
+      "line": "- `section` (Section 13.3.1; p. 439; category: subsidiary; association: separating; properties: default)"
+    },
+    "sections": {
+      "section": "13.3",
+      "category": "executable",
+      "line": "- `sections` (Section 13.3; p. 438; category: executable; association: block; properties: work-distribution, team-executed, partitioned, worksharing, thread-limiting, cancellable)"
+    },
+    "simd": {
+      "section": "12.4",
+      "category": "executable",
+      "line": "- `simd` (Section 12.4; p. 430; category: executable; association: loop nest; properties: context-matching, order-concurrent-nestable, parallelism-generating, pure, simdizable)"
+    },
+    "single": {
+      "section": "13.1",
+      "category": "executable",
+      "line": "- `single` (Section 13.1; p. 436; category: executable; association: block; properties: work-distribution, team-executed, partitioned, worksharing, thread-limiting, thread-selecting)"
+    },
+    "split": {
+      "section": "11.6",
+      "category": "executable",
+      "line": "- `split` (Section 11.6; p. 408; category: executable; association: loop nest; properties: generally-composable, loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)"
+    },
+    "stripe": {
+      "section": "11.7",
+      "category": "executable",
+      "line": "- `stripe` (Section 11.7; p. 410; category: executable; association: loop nest; properties: loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)"
+    },
+    "target": {
+      "section": "15.8",
+      "category": "executable",
+      "line": "- `target` (Section 15.8; pp. 491\u2013495; category: executable; association: block; properties: parallelism-generating, team-generating, thread-limiting, exception-aborting, task-generating, device, device-affecting, data-mapping, map-entering, map-exiting, context-matching)"
+    },
+    "target_data": {
+      "section": "15.7",
+      "category": "executable",
+      "line": "- `target_data` (Section 15.7; pp. 489\u2013490; category: executable; association: block; properties: device, device-affecting, data-mapping, map-entering, map-exiting, parallelism-generating, sharing-task, task-generating)"
+    },
+    "target_enter_data": {
+      "section": "15.5",
+      "category": "executable",
+      "line": "- `target_enter_data` (Section 15.5; pp. 485\u2013486; category: executable; association: unassociated; properties: parallelism-generating, task-generating, device, device-affecting, data-mapping, map-entering)"
+    },
+    "target_exit_data": {
+      "section": "15.6",
+      "category": "executable",
+      "line": "- `target_exit_data` (Section 15.6; pp. 487\u2013488; category: executable; association: unassociated; properties: parallelism-generating, task-generating, device, device-affecting, data-mapping, map-exiting)"
+    },
+    "target_update": {
+      "section": "15.9",
+      "category": "executable",
+      "line": "- `target_update` (Section 15.9; pp. 496\u2013498; category: executable; association: unassociated; properties: parallelism-generating, task-generating, device, device-affecting)"
+    },
+    "task": {
+      "section": "14.1",
+      "category": "executable",
+      "line": "- `task` (Section 14.1; pp. 457\u2013459; category: executable; association: block; properties: parallelism-generating, thread-limiting, task-generating)"
+    },
+    "task_iteration": {
+      "section": "14.2.3",
+      "category": "subsidiary",
+      "line": "- `task_iteration` (Section 14.2.3; p. 465; category: subsidiary; association: unassociated; properties: default)"
+    },
+    "taskgraph": {
+      "section": "14.3",
+      "category": "executable",
+      "line": "- `taskgraph` (Section 14.3; pp. 466\u2013468; category: executable; association: block; properties: default)"
+    },
+    "taskgroup": {
+      "section": "17.4",
+      "category": "executable",
+      "line": "- `taskgroup` (Section 17.4; p. 509; category: executable; association: block; properties: cancellable)"
+    },
+    "taskloop": {
+      "section": "14.2",
+      "category": "executable",
+      "line": "- `taskloop` (Section 14.2; pp. 460\u2013462; category: executable; association: loop nest; properties: parallelism-generating, SIMD-partitionable, task-generating)"
+    },
+    "taskwait": {
+      "section": "17.5",
+      "category": "executable",
+      "line": "- `taskwait` (Section 17.5; pp. 510\u2013511; category: executable; association: unassociated; properties: default)"
+    },
+    "taskyield": {
+      "section": "14.12",
+      "category": "executable",
+      "line": "- `taskyield` (Section 14.12; pp. 477\u2013480; category: executable; association: unassociated; properties: default)"
+    },
+    "teams": {
+      "section": "12.2",
+      "category": "executable",
+      "line": "- `teams` (Section 12.2; pp. 425\u2013427; category: executable; association: block; properties: parallelism-generating, team-generating, thread-limiting, context-matching)"
+    },
+    "threadprivate": {
+      "section": "7.3",
+      "category": "declarative",
+      "line": "- `threadprivate` (Section 7.3; pp. 246\u2013253; category: declarative; association: explicit; properties: pure)"
+    },
+    "tile": {
+      "section": "11.8",
+      "category": "executable",
+      "line": "- `tile` (Section 11.8; p. 411; category: executable; association: loop nest; properties: loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)"
+    },
+    "unroll": {
+      "section": "11.9",
+      "category": "executable",
+      "line": "- `unroll` (Section 11.9; p. 412; category: executable; association: loop nest; properties: generally-composable, loop-transforming, order-concurrent-nestable, pure, simdizable, teams-nestable)"
+    },
+    "workdistribute": {
+      "section": "13.5",
+      "category": "executable",
+      "line": "- `workdistribute` (Section 13.5; pp. 443\u2013446; category: executable; association: block; properties: work-distribution, partitioned)"
+    },
+    "workshare": {
+      "section": "13.4",
+      "category": "executable",
+      "line": "- `workshare` (Section 13.4; pp. 440\u2013442; category: executable; association: block; properties: work-distribution, team-executed, partitioned, worksharing)"
+    }
+  },
+  "parser_clauses": {
+    "absent": "Parenthesized",
+    "acq_rel": "Bare",
+    "acquire": "Bare",
+    "adjust_args": "Parenthesized",
+    "affinity": "Parenthesized",
+    "align": "Parenthesized",
+    "aligned": "Parenthesized",
+    "allocate": "Parenthesized",
+    "allocator": "Parenthesized",
+    "append_args": "Parenthesized",
+    "apply": "Parenthesized",
+    "at": "Parenthesized",
+    "atomic_default_mem_order": "Parenthesized",
+    "bind": "Parenthesized",
+    "capture": "Flexible",
+    "collapse": "Parenthesized",
+    "collector": "Parenthesized",
+    "combiner": "Parenthesized",
+    "compare": "Flexible",
+    "contains": "Parenthesized",
+    "copyin": "Parenthesized",
+    "copyprivate": "Parenthesized",
+    "counts": "Parenthesized",
+    "default": "Parenthesized",
+    "defaultmap": "Parenthesized",
+    "depend": "Parenthesized",
+    "destroy": "Flexible",
+    "detach": "Parenthesized",
+    "device": "Parenthesized",
+    "device_resident": "Parenthesized",
+    "device_safesync": "Flexible",
+    "device_type": "Parenthesized",
+    "dist_schedule": "Parenthesized",
+    "doacross": "Parenthesized",
+    "dynamic_allocators": "Bare",
+    "enter": "Parenthesized",
+    "exclusive": "Bare",
+    "fail": "Flexible",
+    "final": "Parenthesized",
+    "filter": "Parenthesized",
+    "firstprivate": "Parenthesized",
+    "from": "Parenthesized",
+    "full": "Bare",
+    "grainsize": "Parenthesized",
+    "graph_id": "Parenthesized",
+    "graph_reset": "Flexible",
+    "has_device_addr": "Parenthesized",
+    "hint": "Parenthesized",
+    "holds": "Parenthesized",
+    "if": "Parenthesized",
+    "in_reduction": "Parenthesized",
+    "inbranch": "Bare",
+    "inclusive": "Bare",
+    "indirect": "Flexible",
+    "induction": "Parenthesized",
+    "inductor": "Parenthesized",
+    "init": "Parenthesized",
+    "init_complete": "Bare",
+    "initializer": "Parenthesized",
+    "interop": "Parenthesized",
+    "is_device_ptr": "Parenthesized",
+    "label": "Parenthesized",
+    "lastprivate": "Parenthesized",
+    "linear": "Parenthesized",
+    "link": "Parenthesized",
+    "local": "Parenthesized",
+    "looprange": "Parenthesized",
+    "map": "Parenthesized",
+    "match": "Parenthesized",
+    "memscope": "Parenthesized",
+    "mergeable": "Bare",
+    "message": "Parenthesized",
+    "nocontext": "Flexible",
+    "nogroup": "Bare",
+    "no_openmp": "Flexible",
+    "no_openmp_constructs": "Flexible",
+    "no_openmp_routines": "Flexible",
+    "no_parallelism": "Flexible",
+    "nontemporal": "Parenthesized",
+    "notinbranch": "Bare",
+    "novariants": "Flexible",
+    "nowait": "Bare",
+    "num_tasks": "Parenthesized",
+    "num_teams": "Parenthesized",
+    "num_threads": "Parenthesized",
+    "order": "Parenthesized",
+    "ordered": "Flexible",
+    "otherwise": "Parenthesized",
+    "partial": "Flexible",
+    "permutation": "Parenthesized",
+    "priority": "Parenthesized",
+    "private": "Parenthesized",
+    "proc_bind": "Parenthesized",
+    "public": "Flexible",
+    "read": "Flexible",
+    "reduction": "Parenthesized",
+    "release": "Bare",
+    "relaxed": "Bare",
+    "replayable": "Flexible",
+    "reproducible": "Bare",
+    "reverse": "Flexible",
+    "reverse_offload": "Bare",
+    "safelen": "Parenthesized",
+    "safesync": "Bare",
+    "schedule": "Parenthesized",
+    "self_maps": "Bare",
+    "seq_cst": "Bare",
+    "severity": "Parenthesized",
+    "shared": "Parenthesized",
+    "simd": "Bare",
+    "simdlen": "Parenthesized",
+    "sizes": "Parenthesized",
+    "task_reduction": "Parenthesized",
+    "thread_limit": "Parenthesized",
+    "threads": "Bare",
+    "threadset": "Parenthesized",
+    "tile": "Parenthesized",
+    "to": "Parenthesized",
+    "transparent": "Flexible",
+    "uniform": "Parenthesized",
+    "unified_address": "Flexible",
+    "unified_shared_memory": "Flexible",
+    "unroll": "Flexible",
+    "untied": "Bare",
+    "update": "Flexible",
+    "use": "Parenthesized",
+    "use_device_addr": "Parenthesized",
+    "use_device_ptr": "Parenthesized",
+    "uses_allocators": "Parenthesized",
+    "weak": "Flexible",
+    "when": "Parenthesized",
+    "write": "Flexible"
+  },
+  "parser_directives": [
+    "atomic write",
+    "master",
+    "threadprivate",
+    "begin declare_target",
+    "target teams distribute parallel for simd",
+    "target parallel loop",
+    "begin declare_variant",
+    "target parallel do",
+    "target parallel",
+    "parallel master",
+    "declare_induction",
+    "teams loop simd",
+    "end declare target",
+    "masked taskloop",
+    "target teams loop simd",
+    "distribute parallel do simd",
+    "scope",
+    "target loop",
+    "unroll",
+    "declare_target",
+    "teams distribute parallel do",
+    "distribute",
+    "split",
+    "teams distribute simd",
+    "assume",
+    "loop",
+    "target_exit_data",
+    "begin assumes",
+    "assumes",
+    "critical",
+    "do",
+    "error",
+    "declare_variant",
+    "depobj",
+    "target",
+    "tile",
+    "target teams loop",
+    "target teams distribute parallel loop simd",
+    "atomic compare capture",
+    "teams loop",
+    "taskloop",
+    "teams",
+    "requires",
+    "parallel for",
+    "workdistribute",
+    "begin metadirective",
+    "atomic update",
+    "parallel for simd",
+    "do simd",
+    "distribute parallel do",
+    "declare_mapper",
+    "distribute parallel loop",
+    "interchange",
+    "metadirective",
+    "target parallel for simd",
+    "atomic",
+    "teams distribute parallel loop",
+    "parallel master taskloop simd",
+    "task",
+    "target teams distribute simd",
+    "parallel master taskloop",
+    "declare_simd",
+    "parallel",
+    "teams distribute parallel for simd",
+    "taskyield",
+    "parallel do",
+    "atomic read",
+    "groupprivate",
+    "target parallel do simd",
+    "teams distribute parallel loop simd",
+    "nothing",
+    "simd",
+    "allocators",
+    "parallel masked",
+    "ordered",
+    "distribute parallel loop simd",
+    "barrier",
+    "single",
+    "target teams distribute parallel loop",
+    "teams distribute",
+    "target loop simd",
+    "cancel",
+    "teams distribute parallel for",
+    "workshare",
+    "target_data",
+    "parallel masked taskloop simd",
+    "target teams distribute parallel do simd",
+    "sections",
+    "scan",
+    "taskgroup",
+    "target teams distribute parallel for",
+    "parallel sections",
+    "distribute parallel for simd",
+    "section",
+    "taskgraph",
+    "interop",
+    "distribute simd",
+    "target teams distribute",
+    "masked",
+    "distribute parallel for",
+    "taskloop simd",
+    "target_enter_data",
+    "allocate",
+    "atomic capture",
+    "declare_reduction",
+    "fuse",
+    "target_update",
+    "target parallel for",
+    "target parallel loop simd",
+    "flush",
+    "parallel do simd",
+    "reverse",
+    "parallel loop simd",
+    "target simd",
+    "stripe",
+    "parallel loop",
+    "task_iteration",
+    "target teams",
+    "for simd",
+    "teams distribute parallel do simd",
+    "taskwait",
+    "masked taskloop simd",
+    "parallel masked taskloop",
+    "dispatch",
+    "cancellation_point",
+    "target teams distribute parallel do",
+    "for"
+  ],
+  "missing_clauses": [],
+  "missing_directives": [],
+  "extra_clauses": [
+    "device_resident",
+    "label",
+    "public",
+    "reproducible",
+    "reverse",
+    "tile",
+    "unroll"
+  ],
+  "combined_directives": [
+    "atomic write",
+    "master",
+    "target parallel for simd",
+    "teams distribute parallel loop",
+    "parallel master taskloop simd",
+    "parallel masked taskloop simd",
+    "target teams distribute parallel do simd",
+    "target teams distribute simd",
+    "target teams distribute parallel for",
+    "target teams distribute parallel for simd",
+    "parallel master taskloop",
+    "target parallel loop",
+    "parallel sections",
+    "distribute parallel for simd",
+    "teams distribute parallel for simd",
+    "target parallel do",
+    "target parallel",
+    "distribute simd",
+    "parallel master",
+    "target teams distribute",
+    "parallel do",
+    "teams distribute parallel for",
+    "atomic read",
+    "distribute parallel for",
+    "target teams loop",
+    "target teams distribute parallel loop simd",
+    "taskloop simd",
+    "atomic compare capture",
+    "teams loop simd",
+    "end declare target",
+    "teams loop",
+    "masked taskloop",
+    "atomic capture",
+    "target parallel do simd",
+    "target teams loop simd",
+    "distribute parallel do simd",
+    "teams distribute parallel loop simd",
+    "parallel for",
+    "target parallel for",
+    "target loop",
+    "atomic update",
+    "target parallel loop simd",
+    "parallel do simd",
+    "parallel for simd",
+    "parallel loop simd",
+    "do simd",
+    "target simd",
+    "parallel loop",
+    "parallel masked",
+    "target teams",
+    "teams distribute parallel do",
+    "for simd",
+    "distribute parallel loop simd",
+    "distribute parallel do",
+    "teams distribute parallel do simd",
+    "masked taskloop simd",
+    "parallel masked taskloop",
+    "target teams distribute parallel loop",
+    "distribute parallel loop",
+    "target teams distribute parallel do",
+    "teams distribute simd",
+    "teams distribute",
+    "target loop simd"
+  ]
+}
