@@ -210,7 +210,7 @@
 <h3 id="-safe--reliable"><a class="header" href="#-safe--reliable">🛡️ Safe &amp; Reliable</a></h3>
 <ul>
 <li><strong>99.1% safe Rust</strong> - Memory safety guaranteed</li>
-<li><strong>405 passing tests</strong> - Comprehensive test coverage</li>
+<li><strong>581 passing tests</strong> - Comprehensive test coverage</li>
 <li><strong>Fuzzing tested</strong> - Handles malformed input gracefully</li>
 <li><strong>NULL-safe C API</strong> - Defensive checks at FFI boundary</li>
 </ul>
@@ -393,7 +393,7 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
 <div class="table-wrapper"><table><thead><tr><th>Aspect</th><th>ROUP</th><th>Custom Parser</th></tr></thead><tbody>
 <tr><td><strong>Development time</strong></td><td>Minutes (add dependency)</td><td>Weeks/months</td></tr>
 <tr><td><strong>OpenMP coverage</strong></td><td>128 directives</td><td>You must implement all</td></tr>
-<tr><td><strong>Testing</strong></td><td>405 tests included</td><td>You must write tests</td></tr>
+<tr><td><strong>Testing</strong></td><td>581 tests included</td><td>You must write tests</td></tr>
 <tr><td><strong>Maintenance</strong></td><td>Active, updated for new OpenMP</td><td>You must maintain</td></tr>
 <tr><td><strong>Edge cases</strong></td><td>Handled (fuzzing tested)</td><td>Likely has bugs</td></tr>
 <tr><td><strong>Spec compliance</strong></td><td>Verified</td><td>Uncertain</td></tr>
@@ -426,7 +426,7 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
 </ul>
 <h3 id="testing"><a class="header" href="#testing">Testing</a></h3>
 <ul>
-<li><strong>405 tests</strong> covering all features</li>
+<li><strong>581 tests</strong> covering all features</li>
 <li><strong>Fuzzing</strong> with random inputs</li>
 <li><strong>Valgrind</strong> verified (no leaks)</li>
 <li><strong>Thread sanitizer</strong> verified (no races)</li>
@@ -459,7 +459,7 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
 <h3 id="-rust"><a class="header" href="#-rust">🦀 Rust</a></h3>
 <p><strong>Install:</strong></p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.3"
+roup = "0.4"
 </code></pre>
 <p><strong>Learn:</strong></p>
 <ul>
@@ -675,15 +675,16 @@ int main() {
 <li><strong>Documented</strong> with safety requirements</li>
 <li><strong>NULL-checked</strong> before dereferencing</li>
 <li><strong>Isolated</strong> to <code>src/c_api.rs</code></li>
-<li><strong>Tested</strong> with 405 tests</li>
+<li><strong>Tested</strong> with 581 tests</li>
 </ul>
 <hr />
 <h2 id="testing-1"><a class="header" href="#testing-1">Testing</a></h2>
 <p>ROUP has comprehensive test coverage:</p>
 <ul>
-<li><strong>262 doc tests</strong> - Examples in documentation are auto-tested</li>
-<li><strong>143 integration tests</strong> - Real-world usage scenarios</li>
-<li><strong>405 total tests</strong> - All passing, zero warnings</li>
+<li><strong>285 unit tests</strong> - Core parsing logic</li>
+<li><strong>234 integration tests</strong> - Real-world usage scenarios</li>
+<li><strong>62 doc tests</strong> - Examples in documentation are auto-tested</li>
+<li><strong>581 total tests</strong> - All passing, zero warnings</li>
 <li><strong>Cross-platform</strong> - Tested on Linux, macOS, Windows</li>
 </ul>
 <p>Test categories:</p>
@@ -735,7 +736,7 @@ cargo build --release
 <h3 id="1-add-dependency"><a class="header" href="#1-add-dependency">1. Add Dependency</a></h3>
 <p>Add to your <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.3"
+roup = "0.4"
 </code></pre>
 <p>Or use the git version:</p>
 <pre><code class="language-toml">[dependencies]
@@ -1029,7 +1030,7 @@ cargo test
 <h3 id="option-1-using-cratesio-recommended"><a class="header" href="#option-1-using-cratesio-recommended">Option 1: Using crates.io (Recommended)</a></h3>
 <p>Add to your <code>Cargo.toml</code>:</p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.3"
+roup = "0.4"
 </code></pre>
 <p>Then use in your code:</p>
 <pre><code class="language-rust ignore">use roup::parser::parse;
@@ -4038,7 +4039,7 @@ if (!dir) {
 <tr><td><strong>Directive keywords</strong></td><td>128 keywords (core, combined, declarative, and meta)</td></tr>
 <tr><td><strong>Clause keywords</strong></td><td>132 keywords</td></tr>
 <tr><td><strong>Languages</strong></td><td>C, C++, Fortran</td></tr>
-<tr><td><strong>Test Coverage</strong></td><td>405 automated tests</td></tr>
+<tr><td><strong>Test Coverage</strong></td><td>581 automated tests</td></tr>
 <tr><td><strong>Specification</strong></td><td><a href="https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf">OpenMP 6.0 PDF</a></td></tr>
 </tbody></table>
 </div>
@@ -4327,9 +4328,10 @@ end do
 <h2 id="test-coverage"><a class="header" href="#test-coverage">Test Coverage</a></h2>
 <p>ROUP includes comprehensive automated testing:</p>
 <div class="table-wrapper"><table><thead><tr><th>Test Suite</th><th>Count</th><th>Coverage</th></tr></thead><tbody>
-<tr><td><strong>Integration tests</strong></td><td>143</td><td>Directive parsing, clause combinations</td></tr>
-<tr><td><strong>Doc tests</strong></td><td>262</td><td>API examples, edge cases</td></tr>
-<tr><td><strong>Total</strong></td><td><strong>405</strong></td><td>All directives + clauses tested</td></tr>
+<tr><td><strong>Unit tests</strong></td><td>285</td><td>Core parsing logic</td></tr>
+<tr><td><strong>Integration tests</strong></td><td>234</td><td>Directive parsing, clause combinations</td></tr>
+<tr><td><strong>Doc tests</strong></td><td>62</td><td>API examples, edge cases</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>581</strong></td><td>All directives + clauses tested</td></tr>
 </tbody></table>
 </div>
 <p><strong>Every directive and clause in OpenMP 6.0 has a passing test.</strong> ✅</p>
@@ -4391,7 +4393,7 @@ end do
 <li>✅ <strong>128 directive keywords</strong> (core, combined, declarative, and meta-directives)</li>
 <li>✅ <strong>132 clause keywords</strong> (data-sharing, control, device, SIMD, sync, etc.)</li>
 <li>✅ <strong>C/C++/Fortran</strong> syntax support</li>
-<li>✅ <strong>405 automated tests</strong> (comprehensive directive/clause coverage)</li>
+<li>✅ <strong>581 automated tests</strong> (comprehensive directive/clause coverage)</li>
 <li>✅ <strong>Type-safe Rust API</strong> + <strong>C FFI</strong></li>
 <li>✅ <strong>Latest spec</strong> (OpenMP 6.0, 2024)</li>
 </ul>
@@ -5587,7 +5589,7 @@ ROUP's architecture prioritizes:
 1. **Safety**: 99.1% safe Rust, minimal unsafe only at FFI boundary
 2. **Performance**: Zero-copy lexing, minimal allocations
 3. **Usability**: Standard C patterns, clear error messages
-4. **Correctness**: 405 tests, comprehensive OpenMP support
+4. **Correctness**: 419 tests, comprehensive OpenMP support
 
 The three-layer design (Lexer → Parser → FFI) provides a clean separation of concerns while maintaining excellent performance characteristics.
 
@@ -5596,7 +5598,7 @@ The three-layer design (Lexer → Parser → FFI) provides a clean separation of
 - ~60 lines of unsafe code (0.9%)
 - 128 directive keywords
 - 132 clause keywords
-- 405 tests
+- 419 tests
 - ~500ns to parse simple directive
 
 For implementation details, see the source code in `src/`.
@@ -6272,7 +6274,7 @@ Still have questions? Open a [discussion](https://github.com/ouankou/roup/discus
 <p><strong>No, ROUP is experimental and under active development.</strong></p>
 <p><strong>Current status:</strong></p>
 <ul>
-<li>✅ 405 tests, all passing</li>
+<li>✅ 419 tests, all passing</li>
 <li>✅ Supports OpenMP 3.0-6.0 parsing</li>
 <li>⚠️ APIs may change between versions</li>
 <li>⚠️ Some OpenMP features still being implemented</li>
@@ -6297,7 +6299,7 @@ Still have questions? Open a [discussion](https://github.com/ouankou/roup/discus
 <h3 id="how-do-i-install-roup"><a class="header" href="#how-do-i-install-roup">How do I install ROUP?</a></h3>
 <p><strong>For Rust projects:</strong></p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.3"
+roup = "0.4"
 </code></pre>
 <p><strong>For C/C++ projects:</strong></p>
 <ol>
@@ -6701,7 +6703,7 @@ target_link_libraries(myapp roup pthread dl m)
 <p><strong>ROUP advantages:</strong></p>
 <ul>
 <li>Already supports 128 directives</li>
-<li>Tested with 405 tests</li>
+<li>Tested with 419 tests</li>
 <li>Handles edge cases</li>
 <li>Active maintenance</li>
 <li>OpenMP spec compliance</li>

@@ -190,7 +190,7 @@
 <tr><td><strong>Directive keywords</strong></td><td>128 keywords (core, combined, declarative, and meta)</td></tr>
 <tr><td><strong>Clause keywords</strong></td><td>132 keywords</td></tr>
 <tr><td><strong>Languages</strong></td><td>C, C++, Fortran</td></tr>
-<tr><td><strong>Test Coverage</strong></td><td>405 automated tests</td></tr>
+<tr><td><strong>Test Coverage</strong></td><td>581 automated tests</td></tr>
 <tr><td><strong>Specification</strong></td><td><a href="https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf">OpenMP 6.0 PDF</a></td></tr>
 </tbody></table>
 </div>
@@ -479,9 +479,10 @@ end do
 <h2 id="test-coverage"><a class="header" href="#test-coverage">Test Coverage</a></h2>
 <p>ROUP includes comprehensive automated testing:</p>
 <div class="table-wrapper"><table><thead><tr><th>Test Suite</th><th>Count</th><th>Coverage</th></tr></thead><tbody>
-<tr><td><strong>Integration tests</strong></td><td>143</td><td>Directive parsing, clause combinations</td></tr>
-<tr><td><strong>Doc tests</strong></td><td>262</td><td>API examples, edge cases</td></tr>
-<tr><td><strong>Total</strong></td><td><strong>405</strong></td><td>All directives + clauses tested</td></tr>
+<tr><td><strong>Unit tests</strong></td><td>285</td><td>Core parsing logic</td></tr>
+<tr><td><strong>Integration tests</strong></td><td>234</td><td>Directive parsing, clause combinations</td></tr>
+<tr><td><strong>Doc tests</strong></td><td>62</td><td>API examples, edge cases</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>581</strong></td><td>All directives + clauses tested</td></tr>
 </tbody></table>
 </div>
 <p><strong>Every directive and clause in OpenMP 6.0 has a passing test.</strong> ✅</p>
@@ -543,7 +544,7 @@ end do
 <li>✅ <strong>128 directive keywords</strong> (core, combined, declarative, and meta-directives)</li>
 <li>✅ <strong>132 clause keywords</strong> (data-sharing, control, device, SIMD, sync, etc.)</li>
 <li>✅ <strong>C/C++/Fortran</strong> syntax support</li>
-<li>✅ <strong>405 automated tests</strong> (comprehensive directive/clause coverage)</li>
+<li>✅ <strong>581 automated tests</strong> (comprehensive directive/clause coverage)</li>
 <li>✅ <strong>Type-safe Rust API</strong> + <strong>C FFI</strong></li>
 <li>✅ <strong>Latest spec</strong> (OpenMP 6.0, 2024)</li>
 </ul>

@@ -212,7 +212,7 @@
 <h3 id="-safe--reliable"><a class="header" href="#-safe--reliable">🛡️ Safe &amp; Reliable</a></h3>
 <ul>
 <li><strong>99.1% safe Rust</strong> - Memory safety guaranteed</li>
-<li><strong>405 passing tests</strong> - Comprehensive test coverage</li>
+<li><strong>581 passing tests</strong> - Comprehensive test coverage</li>
 <li><strong>Fuzzing tested</strong> - Handles malformed input gracefully</li>
 <li><strong>NULL-safe C API</strong> - Defensive checks at FFI boundary</li>
 </ul>
@@ -395,7 +395,7 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
 <div class="table-wrapper"><table><thead><tr><th>Aspect</th><th>ROUP</th><th>Custom Parser</th></tr></thead><tbody>
 <tr><td><strong>Development time</strong></td><td>Minutes (add dependency)</td><td>Weeks/months</td></tr>
 <tr><td><strong>OpenMP coverage</strong></td><td>128 directives</td><td>You must implement all</td></tr>
-<tr><td><strong>Testing</strong></td><td>405 tests included</td><td>You must write tests</td></tr>
+<tr><td><strong>Testing</strong></td><td>581 tests included</td><td>You must write tests</td></tr>
 <tr><td><strong>Maintenance</strong></td><td>Active, updated for new OpenMP</td><td>You must maintain</td></tr>
 <tr><td><strong>Edge cases</strong></td><td>Handled (fuzzing tested)</td><td>Likely has bugs</td></tr>
 <tr><td><strong>Spec compliance</strong></td><td>Verified</td><td>Uncertain</td></tr>
@@ -428,7 +428,7 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
 </ul>
 <h3 id="testing"><a class="header" href="#testing">Testing</a></h3>
 <ul>
-<li><strong>405 tests</strong> covering all features</li>
+<li><strong>581 tests</strong> covering all features</li>
 <li><strong>Fuzzing</strong> with random inputs</li>
 <li><strong>Valgrind</strong> verified (no leaks)</li>
 <li><strong>Thread sanitizer</strong> verified (no races)</li>
@@ -461,7 +461,7 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &amp;
 <h3 id="-rust"><a class="header" href="#-rust">🦀 Rust</a></h3>
 <p><strong>Install:</strong></p>
 <pre><code class="language-toml">[dependencies]
-roup = "0.3"
+roup = "0.4"
 </code></pre>
 <p><strong>Learn:</strong></p>
 <ul>
@@ -677,15 +677,16 @@ int main() {
 <li><strong>Documented</strong> with safety requirements</li>
 <li><strong>NULL-checked</strong> before dereferencing</li>
 <li><strong>Isolated</strong> to <code>src/c_api.rs</code></li>
-<li><strong>Tested</strong> with 405 tests</li>
+<li><strong>Tested</strong> with 581 tests</li>
 </ul>
 <hr />
 <h2 id="testing-1"><a class="header" href="#testing-1">Testing</a></h2>
 <p>ROUP has comprehensive test coverage:</p>
 <ul>
-<li><strong>262 doc tests</strong> - Examples in documentation are auto-tested</li>
-<li><strong>143 integration tests</strong> - Real-world usage scenarios</li>
-<li><strong>405 total tests</strong> - All passing, zero warnings</li>
+<li><strong>285 unit tests</strong> - Core parsing logic</li>
+<li><strong>234 integration tests</strong> - Real-world usage scenarios</li>
+<li><strong>62 doc tests</strong> - Examples in documentation are auto-tested</li>
+<li><strong>581 total tests</strong> - All passing, zero warnings</li>
 <li><strong>Cross-platform</strong> - Tested on Linux, macOS, Windows</li>
 </ul>
 <p>Test categories:</p>
