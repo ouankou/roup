@@ -255,19 +255,19 @@ Clause count: 1
 
 ## What's Supported?
 
-### Directives (95 total)
-✅ Parallelism: `parallel`, `for`, `sections`, `single`, `master`  
-✅ Tasking: `task`, `taskwait`, `taskgroup`, `taskloop`  
-✅ Device offloading: `target`, `teams`, `distribute`  
-✅ Synchronization: `barrier`, `critical`, `atomic`  
-✅ Advanced: `metadirective`, `declare variant`, `loop`  
+### Directive keywords (127 total)
+✅ Parallelism: `parallel`, `for`, `sections`, `single`, `master`
+✅ Tasking: `task`, `taskwait`, `taskgroup`, `taskloop`
+✅ Device offloading: `target`, `teams`, `distribute`
+✅ Synchronization: `barrier`, `critical`, `atomic`
+✅ Advanced: `metadirective`, `declare variant`, `loop`, and every combined form (e.g. `target teams distribute parallel for simd`)
 
-### Clauses (91 total)
-✅ Scheduling: `schedule`, `collapse`, `ordered`  
-✅ Data-sharing: `private`, `shared`, `firstprivate`, `lastprivate`  
-✅ Reductions: `reduction(+|-|*|&|&&|min|max:vars)`  
-✅ Device clauses: `device`, `map`, `is_device_ptr`  
-✅ Control: `if`, `num_threads`, `default`  
+### Clause keywords (132 total)
+✅ Scheduling: `schedule`, `collapse`, `ordered`
+✅ Data-sharing: `private`, `shared`, `firstprivate`, `lastprivate`
+✅ Reductions: `reduction(+|-|*|&|&&|min|max:vars)`
+✅ Device clauses: `device`, `map`, `is_device_ptr`
+✅ Control: `if`, `num_threads`, `default`, and new OpenMP 6.0 additions such as `device_safesync`
 
 **For the complete support matrix, see [OpenMP Support](./openmp-support.md).**
 

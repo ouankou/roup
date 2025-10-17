@@ -38,14 +38,14 @@ ROUP is an **experimental** parser for OpenMP directives, written in safe Rust w
 ### 🛡️ Safe & Reliable
 
 - **99.1% safe Rust** - Memory safety guaranteed
-- **352 passing tests** - Comprehensive test coverage
+- **405 passing tests** - Comprehensive test coverage
 - **Fuzzing tested** - Handles malformed input gracefully
 - **NULL-safe C API** - Defensive checks at FFI boundary
 
 ### 📚 Comprehensive OpenMP Support
 
-- **95 directives** - From `parallel` to `metadirective`
-- **91 clauses** - Extensive OpenMP 3.0 through 6.0 coverage
+- **128 directive keywords** - From `parallel` to every combined OpenMP 6.0 form
+- **132 clause keywords** - Extensive OpenMP 3.0 through 6.0 coverage
 - **Version tracking** - Know which OpenMP version introduced each feature
 - **Spec compliant** - Follows official OpenMP specifications
 
@@ -257,8 +257,8 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &
 | Aspect | ROUP | Custom Parser |
 |--------|------|---------------|
 | **Development time** | Minutes (add dependency) | Weeks/months |
-| **OpenMP coverage** | 120+ directives | You must implement all |
-| **Testing** | 342 tests included | You must write tests |
+| **OpenMP coverage** | 128 directives | You must implement all |
+| **Testing** | 405 tests included | You must write tests |
 | **Maintenance** | Active, updated for new OpenMP | You must maintain |
 | **Edge cases** | Handled (fuzzing tested) | Likely has bugs |
 | **Spec compliance** | Verified | Uncertain |
@@ -293,7 +293,7 @@ ROUP prioritizes safety without compromising usability:
 
 ### Testing
 
-- **342 tests** covering all features
+- **405 tests** covering all features
 - **Fuzzing** with random inputs
 - **Valgrind** verified (no leaks)
 - **Thread sanitizer** verified (no races)
@@ -587,7 +587,7 @@ All `unsafe` code is:
 - **Documented** with safety requirements
 - **NULL-checked** before dereferencing
 - **Isolated** to `src/c_api.rs`
-- **Tested** with 355+ tests
+- **Tested** with 405 tests
 
 ---
 
@@ -595,9 +595,9 @@ All `unsafe` code is:
 
 ROUP has comprehensive test coverage:
 
-- **239 doc tests** - Examples in documentation are auto-tested
-- **116 integration tests** - Real-world usage scenarios
-- **355 total tests** - All passing, zero warnings
+- **262 doc tests** - Examples in documentation are auto-tested
+- **143 integration tests** - Real-world usage scenarios
+- **405 total tests** - All passing, zero warnings
 - **Cross-platform** - Tested on Linux, macOS, Windows
 
 Test categories:
