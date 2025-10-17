@@ -69,16 +69,25 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         // Parallel constructs
         "parallel" => Ok(DirectiveKind::Parallel),
         "parallel for" => Ok(DirectiveKind::ParallelFor),
+        "parallel do" => Ok(DirectiveKind::ParallelDo), // Fortran equivalent
         "parallel for simd" => Ok(DirectiveKind::ParallelForSimd),
+        "parallel do simd" => Ok(DirectiveKind::ParallelDoSimd), // Fortran equivalent
         "parallel sections" => Ok(DirectiveKind::ParallelSections),
         "parallel workshare" => Ok(DirectiveKind::ParallelWorkshare),
         "parallel loop" => Ok(DirectiveKind::ParallelLoop),
+        "parallel loop simd" => Ok(DirectiveKind::ParallelLoopSimd),
         "parallel masked" => Ok(DirectiveKind::ParallelMasked),
         "parallel master" => Ok(DirectiveKind::ParallelMaster),
+        "parallel masked taskloop" => Ok(DirectiveKind::ParallelMaskedTaskloop),
+        "parallel masked taskloop simd" => Ok(DirectiveKind::ParallelMaskedTaskloopSimd),
+        "parallel master taskloop" => Ok(DirectiveKind::ParallelMasterTaskloop),
+        "parallel master taskloop simd" => Ok(DirectiveKind::ParallelMasterTaskloopSimd),
 
         // Work-sharing constructs
         "for" => Ok(DirectiveKind::For),
+        "do" => Ok(DirectiveKind::Do), // Fortran equivalent
         "for simd" => Ok(DirectiveKind::ForSimd),
+        "do simd" => Ok(DirectiveKind::DoSimd), // Fortran equivalent
         "sections" => Ok(DirectiveKind::Sections),
         "section" => Ok(DirectiveKind::Section),
         "single" => Ok(DirectiveKind::Single),
@@ -93,9 +102,13 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         "task" => Ok(DirectiveKind::Task),
         "taskloop" => Ok(DirectiveKind::Taskloop),
         "taskloop simd" => Ok(DirectiveKind::TaskloopSimd),
+        "masked taskloop" => Ok(DirectiveKind::MaskedTaskloop),
+        "masked taskloop simd" => Ok(DirectiveKind::MaskedTaskloopSimd),
         "taskyield" => Ok(DirectiveKind::Taskyield),
         "taskwait" => Ok(DirectiveKind::Taskwait),
         "taskgroup" => Ok(DirectiveKind::Taskgroup),
+        "taskgraph" => Ok(DirectiveKind::Taskgraph),
+        "task iteration" => Ok(DirectiveKind::TaskIteration),
 
         // Target constructs
         "target" => Ok(DirectiveKind::Target),
@@ -105,32 +118,60 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         "target update" => Ok(DirectiveKind::TargetUpdate),
         "target parallel" => Ok(DirectiveKind::TargetParallel),
         "target parallel for" => Ok(DirectiveKind::TargetParallelFor),
+        "target parallel do" => Ok(DirectiveKind::TargetParallelDo), // Fortran equivalent
         "target parallel for simd" => Ok(DirectiveKind::TargetParallelForSimd),
+        "target parallel do simd" => Ok(DirectiveKind::TargetParallelDoSimd), // Fortran equivalent
         "target parallel loop" => Ok(DirectiveKind::TargetParallelLoop),
+        "target parallel loop simd" => Ok(DirectiveKind::TargetParallelLoopSimd),
         "target simd" => Ok(DirectiveKind::TargetSimd),
+        "target loop" => Ok(DirectiveKind::TargetLoop),
+        "target loop simd" => Ok(DirectiveKind::TargetLoopSimd),
         "target teams" => Ok(DirectiveKind::TargetTeams),
         "target teams distribute" => Ok(DirectiveKind::TargetTeamsDistribute),
         "target teams distribute simd" => Ok(DirectiveKind::TargetTeamsDistributeSimd),
         "target teams distribute parallel for" => {
             Ok(DirectiveKind::TargetTeamsDistributeParallelFor)
         }
+        "target teams distribute parallel do" => {
+            Ok(DirectiveKind::TargetTeamsDistributeParallelDo) // Fortran equivalent
+        }
         "target teams distribute parallel for simd" => {
             Ok(DirectiveKind::TargetTeamsDistributeParallelForSimd)
         }
+        "target teams distribute parallel do simd" => {
+            Ok(DirectiveKind::TargetTeamsDistributeParallelDoSimd) // Fortran equivalent
+        }
+        "target teams distribute parallel loop" => {
+            Ok(DirectiveKind::TargetTeamsDistributeParallelLoop)
+        }
+        "target teams distribute parallel loop simd" => {
+            Ok(DirectiveKind::TargetTeamsDistributeParallelLoopSimd)
+        }
         "target teams loop" => Ok(DirectiveKind::TargetTeamsLoop),
+        "target teams loop simd" => Ok(DirectiveKind::TargetTeamsLoopSimd),
 
         // Teams constructs
         "teams" => Ok(DirectiveKind::Teams),
         "teams distribute" => Ok(DirectiveKind::TeamsDistribute),
         "teams distribute simd" => Ok(DirectiveKind::TeamsDistributeSimd),
         "teams distribute parallel for" => Ok(DirectiveKind::TeamsDistributeParallelFor),
+        "teams distribute parallel do" => Ok(DirectiveKind::TeamsDistributeParallelDo), // Fortran equivalent
         "teams distribute parallel for simd" => Ok(DirectiveKind::TeamsDistributeParallelForSimd),
+        "teams distribute parallel do simd" => Ok(DirectiveKind::TeamsDistributeParallelDoSimd), // Fortran equivalent
+        "teams distribute parallel loop" => Ok(DirectiveKind::TeamsDistributeParallelLoop),
+        "teams distribute parallel loop simd" => Ok(DirectiveKind::TeamsDistributeParallelLoopSimd),
         "teams loop" => Ok(DirectiveKind::TeamsLoop),
+        "teams loop simd" => Ok(DirectiveKind::TeamsLoopSimd),
 
         // Synchronization constructs
         "barrier" => Ok(DirectiveKind::Barrier),
         "critical" => Ok(DirectiveKind::Critical),
         "atomic" => Ok(DirectiveKind::Atomic),
+        "atomic read" => Ok(DirectiveKind::AtomicRead),
+        "atomic write" => Ok(DirectiveKind::AtomicWrite),
+        "atomic update" => Ok(DirectiveKind::AtomicUpdate),
+        "atomic capture" => Ok(DirectiveKind::AtomicCapture),
+        "atomic compare capture" => Ok(DirectiveKind::AtomicCompareCapture),
         "flush" => Ok(DirectiveKind::Flush),
         "ordered" => Ok(DirectiveKind::Ordered),
         "master" => Ok(DirectiveKind::Master),
@@ -140,25 +181,55 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         "declare reduction" => Ok(DirectiveKind::DeclareReduction),
         "declare mapper" => Ok(DirectiveKind::DeclareMapper),
         "declare target" => Ok(DirectiveKind::DeclareTarget),
+        "begin declare target" => Ok(DirectiveKind::BeginDeclareTarget),
+        "end declare target" => Ok(DirectiveKind::EndDeclareTarget),
         "declare variant" => Ok(DirectiveKind::DeclareVariant),
+        "begin declare variant" => Ok(DirectiveKind::BeginDeclareVariant),
+        "end declare variant" => Ok(DirectiveKind::EndDeclareVariant),
+        "declare induction" => Ok(DirectiveKind::DeclareInduction),
 
         // Distribute constructs
         "distribute" => Ok(DirectiveKind::Distribute),
         "distribute simd" => Ok(DirectiveKind::DistributeSimd),
         "distribute parallel for" => Ok(DirectiveKind::DistributeParallelFor),
+        "distribute parallel do" => Ok(DirectiveKind::DistributeParallelDo), // Fortran equivalent
         "distribute parallel for simd" => Ok(DirectiveKind::DistributeParallelForSimd),
+        "distribute parallel do simd" => Ok(DirectiveKind::DistributeParallelDoSimd), // Fortran equivalent
+        "distribute parallel loop" => Ok(DirectiveKind::DistributeParallelLoop),
+        "distribute parallel loop simd" => Ok(DirectiveKind::DistributeParallelLoopSimd),
 
         // Meta-directives
         "metadirective" => Ok(DirectiveKind::Metadirective),
+        "begin metadirective" => Ok(DirectiveKind::BeginMetadirective),
+        "assume" => Ok(DirectiveKind::Assume),
+        "assumes" => Ok(DirectiveKind::Assumes),
+        "begin assumes" => Ok(DirectiveKind::BeginAssumes),
+
+        // Loop transformations
+        "tile" => Ok(DirectiveKind::Tile),
+        "unroll" => Ok(DirectiveKind::Unroll),
+        "fuse" => Ok(DirectiveKind::Fuse),
+        "split" => Ok(DirectiveKind::Split),
+        "interchange" => Ok(DirectiveKind::Interchange),
+        "reverse" => Ok(DirectiveKind::Reverse),
+        "stripe" => Ok(DirectiveKind::Stripe),
 
         // Other constructs
         "threadprivate" => Ok(DirectiveKind::Threadprivate),
         "allocate" => Ok(DirectiveKind::Allocate),
+        "allocators" => Ok(DirectiveKind::Allocators),
         "requires" => Ok(DirectiveKind::Requires),
         "scan" => Ok(DirectiveKind::Scan),
         "depobj" => Ok(DirectiveKind::Depobj),
         "nothing" => Ok(DirectiveKind::Nothing),
         "error" => Ok(DirectiveKind::Error),
+        "cancel" => Ok(DirectiveKind::Cancel),
+        "cancellation point" => Ok(DirectiveKind::CancellationPoint),
+        "dispatch" => Ok(DirectiveKind::Dispatch),
+        "interop" => Ok(DirectiveKind::Interop),
+        "scope" => Ok(DirectiveKind::Scope),
+        "groupprivate" => Ok(DirectiveKind::Groupprivate),
+        "workdistribute" => Ok(DirectiveKind::Workdistribute),
 
         _ => Err(ConversionError::UnknownDirective(name.to_string())),
     }

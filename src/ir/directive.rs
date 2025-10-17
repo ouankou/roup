@@ -86,10 +86,20 @@ pub enum DirectiveKind {
     ParallelWorkshare = 4,
     /// `#pragma omp parallel loop`
     ParallelLoop = 5,
+    /// `#pragma omp parallel loop simd`
+    ParallelLoopSimd = 8,
     /// `#pragma omp parallel masked`
     ParallelMasked = 6,
+    /// `#pragma omp parallel masked taskloop`
+    ParallelMaskedTaskloop = 9,
+    /// `#pragma omp parallel masked taskloop simd`
+    ParallelMaskedTaskloopSimd = 17,
     /// `#pragma omp parallel master` (deprecated in 5.1)
     ParallelMaster = 7,
+    /// `#pragma omp parallel master taskloop`
+    ParallelMasterTaskloop = 18,
+    /// `#pragma omp parallel master taskloop simd`
+    ParallelMasterTaskloopSimd = 19,
 
     // ========================================================================
     // Work-sharing constructs
@@ -132,6 +142,14 @@ pub enum DirectiveKind {
     Taskwait = 34,
     /// `#pragma omp taskgroup`
     Taskgroup = 35,
+    /// `#pragma omp taskgraph` (OpenMP 6.0)
+    Taskgraph = 36,
+    /// `#pragma omp task iteration` (OpenMP 6.0)
+    TaskIteration = 37,
+    /// `#pragma omp masked taskloop`
+    MaskedTaskloop = 38,
+    /// `#pragma omp masked taskloop simd`
+    MaskedTaskloopSimd = 39,
 
     // ========================================================================
     // Target constructs
@@ -154,8 +172,14 @@ pub enum DirectiveKind {
     TargetParallelForSimd = 47,
     /// `#pragma omp target parallel loop`
     TargetParallelLoop = 48,
+    /// `#pragma omp target parallel loop simd`
+    TargetParallelLoopSimd = 56,
     /// `#pragma omp target simd`
     TargetSimd = 49,
+    /// `#pragma omp target loop`
+    TargetLoop = 57,
+    /// `#pragma omp target loop simd`
+    TargetLoopSimd = 58,
     /// `#pragma omp target teams`
     TargetTeams = 50,
     /// `#pragma omp target teams distribute`
@@ -166,8 +190,14 @@ pub enum DirectiveKind {
     TargetTeamsDistributeParallelFor = 53,
     /// `#pragma omp target teams distribute parallel for simd`
     TargetTeamsDistributeParallelForSimd = 54,
+    /// `#pragma omp target teams distribute parallel loop`
+    TargetTeamsDistributeParallelLoop = 59,
+    /// `#pragma omp target teams distribute parallel loop simd`
+    TargetTeamsDistributeParallelLoopSimd = 69,
     /// `#pragma omp target teams loop`
     TargetTeamsLoop = 55,
+    /// `#pragma omp target teams loop simd`
+    TargetTeamsLoopSimd = 85,
 
     // ========================================================================
     // Teams constructs
@@ -182,8 +212,14 @@ pub enum DirectiveKind {
     TeamsDistributeParallelFor = 63,
     /// `#pragma omp teams distribute parallel for simd`
     TeamsDistributeParallelForSimd = 64,
+    /// `#pragma omp teams distribute parallel loop`
+    TeamsDistributeParallelLoop = 66,
+    /// `#pragma omp teams distribute parallel loop simd`
+    TeamsDistributeParallelLoopSimd = 67,
     /// `#pragma omp teams loop`
     TeamsLoop = 65,
+    /// `#pragma omp teams loop simd`
+    TeamsLoopSimd = 68,
 
     // ========================================================================
     // Synchronization constructs
@@ -194,6 +230,16 @@ pub enum DirectiveKind {
     Critical = 71,
     /// `#pragma omp atomic`
     Atomic = 72,
+    /// `#pragma omp atomic read`
+    AtomicRead = 77,
+    /// `#pragma omp atomic write`
+    AtomicWrite = 78,
+    /// `#pragma omp atomic update`
+    AtomicUpdate = 79,
+    /// `#pragma omp atomic capture`
+    AtomicCapture = 86,
+    /// `#pragma omp atomic compare capture`
+    AtomicCompareCapture = 87,
     /// `#pragma omp flush`
     Flush = 73,
     /// `#pragma omp ordered`
@@ -214,6 +260,8 @@ pub enum DirectiveKind {
     DeclareTarget = 82,
     /// `#pragma omp declare variant`
     DeclareVariant = 83,
+    /// `#pragma omp declare induction` (OpenMP 6.0)
+    DeclareInduction = 84,
 
     // ========================================================================
     // Distribute constructs
@@ -226,30 +274,112 @@ pub enum DirectiveKind {
     DistributeParallelFor = 92,
     /// `#pragma omp distribute parallel for simd`
     DistributeParallelForSimd = 93,
+    /// `#pragma omp distribute parallel loop`
+    DistributeParallelLoop = 94,
+    /// `#pragma omp distribute parallel loop simd`
+    DistributeParallelLoopSimd = 95,
 
     // ========================================================================
     // Meta-directives
     // ========================================================================
     /// `#pragma omp metadirective`
     Metadirective = 100,
+    /// `#pragma omp begin metadirective`
+    BeginMetadirective = 103,
+    /// `#pragma omp assume` (OpenMP 6.0)
+    Assume = 101,
+    /// `#pragma omp assumes` (OpenMP 6.0)
+    Assumes = 102,
+    /// `#pragma omp begin assumes`
+    BeginAssumes = 104,
+    /// `#pragma omp begin declare target`
+    BeginDeclareTarget = 112,
+    /// `#pragma omp end declare target`
+    EndDeclareTarget = 113,
+    /// `#pragma omp begin declare variant`
+    BeginDeclareVariant = 114,
+    /// `#pragma omp end declare variant`
+    EndDeclareVariant = 115,
+
+    // ========================================================================
+    // Loop transformation directives (OpenMP 6.0)
+    // ========================================================================
+    /// `#pragma omp tile`
+    Tile = 105,
+    /// `#pragma omp unroll`
+    Unroll = 106,
+    /// `#pragma omp fuse`
+    Fuse = 107,
+    /// `#pragma omp split`
+    Split = 108,
+    /// `#pragma omp interchange`
+    Interchange = 109,
+    /// `#pragma omp reverse`
+    Reverse = 110,
+    /// `#pragma omp stripe`
+    Stripe = 111,
 
     // ========================================================================
     // Other constructs
     // ========================================================================
     /// `#pragma omp threadprivate`
-    Threadprivate = 110,
+    Threadprivate = 120,
     /// `#pragma omp allocate`
-    Allocate = 111,
+    Allocate = 121,
+    /// `#pragma omp allocators` (OpenMP 6.0)
+    Allocators = 122,
     /// `#pragma omp requires`
-    Requires = 112,
+    Requires = 123,
     /// `#pragma omp scan`
-    Scan = 113,
+    Scan = 124,
     /// `#pragma omp depobj`
-    Depobj = 114,
+    Depobj = 125,
     /// `#pragma omp nothing`
-    Nothing = 115,
+    Nothing = 126,
     /// `#pragma omp error`
-    Error = 116,
+    Error = 127,
+    /// `#pragma omp cancel` (OpenMP 4.0)
+    Cancel = 128,
+    /// `#pragma omp cancellation point` (OpenMP 4.0)
+    CancellationPoint = 129,
+    /// `#pragma omp dispatch` (OpenMP 6.0)
+    Dispatch = 130,
+    /// `#pragma omp interop` (OpenMP 5.1)
+    Interop = 131,
+    /// `#pragma omp scope` (OpenMP 5.1)
+    Scope = 132,
+    /// `#pragma omp groupprivate` (OpenMP 6.0)
+    Groupprivate = 133,
+    /// `#pragma omp workdistribute` (Fortran, OpenMP 6.0)
+    Workdistribute = 134,
+
+    // ========================================================================
+    // Fortran "do" variants (Fortran equivalents of "for" directives)
+    // ========================================================================
+    /// `!$omp do` (Fortran equivalent of `for`)
+    Do = 135,
+    /// `!$omp do simd` (Fortran equivalent of `for simd`)
+    DoSimd = 136,
+    /// `!$omp parallel do` (Fortran equivalent of `parallel for`)
+    ParallelDo = 137,
+    /// `!$omp parallel do simd` (Fortran equivalent of `parallel for simd`)
+    ParallelDoSimd = 138,
+    /// `!$omp distribute parallel do` (Fortran)
+    DistributeParallelDo = 139,
+    /// `!$omp distribute parallel do simd` (Fortran)
+    DistributeParallelDoSimd = 140,
+    /// `!$omp teams distribute parallel do` (Fortran)
+    TeamsDistributeParallelDo = 141,
+    /// `!$omp teams distribute parallel do simd` (Fortran)
+    TeamsDistributeParallelDoSimd = 142,
+    /// `!$omp target parallel do` (Fortran)
+    TargetParallelDo = 143,
+    /// `!$omp target parallel do simd` (Fortran)
+    TargetParallelDoSimd = 144,
+    /// `!$omp target teams distribute parallel do` (Fortran)
+    TargetTeamsDistributeParallelDo = 145,
+    /// `!$omp target teams distribute parallel do simd` (Fortran)
+    TargetTeamsDistributeParallelDoSimd = 146,
 
     /// Unknown or custom directive
     Unknown = 255,
@@ -265,8 +395,13 @@ impl fmt::Display for DirectiveKind {
             DirectiveKind::ParallelSections => write!(f, "parallel sections"),
             DirectiveKind::ParallelWorkshare => write!(f, "parallel workshare"),
             DirectiveKind::ParallelLoop => write!(f, "parallel loop"),
+            DirectiveKind::ParallelLoopSimd => write!(f, "parallel loop simd"),
             DirectiveKind::ParallelMasked => write!(f, "parallel masked"),
+            DirectiveKind::ParallelMaskedTaskloop => write!(f, "parallel masked taskloop"),
+            DirectiveKind::ParallelMaskedTaskloopSimd => write!(f, "parallel masked taskloop simd"),
             DirectiveKind::ParallelMaster => write!(f, "parallel master"),
+            DirectiveKind::ParallelMasterTaskloop => write!(f, "parallel master taskloop"),
+            DirectiveKind::ParallelMasterTaskloopSimd => write!(f, "parallel master taskloop simd"),
 
             // Work-sharing constructs
             DirectiveKind::For => write!(f, "for"),
@@ -288,6 +423,10 @@ impl fmt::Display for DirectiveKind {
             DirectiveKind::Taskyield => write!(f, "taskyield"),
             DirectiveKind::Taskwait => write!(f, "taskwait"),
             DirectiveKind::Taskgroup => write!(f, "taskgroup"),
+            DirectiveKind::Taskgraph => write!(f, "taskgraph"),
+            DirectiveKind::TaskIteration => write!(f, "task iteration"),
+            DirectiveKind::MaskedTaskloop => write!(f, "masked taskloop"),
+            DirectiveKind::MaskedTaskloopSimd => write!(f, "masked taskloop simd"),
 
             // Target constructs
             DirectiveKind::Target => write!(f, "target"),
@@ -299,7 +438,10 @@ impl fmt::Display for DirectiveKind {
             DirectiveKind::TargetParallelFor => write!(f, "target parallel for"),
             DirectiveKind::TargetParallelForSimd => write!(f, "target parallel for simd"),
             DirectiveKind::TargetParallelLoop => write!(f, "target parallel loop"),
+            DirectiveKind::TargetParallelLoopSimd => write!(f, "target parallel loop simd"),
             DirectiveKind::TargetSimd => write!(f, "target simd"),
+            DirectiveKind::TargetLoop => write!(f, "target loop"),
+            DirectiveKind::TargetLoopSimd => write!(f, "target loop simd"),
             DirectiveKind::TargetTeams => write!(f, "target teams"),
             DirectiveKind::TargetTeamsDistribute => write!(f, "target teams distribute"),
             DirectiveKind::TargetTeamsDistributeSimd => write!(f, "target teams distribute simd"),
@@ -309,7 +451,14 @@ impl fmt::Display for DirectiveKind {
             DirectiveKind::TargetTeamsDistributeParallelForSimd => {
                 write!(f, "target teams distribute parallel for simd")
             }
+            DirectiveKind::TargetTeamsDistributeParallelLoop => {
+                write!(f, "target teams distribute parallel loop")
+            }
+            DirectiveKind::TargetTeamsDistributeParallelLoopSimd => {
+                write!(f, "target teams distribute parallel loop simd")
+            }
             DirectiveKind::TargetTeamsLoop => write!(f, "target teams loop"),
+            DirectiveKind::TargetTeamsLoopSimd => write!(f, "target teams loop simd"),
 
             // Teams constructs
             DirectiveKind::Teams => write!(f, "teams"),
@@ -321,12 +470,24 @@ impl fmt::Display for DirectiveKind {
             DirectiveKind::TeamsDistributeParallelForSimd => {
                 write!(f, "teams distribute parallel for simd")
             }
+            DirectiveKind::TeamsDistributeParallelLoop => {
+                write!(f, "teams distribute parallel loop")
+            }
+            DirectiveKind::TeamsDistributeParallelLoopSimd => {
+                write!(f, "teams distribute parallel loop simd")
+            }
             DirectiveKind::TeamsLoop => write!(f, "teams loop"),
+            DirectiveKind::TeamsLoopSimd => write!(f, "teams loop simd"),
 
             // Synchronization constructs
             DirectiveKind::Barrier => write!(f, "barrier"),
             DirectiveKind::Critical => write!(f, "critical"),
             DirectiveKind::Atomic => write!(f, "atomic"),
+            DirectiveKind::AtomicRead => write!(f, "atomic read"),
+            DirectiveKind::AtomicWrite => write!(f, "atomic write"),
+            DirectiveKind::AtomicUpdate => write!(f, "atomic update"),
+            DirectiveKind::AtomicCapture => write!(f, "atomic capture"),
+            DirectiveKind::AtomicCompareCapture => write!(f, "atomic compare capture"),
             DirectiveKind::Flush => write!(f, "flush"),
             DirectiveKind::Ordered => write!(f, "ordered"),
             DirectiveKind::Master => write!(f, "master"),
@@ -337,6 +498,7 @@ impl fmt::Display for DirectiveKind {
             DirectiveKind::DeclareMapper => write!(f, "declare mapper"),
             DirectiveKind::DeclareTarget => write!(f, "declare target"),
             DirectiveKind::DeclareVariant => write!(f, "declare variant"),
+            DirectiveKind::DeclareInduction => write!(f, "declare induction"),
 
             // Distribute constructs
             DirectiveKind::Distribute => write!(f, "distribute"),
@@ -345,18 +507,65 @@ impl fmt::Display for DirectiveKind {
             DirectiveKind::DistributeParallelForSimd => {
                 write!(f, "distribute parallel for simd")
             }
+            DirectiveKind::DistributeParallelLoop => write!(f, "distribute parallel loop"),
+            DirectiveKind::DistributeParallelLoopSimd => write!(f, "distribute parallel loop simd"),
 
             // Meta-directives
             DirectiveKind::Metadirective => write!(f, "metadirective"),
+            DirectiveKind::BeginMetadirective => write!(f, "begin metadirective"),
+            DirectiveKind::Assume => write!(f, "assume"),
+            DirectiveKind::Assumes => write!(f, "assumes"),
+            DirectiveKind::BeginAssumes => write!(f, "begin assumes"),
+            DirectiveKind::BeginDeclareTarget => write!(f, "begin declare target"),
+            DirectiveKind::EndDeclareTarget => write!(f, "end declare target"),
+            DirectiveKind::BeginDeclareVariant => write!(f, "begin declare variant"),
+            DirectiveKind::EndDeclareVariant => write!(f, "end declare variant"),
+
+            // Loop transformations
+            DirectiveKind::Tile => write!(f, "tile"),
+            DirectiveKind::Unroll => write!(f, "unroll"),
+            DirectiveKind::Fuse => write!(f, "fuse"),
+            DirectiveKind::Split => write!(f, "split"),
+            DirectiveKind::Interchange => write!(f, "interchange"),
+            DirectiveKind::Reverse => write!(f, "reverse"),
+            DirectiveKind::Stripe => write!(f, "stripe"),
 
             // Other constructs
             DirectiveKind::Threadprivate => write!(f, "threadprivate"),
             DirectiveKind::Allocate => write!(f, "allocate"),
+            DirectiveKind::Allocators => write!(f, "allocators"),
             DirectiveKind::Requires => write!(f, "requires"),
             DirectiveKind::Scan => write!(f, "scan"),
             DirectiveKind::Depobj => write!(f, "depobj"),
             DirectiveKind::Nothing => write!(f, "nothing"),
             DirectiveKind::Error => write!(f, "error"),
+            DirectiveKind::Cancel => write!(f, "cancel"),
+            DirectiveKind::CancellationPoint => write!(f, "cancellation point"),
+            DirectiveKind::Dispatch => write!(f, "dispatch"),
+            DirectiveKind::Interop => write!(f, "interop"),
+            DirectiveKind::Scope => write!(f, "scope"),
+            DirectiveKind::Groupprivate => write!(f, "groupprivate"),
+            DirectiveKind::Workdistribute => write!(f, "workdistribute"),
+
+            // Fortran "do" variants
+            DirectiveKind::Do => write!(f, "do"),
+            DirectiveKind::DoSimd => write!(f, "do simd"),
+            DirectiveKind::ParallelDo => write!(f, "parallel do"),
+            DirectiveKind::ParallelDoSimd => write!(f, "parallel do simd"),
+            DirectiveKind::DistributeParallelDo => write!(f, "distribute parallel do"),
+            DirectiveKind::DistributeParallelDoSimd => write!(f, "distribute parallel do simd"),
+            DirectiveKind::TeamsDistributeParallelDo => write!(f, "teams distribute parallel do"),
+            DirectiveKind::TeamsDistributeParallelDoSimd => {
+                write!(f, "teams distribute parallel do simd")
+            }
+            DirectiveKind::TargetParallelDo => write!(f, "target parallel do"),
+            DirectiveKind::TargetParallelDoSimd => write!(f, "target parallel do simd"),
+            DirectiveKind::TargetTeamsDistributeParallelDo => {
+                write!(f, "target teams distribute parallel do")
+            }
+            DirectiveKind::TargetTeamsDistributeParallelDoSimd => {
+                write!(f, "target teams distribute parallel do simd")
+            }
 
             DirectiveKind::Unknown => write!(f, "unknown"),
         }
@@ -374,8 +583,22 @@ impl DirectiveKind {
                 | DirectiveKind::ParallelSections
                 | DirectiveKind::ParallelWorkshare
                 | DirectiveKind::ParallelLoop
+                | DirectiveKind::ParallelLoopSimd
                 | DirectiveKind::ParallelMasked
+                | DirectiveKind::ParallelMaskedTaskloop
+                | DirectiveKind::ParallelMaskedTaskloopSimd
                 | DirectiveKind::ParallelMaster
+                | DirectiveKind::ParallelMasterTaskloop
+                | DirectiveKind::ParallelMasterTaskloopSimd
+                | DirectiveKind::ParallelDo
+                | DirectiveKind::ParallelDoSimd
+                | DirectiveKind::TargetParallel
+                | DirectiveKind::TargetParallelFor
+                | DirectiveKind::TargetParallelForSimd
+                | DirectiveKind::TargetParallelLoop
+                | DirectiveKind::TargetParallelLoopSimd
+                | DirectiveKind::TargetParallelDo
+                | DirectiveKind::TargetParallelDoSimd
         )
     }
 
@@ -389,6 +612,9 @@ impl DirectiveKind {
                 | DirectiveKind::Section
                 | DirectiveKind::Single
                 | DirectiveKind::Workshare
+                | DirectiveKind::Workdistribute
+                | DirectiveKind::Do
+                | DirectiveKind::DoSimd
         )
     }
 
@@ -400,15 +626,32 @@ impl DirectiveKind {
                 | DirectiveKind::DeclareSimd
                 | DirectiveKind::ForSimd
                 | DirectiveKind::ParallelForSimd
+                | DirectiveKind::ParallelLoopSimd
+                | DirectiveKind::ParallelMaskedTaskloopSimd
+                | DirectiveKind::ParallelMasterTaskloopSimd
                 | DirectiveKind::TaskloopSimd
+                | DirectiveKind::MaskedTaskloopSimd
                 | DirectiveKind::TargetSimd
+                | DirectiveKind::TargetLoopSimd
                 | DirectiveKind::TargetParallelForSimd
+                | DirectiveKind::TargetParallelLoopSimd
                 | DirectiveKind::TargetTeamsDistributeSimd
                 | DirectiveKind::TargetTeamsDistributeParallelForSimd
+                | DirectiveKind::TargetTeamsDistributeParallelLoopSimd
+                | DirectiveKind::TargetTeamsLoopSimd
                 | DirectiveKind::TeamsDistributeSimd
                 | DirectiveKind::TeamsDistributeParallelForSimd
+                | DirectiveKind::TeamsDistributeParallelLoopSimd
+                | DirectiveKind::TeamsLoopSimd
                 | DirectiveKind::DistributeSimd
                 | DirectiveKind::DistributeParallelForSimd
+                | DirectiveKind::DistributeParallelLoopSimd
+                | DirectiveKind::DoSimd
+                | DirectiveKind::ParallelDoSimd
+                | DirectiveKind::DistributeParallelDoSimd
+                | DirectiveKind::TeamsDistributeParallelDoSimd
+                | DirectiveKind::TargetParallelDoSimd
+                | DirectiveKind::TargetTeamsDistributeParallelDoSimd
         )
     }
 
@@ -422,6 +665,10 @@ impl DirectiveKind {
                 | DirectiveKind::Taskyield
                 | DirectiveKind::Taskwait
                 | DirectiveKind::Taskgroup
+                | DirectiveKind::Taskgraph
+                | DirectiveKind::TaskIteration
+                | DirectiveKind::MaskedTaskloop
+                | DirectiveKind::MaskedTaskloopSimd
         )
     }
 
@@ -438,13 +685,23 @@ impl DirectiveKind {
                 | DirectiveKind::TargetParallelFor
                 | DirectiveKind::TargetParallelForSimd
                 | DirectiveKind::TargetParallelLoop
+                | DirectiveKind::TargetParallelLoopSimd
                 | DirectiveKind::TargetSimd
+                | DirectiveKind::TargetLoop
+                | DirectiveKind::TargetLoopSimd
                 | DirectiveKind::TargetTeams
                 | DirectiveKind::TargetTeamsDistribute
                 | DirectiveKind::TargetTeamsDistributeSimd
                 | DirectiveKind::TargetTeamsDistributeParallelFor
                 | DirectiveKind::TargetTeamsDistributeParallelForSimd
+                | DirectiveKind::TargetTeamsDistributeParallelLoop
+                | DirectiveKind::TargetTeamsDistributeParallelLoopSimd
                 | DirectiveKind::TargetTeamsLoop
+                | DirectiveKind::TargetTeamsLoopSimd
+                | DirectiveKind::TargetParallelDo
+                | DirectiveKind::TargetParallelDoSimd
+                | DirectiveKind::TargetTeamsDistributeParallelDo
+                | DirectiveKind::TargetTeamsDistributeParallelDoSimd
         )
     }
 
@@ -457,13 +714,23 @@ impl DirectiveKind {
                 | DirectiveKind::TeamsDistributeSimd
                 | DirectiveKind::TeamsDistributeParallelFor
                 | DirectiveKind::TeamsDistributeParallelForSimd
+                | DirectiveKind::TeamsDistributeParallelLoop
+                | DirectiveKind::TeamsDistributeParallelLoopSimd
                 | DirectiveKind::TeamsLoop
+                | DirectiveKind::TeamsLoopSimd
                 | DirectiveKind::TargetTeams
                 | DirectiveKind::TargetTeamsDistribute
                 | DirectiveKind::TargetTeamsDistributeSimd
                 | DirectiveKind::TargetTeamsDistributeParallelFor
                 | DirectiveKind::TargetTeamsDistributeParallelForSimd
+                | DirectiveKind::TargetTeamsDistributeParallelLoop
+                | DirectiveKind::TargetTeamsDistributeParallelLoopSimd
                 | DirectiveKind::TargetTeamsLoop
+                | DirectiveKind::TargetTeamsLoopSimd
+                | DirectiveKind::TeamsDistributeParallelDo
+                | DirectiveKind::TeamsDistributeParallelDoSimd
+                | DirectiveKind::TargetTeamsDistributeParallelDo
+                | DirectiveKind::TargetTeamsDistributeParallelDoSimd
         )
     }
 
@@ -477,13 +744,42 @@ impl DirectiveKind {
                 | DirectiveKind::ParallelFor
                 | DirectiveKind::ParallelForSimd
                 | DirectiveKind::ParallelLoop
+                | DirectiveKind::ParallelLoopSimd
                 | DirectiveKind::Simd
                 | DirectiveKind::Taskloop
                 | DirectiveKind::TaskloopSimd
+                | DirectiveKind::MaskedTaskloop
+                | DirectiveKind::MaskedTaskloopSimd
+                | DirectiveKind::TargetLoop
+                | DirectiveKind::TargetLoopSimd
+                | DirectiveKind::TargetParallelLoop
+                | DirectiveKind::TargetParallelLoopSimd
+                | DirectiveKind::TargetTeamsLoop
+                | DirectiveKind::TargetTeamsLoopSimd
+                | DirectiveKind::TargetTeamsDistributeParallelLoop
+                | DirectiveKind::TargetTeamsDistributeParallelLoopSimd
+                | DirectiveKind::TeamsLoop
+                | DirectiveKind::TeamsLoopSimd
+                | DirectiveKind::TeamsDistributeParallelLoop
+                | DirectiveKind::TeamsDistributeParallelLoopSimd
                 | DirectiveKind::Distribute
                 | DirectiveKind::DistributeSimd
                 | DirectiveKind::DistributeParallelFor
                 | DirectiveKind::DistributeParallelForSimd
+                | DirectiveKind::DistributeParallelLoop
+                | DirectiveKind::DistributeParallelLoopSimd
+                | DirectiveKind::Do
+                | DirectiveKind::DoSimd
+                | DirectiveKind::ParallelDo
+                | DirectiveKind::ParallelDoSimd
+                | DirectiveKind::DistributeParallelDo
+                | DirectiveKind::DistributeParallelDoSimd
+                | DirectiveKind::TeamsDistributeParallelDo
+                | DirectiveKind::TeamsDistributeParallelDoSimd
+                | DirectiveKind::TargetParallelDo
+                | DirectiveKind::TargetParallelDoSimd
+                | DirectiveKind::TargetTeamsDistributeParallelDo
+                | DirectiveKind::TargetTeamsDistributeParallelDoSimd
         )
     }
 
@@ -494,10 +790,17 @@ impl DirectiveKind {
             DirectiveKind::Barrier
                 | DirectiveKind::Critical
                 | DirectiveKind::Atomic
+                | DirectiveKind::AtomicRead
+                | DirectiveKind::AtomicWrite
+                | DirectiveKind::AtomicUpdate
+                | DirectiveKind::AtomicCapture
+                | DirectiveKind::AtomicCompareCapture
                 | DirectiveKind::Flush
                 | DirectiveKind::Ordered
                 | DirectiveKind::Master
                 | DirectiveKind::Masked
+                | DirectiveKind::Taskwait
+                | DirectiveKind::Taskyield
         )
     }
 
@@ -908,6 +1211,8 @@ mod tests {
         assert!(DirectiveKind::For.is_worksharing());
         assert!(DirectiveKind::Sections.is_worksharing());
         assert!(DirectiveKind::Single.is_worksharing());
+        assert!(DirectiveKind::Workshare.is_worksharing());
+        assert!(DirectiveKind::Workdistribute.is_worksharing());
         assert!(!DirectiveKind::Parallel.is_worksharing());
     }
 
@@ -925,6 +1230,8 @@ mod tests {
         assert!(DirectiveKind::Task.is_task());
         assert!(DirectiveKind::Taskloop.is_task());
         assert!(DirectiveKind::Taskyield.is_task());
+        assert!(DirectiveKind::Taskgraph.is_task());
+        assert!(DirectiveKind::TaskIteration.is_task());
         assert!(!DirectiveKind::Parallel.is_task());
     }
 
