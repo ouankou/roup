@@ -321,7 +321,7 @@ end do
 !$omp end parallel do
 ```
 
-✅ **Supported:** Free-form (`!$omp`), Fixed-form (`c$omp`, `*$omp`)  
+✅ **Supported:** Free-form (`!$omp`), Fixed-form (`!$omp`, `c$omp`, `*$omp`), Short forms (`!$`, `c$`, `*$`)
 ✅ **Case insensitive:** `!$OMP`, `!$Omp`, `!$omp` all work
 
 ---
