@@ -120,7 +120,6 @@ fn parses_fortran_fixed_with_mixed_sentinels() {
 }
 
 #[test]
-#[ignore = "debugging P1 comment"]
 fn preserves_token_separation_in_c_continuations() {
     // Test case for P1 comment: ensure "parallel\n    for" doesn't become "parallelfor"
     let directive = parse_with_language(
@@ -138,7 +137,6 @@ fn preserves_token_separation_in_c_continuations() {
 }
 
 #[test]
-#[ignore = "debugging P1 comment"]
 fn preserves_token_separation_no_trailing_space() {
     // Edge case: backslash immediately after token, all separation via next-line indent
     let directive = parse_with_language(

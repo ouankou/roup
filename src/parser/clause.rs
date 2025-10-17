@@ -322,6 +322,25 @@ mod tests {
     }
 
     #[test]
+    fn parses_schedule_clause_with_leading_whitespace() {
+        let registry = ClauseRegistry::builder()
+            .register_parenthesized("schedule")
+            .build();
+
+        let (rest, clauses) = registry
+            .parse_sequence(" schedule(dynamic, 4)")
+            .expect("schedule clause should parse");
+
+        assert_eq!(rest, "");
+        assert_eq!(clauses.len(), 1);
+        assert_eq!(clauses[0].name, "schedule");
+        assert_eq!(
+            clauses[0].kind,
+            ClauseKind::Parenthesized("dynamic, 4".into())
+        );
+    }
+
+    #[test]
     fn clause_display_roundtrips_bare_clause() {
         let clause = Clause {
             name: "nowait".into(),

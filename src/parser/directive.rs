@@ -180,10 +180,10 @@ impl DirectiveRegistry {
             if let Some((_, next_ch)) = input[idx..].char_indices().next() {
                 if is_ident_char(next_ch) {
                     // check if prefix is registered; if so, continue to extend
-                    let prefix_candidate = input[start..idx].trim_end();
+                    let prefix_candidate = &input[start..idx];
                     let prefix_candidate =
                         crate::lexer::collapse_line_continuations(prefix_candidate);
-                    let prefix_candidate_ref = prefix_candidate.as_ref().trim_end();
+                    let prefix_candidate_ref = prefix_candidate.as_ref().trim();
                     // Check for prefixes
                     let has_prefix = if self.case_insensitive {
                         self.prefixes
@@ -337,6 +337,31 @@ mod tests {
         );
         assert_eq!(directive.clauses[1].name, "nowait");
         assert_eq!(directive.clauses[1].kind, ClauseKind::Bare);
+    }
+
+    #[test]
+    fn parses_directive_name_across_c_line_continuation() {
+        let clause_registry = ClauseRegistry::default();
+        let registry = DirectiveRegistryBuilder::new()
+            .register_generic("parallel")
+            .register_generic("parallel for")
+            .register_generic("parallel for simd")
+            .build();
+
+        let input = concat!("parallel \\\n", "    for private(i)");
+
+        let (rest, directive) = registry
+            .parse(input, &clause_registry)
+            .expect("directive should parse across line continuation");
+
+        assert_eq!(rest, "");
+        assert_eq!(directive.name, "parallel for");
+        assert_eq!(directive.clauses.len(), 1);
+        assert_eq!(directive.clauses[0].name, "private");
+        assert_eq!(
+            directive.clauses[0].kind,
+            ClauseKind::Parenthesized("i".into())
+        );
     }
 
     #[test]
