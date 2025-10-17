@@ -2,7 +2,7 @@
 # Test against multiple Rust versions to catch version-specific issues
 #
 # ROUP follows MSRV + stable approach (Rust ecosystem best practice):
-#   - MSRV (Minimum Supported Rust Version): 1.81.0
+#   - MSRV (Minimum Supported Rust Version): 1.85.0
 #   - Stable: Latest stable release
 #
 # This script automatically reads the Rust version list from the CI config file
@@ -10,8 +10,8 @@
 #
 # Usage:
 #   ./test_rust_versions.sh              # Auto-read versions from CI config (MSRV + stable)
-#   ./test_rust_versions.sh 1.81 stable  # Test specific versions
-#   ./test_rust_versions.sh 1.81 1.85 stable  # Test intermediate versions too
+#   ./test_rust_versions.sh 1.85 stable  # Test specific versions
+#   ./test_rust_versions.sh 1.85 1.86 stable  # Test intermediate versions too
 #
 # How it works:
 #   - Parses .github/workflows/ci.yml to extract the version matrix
@@ -38,12 +38,12 @@ get_rust_versions_from_ci() {
 
     if [ ! -f "$ci_file" ]; then
         echo "WARNING: CI config not found, using fallback MSRV + stable" >&2
-        echo "1.81 stable"
+        echo "1.85 stable"
         return
     fi
 
     # Extract version array from CI YAML
-    # Looks for: version: ["1.81", "stable"]
+    # Looks for: version: ["1.85", "stable"]
     local versions=$(grep -A 1 "version:" "$ci_file" | \
                     grep -oP '\[.*\]' | \
                     tr -d '[]"' | \
@@ -51,7 +51,7 @@ get_rust_versions_from_ci() {
 
     if [ -z "$versions" ]; then
         echo "WARNING: Could not parse versions from CI config, using fallback MSRV + stable" >&2
-        echo "1.81 stable"
+        echo "1.85 stable"
         return
     fi
 

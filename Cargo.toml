@@ -1,9 +1,10 @@
 [package]
 name = "roup"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Anjia Wang <anjia@ouankou.com>"]
 edition = "2021"
-rust-version = "1.81.0"  # MSRV: Ubuntu 22.04/24.04 LTS (apt install rustc-1.81) - required by half crate
+rust-version = "1.85.0"  # MSRV: Required for mdBook dependencies (edition2024 support)
+license = "BSD-3-Clause"
 
 [dependencies]
 # Learning Rust: External Dependencies
