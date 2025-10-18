@@ -113,7 +113,6 @@ pub fn parse_clause_mappings() -> Vec<(String, i32)> {
 }
 
 /// Parse OpenACC directive mappings from c_api.rs acc_directive_name_to_kind() using AST
-#[allow(dead_code)] // Used by build.rs but not src/bin/gen.rs
 pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
@@ -149,7 +148,6 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
 }
 
 /// Parse OpenACC clause mappings from c_api.rs convert_acc_clause() using AST
-#[allow(dead_code)] // Used by build.rs but not src/bin/gen.rs
 pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
@@ -182,9 +180,12 @@ pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
 
 /// Calculate FNV-1a hash checksum of directive and clause mappings.
 ///
+/// **Note**: Superseded by `calculate_combined_checksum` which handles both OpenMP and OpenACC.
+/// Kept for potential single-API use cases and API stability.
+///
 /// Used to verify the generated header matches c_api.rs. Returns a 64-bit hash value.
 /// See module documentation for algorithm rationale.
-#[allow(dead_code)] // Used by src/bin/gen.rs but not build.rs
+#[allow(dead_code)]
 pub fn calculate_checksum(directives: &[(String, i32)], clauses: &[(String, i32)]) -> u64 {
     let mut hash: u64 = FNV_OFFSET_BASIS;
 
@@ -214,7 +215,6 @@ pub fn calculate_checksum(directives: &[(String, i32)], clauses: &[(String, i32)
 /// Calculate combined FNV-1a hash checksum of OpenMP and OpenACC mappings.
 ///
 /// Used to verify the generated header matches c_api.rs for both APIs.
-#[allow(dead_code)] // Used by build.rs but not src/bin/gen.rs
 pub fn calculate_combined_checksum(
     omp_directives: &[(String, i32)],
     omp_clauses: &[(String, i32)],

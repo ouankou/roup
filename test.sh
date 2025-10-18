@@ -19,10 +19,13 @@ rustc --version
 cargo clippy --version 2>/dev/null || echo "  clippy: not installed"
 echo ""
 
+# Test section counter for auto-numbering
+SECTION_NUM=1
+
 # ===================================================================
 # 1. Code Formatting Check
 # ===================================================================
-echo "=== 1. Formatting Check ==="
+echo "=== $SECTION_NUM. Formatting Check ==="
 echo -n "Running cargo fmt --check... "
 if cargo fmt --check > /dev/null 2>&1; then
     echo -e "${GREEN}✓ PASS${NC}"
@@ -35,7 +38,7 @@ fi
 # ===================================================================
 # 2. Rust Build (all targets)
 # ===================================================================
-echo "=== 2. Rust Build ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Rust Build ==="
 echo -n "Building debug (all targets)... "
 if cargo build --locked --all-targets 2>&1 | tee /tmp/build_debug.log | grep -q "Finished"; then
     warnings=$(grep -i "warning:" /tmp/build_debug.log | grep -v "build.rs" | wc -l)
@@ -65,7 +68,7 @@ fi
 # ===================================================================
 # 3. Rust Unit Tests
 # ===================================================================
-echo "=== 3. Rust Unit Tests ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Rust Unit Tests ==="
 echo -n "Running cargo test --lib... "
 if cargo test --locked --lib > /tmp/test_lib.log 2>&1; then
     passed=$(grep "test result:" /tmp/test_lib.log | grep -o "[0-9]* passed" | grep -o "[0-9]*")
@@ -79,7 +82,7 @@ fi
 # ===================================================================
 # 4. Rust Integration Tests
 # ===================================================================
-echo "=== 4. Rust Integration Tests ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Rust Integration Tests ==="
 echo -n "Running cargo test --tests... "
 if cargo test --locked --tests > /tmp/test_integration.log 2>&1; then
     passed=$(grep "test result:" /tmp/test_integration.log | tail -1 | grep -o "[0-9]* passed" | grep -o "[0-9]*")
@@ -93,7 +96,7 @@ fi
 # ===================================================================
 # 5. Rust Doc Tests
 # ===================================================================
-echo "=== 5. Rust Doc Tests ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Rust Doc Tests ==="
 echo -n "Running cargo test --doc... "
 if cargo test --locked --doc > /tmp/test_doc.log 2>&1; then
     passed=$(grep "test result:" /tmp/test_doc.log | tail -1 | grep -o "[0-9]* passed" | grep -o "[0-9]*")
@@ -107,7 +110,7 @@ fi
 # ===================================================================
 # 6. All Rust Tests Together
 # ===================================================================
-echo "=== 6. All Rust Tests Together ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. All Rust Tests Together ==="
 echo -n "Running cargo test --all-targets... "
 if cargo test --locked --all-targets > /tmp/test_all.log 2>&1; then
     total_passed=$(grep "test result:" /tmp/test_all.log | grep -o "[0-9]* passed" | awk '{sum+=$1} END {print sum}')
@@ -121,7 +124,7 @@ fi
 # ===================================================================
 # 7. Rust Examples Build
 # ===================================================================
-echo "=== 7. Examples Build ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Examples Build ==="
 echo -n "Building all examples... "
 if cargo build --locked --examples > /tmp/build_examples.log 2>&1; then
     echo -e "${GREEN}✓ PASS${NC}"
@@ -134,7 +137,7 @@ fi
 # ===================================================================
 # 8. Rust Documentation Build
 # ===================================================================
-echo "=== 8. Rust Documentation ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Rust Documentation ==="
 echo -n "Building API docs (cargo doc --no-deps --all-features)... "
 if cargo doc --locked --no-deps --all-features > /tmp/doc.log 2>&1; then
     warnings=$(grep -i "warning:" /tmp/doc.log | wc -l)
@@ -154,7 +157,7 @@ fi
 # ===================================================================
 # 9. ompparser Compatibility Tests
 # ===================================================================
-echo "=== 9. ompparser Compat Tests ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. ompparser Compat Tests ==="
 if [ -d "compat/ompparser" ] && [ -f "compat/ompparser/build.sh" ]; then
     echo -n "Running compat tests... "
     cd compat/ompparser
@@ -177,7 +180,7 @@ fi
 # ===================================================================
 # 10. accparser Compatibility Tests
 # ===================================================================
-echo "=== 10. accparser Compat Tests ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. accparser Compat Tests ==="
 if [ -d "compat/accparser" ] && [ -f "compat/accparser/build.sh" ]; then
     echo -n "Running accparser compat tests... "
     cd compat/accparser
@@ -198,7 +201,7 @@ fi
 # ===================================================================
 # 11. mdBook Documentation Build
 # ===================================================================
-echo "=== 11. mdBook Documentation ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. mdBook Documentation ==="
 if ! command -v mdbook > /dev/null 2>&1; then
     echo -e "${RED}✗ FAIL - mdbook is MANDATORY but not installed${NC}"
     echo "   Install: cargo install mdbook"
@@ -222,7 +225,7 @@ fi
 # ===================================================================
 # 12. mdBook Code Examples Test
 # ===================================================================
-echo "=== 12. mdBook Code Examples ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. mdBook Code Examples ==="
 echo -n "Testing mdBook code examples... "
 if mdbook test docs/book > /tmp/mdbook_test.log 2>&1; then
     echo -e "${GREEN}✓ PASS${NC}"
@@ -235,7 +238,7 @@ fi
 # ===================================================================
 # 13. C Examples Build and Run
 # ===================================================================
-echo "=== 13. C Examples ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. C Examples ==="
 if [ ! -d "examples/c" ] || [ ! -f "examples/c/Makefile" ]; then
     echo -e "${RED}✗ FAIL - C examples are MANDATORY but not found${NC}"
     echo "   Expected: examples/c/Makefile"
@@ -263,7 +266,7 @@ fi
 # ===================================================================
 # 14. C++ Examples Build and Run
 # ===================================================================
-echo "=== 14. C++ Examples ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. C++ Examples ==="
 if [ -d "examples/cpp" ] && [ -f "examples/cpp/Makefile" ]; then
     echo -n "Building C++ examples... "
     if (cd examples/cpp && make clean > /dev/null 2>&1 && make > /tmp/cpp_examples_build.log 2>&1); then
@@ -292,7 +295,7 @@ fi
 # ===================================================================
 # 15. Fortran Examples Build
 # ===================================================================
-echo "=== 15. Fortran Examples ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Fortran Examples ==="
 if [ ! -d "examples/fortran" ] || [ ! -f "examples/fortran/Makefile" ]; then
     echo -e "${RED}✗ FAIL - Fortran examples are MANDATORY but not found${NC}"
     echo "   Expected: examples/fortran/Makefile"
@@ -311,7 +314,7 @@ fi
 # ===================================================================
 # 16. Header Verification
 # ===================================================================
-echo "=== 16. Header Verification ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Header Verification ==="
 echo -n "Verifying header is up-to-date... "
 if cargo run --locked --bin gen > /tmp/header_verify.log 2>&1; then
     echo -e "${GREEN}✓ PASS${NC}"
@@ -324,7 +327,7 @@ fi
 # ===================================================================
 # 17. Check for Compiler Warnings
 # ===================================================================
-echo "=== 17. Warning Check ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Warning Check ==="
 echo -n "Checking for unexpected warnings... "
 cargo build --locked 2>&1 | tee /tmp/warnings_raw.log > /dev/null
 grep -i "warning:" /tmp/warnings_raw.log | grep -v "build.rs" > /tmp/warnings.log || true
@@ -340,7 +343,7 @@ fi
 # ===================================================================
 # 18. Clippy Lints (MANDATORY)
 # ===================================================================
-echo "=== 18. Clippy Lints ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Clippy Lints ==="
 if command -v cargo-clippy > /dev/null 2>&1 || cargo clippy --version > /dev/null 2>&1; then
     echo -n "Running clippy (all targets)... "
     if cargo clippy --locked --all-targets -- -D warnings > /tmp/clippy.log 2>&1; then
@@ -359,7 +362,7 @@ fi
 # ===================================================================
 # 19. OpenMP_VV Round-Trip Validation (REQUIRED: 100% pass rate)
 # ===================================================================
-echo "=== 19. OpenMP_VV Round-Trip Validation ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. OpenMP_VV Round-Trip Validation ==="
 openmp_vv_status="skipped"
 if command -v clang &>/dev/null && command -v clang-format &>/dev/null; then
     echo -n "Running OpenMP_VV round-trip test (100% required)... "
@@ -393,7 +396,7 @@ fi
 # ===================================================================
 # 20. All Features Test
 # ===================================================================
-echo "=== 20. All Features Test ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. All Features Test ==="
 echo -n "Running tests with --all-features... "
 if cargo test --locked --all-features > /tmp/test_all_features.log 2>&1; then
     echo -e "${GREEN}✓ PASS${NC}"
@@ -406,7 +409,7 @@ fi
 # ===================================================================
 # 21. Benchmark Tests
 # ===================================================================
-echo "=== 21. Benchmark Tests ==="
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Benchmark Tests ==="
 if [ ! -d "benches" ]; then
     echo -e "${RED}✗ FAIL - Benchmarks are MANDATORY but benches directory not found${NC}"
     exit 1

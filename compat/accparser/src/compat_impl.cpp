@@ -80,7 +80,11 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
         case ACC_DIRECTIVE_DECLARE:     return ACCD_declare;
         case ACC_DIRECTIVE_WAIT:        return ACCD_wait;
         case ACC_DIRECTIVE_END:         return ACCD_end;
+        case 11:                        return ACCD_cache;       // "cache" directive
         case ACC_DIRECTIVE_UPDATE:      return ACCD_update;
+        case 13:                        return ACCD_parallel_loop;  // "parallel loop" composite
+        case 14:                        return ACCD_kernels_loop;   // "kernels loop" composite
+        case 15:                        return ACCD_serial_loop;    // "serial loop" composite
         case ACC_DIRECTIVE_SERIAL:      return ACCD_serial;
         case ACC_DIRECTIVE_ROUTINE:     return ACCD_routine;
         case ACC_DIRECTIVE_SET:         return ACCD_set;
@@ -157,9 +161,12 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
     }
 
     // Validate input length using constant from ROUP C API
-    // Use strnlen to safely handle potentially untrusted/non-null-terminated input
-    const size_t input_len = strnlen(input, ROUP_MAX_PRAGMA_LENGTH);
-    if (input_len == ROUP_MAX_PRAGMA_LENGTH) {
+    // Manual safe strlen to avoid non-portable strnlen (POSIX.1-2008)
+    size_t input_len = 0;
+    while (input_len < ROUP_MAX_PRAGMA_LENGTH && input[input_len] != '\0') {
+        ++input_len;
+    }
+    if (input_len == ROUP_MAX_PRAGMA_LENGTH && input[input_len] != '\0') {
         return nullptr;  // Input too long or not null-terminated within limit
     }
 
@@ -183,8 +190,10 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
         }
     }
 
-    // Call ROUP parser
-    AccDirective* roup_dir = acc_parse(input_str.c_str());
+    // Call ROUP parser with language setting to honor setLang()
+    // Map acc parser language to ROUP language constants
+    int32_t roup_lang = (current_lang == ACC_Lang_Fortran) ? 1 : 0; // 0=C, 1=Fortran free-form
+    AccDirective* roup_dir = acc_parse_with_language(input_str.c_str(), roup_lang);
     if (!roup_dir) {
         return nullptr;
     }
