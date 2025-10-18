@@ -365,6 +365,34 @@ Failed versions:
 
 This clearly shows which version failed and why.
 
+## OpenMP_VV Round-Trip Harness
+
+ROUP can reuse the [OpenMP Validation & Verification](https://github.com/OpenMP-Validation-and-Verification/OpenMP_VV) test
+suite to smoke-test the parser by round-tripping every pragma.
+
+### Running the Harness
+
+```bash
+# Clone OpenMP_VV (if needed), preprocess, and verify every pragma round-trip
+cargo run --bin openmp_vv
+
+# Reuse an existing checkout (skips cloning into target/openmp_vv)
+cargo run --bin openmp_vv -- --repo-path /path/to/OpenMP_VV --skip-clone
+
+# Use custom toolchain locations
+cargo run --bin openmp_vv -- --clang /opt/clang/bin/clang --clang-format /opt/clang/bin/clang-format
+```
+
+The first run clones `OpenMP_VV` into `target/openmp_vv`. Subsequent executions reuse that clone unless you supply a
+different `--repo-path`. The harness walks every C/C++ source under `tests/`, expands macros with `clang -E -P -CC` (adding
+`-fopenmp` and the file's directory to the include path), formats the resulting `#pragma omp` lines with `clang-format`, and
+feeds each directive through ROUP. The directives produced by `Directive::to_pragma_string()` are formatted a second time
+with `clang-format`; if the normalized input and output differ, the harness reports a mismatch.
+
+The summary shows how many files contained OpenMP pragmas, how many round-tripped successfully, and the overall success rate.
+Detailed sections list round-trip mismatches, parse failures, or tool execution issues (e.g., missing `clang-format`).
+Currently the harness only processes C/C++ sources; Fortran coverage will be added separately.
+
 ## FAQ
 
 **Q: Why MSRV + stable instead of testing many versions?**
