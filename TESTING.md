@@ -365,6 +365,109 @@ Failed versions:
 
 This clearly shows which version failed and why.
 
+## OpenMP_VV Round-Trip Validation
+
+ROUP can validate itself against the [OpenMP Validation & Verification (OpenMP_VV)](https://github.com/OpenMP-Validation-and-Verification/OpenMP_VV) test suite by round-tripping every pragma through the parser.
+
+### How It Works
+
+The validation process:
+
+1. **Clone OpenMP_VV** (automatically on first run to `target/openmp_vv`)
+2. **Find all C/C++ test files** in the `tests/` directory
+3. **Preprocess with clang** to expand macros and includes
+4. **Extract OpenMP pragmas** (lines starting with `#pragma omp`)
+5. **Round-trip each pragma**:
+   - Normalize original with `clang-format`
+   - Parse with ROUP → unparse to string
+   - Normalize round-tripped version with `clang-format`
+   - Compare with `diff`
+6. **Report statistics**: total pragmas, pass/fail counts, success rate
+
+### Running the Test
+
+```bash
+# Run OpenMP_VV validation (auto-clones repository if needed)
+./test_openmp_vv.sh
+
+# Or as part of the full test suite
+./test.sh  # Includes OpenMP_VV as section 18
+```
+
+### Using Existing Repository
+
+If you already have OpenMP_VV cloned elsewhere:
+
+```bash
+# Point to existing clone
+OPENMP_VV_PATH=/path/to/OpenMP_VV ./test_openmp_vv.sh
+
+# Use specific clang version
+CLANG=clang-15 CLANG_FORMAT=clang-format-15 ./test_openmp_vv.sh
+```
+
+### Example Output
+
+```
+=========================================
+  OpenMP_VV Round-Trip Validation
+=========================================
+
+Checking for required tools...
+✓ All required tools found
+
+Using existing OpenMP_VV at target/openmp_vv
+
+Building roup_roundtrip binary...
+✓ Binary built
+
+Finding C/C++ test files in target/openmp_vv/tests...
+Found 247 C/C++ files
+
+Processing files...
+
+=========================================
+  Results
+=========================================
+
+Files processed:        247
+Files with pragmas:     183
+Total pragmas:          1247
+
+Passed:                1189
+Failed:                58
+  Parse errors:         12
+  Mismatches:           46
+
+Success rate:           95.3%
+```
+
+### Requirements
+
+- **clang** - For preprocessing (macros, includes)
+- **clang-format** - For pragma normalization
+- **cargo** - To build the `roup_roundtrip` binary
+- **git** - To clone OpenMP_VV (if not already present)
+
+The test gracefully skips if clang/clang-format are not available.
+
+### Implementation Details
+
+The validation uses two simple components:
+
+1. **`roup_roundtrip` binary** (~30 lines of Rust):
+   - Reads one pragma from stdin
+   - Parses and unparses it
+   - Prints to stdout
+   - Exits with code 1 on parse error
+
+2. **`test_openmp_vv.sh` script** (~200 lines of bash):
+   - Orchestrates the entire workflow
+   - Uses standard Unix tools (find, grep, diff)
+   - Tracks statistics and formats output
+
+This approach is simpler and more maintainable than complex Rust-only solutions.
+
 ## FAQ
 
 **Q: Why MSRV + stable instead of testing many versions?**
