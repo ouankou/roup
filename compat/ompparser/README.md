@@ -1,80 +1,49 @@
 # ROUP ompparser Compatibility Layer
 
-⚠️ **Experimental Feature** - Under active development  
-**Tests**: 46/46 passing (100%) 🎯
+> **Experimental:** the ABI is expected to stabilise over time.
 
-Drop-in replacement for [ompparser](https://github.com/ouankou/ompparser) using ROUP as the backend parser.
+The compatibility layer packages the ROUP parser behind the original ompparser API so existing projects can switch parsers
+without code changes.
 
 ## Quick Start
 
 ```bash
+cd compat/ompparser
 ./build.sh
 ```
 
-The script will:
-- ✅ Check prerequisites (git, cmake, gcc, cargo)
-- ✅ Initialize ompparser submodule
-- ✅ Build ROUP core library
-- ✅ Build `libompparser.so` (~5.5MB with static ROUP embedding)
-- ✅ Run all 46 tests
+The script ensures dependencies are present, initialises the ompparser submodule, builds ROUP, compiles the wrapper, and runs the
+CMake test suite.
 
-## What You Get
-
-- **libompparser.so** - Drop-in replacement with ROUP parser + ompparser methods
-- **libroup-ompparser-compat.a** - Static library for ROUP-specific builds
-
-## Manual Build
+## Manual Steps
 
 ```bash
-# 1. Initialize submodule
 git submodule update --init --recursive
-
-# 2. Build ROUP
-cd ../.. && cargo build --release && cd compat/ompparser
-
-# 3. Build compat layer
+cargo build --release
+cd compat/ompparser
 mkdir -p build && cd build
-cmake .. && make
-
-# 4. Run tests
+cmake ..
+make
 ctest --output-on-failure
 ```
 
+## Outputs
+
+- `libompparser.so` – ompparser ABI backed by ROUP
+- `libroup-ompparser-compat.a` – static library variant
+
 ## Documentation
 
-**Full documentation**: See [ompparser Compatibility Layer](../../docs/book/src/ompparser-compat.md) in the ROUP book.
-
-**Files in this directory**:
-## Project Structure
-
-- `build.sh` - One-command build script
-- `CMakeLists.txt` - Build configuration
-- `src/compat_impl.cpp` - Compatibility wrapper (~190 lines)
-- `ompparser/` - Submodule (provides headers and implementation sources)
-- `examples/` - Example code showing usage
-- `tests/` - Test suite (46 tests)
-
-## Architecture
-
-```
-Your Code (uses parseOpenMP, OpenMPDirective API)
-    ↓
-compat_impl.cpp (compatibility wrapper)
-    ↓
-ROUP C API (roup_parse, roup_directive_kind, etc.)
-    ↓
-ROUP Parser (Rust - safe, fast parsing)
-```
-
-The library reuses ompparser's own implementation for toString(), generateDOT(), and other methods (zero duplication).
+Architectural notes and usage examples live in the documentation site:
+[`docs/book/src/ompparser-compat.md`](../../docs/book/src/ompparser-compat.md).
 
 ## Requirements
 
 - CMake 3.10+
-- C++11 compiler
+- A C++17-capable compiler
 - Rust toolchain (for building ROUP)
 - Git (for submodules)
 
 ## License
 
-Apache-2.0 (same as ROUP core)
+Apache-2.0 (matching the ROUP core)

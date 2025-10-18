@@ -1,122 +1,29 @@
 # ROUP Fortran Examples
 
-This directory contains Fortran example programs demonstrating the use of ROUP (Rust-based OpenMP/OpenACC Unified Parser) with Fortran code.
+Two examples demonstrate the current Fortran support:
 
-## 🚧 Experimental Status
+- `basic_parse.f90` – standalone examples of OpenMP directive syntax in Fortran
+- `tutorial_basic.f90` – shows how to call the ROUP C API from Fortran via `iso_c_binding`
 
-**Fortran support in ROUP is experimental and under active development.**
-
-## Examples
-
-### basic_parse.f90
-
-Simple Fortran program demonstrating OpenMP directive formats in Fortran:
-- Free-form `!$OMP` sentinel
-- Various directive types
-- Standalone example (no C API calls)
-
-**Build:**
-```bash
-make basic_parse
-./basic_parse
-```
-
-### tutorial_basic.f90
-
-Comprehensive tutorial showing:
-- Fortran-C interoperability with ROUP C API
-- Parsing Fortran free-form OpenMP directives
-- Extracting directive names and clause information
-- Memory management with C API
-
-**Build:**
-```bash
-make tutorial_basic
-./tutorial_basic
-```
+> Fortran support is experimental and still evolving.
 
 ## Building
 
-### Prerequisites
-
-- GNU Fortran compiler (`gfortran`)
-- ROUP library built (run `cargo build --release` in project root)
-
-### Quick Start
-
 ```bash
-# Build all examples
-make
-
-# Or build specific example
+cargo build --release
+cd examples/fortran
+make            # builds both programs
 make tutorial_basic
-
-# Run
 ./tutorial_basic
 ```
 
-## Fortran OpenMP Directive Formats
+`make basic_parse` builds the syntax-only sample. Adjust compiler flags in the Makefile if you need a different Fortran
+compiler.
 
-ROUP supports both Fortran free-form and fixed-form formats:
+## Notes
 
-### Free-Form (Modern Fortran)
+- Supports both free-form (`!$OMP`) and fixed-form (`C$OMP`) sentinels.
+- Callers are responsible for releasing resources through the C API wrappers.
+- Some Fortran-specific constructs (e.g., complex array sections) are still being validated.
 
-```fortran
-!$OMP PARALLEL PRIVATE(A, B) NUM_THREADS(4)
-!$OMP DO SCHEDULE(STATIC, 10)
-!$OMP END PARALLEL
-```
-
-### Fixed-Form (Fortran 77)
-
-```fortran
-C$OMP PARALLEL PRIVATE(A, B)
-!$OMP DO SCHEDULE(DYNAMIC)
-C$OMP END PARALLEL
-```
-
-## C API Integration
-
-The tutorial demonstrates using ROUP's C API from Fortran via `iso_c_binding`:
-
-```fortran
-use iso_c_binding
-use roup_interface
-
-! Parse Fortran directive
-directive_ptr = roup_parse_with_language(c_input, ROUP_LANG_FORTRAN_FREE)
-
-! Extract information
-name_ptr = roup_directive_name(directive_ptr)
-num_clauses = roup_directive_clause_count(directive_ptr)
-
-! Clean up
-call roup_directive_free(directive_ptr)
-```
-
-## Language Constants
-
-From `src/roup_constants.h`:
-
-```c
-#define ROUP_LANG_C                0  // C/C++ (#pragma omp)
-#define ROUP_LANG_FORTRAN_FREE     1  // Fortran free-form (!$OMP)
-#define ROUP_LANG_FORTRAN_FIXED    2  // Fortran fixed-form (!$OMP or C$OMP)
-```
-
-## Known Limitations
-
-⚠️ **Experimental features:**
-- End directives (e.g., `!$OMP END PARALLEL`) are not yet fully supported
-- Array section syntax may have limited support
-- Common block specifications in THREADPRIVATE need testing
-
-## Further Reading
-
-- [Fortran Tutorial](../../docs/book/src/fortran-tutorial.md) - Comprehensive guide
-- [C Tutorial](../c/README.md) - C API reference
-- [Architecture](../../docs/book/src/architecture.md) - Parser design
-
-## Support
-
-For issues or questions about Fortran support, please file an issue on the project repository.
+Refer to the Fortran tutorial in the documentation site for a deeper walkthrough.
