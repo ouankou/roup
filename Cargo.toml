@@ -1,6 +1,6 @@
 [package]
 name = "roup"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Anjia Wang <anjia@ouankou.com>"]
 edition = "2021"
 rust-version = "1.85.0"  # MSRV: Required for mdBook dependencies (edition2024 support)
