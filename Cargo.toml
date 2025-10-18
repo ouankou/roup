@@ -34,6 +34,10 @@ syn = { version = "2", features = ["full", "parsing"] }  # Robust Rust AST parse
 name = "gen"
 path = "src/bin/gen.rs"
 
+[[bin]]
+name = "roup_roundtrip"
+path = "src/bin/roup_roundtrip.rs"
+
 [lib]
 # Library configuration for FFI
 # cdylib = C-compatible dynamic library for FFI
