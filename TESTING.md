@@ -365,6 +365,41 @@ Failed versions:
 
 This clearly shows which version failed and why.
 
+## OpenMP_VV Validation Harness
+
+ROUP can reuse the [OpenMP Validation & Verification](https://github.com/OpenMP-Validation-and-Verification/OpenMP_VV) test
+suite to sanity-check directive coverage across real-world programs.
+
+### Running the Harness
+
+```bash
+# Round-trip OpenMP pragmas under OpenMP_VV/tests and summarize the results
+cargo run --bin openmp_vv
+
+# Reuse an existing checkout (skips cloning into target/openmp_vv)
+cargo run --bin openmp_vv -- --repo-path /path/to/OpenMP_VV --skip-clone
+
+# Show every failure instead of truncating after 20 entries
+cargo run --bin openmp_vv -- --max-failures 0
+
+# Point to alternative toolchain locations
+cargo run --bin openmp_vv -- --clang /opt/llvm/bin/clang --clang-format /opt/llvm/bin/clang-format
+```
+
+The first run clones `OpenMP_VV` into `target/openmp_vv`. Subsequent executions reuse that clone unless you specify a
+custom `--repo-path`. The harness walks every C/C++ source under `tests/`, preprocesses each file with `clang -E -P -CC`
+to flatten continuations/macros, extracts every `#pragma omp` line, and round-trips it through ROUP:
+
+1. Feed the canonical pragma to the ROUP parser.
+2. Convert the parsed directive back to a pragma string.
+3. Format both versions through `clang-format -style=LLVM` inside a stub function.
+4. Compare the formatted results.
+
+The summary reports total directives, round-trip matches, parse failures, mismatches, and any `clang`/`clang-format`
+errors. Failure samples list the originating file, the original directive, and the diagnostic. Use `--max-failures`
+to control how many individual diagnostics are shown, and `--skip-clone` to enforce offline execution when the
+repository is already present locally.
+
 ## FAQ
 
 **Q: Why MSRV + stable instead of testing many versions?**
