@@ -28,6 +28,7 @@ extern "C" {
 
     // Core parsing
     AccDirective* acc_parse(const char* input);
+    AccDirective* acc_parse_with_language(const char* input, int32_t language);
     void acc_directive_free(AccDirective* directive);
 
     // Directive queries
