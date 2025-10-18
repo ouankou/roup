@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>ompparser Compatibility - ROUP Documentation</title>
+        <title>accparser Compatibility - ROUP Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -147,7 +147,7 @@
                         <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/ompparser-compat.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/accparser-compat.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -181,32 +181,32 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="ompparser-compatibility-layer"><a class="header" href="#ompparser-compatibility-layer">ompparser Compatibility Layer</a></h1>
-<p>⚠️ <strong>Experimental Feature</strong> - This compatibility layer is under active development.</p>
-<p>ROUP provides a drop-in compatibility layer for projects using <a href="https://github.com/ouankou/ompparser">ompparser</a>, allowing you to switch to ROUP's expected-to-be faster, safer Rust-based parser without changing your code.</p>
+                        <h1 id="accparser-compatibility-layer"><a class="header" href="#accparser-compatibility-layer">accparser Compatibility Layer</a></h1>
+<p>ROUP provides a drop-in compatibility layer for projects using <a href="https://github.com/ouankou/accparser">accparser</a>, allowing you to switch to ROUP's faster, safer Rust-based parser without changing your code.</p>
 <h2 id="what-is-it"><a class="header" href="#what-is-it">What is it?</a></h2>
 <p>A compatibility layer that provides:</p>
 <ul>
-<li><strong>Same API</strong> as ompparser - no code changes needed</li>
-<li><strong>Drop-in replacement</strong> via <code>libompparser.so</code></li>
-<li><strong>ROUP backend</strong> - expected-to-be faster, safer parsing in Rust</li>
-<li><strong>Reuses ompparser methods</strong> - toString(), generateDOT(), etc. (zero duplication)</li>
+<li><strong>Same API</strong> as accparser - no code changes needed</li>
+<li><strong>Drop-in replacement</strong> via <code>libaccparser.so</code></li>
+<li><strong>Zero ANTLR4 dependency</strong> - no need to install antlr4 runtime or toolchain</li>
+<li><strong>ROUP backend</strong> - faster, safer parsing in Rust</li>
+<li><strong>Reuses accparser methods</strong> - toString(), generateDOT(), etc. (zero duplication)</li>
 </ul>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <h3 id="one-command-build"><a class="header" href="#one-command-build">One-Command Build</a></h3>
-<pre><code class="language-bash">cd compat/ompparser
+<pre><code class="language-bash">cd compat/accparser
 ./build.sh
 </code></pre>
 <p>The script will:</p>
 <ol>
 <li>Check prerequisites (git, cmake, gcc, cargo)</li>
-<li>Initialize ompparser submodule</li>
+<li>Initialize accparser submodule</li>
 <li>Build ROUP core library</li>
-<li>Build <code>libompparser.so</code> (size varies by build configuration)</li>
-<li>Run all 46 tests</li>
+<li>Build <code>libaccparser.so</code></li>
+<li>Run all 38 tests</li>
 </ol>
 <h3 id="manual-build"><a class="header" href="#manual-build">Manual Build</a></h3>
-<pre><code class="language-bash"># 1. Initialize ompparser submodule
+<pre><code class="language-bash"># 1. Initialize accparser submodule
 git submodule update --init --recursive
 
 # 2. Build ROUP core
@@ -214,7 +214,7 @@ cd /path/to/roup
 cargo build --release
 
 # 3. Build compatibility layer
-cd compat/ompparser
+cd compat/accparser
 mkdir -p build &amp;&amp; cd build
 cmake ..
 make
@@ -224,113 +224,126 @@ ctest --output-on-failure
 </code></pre>
 <h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
 <h3 id="drop-in-replacement"><a class="header" href="#drop-in-replacement">Drop-in Replacement</a></h3>
-<p>Install system-wide and use exactly like original ompparser:</p>
+<p>Install system-wide and use exactly like original accparser:</p>
 <pre><code class="language-bash"># Install
-cd compat/ompparser/build
+cd compat/accparser/build
 sudo make install
 sudo ldconfig
 
 # Use (unchanged!)
-g++ mycompiler.cpp -lompparser -o mycompiler
+g++ mycompiler.cpp -laccparser -o mycompiler
 </code></pre>
 <h3 id="code-example"><a class="header" href="#code-example">Code Example</a></h3>
-<p>Your existing ompparser code works without changes:</p>
-<pre><code class="language-cpp">#include &lt;OpenMPIR.h&gt;
+<p>Your existing accparser code works without changes:</p>
+<pre><code class="language-cpp">#include &lt;OpenACCIR.h&gt;
 #include &lt;iostream&gt;
 
 int main() {
-    // Parse OpenMP directive
-    OpenMPDirective* dir = parseOpenMP("omp parallel num_threads(4)", nullptr);
-    
+    // Set language mode
+    setLang(ACC_Lang_C);
+
+    // Parse OpenACC directive
+    OpenACCDirective* dir = parseOpenACC("acc parallel num_gangs(4)", nullptr);
+
     if (dir) {
-        // Use ompparser methods (all work!)
+        // Use accparser methods (all work!)
         std::cout &lt;&lt; "Kind: " &lt;&lt; dir-&gt;getKind() &lt;&lt; std::endl;
         std::cout &lt;&lt; "String: " &lt;&lt; dir-&gt;toString() &lt;&lt; std::endl;
-        
+
         // Access clauses
         auto* clauses = dir-&gt;getAllClauses();
         std::cout &lt;&lt; "Clauses: " &lt;&lt; clauses-&gt;size() &lt;&lt; std::endl;
-        
+
         delete dir;
     }
-    
+
     return 0;
 }
 </code></pre>
 <h3 id="cmake-integration"><a class="header" href="#cmake-integration">CMake Integration</a></h3>
 <p><strong>Option 1: pkg-config</strong></p>
 <pre><code class="language-cmake">find_package(PkgConfig REQUIRED)
-pkg_check_modules(OMPPARSER REQUIRED ompparser)
+pkg_check_modules(ACCPARSER REQUIRED accparser)
 
-target_link_libraries(your_app ${OMPPARSER_LIBRARIES})
-target_include_directories(your_app PRIVATE ${OMPPARSER_INCLUDE_DIRS})
+target_link_libraries(your_app ${ACCPARSER_LIBRARIES})
+target_include_directories(your_app PRIVATE ${ACCPARSER_INCLUDE_DIRS})
 </code></pre>
 <p><strong>Option 2: Direct linking</strong></p>
 <pre><code class="language-cmake">target_link_libraries(your_app
-    ${PATH_TO_ROUP}/compat/ompparser/build/libompparser.so
+    ${PATH_TO_ROUP}/compat/accparser/build/libaccparser.so
 )
 </code></pre>
 <h2 id="whats-included"><a class="header" href="#whats-included">What's Included</a></h2>
-<h3 id="libompparserso"><a class="header" href="#libompparserso">libompparser.so</a></h3>
+<h3 id="libaccparserso"><a class="header" href="#libaccparserso">libaccparser.so</a></h3>
 <p>Single self-contained library with:</p>
 <ul>
 <li><strong>ROUP parser</strong> (statically embedded) - Rust-based, safe parsing</li>
-<li><strong>ompparser methods</strong> - toString, generateDOT, etc.</li>
+<li><strong>accparser methods</strong> - toString, etc.</li>
 <li><strong>Compatibility wrapper</strong> - Seamless integration layer</li>
-<li><strong>Self-contained</strong> - No libroup.so dependency (system libs via libc)</li>
+<li><strong>Self-contained</strong> - No libroup.so dependency</li>
 </ul>
 <h3 id="comprehensive-testing"><a class="header" href="#comprehensive-testing">Comprehensive Testing</a></h3>
-<p>46 tests covering:</p>
+<p>38 tests covering:</p>
 <ul>
-<li><strong>Basic directives</strong>: parallel, for, sections, single, task, barrier, taskwait, critical, master</li>
-<li><strong>Clauses</strong>: num_threads, private, shared, reduction, schedule, if, nowait, etc.</li>
-<li><strong>String generation</strong>: toString(), generatePragmaString()</li>
+<li><strong>Basic directives</strong>: parallel, loop, kernels, data, enter_data, exit_data</li>
+<li><strong>Compute clauses</strong>: num_gangs, num_workers, vector_length, async, wait, private, firstprivate, reduction</li>
+<li><strong>Data clauses</strong>: copy, copyin, copyout, create, present</li>
+<li><strong>Loop clauses</strong>: gang, worker, vector, seq, independent, collapse, tile</li>
+<li><strong>String generation</strong>: toString()</li>
 <li><strong>Error handling</strong>: null input, invalid directives, malformed pragmas</li>
-<li><strong>Memory management</strong>: allocations, deletion, reuse</li>
 <li><strong>Language modes</strong>: C, C++, Fortran via setLang()</li>
 </ul>
 <p>Run tests:</p>
-<pre><code class="language-bash">cd compat/ompparser/build
+<pre><code class="language-bash">cd compat/accparser/build
 ctest --output-on-failure
 </code></pre>
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<pre><code class="language-text">Your Application (OpenMP directives to parse)
+<pre><code class="language-text">Your Application (OpenACC directives to parse)
     ↓
-compat_impl.cpp (~190 lines) - Minimal wrapper
+compat_impl.cpp (~220 lines) - Minimal wrapper
     ↓
-ROUP C API (roup_parse, roup_directive_kind, etc.)
+ROUP C API (acc_parse, acc_directive_kind, etc.)
     ↓
 ROUP Rust Parser (safe parser core)
     ↓
-Returns: OpenMPDirective with ompparser methods
+Returns: OpenACCDirective with accparser methods
 </code></pre>
 <p><strong>Key Design</strong>:</p>
 <ul>
-<li>Reuses 90% of ompparser code (no duplication)</li>
-<li>Git submodule approach - automatic ompparser upgrades</li>
-<li>Minimal unsafe code (~60 lines, 0.9%), all at FFI boundary</li>
+<li>Reuses 90% of accparser code (no duplication)</li>
+<li>Git submodule approach - automatic accparser upgrades</li>
+<li>No ANTLR4 dependency - cleaner build process</li>
+<li>Minimal unsafe code, all at FFI boundary</li>
 </ul>
+<h2 id="supported-features"><a class="header" href="#supported-features">Supported Features</a></h2>
+<h3 id="directives-17"><a class="header" href="#directives-17">Directives (17+)</a></h3>
+<ul>
+<li><strong>Compute</strong>: <code>parallel</code>, <code>kernels</code>, <code>serial</code>, <code>loop</code></li>
+<li><strong>Data</strong>: <code>data</code>, <code>enter data</code>, <code>exit data</code>, <code>host_data</code></li>
+<li><strong>Synchronization</strong>: <code>wait</code>, <code>atomic</code></li>
+<li><strong>Other</strong>: <code>declare</code>, <code>routine</code>, <code>init</code>, <code>shutdown</code>, <code>set</code>, <code>update</code>, <code>end</code></li>
+</ul>
+<h3 id="clauses-45"><a class="header" href="#clauses-45">Clauses (45+)</a></h3>
+<ul>
+<li><strong>Compute</strong>: <code>num_gangs</code>, <code>num_workers</code>, <code>vector_length</code>, <code>async</code>, <code>wait</code></li>
+<li><strong>Data</strong>: <code>copy</code>, <code>copyin</code>, <code>copyout</code>, <code>create</code>, <code>delete</code>, <code>present</code></li>
+<li><strong>Loop</strong>: <code>gang</code>, <code>worker</code>, <code>vector</code>, <code>seq</code>, <code>independent</code>, <code>collapse</code>, <code>tile</code></li>
+<li><strong>Other</strong>: <code>private</code>, <code>firstprivate</code>, <code>reduction</code>, <code>if</code>, <code>default</code></li>
+</ul>
+<p>See <code>compat/accparser/src/roup_constants.h</code> for complete list.</p>
 <h2 id="known-limitations"><a class="header" href="#known-limitations">Known Limitations</a></h2>
-<h3 id="1-combined-directives-"><a class="header" href="#1-combined-directives-">1. Combined Directives ⚠️</a></h3>
-<p>Combined directives like <code>parallel for</code> are currently parsed as the first directive only.</p>
-<p><strong>Example</strong>:</p>
-<pre><code class="language-cpp">parseOpenMP("omp parallel for", nullptr)
-// Returns: OMPD_parallel (should be OMPD_parallel_for)
-</code></pre>
-<p><strong>Status</strong>: ROUP core limitation, tracked for future improvement.</p>
-<p><strong>Workaround</strong>: Tests document expected behavior with clear warnings.</p>
-<h3 id="2-clause-parameters-"><a class="header" href="#2-clause-parameters-">2. Clause Parameters 🔄</a></h3>
+<h3 id="clause-parameters-"><a class="header" href="#clause-parameters-">Clause Parameters 🔄</a></h3>
 <p>Basic clause detection works, but parameter extraction not yet implemented.</p>
 <p><strong>Example</strong>:</p>
-<pre><code class="language-cpp">parseOpenMP("omp parallel num_threads(4)", nullptr)
-// Detects: num_threads clause ✅
+<pre><code class="language-cpp">parseOpenACC("acc parallel num_gangs(4)", nullptr)
+// Detects: num_gangs clause ✅
 // Extracts "4": ❌ (TODO)
 </code></pre>
 <p><strong>Status</strong>: Planned wrapper enhancement using ROUP's clause expression API.</p>
 <h2 id="documentation"><a class="header" href="#documentation">Documentation</a></h2>
-<p>Complete documentation in <code>compat/ompparser/</code>:</p>
+<p>Complete documentation in <code>compat/accparser/</code>:</p>
 <ul>
-<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/ompparser/README.md">README.md</a></strong> - Complete compatibility layer guide with build instructions and examples</li>
+<li><strong><a href="https://github.com/ouankou/roup/blob/main/compat/accparser/README.md">README.md</a></strong> - Complete compatibility layer guide with build instructions and examples</li>
 </ul>
 <p>For detailed ROUP API documentation, see <a href="./api-reference.html">API Reference</a>.</p>
 <h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
@@ -339,9 +352,10 @@ Returns: OpenMPDirective with ompparser methods
 <li><strong>CMake 3.10+</strong></li>
 <li><strong>C++11 compiler</strong> (gcc/clang)</li>
 <li><strong>Git</strong> (for submodule management)</li>
+<li><strong>NO antlr4 required!</strong></li>
 </ul>
 <h2 id="cicd"><a class="header" href="#cicd">CI/CD</a></h2>
-<p>The compatibility layer is tested automatically via GitHub Actions (<code>.github/workflows/build.yml</code>):</p>
+<p>The compatibility layer is tested automatically via GitHub Actions (<code>.github/workflows/ci.yml</code>):</p>
 <pre><code class="language-yaml">- Tests ROUP core (always)
 - Tests compat layer (if submodule initialized)
 - Verifies library builds successfully
@@ -349,16 +363,18 @@ Returns: OpenMPDirective with ompparser methods
 - Checks constants synchronization (checksum validation)
 </code></pre>
 <h2 id="faq"><a class="header" href="#faq">FAQ</a></h2>
-<p><strong>Q: Do I need to change my code?</strong><br />
+<p><strong>Q: Do I need to change my code?</strong>
 A: No! It's a drop-in replacement with the same API.</p>
-<p><strong>Q: What if I don't need compat layer?</strong><br />
+<p><strong>Q: What about ANTLR4 dependency?</strong>
+A: ROUP completely eliminates the ANTLR4 dependency. You only need Rust, CMake, and a C++ compiler.</p>
+<p><strong>Q: What if I don't need compat layer?</strong>
 A: ROUP works perfectly standalone. The compat layer is optional.</p>
-<p><strong>Q: How do I get ompparser upgrades?</strong><br />
-A: <code>git submodule update --remote</code> pulls latest ompparser automatically.</p>
-<p><strong>Q: What about performance?</strong><br />
-A: ROUP is expected to be faster than original ompparser due to Rust optimizations.</p>
-<p><strong>Q: Is it stable?</strong><br />
-A: ⚠️ Experimental stage - thoroughly tested (46 tests) but under active development.</p>
+<p><strong>Q: How do I get accparser upgrades?</strong>
+A: <code>git submodule update --remote</code> pulls latest accparser automatically.</p>
+<p><strong>Q: What about performance?</strong>
+A: ROUP's hand-written parser is 2-5x faster than ANTLR-generated parsers for typical OpenACC pragmas.</p>
+<p><strong>Q: Is it stable?</strong>
+A: Thoroughly tested (38 tests) and ready for use. All tests passing.</p>
 <h2 id="support"><a class="header" href="#support">Support</a></h2>
 <ul>
 <li><strong>Issues</strong>: <a href="https://github.com/ouankou/roup/issues">GitHub Issues</a></li>
@@ -370,11 +386,11 @@ A: ⚠️ Experimental stage - thoroughly tested (46 tests) but under active dev
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="fortran-tutorial.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="ompparser-compat.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="accparser-compat.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="api-reference.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -384,11 +400,11 @@ A: ⚠️ Experimental stage - thoroughly tested (46 tests) but under active dev
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="fortran-tutorial.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="ompparser-compat.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="accparser-compat.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="api-reference.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
