@@ -1,5 +1,6 @@
 mod clause;
 mod directive;
+pub mod openacc;
 pub mod openmp;
 
 pub use clause::{Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, ClauseRule};
@@ -12,6 +13,13 @@ pub struct Parser {
     clause_registry: ClauseRegistry,
     directive_registry: DirectiveRegistry,
     language: Language,
+    dialect: Dialect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dialect {
+    OpenMp,
+    OpenAcc,
 }
 
 impl Parser {
@@ -20,6 +28,7 @@ impl Parser {
             clause_registry,
             directive_registry,
             language: Language::default(),
+            dialect: Dialect::OpenMp,
         }
     }
 
@@ -33,6 +42,11 @@ impl Parser {
             self.clause_registry = self.clause_registry.with_case_insensitive(true);
         }
 
+        self
+    }
+
+    pub fn with_dialect(mut self, dialect: Dialect) -> Self {
+        self.dialect = dialect;
         self
     }
 
@@ -51,7 +65,10 @@ impl Parser {
                 let (input, _) = (
                     lexer::lex_pragma,
                     lexer::skip_space1_and_comments,
-                    lexer::lex_omp,
+                    |i| match self.dialect {
+                        Dialect::OpenMp => lexer::lex_dialect_keyword(i, "omp"),
+                        Dialect::OpenAcc => lexer::lex_dialect_keyword(i, "acc"),
+                    },
                     lexer::skip_space1_and_comments,
                 )
                     .parse(input)?;
@@ -59,7 +76,10 @@ impl Parser {
             }
             Language::FortranFree => {
                 let (input, _) = (
-                    lexer::lex_fortran_free_sentinel,
+                    |i| match self.dialect {
+                        Dialect::OpenMp => lexer::lex_fortran_free_sentinel_with_prefix(i, "omp"),
+                        Dialect::OpenAcc => lexer::lex_fortran_free_sentinel_with_prefix(i, "acc"),
+                    },
                     lexer::skip_space1_and_comments,
                 )
                     .parse(input)?;
@@ -67,7 +87,10 @@ impl Parser {
             }
             Language::FortranFixed => {
                 let (input, _) = (
-                    lexer::lex_fortran_fixed_sentinel,
+                    |i| match self.dialect {
+                        Dialect::OpenMp => lexer::lex_fortran_fixed_sentinel_with_prefix(i, "omp"),
+                        Dialect::OpenAcc => lexer::lex_fortran_fixed_sentinel_with_prefix(i, "acc"),
+                    },
                     lexer::skip_space1_and_comments,
                 )
                     .parse(input)?;
@@ -86,6 +109,11 @@ impl Default for Parser {
 
 pub fn parse_omp_directive(input: &str) -> IResult<&str, Directive<'_>> {
     let parser = Parser::default();
+    parser.parse(input)
+}
+
+pub fn parse_acc_directive(input: &str) -> IResult<&str, Directive<'_>> {
+    let parser = openacc::parser();
     parser.parse(input)
 }
 

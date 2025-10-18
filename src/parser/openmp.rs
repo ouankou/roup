@@ -710,5 +710,5 @@ pub fn directive_registry() -> DirectiveRegistry {
 }
 
 pub fn parser() -> Parser {
-    Parser::new(directive_registry(), clause_registry())
+    Parser::new(directive_registry(), clause_registry()).with_dialect(super::Dialect::OpenMp)
 }

@@ -62,9 +62,20 @@ pub fn lex_pragma(input: &str) -> IResult<&str, &str> {
     tag("#pragma")(input)
 }
 
-/// Parse "omp" keyword
+/// Parse a dialect keyword following `#pragma`
+pub fn lex_dialect_keyword<'a>(input: &'a str, keyword: &str) -> IResult<&'a str, &'a str> {
+    let parser = tag(keyword);
+    parser(input)
+}
+
+/// Parse "omp" keyword (OpenMP default)
 pub fn lex_omp(input: &str) -> IResult<&str, &str> {
-    tag("omp")(input)
+    lex_dialect_keyword(input, "omp")
+}
+
+/// Parse "acc" keyword for OpenACC
+pub fn lex_acc(input: &str) -> IResult<&str, &str> {
+    lex_dialect_keyword(input, "acc")
 }
 
 /// Parse Fortran free-form sentinel "!$OMP" (case-insensitive)
@@ -73,23 +84,32 @@ pub fn lex_omp(input: &str) -> IResult<&str, &str> {
 /// - "!$OMP PARALLEL" -> matches
 /// - "    !$OMP PARALLEL" -> matches (leading spaces consumed)
 /// - "  \t!$OMP DO" -> matches (mixed whitespace consumed)
-pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
+pub fn lex_fortran_free_sentinel_with_prefix<'a>(
+    input: &'a str,
+    prefix: &str,
+) -> IResult<&'a str, &'a str> {
     // Skip optional leading whitespace (common in indented Fortran code)
     let (after_space, _) = skip_space_and_comments(input)?;
 
-    // Optimize: check only first 5 characters instead of entire input
-    let matches = after_space
-        .get(..5)
-        .is_some_and(|s| s.eq_ignore_ascii_case("!$omp"));
-
-    if matches {
-        Ok((&after_space[5..], &after_space[..5]))
+    let expected = format!("!${}", prefix);
+    if after_space
+        .get(..expected.len())
+        .is_some_and(|s| s.eq_ignore_ascii_case(&expected))
+    {
+        Ok((
+            &after_space[expected.len()..],
+            &after_space[..expected.len()],
+        ))
     } else {
         Err(nom::Err::Error(nom::error::Error::new(
             input,
             nom::error::ErrorKind::Tag,
         )))
     }
+}
+
+pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
+    lex_fortran_free_sentinel_with_prefix(input, "omp")
 }
 
 /// Parse Fortran fixed-form sentinel "!$OMP", "C$OMP", or short forms in columns 1-6 (case-insensitive)
@@ -101,12 +121,15 @@ pub fn lex_fortran_free_sentinel(input: &str) -> IResult<&str, &str> {
 /// - "C$OMP DO" -> matches
 /// - "*$OMP END PARALLEL" -> matches
 /// - "!$ PARALLEL" -> matches (short form)
-pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
+pub fn lex_fortran_fixed_sentinel_with_prefix<'a>(
+    input: &'a str,
+    prefix: &str,
+) -> IResult<&'a str, &'a str> {
     // Skip optional leading whitespace (common in indented Fortran code)
     let (after_space, _) = skip_space_and_comments(input)?;
 
     // Check for both long-form (!$omp, c$omp, *$omp) and short-form (!$, c$, *$) sentinels
-    if let Some(len) = match_fortran_sentinel(after_space) {
+    if let Some(len) = match_fortran_sentinel_with_prefix(after_space, prefix) {
         Ok((&after_space[len..], &after_space[..len]))
     } else {
         Err(nom::Err::Error(nom::error::Error::new(
@@ -114,6 +137,10 @@ pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
             nom::error::ErrorKind::Tag,
         )))
     }
+}
+
+pub fn lex_fortran_fixed_sentinel(input: &str) -> IResult<&str, &str> {
+    lex_fortran_fixed_sentinel_with_prefix(input, "omp")
 }
 
 /// Parse an identifier (directive or clause name)
@@ -403,7 +430,7 @@ fn skip_fortran_continuation(input: &str, idx: usize) -> Option<usize> {
         }
     }
 
-    if let Some(len_sent) = match_fortran_sentinel(&input[next..]) {
+    if let Some(len_sent) = match_fortran_sentinel_any(&input[next..]) {
         next += len_sent;
         while next < len && matches!(bytes[next], b' ' | b'\t') {
             next += 1;
@@ -420,18 +447,28 @@ fn skip_fortran_continuation(input: &str, idx: usize) -> Option<usize> {
     Some(next)
 }
 
-fn match_fortran_sentinel(input: &str) -> Option<usize> {
-    // Order matters: check long-form sentinels before short-form variants
-    // to avoid incorrect prefix matching (e.g., "!$omp" should match before "!$")
-    let candidates = ["!$omp", "c$omp", "*$omp", "!$", "c$", "*$"];
+fn match_fortran_sentinel_with_prefix(input: &str, prefix: &str) -> Option<usize> {
+    let mut candidates = Vec::new();
+    let lower = prefix.to_ascii_lowercase();
+    for sentinel in ["!$", "c$", "*$"] {
+        candidates.push(format!("{}{}", sentinel, lower));
+    }
+    // Short forms are shared between OpenMP/OpenACC
+    candidates.extend(["!$".to_string(), "c$".to_string(), "*$".to_string()]);
+
     for candidate in candidates {
         if input.len() >= candidate.len()
-            && input[..candidate.len()].eq_ignore_ascii_case(candidate)
+            && input[..candidate.len()].eq_ignore_ascii_case(&candidate)
         {
             return Some(candidate.len());
         }
     }
     None
+}
+
+fn match_fortran_sentinel_any(input: &str) -> Option<usize> {
+    match_fortran_sentinel_with_prefix(input, "omp")
+        .or_else(|| match_fortran_sentinel_with_prefix(input, "acc"))
 }
 
 #[cfg(test)]
