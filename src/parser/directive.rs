@@ -19,7 +19,24 @@ pub struct Directive<'a> {
 
 impl Directive<'_> {
     pub fn to_pragma_string(&self) -> String {
-        self.to_string()
+        self.to_pragma_string_with_prefix("#pragma omp")
+    }
+
+    pub fn to_pragma_string_with_prefix(&self, prefix: &str) -> String {
+        let mut output = String::new();
+        output.push_str(prefix);
+        output.push(' ');
+        output.push_str(self.name.as_ref());
+        if !self.clauses.is_empty() {
+            output.push(' ');
+            for (idx, clause) in self.clauses.iter().enumerate() {
+                if idx > 0 {
+                    output.push(' ');
+                }
+                output.push_str(&clause.to_string());
+            }
+        }
+        output
     }
 }
 
