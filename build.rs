@@ -25,8 +25,13 @@ use constants_gen::*;
 ///
 /// This function is specific to build.rs and generates the C header with all constants.
 /// The gen binary doesn't need this - it only verifies using checksum comparison.
-fn generate_header(directives: &[(String, i32)], clauses: &[(String, i32)]) -> String {
-    // Generate directive constants
+fn generate_header(
+    directives: &[(String, i32)],
+    clauses: &[(String, i32)],
+    acc_directives: &[(String, i32)],
+    acc_clauses: &[(String, i32)],
+) -> String {
+    // Generate OpenMP directive constants
     let mut directive_defs = String::new();
     for (name, num) in directives {
         directive_defs.push_str(&format!("#define ROUP_DIRECTIVE_{name:<20} {num}\n"));
@@ -35,7 +40,7 @@ fn generate_header(directives: &[(String, i32)], clauses: &[(String, i32)]) -> S
         "#define ROUP_DIRECTIVE_UNKNOWN       {UNKNOWN_KIND}\n"
     ));
 
-    // Generate clause constants
+    // Generate OpenMP clause constants
     let mut clause_defs = String::new();
     for (name, num) in clauses {
         clause_defs.push_str(&format!("#define ROUP_CLAUSE_{name:<15} {num}\n"));
@@ -44,10 +49,30 @@ fn generate_header(directives: &[(String, i32)], clauses: &[(String, i32)]) -> S
         "#define ROUP_CLAUSE_UNKNOWN      {UNKNOWN_KIND}\n"
     ));
 
-    // Generate checksum for validation
-    let checksum = calculate_checksum(directives, clauses);
+    // Generate OpenACC directive constants
+    let mut acc_directive_defs = String::new();
+    for (name, num) in acc_directives {
+        acc_directive_defs.push_str(&format!("#define ACC_DIRECTIVE_{name:<20} {num}\n"));
+    }
+    acc_directive_defs.push_str(&format!(
+        "#define ACC_DIRECTIVE_UNKNOWN        {UNKNOWN_KIND}\n"
+    ));
+
+    // Generate OpenACC clause constants
+    let mut acc_clause_defs = String::new();
+    for (name, num) in acc_clauses {
+        acc_clause_defs.push_str(&format!("#define ACC_CLAUSE_{name:<15} {num}\n"));
+    }
+    acc_clause_defs.push_str(&format!(
+        "#define ACC_CLAUSE_UNKNOWN       {UNKNOWN_KIND}\n"
+    ));
+
+    // Generate checksum for validation (includes both OpenMP and OpenACC)
+    let checksum = calculate_combined_checksum(directives, clauses, acc_directives, acc_clauses);
     let dir_count = directives.len();
     let clause_count = clauses.len();
+    let acc_dir_count = acc_directives.len();
+    let acc_clause_count = acc_clauses.len();
 
     format!(
         r#"/*
@@ -77,31 +102,45 @@ extern "C" {{
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of {dir_count} directives + {clause_count} clauses = 0x{checksum:016X}
+// Auto-generated checksum: FNV-1a hash of OpenMP ({dir_count} directives + {clause_count} clauses) + OpenACC ({acc_dir_count} directives + {acc_clause_count} clauses) = 0x{checksum:016X}
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
 #define ROUP_CONSTANTS_CHECKSUM 0x{checksum:016X}
 
 // ============================================================================
 // Language Format Constants
 // ============================================================================
-// Language format for roup_parse_with_language()
-#define ROUP_LANG_C                         0  // C/C++ (#pragma omp)
-#define ROUP_LANG_FORTRAN_FREE              1  // Fortran free-form (!$OMP)
-#define ROUP_LANG_FORTRAN_FIXED             2  // Fortran fixed-form (!$OMP or C$OMP)
+// Language format for roup_parse_with_language() and acc_parse_with_language()
+#define ROUP_LANG_C                         0  // C/C++ (#pragma omp/#pragma acc)
+#define ROUP_LANG_FORTRAN_FREE              1  // Fortran free-form (!$OMP/!$ACC)
+#define ROUP_LANG_FORTRAN_FIXED             2  // Fortran fixed-form (!$OMP/!$ACC or C$OMP/C$ACC)
 
 // ============================================================================
-// Directive Kind Constants
+// OpenMP Directive Kind Constants
 // ============================================================================
 // Auto-generated from src/c_api.rs:directive_name_to_kind()
 
 {directive_defs}
 
 // ============================================================================
-// Clause Kind Constants
+// OpenMP Clause Kind Constants
 // ============================================================================
 // Auto-generated from src/c_api.rs:convert_clause()
 
 {clause_defs}
+
+// ============================================================================
+// OpenACC Directive Kind Constants
+// ============================================================================
+// Auto-generated from src/c_api.rs:acc_directive_name_to_kind()
+
+{acc_directive_defs}
+
+// ============================================================================
+// OpenACC Clause Kind Constants
+// ============================================================================
+// Auto-generated from src/c_api.rs:convert_acc_clause()
+
+{acc_clause_defs}
 
 // ============================================================================
 // Validation Constants
@@ -118,16 +157,20 @@ extern "C" {{
 }
 
 fn main() {
-    // Parse constants from source
+    // Parse OpenMP constants from source
     let directives = parse_directive_mappings();
     let clauses = parse_clause_mappings();
+
+    // Parse OpenACC constants from source
+    let acc_directives = parse_acc_directive_mappings();
+    let acc_clauses = parse_acc_clause_mappings();
 
     // Get the output directory
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("roup_constants.h");
 
-    // Generate the header
-    let header = generate_header(&directives, &clauses);
+    // Generate the header with both OpenMP and OpenACC constants
+    let header = generate_header(&directives, &clauses, &acc_directives, &acc_clauses);
 
     // Write to OUT_DIR
     fs::write(&dest_path, &header).expect("Failed to write to OUT_DIR");
@@ -141,10 +184,13 @@ fn main() {
         fs::read_to_string(&src_dest).expect("Failed to read generated header for validation");
 
     let extracted_checksum = extract_checksum_from_header(&generated_content);
-    let expected_checksum = calculate_checksum(&directives, &clauses);
+    let expected_checksum =
+        calculate_combined_checksum(&directives, &clauses, &acc_directives, &acc_clauses);
 
     let dir_count = directives.len();
     let clause_count = clauses.len();
+    let acc_dir_count = acc_directives.len();
+    let acc_clause_count = acc_clauses.len();
 
     match extracted_checksum {
         Some(checksum) => {
@@ -152,7 +198,7 @@ fn main() {
                 checksum,
                 expected_checksum,
                 "FATAL: Constants checksum mismatch!\n\
-                 Expected: 0x{expected_checksum:08X} (FNV-1a hash of {dir_count} directives + {clause_count} clauses)\n\
+                 Expected: 0x{expected_checksum:08X} (FNV-1a hash of OpenMP: {dir_count} directives + {clause_count} clauses, OpenACC: {acc_dir_count} directives + {acc_clause_count} clauses)\n\
                  Found in header: 0x{checksum:08X}\n\
                  The generated header is out of sync with c_api.rs.\n\
                  This should never happen - build.rs generates both values.\n\

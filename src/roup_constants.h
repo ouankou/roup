@@ -25,20 +25,20 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of 17 directives + 12 clauses = 0xF824DCF393ADA836
+// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 12 clauses) + OpenACC (17 directives + 45 clauses) = 0xA4F76C66CC484598
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0xF824DCF393ADA836
+#define ROUP_CONSTANTS_CHECKSUM 0xA4F76C66CC484598
 
 // ============================================================================
 // Language Format Constants
 // ============================================================================
-// Language format for roup_parse_with_language()
-#define ROUP_LANG_C                         0  // C/C++ (#pragma omp)
-#define ROUP_LANG_FORTRAN_FREE              1  // Fortran free-form (!$OMP)
-#define ROUP_LANG_FORTRAN_FIXED             2  // Fortran fixed-form (!$OMP or C$OMP)
+// Language format for roup_parse_with_language() and acc_parse_with_language()
+#define ROUP_LANG_C                         0  // C/C++ (#pragma omp/#pragma acc)
+#define ROUP_LANG_FORTRAN_FREE              1  // Fortran free-form (!$OMP/!$ACC)
+#define ROUP_LANG_FORTRAN_FIXED             2  // Fortran fixed-form (!$OMP/!$ACC or C$OMP/C$ACC)
 
 // ============================================================================
-// Directive Kind Constants
+// OpenMP Directive Kind Constants
 // ============================================================================
 // Auto-generated from src/c_api.rs:directive_name_to_kind()
 
@@ -63,7 +63,7 @@ extern "C" {
 
 
 // ============================================================================
-// Clause Kind Constants
+// OpenMP Clause Kind Constants
 // ============================================================================
 // Auto-generated from src/c_api.rs:convert_clause()
 
@@ -80,6 +80,84 @@ extern "C" {
 #define ROUP_CLAUSE_NOWAIT          10
 #define ROUP_CLAUSE_DEFAULT         11
 #define ROUP_CLAUSE_UNKNOWN      999
+
+
+// ============================================================================
+// OpenACC Directive Kind Constants
+// ============================================================================
+// Auto-generated from src/c_api.rs:acc_directive_name_to_kind()
+
+#define ACC_DIRECTIVE_PARALLEL             0
+#define ACC_DIRECTIVE_LOOP                 1
+#define ACC_DIRECTIVE_KERNELS              2
+#define ACC_DIRECTIVE_DATA                 3
+#define ACC_DIRECTIVE_HOST_DATA            6
+#define ACC_DIRECTIVE_ATOMIC               7
+#define ACC_DIRECTIVE_DECLARE              8
+#define ACC_DIRECTIVE_WAIT                 9
+#define ACC_DIRECTIVE_END                  10
+#define ACC_DIRECTIVE_UPDATE               12
+#define ACC_DIRECTIVE_SERIAL               17
+#define ACC_DIRECTIVE_ROUTINE              18
+#define ACC_DIRECTIVE_SET                  19
+#define ACC_DIRECTIVE_INIT                 20
+#define ACC_DIRECTIVE_SHUTDOWN             21
+#define ACC_DIRECTIVE_ENTER_DATA           24
+#define ACC_DIRECTIVE_EXIT_DATA            25
+#define ACC_DIRECTIVE_UNKNOWN        999
+
+
+// ============================================================================
+// OpenACC Clause Kind Constants
+// ============================================================================
+// Auto-generated from src/c_api.rs:convert_acc_clause()
+
+#define ACC_CLAUSE_ASYNC           0
+#define ACC_CLAUSE_WAIT            1
+#define ACC_CLAUSE_NUM_GANGS       2
+#define ACC_CLAUSE_NUM_WORKERS     3
+#define ACC_CLAUSE_VECTOR_LENGTH   4
+#define ACC_CLAUSE_GANG            5
+#define ACC_CLAUSE_WORKER          6
+#define ACC_CLAUSE_VECTOR          7
+#define ACC_CLAUSE_SEQ             8
+#define ACC_CLAUSE_INDEPENDENT     9
+#define ACC_CLAUSE_AUTO            10
+#define ACC_CLAUSE_COLLAPSE        11
+#define ACC_CLAUSE_DEVICE_TYPE     12
+#define ACC_CLAUSE_BIND            13
+#define ACC_CLAUSE_IF              14
+#define ACC_CLAUSE_DEFAULT         15
+#define ACC_CLAUSE_FIRSTPRIVATE    16
+#define ACC_CLAUSE_DEFAULT_ASYNC   17
+#define ACC_CLAUSE_LINK            18
+#define ACC_CLAUSE_NO_CREATE       19
+#define ACC_CLAUSE_NOHOST          20
+#define ACC_CLAUSE_PRESENT         21
+#define ACC_CLAUSE_PRIVATE         22
+#define ACC_CLAUSE_REDUCTION       23
+#define ACC_CLAUSE_READ            24
+#define ACC_CLAUSE_SELF            25
+#define ACC_CLAUSE_TILE            26
+#define ACC_CLAUSE_USE_DEVICE      27
+#define ACC_CLAUSE_ATTACH          28
+#define ACC_CLAUSE_DETACH          29
+#define ACC_CLAUSE_FINALIZE        30
+#define ACC_CLAUSE_IF_PRESENT      31
+#define ACC_CLAUSE_CAPTURE         32
+#define ACC_CLAUSE_WRITE           33
+#define ACC_CLAUSE_UPDATE          34
+#define ACC_CLAUSE_COPY            35
+#define ACC_CLAUSE_COPYIN          36
+#define ACC_CLAUSE_COPYOUT         37
+#define ACC_CLAUSE_CREATE          38
+#define ACC_CLAUSE_DELETE          39
+#define ACC_CLAUSE_DEVICE          40
+#define ACC_CLAUSE_DEVICEPTR       41
+#define ACC_CLAUSE_DEVICE_NUM      42
+#define ACC_CLAUSE_DEVICE_RESIDENT 43
+#define ACC_CLAUSE_HOST            44
+#define ACC_CLAUSE_UNKNOWN       999
 
 
 // ============================================================================

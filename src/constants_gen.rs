@@ -112,10 +112,79 @@ pub fn parse_clause_mappings() -> Vec<(String, i32)> {
     mappings
 }
 
+/// Parse OpenACC directive mappings from c_api.rs acc_directive_name_to_kind() using AST
+#[allow(dead_code)] // Used by build.rs but not src/bin/gen.rs
+pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
+    let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
+    let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
+
+    let mut mappings = Vec::new();
+    let mut seen_numbers = HashSet::new();
+
+    // Find the acc_directive_name_to_kind function
+    for item in &ast.items {
+        if let Item::Fn(ItemFn { sig, block, .. }) = item {
+            if sig.ident == "acc_directive_name_to_kind" {
+                // Recursively find match expressions in the function body
+                find_matches_in_stmts(&block.stmts, &mut |arms| {
+                    for arm in arms {
+                        if let Some((name, num)) = parse_directive_arm(arm) {
+                            // Filter out: (1) composite directives with spaces, (2) UNKNOWN_KIND, (3) duplicates
+                            let is_simple_directive = name.split_whitespace().count() == 1;
+                            let is_known_kind = num != UNKNOWN_KIND;
+                            let is_first_occurrence = seen_numbers.insert(num);
+
+                            if is_simple_directive && is_known_kind && is_first_occurrence {
+                                mappings.push((normalize_constant_name(&name), num));
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    mappings.sort_by_key(|(_, num)| *num);
+    mappings
+}
+
+/// Parse OpenACC clause mappings from c_api.rs convert_acc_clause() using AST
+#[allow(dead_code)] // Used by build.rs but not src/bin/gen.rs
+pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
+    let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
+    let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
+
+    let mut mappings = Vec::new();
+    let mut seen_numbers = HashSet::new();
+
+    // Find the convert_acc_clause function
+    for item in &ast.items {
+        if let Item::Fn(ItemFn { sig, block, .. }) = item {
+            if sig.ident == "convert_acc_clause" {
+                // Recursively find match expressions in the function body
+                find_matches_in_stmts(&block.stmts, &mut |arms| {
+                    for arm in arms {
+                        if let Some((name, num)) = parse_clause_arm(arm) {
+                            // Skip unknown and duplicates
+                            if num != UNKNOWN_KIND && seen_numbers.insert(num) {
+                                mappings.push((normalize_constant_name(&name), num));
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    mappings.sort_by_key(|(_, num)| *num);
+    mappings
+}
+
 /// Calculate FNV-1a hash checksum of directive and clause mappings.
 ///
 /// Used to verify the generated header matches c_api.rs. Returns a 64-bit hash value.
 /// See module documentation for algorithm rationale.
+#[allow(dead_code)] // Used by src/bin/gen.rs but not build.rs
 pub fn calculate_checksum(directives: &[(String, i32)], clauses: &[(String, i32)]) -> u64 {
     let mut hash: u64 = FNV_OFFSET_BASIS;
 
@@ -131,6 +200,61 @@ pub fn calculate_checksum(directives: &[(String, i32)], clauses: &[(String, i32)
 
     // Hash clause names and numbers
     for (name, num) in clauses {
+        for byte in name.bytes() {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+        hash ^= *num as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+
+    hash
+}
+
+/// Calculate combined FNV-1a hash checksum of OpenMP and OpenACC mappings.
+///
+/// Used to verify the generated header matches c_api.rs for both APIs.
+#[allow(dead_code)] // Used by build.rs but not src/bin/gen.rs
+pub fn calculate_combined_checksum(
+    omp_directives: &[(String, i32)],
+    omp_clauses: &[(String, i32)],
+    acc_directives: &[(String, i32)],
+    acc_clauses: &[(String, i32)],
+) -> u64 {
+    let mut hash: u64 = FNV_OFFSET_BASIS;
+
+    // Hash OpenMP directive names and numbers
+    for (name, num) in omp_directives {
+        for byte in name.bytes() {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+        hash ^= *num as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+
+    // Hash OpenMP clause names and numbers
+    for (name, num) in omp_clauses {
+        for byte in name.bytes() {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+        hash ^= *num as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+
+    // Hash OpenACC directive names and numbers
+    for (name, num) in acc_directives {
+        for byte in name.bytes() {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+        hash ^= *num as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+
+    // Hash OpenACC clause names and numbers
+    for (name, num) in acc_clauses {
         for byte in name.bytes() {
             hash ^= byte as u64;
             hash = hash.wrapping_mul(FNV_PRIME);
