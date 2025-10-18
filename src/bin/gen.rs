@@ -20,8 +20,8 @@ mod constants_gen;
 
 // Only import the functions we actually use (verification, not generation)
 use constants_gen::{
-    calculate_checksum, extract_checksum_from_header, parse_clause_mappings,
-    parse_directive_mappings,
+    calculate_combined_checksum, extract_checksum_from_header, parse_acc_clause_mappings,
+    parse_acc_directive_mappings, parse_clause_mappings, parse_directive_mappings,
 };
 
 fn main() {
@@ -37,13 +37,18 @@ fn main() {
     // Step 2: Calculate expected checksum from source (using syn)
     let directives = parse_directive_mappings();
     let clauses = parse_clause_mappings();
-    let expected_checksum = calculate_checksum(&directives, &clauses);
+    let acc_directives = parse_acc_directive_mappings();
+    let acc_clauses = parse_acc_clause_mappings();
+    let expected_checksum =
+        calculate_combined_checksum(&directives, &clauses, &acc_directives, &acc_clauses);
 
     println!(
-        "Calculated from source: {} (directives: {}, clauses: {})",
+        "Calculated from source: {} (OpenMP: {} directives + {} clauses, OpenACC: {} directives + {} clauses)",
         expected_checksum,
         directives.len(),
-        clauses.len()
+        clauses.len(),
+        acc_directives.len(),
+        acc_clauses.len()
     );
 
     // Step 3: Read checksum from committed header

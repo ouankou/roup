@@ -2,3 +2,6 @@
 	path = compat/ompparser/ompparser
 	url = https://github.com/ouankou/ompparser.git
 	branch = main
+[submodule "compat/accparser/accparser"]
+	path = compat/accparser/accparser
+	url = https://github.com/ouankou/accparser.git

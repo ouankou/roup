@@ -66,7 +66,7 @@ use std::ptr;
 
 use crate::ir::{convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
 use crate::lexer::Language;
-use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
+use crate::parser::{openacc, openmp, parse_omp_directive, Clause, ClauseKind};
 
 // ============================================================================
 // Language Constants for Fortran Support
@@ -1227,6 +1227,544 @@ fn free_clause_data(clause: &OmpClause) {
 // - Thread safety annotations (Rust types are Send/Sync, C must ensure too)
 // - Comprehensive error reporting (currently just NULL on error)
 // - Semantic validation beyond parsing (requires deeper OpenMP knowledge)
+
+// ============================================================================
+// OpenACC C API Implementation
+// ============================================================================
+//
+// This section provides a C FFI for OpenACC parsing, mirroring the OpenMP API
+// design pattern. It enables C/C++ code (specifically the accparser compatibility
+// layer) to use ROUP's OpenACC parser.
+//
+// Architecture: C code → acc_parse() → AccDirective → iterate clauses → free
+//
+// The API follows the same safety model as the OpenMP API above.
+
+/// Opaque OpenACC directive type (C-compatible)
+#[repr(C)]
+pub struct AccDirective {
+    name: *const c_char,
+    clauses: Vec<AccClause>,
+}
+
+/// Opaque OpenACC clause type (C-compatible)
+#[repr(C)]
+pub struct AccClause {
+    kind: i32,
+    expressions: *mut AccStringList, // For variable lists, arguments, etc.
+}
+
+/// Iterator over OpenACC clauses
+#[repr(C)]
+pub struct AccClauseIterator {
+    clauses: Vec<*const AccClause>,
+    index: usize,
+}
+
+/// List of strings for OpenACC clause arguments
+#[repr(C)]
+pub struct AccStringList {
+    items: Vec<*const c_char>,
+}
+
+// ============================================================================
+// OpenACC Parse Functions
+// ============================================================================
+
+/// Parse an OpenACC directive from a C string.
+///
+/// ## Parameters
+/// - `input`: Null-terminated C string containing the directive
+///
+/// ## Returns
+/// - Pointer to `AccDirective` on success
+/// - NULL on parse failure or NULL input
+///
+/// ## Safety
+/// Caller must:
+/// - Pass valid null-terminated C string or NULL
+/// - Call `acc_directive_free()` on the returned pointer
+///
+/// ## Example
+/// ```c
+/// AccDirective* dir = acc_parse("#pragma acc parallel loop");
+/// if (dir) {
+///     // use directive
+///     acc_directive_free(dir);
+/// }
+/// ```
+#[no_mangle]
+pub extern "C" fn acc_parse(input: *const c_char) -> *mut AccDirective {
+    if input.is_null() {
+        return ptr::null_mut();
+    }
+
+    unsafe {
+        let c_str = CStr::from_ptr(input);
+        let rust_str = match c_str.to_str() {
+            Ok(s) => s,
+            Err(_) => return ptr::null_mut(),
+        };
+
+        let parser = openacc::parser();
+        let directive = match parser.parse(rust_str) {
+            Ok((_, dir)) => dir,
+            Err(_) => return ptr::null_mut(),
+        };
+
+        let c_directive = AccDirective {
+            name: allocate_c_string(directive.name.as_ref()),
+            clauses: directive
+                .clauses
+                .into_iter()
+                .map(|c| convert_acc_clause(&c))
+                .collect(),
+        };
+
+        Box::into_raw(Box::new(c_directive))
+    }
+}
+
+/// Parse an OpenACC directive with explicit language specification.
+///
+/// ## Parameters
+/// - `input`: Null-terminated string containing the directive
+/// - `language`: Language format (ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE, ROUP_LANG_FORTRAN_FIXED)
+///
+/// ## Returns
+/// - Pointer to `AccDirective` on success
+/// - NULL on error
+#[no_mangle]
+pub extern "C" fn acc_parse_with_language(
+    input: *const c_char,
+    language: i32,
+) -> *mut AccDirective {
+    if input.is_null() {
+        return ptr::null_mut();
+    }
+
+    let lang = match language {
+        ROUP_LANG_C => Language::C,
+        ROUP_LANG_FORTRAN_FREE => Language::FortranFree,
+        ROUP_LANG_FORTRAN_FIXED => Language::FortranFixed,
+        _ => return ptr::null_mut(),
+    };
+
+    unsafe {
+        let c_str = CStr::from_ptr(input);
+        let rust_str = match c_str.to_str() {
+            Ok(s) => s,
+            Err(_) => return ptr::null_mut(),
+        };
+
+        let parser = openacc::parser().with_language(lang);
+        let directive = match parser.parse(rust_str) {
+            Ok((_, dir)) => dir,
+            Err(_) => return ptr::null_mut(),
+        };
+
+        let c_directive = AccDirective {
+            name: allocate_c_string(directive.name.as_ref()),
+            clauses: directive
+                .clauses
+                .into_iter()
+                .map(|c| convert_acc_clause(&c))
+                .collect(),
+        };
+
+        Box::into_raw(Box::new(c_directive))
+    }
+}
+
+/// Free an OpenACC directive allocated by `acc_parse()`.
+#[no_mangle]
+pub extern "C" fn acc_directive_free(directive: *mut AccDirective) {
+    if directive.is_null() {
+        return;
+    }
+
+    unsafe {
+        let boxed = Box::from_raw(directive);
+
+        if !boxed.name.is_null() {
+            drop(CString::from_raw(boxed.name as *mut c_char));
+        }
+
+        for clause in &boxed.clauses {
+            free_acc_clause_data(clause);
+        }
+    }
+}
+
+// ============================================================================
+// OpenACC Directive Query Functions
+// ============================================================================
+
+/// Get OpenACC directive kind.
+///
+/// Returns -1 if directive is NULL.
+#[no_mangle]
+pub extern "C" fn acc_directive_kind(directive: *const AccDirective) -> i32 {
+    if directive.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let dir = &*directive;
+        acc_directive_name_to_kind(dir.name)
+    }
+}
+
+/// Get OpenACC directive name as a C string.
+///
+/// Returns NULL if directive is NULL.
+#[no_mangle]
+pub extern "C" fn acc_directive_name(directive: *const AccDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let dir = &*directive;
+        dir.name
+    }
+}
+
+/// Get number of clauses in an OpenACC directive.
+///
+/// Returns 0 if directive is NULL.
+#[no_mangle]
+pub extern "C" fn acc_directive_clause_count(directive: *const AccDirective) -> i32 {
+    if directive.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let dir = &*directive;
+        dir.clauses.len() as i32
+    }
+}
+
+/// Create an iterator over OpenACC directive clauses.
+///
+/// Returns NULL if directive is NULL.
+/// Caller must call `acc_clause_iterator_free()`.
+#[no_mangle]
+pub extern "C" fn acc_directive_clauses_iter(
+    directive: *const AccDirective,
+) -> *mut AccClauseIterator {
+    if directive.is_null() {
+        return ptr::null_mut();
+    }
+
+    unsafe {
+        let dir = &*directive;
+        let iter = AccClauseIterator {
+            clauses: dir.clauses.iter().map(|c| c as *const AccClause).collect(),
+            index: 0,
+        };
+        Box::into_raw(Box::new(iter))
+    }
+}
+
+// ============================================================================
+// OpenACC Clause Iterator Functions
+// ============================================================================
+
+/// Get next clause from OpenACC iterator.
+///
+/// ## Returns
+/// - 1 if clause available (written to `out`)
+/// - 0 if no more clauses or NULL inputs
+#[no_mangle]
+pub extern "C" fn acc_clause_iterator_next(
+    iter: *mut AccClauseIterator,
+    out: *mut *const AccClause,
+) -> i32 {
+    if iter.is_null() || out.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let iterator = &mut *iter;
+
+        if iterator.index >= iterator.clauses.len() {
+            return 0;
+        }
+
+        let clause_ptr = iterator.clauses[iterator.index];
+        iterator.index += 1;
+
+        *out = clause_ptr;
+        1
+    }
+}
+
+/// Free OpenACC clause iterator.
+#[no_mangle]
+pub extern "C" fn acc_clause_iterator_free(iter: *mut AccClauseIterator) {
+    if iter.is_null() {
+        return;
+    }
+
+    unsafe {
+        drop(Box::from_raw(iter));
+    }
+}
+
+// ============================================================================
+// OpenACC Clause Query Functions
+// ============================================================================
+
+/// Get OpenACC clause kind.
+///
+/// Returns -1 if clause is NULL.
+#[no_mangle]
+pub extern "C" fn acc_clause_kind(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let c = &*clause;
+        c.kind
+    }
+}
+
+/// Get number of expressions in an OpenACC clause.
+///
+/// Returns 0 if clause is NULL or has no expressions.
+#[no_mangle]
+pub extern "C" fn acc_clause_expressions_count(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.expressions.is_null() {
+            return 0;
+        }
+        let list = &*c.expressions;
+        list.items.len() as i32
+    }
+}
+
+/// Get expression at index from OpenACC clause.
+///
+/// Returns NULL if clause is NULL, has no expressions, or index out of bounds.
+#[no_mangle]
+pub extern "C" fn acc_clause_expression_at(clause: *const AccClause, index: i32) -> *const c_char {
+    if clause.is_null() || index < 0 {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.expressions.is_null() {
+            return ptr::null();
+        }
+
+        let list = &*c.expressions;
+        let idx = index as usize;
+
+        if idx >= list.items.len() {
+            return ptr::null();
+        }
+
+        list.items[idx]
+    }
+}
+
+// ============================================================================
+// OpenACC String List Functions
+// ============================================================================
+
+/// Free OpenACC string list.
+#[no_mangle]
+pub extern "C" fn acc_string_list_free(list: *mut AccStringList) {
+    if list.is_null() {
+        return;
+    }
+
+    unsafe {
+        let boxed = Box::from_raw(list);
+
+        for item_ptr in &boxed.items {
+            if !item_ptr.is_null() {
+                drop(CString::from_raw(*item_ptr as *mut c_char));
+            }
+        }
+    }
+}
+
+// ============================================================================
+// OpenACC Helper Functions (Internal)
+// ============================================================================
+
+/// Convert OpenACC directive name to kind enum code.
+///
+/// Maps directive names to integer codes for C switch statements.
+///
+/// ## Directive Codes (27 total, including variants):
+/// - 0 = parallel           - 14 = kernels loop
+/// - 1 = loop               - 15 = parallel loop
+/// - 2 = kernels            - 16 = serial loop
+/// - 3 = data               - 17 = serial
+/// - 4 = enter data         - 18 = routine
+/// - 5 = exit data          - 19 = set
+/// - 6 = host_data          - 20 = init
+/// - 7 = atomic             - 21 = shutdown
+/// - 8 = declare            - 22 = update
+/// - 9 = wait               - 23 = cache
+/// - 10 = end               - 24 = enter_data (underscore variant)
+/// - 11 = host data (space) - 25 = exit_data (underscore variant)
+/// - 12 = update directive  - 26 = wait directive
+/// - 13 = cache directive
+/// - -1 = NULL/unknown
+fn acc_directive_name_to_kind(name: *const c_char) -> i32 {
+    if name.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let c_str = CStr::from_ptr(name);
+        let name_str = c_str.to_str().unwrap_or("");
+
+        // Case-insensitive matching
+        match name_str.to_lowercase().as_str() {
+            "parallel" => 0,
+            "loop" => 1,
+            "kernels" => 2,
+            "data" => 3,
+            "enter data" => 4,
+            "exit data" => 5,
+            "host_data" => 6,
+            "atomic" => 7,
+            "declare" => 8,
+            "wait" => 9,
+            "end" => 10,
+            "host data" => 11,
+            "update" => 12,
+            "kernels loop" => 14,
+            "parallel loop" => 15,
+            "serial loop" => 16,
+            "serial" => 17,
+            "routine" => 18,
+            "set" => 19,
+            "init" => 20,
+            "shutdown" => 21,
+            "enter_data" => 24,
+            "exit_data" => 25,
+            // Special directives that may have embedded content
+            name if name.starts_with("cache(") => 23,
+            name if name.starts_with("wait(") => 26,
+            name if name.starts_with("end ") => 10,
+            _ => 999, // Unknown
+        }
+    }
+}
+
+/// Convert Rust Clause to C-compatible AccClause.
+///
+/// ## Clause Kind Mapping (45 clauses):
+/// - 0  = async             - 15 = default          - 30 = finalize
+/// - 1  = wait              - 16 = firstprivate     - 31 = if_present
+/// - 2  = num_gangs         - 17 = default_async    - 32 = capture
+/// - 3  = num_workers       - 18 = link             - 33 = write
+/// - 4  = vector_length     - 19 = no_create        - 34 = update (clause)
+/// - 5  = gang              - 20 = nohost           - 35 = copy
+/// - 6  = worker            - 21 = present          - 36 = copyin
+/// - 7  = vector            - 22 = private          - 37 = copyout
+/// - 8  = seq               - 23 = reduction        - 38 = create
+/// - 9  = independent       - 24 = read             - 39 = delete
+/// - 10 = auto              - 25 = self             - 40 = device
+/// - 11 = collapse          - 26 = tile             - 41 = deviceptr
+/// - 12 = device_type       - 27 = use_device       - 42 = device_num
+/// - 13 = bind              - 28 = attach           - 43 = device_resident
+/// - 14 = if                - 29 = detach           - 44 = host
+/// - 999 = unknown
+fn convert_acc_clause(clause: &Clause) -> AccClause {
+    let normalized_name = clause.name.to_ascii_lowercase();
+
+    // Use tuple pattern for AST parser compatibility (constants_gen.rs)
+    // The second tuple element is a dummy unit type that gets optimized away
+    let (kind, _) = match normalized_name.as_str() {
+        "async" => (0, ()),
+        "wait" => (1, ()),
+        "num_gangs" => (2, ()),
+        "num_workers" => (3, ()),
+        "vector_length" => (4, ()),
+        "gang" => (5, ()),
+        "worker" => (6, ()),
+        "vector" => (7, ()),
+        "seq" => (8, ()),
+        "independent" => (9, ()),
+        "auto" => (10, ()),
+        "collapse" => (11, ()),
+        "device_type" => (12, ()),
+        "bind" => (13, ()),
+        "if" => (14, ()),
+        "default" => (15, ()),
+        "firstprivate" => (16, ()),
+        "default_async" => (17, ()),
+        "link" => (18, ()),
+        "no_create" => (19, ()),
+        "nohost" => (20, ()),
+        "present" => (21, ()),
+        "private" => (22, ()),
+        "reduction" => (23, ()),
+        "read" => (24, ()),
+        "self" => (25, ()),
+        "tile" => (26, ()),
+        "use_device" => (27, ()),
+        "attach" => (28, ()),
+        "detach" => (29, ()),
+        "finalize" => (30, ()),
+        "if_present" => (31, ()),
+        "capture" => (32, ()),
+        "write" => (33, ()),
+        "update" => (34, ()),
+        // Data clauses
+        "copy" => (35, ()),
+        "copyin" => (36, ()),
+        "copyout" => (37, ()),
+        "create" => (38, ()),
+        "delete" => (39, ()),
+        "device" => (40, ()),
+        "deviceptr" => (41, ()),
+        "device_num" => (42, ()),
+        "device_resident" => (43, ()),
+        "host" => (44, ()),
+        _ => (999, ()),
+    };
+
+    // Extract expressions from clause content
+    let expressions = match &clause.kind {
+        ClauseKind::Parenthesized(content) => {
+            let content_str = content.as_ref();
+            if !content_str.is_empty() {
+                // For now, store the entire content as a single expression
+                // More sophisticated parsing could split by commas, etc.
+                let items = vec![allocate_c_string(content_str)];
+
+                Box::into_raw(Box::new(AccStringList { items }))
+            } else {
+                ptr::null_mut()
+            }
+        }
+        ClauseKind::Bare => ptr::null_mut(),
+    };
+
+    AccClause { kind, expressions }
+}
+
+/// Free OpenACC clause-specific data.
+fn free_acc_clause_data(clause: &AccClause) {
+    if !clause.expressions.is_null() {
+        acc_string_list_free(clause.expressions);
+    }
+}
 
 #[cfg(test)]
 mod tests {
