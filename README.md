@@ -12,7 +12,7 @@ Rust-first parsing for OpenMP directives with C and C++ bindings.
 ### Rust
 ```toml
 [dependencies]
-roup = "0.4"
+roup = "0.5"
 ```
 
 ### C or C++
@@ -28,7 +28,7 @@ Need platform-specific notes? See the [building guide](https://roup.ouankou.com/
 - **OpenMP 3.0–6.0 coverage**: directives, clauses, and combined forms.
 - **Multi-language APIs**: idiomatic Rust plus C and C++17 bindings.
 - **Tight unsafe boundary**: the FFI layer is the only unsafe code.
-- **Thorough testing**: over 600 automated tests across languages.
+- **Thorough testing**: 620+ automated tests across languages.
 - **ompparser compatibility**: optional shim for existing consumers.
 
 ## Documentation

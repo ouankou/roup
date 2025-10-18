@@ -473,4 +473,4 @@ if (!dir) {
 - [Rust API Documentation](./api/roup/index.html) - Complete rustdoc
 - [C++ Tutorial](./cpp-tutorial.md) - Real-world C++ examples
 - [GitHub Repository](https://github.com/ouankou/roup) - Source code and examples
-- [Quick Start Guide](https://github.com/ouankou/roup/blob/main/docs/QUICK_START.md) - Get started in 5 minutes
+- [Getting Started Guide](./getting-started.md) - Get started in 5 minutes

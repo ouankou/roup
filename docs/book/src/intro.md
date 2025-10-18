@@ -337,7 +337,7 @@ Choose your language:
 **Install:**
 ```toml
 [dependencies]
-roup = "0.4"
+roup = "0.5"
 ```
 
 **Learn:**
@@ -619,7 +619,7 @@ Want to experiment with ROUP? Check out our tutorials:
 
 Or jump straight to the code:
 - [GitHub Repository](https://github.com/ouankou/roup)
-- [Quick Start Guide](https://github.com/ouankou/roup/blob/main/docs/QUICK_START.md)
+- [Getting Started Guide](./getting-started.md)
 
 ---
 
