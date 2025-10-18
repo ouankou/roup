@@ -182,8 +182,10 @@ fi
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. accparser Compat Tests ==="
 if [ -d "compat/accparser" ] && [ -f "compat/accparser/build.sh" ]; then
-    echo -n "Running accparser compat tests... "
+    echo -n "Running accparser compat tests (clean build)... "
     cd compat/accparser
+    # Clean build to ensure fresh state (like CI)
+    rm -rf build > /dev/null 2>&1
     if ./build.sh > /tmp/accparser_compat_test.log 2>&1; then
         echo -e "${GREEN}✓ PASS${NC}"
     else

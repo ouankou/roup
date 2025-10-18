@@ -167,7 +167,9 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
     while (input_len < ROUP_MAX_PRAGMA_LENGTH && input[input_len] != '\0') {
         ++input_len;
     }
-    if (input_len == ROUP_MAX_PRAGMA_LENGTH && input[input_len] != '\0') {
+    // If loop exited because we hit the limit (not because we found '\0'),
+    // the input is too long or not null-terminated within bounds
+    if (input_len == ROUP_MAX_PRAGMA_LENGTH) {
         return nullptr;  // Input too long or not null-terminated within limit
     }
 
