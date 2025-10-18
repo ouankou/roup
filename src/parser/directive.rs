@@ -21,6 +21,35 @@ impl Directive<'_> {
     pub fn to_pragma_string(&self) -> String {
         self.to_string()
     }
+
+    /// Convert directive to pragma string with custom prefix
+    ///
+    /// # Example
+    /// ```
+    /// # use roup::parser::{Directive, Clause, ClauseKind};
+    /// # use std::borrow::Cow;
+    /// let directive = Directive {
+    ///     name: Cow::Borrowed("parallel"),
+    ///     clauses: vec![],
+    /// };
+    /// assert_eq!(directive.to_pragma_string_with_prefix("#pragma acc"), "#pragma acc parallel");
+    /// ```
+    pub fn to_pragma_string_with_prefix(&self, prefix: &str) -> String {
+        let mut output = String::new();
+        output.push_str(prefix);
+        output.push(' ');
+        output.push_str(self.name.as_ref());
+        if !self.clauses.is_empty() {
+            output.push(' ');
+            for (idx, clause) in self.clauses.iter().enumerate() {
+                if idx > 0 {
+                    output.push(' ');
+                }
+                output.push_str(&clause.to_string());
+            }
+        }
+        output
+    }
 }
 
 impl fmt::Display for Directive<'_> {
