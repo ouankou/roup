@@ -1,181 +1,58 @@
 # ROUP Documentation Website
 
-This directory contains the source for the ROUP documentation website at **https://roup.ouankou.com**
+The `docs/book` directory contains the mdBook sources for the ROUP
+documentation.  CI builds the book together with the generated Rust API docs and
+publishes the result to GitHub Pages.
 
-## Architecture
+## Local development
 
-The website uses a **hybrid documentation system**:
-- **mdBook** - Human-focused documentation (tutorials, guides)
-- **rustdoc** - Auto-generated API reference from source code
-- Both combined into a single site deployed via GitHub Pages
+Install mdBook and build the content locally:
 
-## Local Development
-
-### Prerequisites
 ```bash
 cargo install mdbook
+mdbook build docs/book
 ```
 
-### Build Documentation
-```bash
-# Build mdBook
-mdbook build
+For live previews use:
 
-# Build rustdoc
-cd ../..
+```bash
+mdbook serve docs/book --open
+```
+
+To include the API reference alongside the book:
+
+```bash
 cargo doc --no-deps --all-features
-
-# Combine both
-mkdir -p book/api
-cp -r ../../target/doc/* book/api/
-```
-
-### Live Preview
-```bash
-mdbook serve --open
-# Opens http://localhost:3000 with live reload
+mkdir -p docs/book/book/api
+cp -r target/doc/* docs/book/book/api/
 ```
 
 ## Structure
 
 ```
 docs/book/
-├── book.toml           # mdBook configuration
-├── src/                # Source markdown files
-│   ├── SUMMARY.md      # Table of contents
-│   ├── intro.md        # Introduction/landing page
-│   ├── cpp-tutorial.md # Detailed C++ tutorial
-│   └── api-reference.md # API reference (links to rustdoc)
-└── book/               # Generated output (git-ignored)
-    ├── *.html          # mdBook HTML files
-    └── api/            # rustdoc output
-        └── roup/       # Rust API docs
+├── book.toml        # mdBook configuration
+├── README.md        # this file
+├── src/             # Markdown sources consumed by mdBook
+│   ├── SUMMARY.md   # table of contents
+│   ├── intro.md     # landing page
+│   └── ...          # tutorials, reference material, FAQ, etc.
+└── book/            # Generated output (ignored by git)
 ```
 
-## Deployment
+## CI integration
 
-The documentation is automatically deployed via GitHub Actions (`.github/workflows/docs.yml`):
+`.github/workflows/ci.yml` runs the Linux test matrix and triggers a `docs`
+job.  That job builds the mdBook, executes mdBook doctests, produces the Rust
+API documentation, and combines everything into `docs/book/book/` before
+publishing it to the `gh-pages` branch.
 
-1. **On PR**: Validates that docs build successfully (no deployment)
-2. **On merge to main**: Builds and deploys to `gh-pages` branch
-3. **GitHub Pages**: Serves from `gh-pages` at roup.ouankou.com
+## Adding new pages
 
-### Manual Deployment
+1. Create a Markdown file in `src/`.
+2. Reference it from `src/SUMMARY.md` so mdBook adds it to the navigation.
+3. Run `mdbook serve` or `mdbook build` to ensure the page compiles.
 
-If you need to deploy manually:
-
-```bash
-# Build everything
-mdbook build
-cd ../..
-cargo doc --no-deps --all-features
-cd docs/book
-mkdir -p book/api
-cp -r ../../target/doc/* book/api/
-
-# Deploy to gh-pages branch
-# (Normally handled by GitHub Actions)
-```
-
-## Adding Content
-
-### New Page
-
-1. Create markdown file in `src/`:
-   ```bash
-   touch src/my-new-page.md
-   ```
-
-2. Add to `SUMMARY.md`:
-   ```markdown
-   - [My New Page](./my-new-page.md)
-   ```
-
-3. Test locally:
-   ```bash
-   mdbook serve
-   ```
-
-### Including Code Examples
-
-Use mdBook's `{{#include}}` preprocessor to include code from the repo:
-
-```markdown
-{{#include ../../examples/c/tutorial_basic.c:1:50}}
-```
-
-This ensures examples stay in sync with actual tested code.
-
-### Linking to rustdoc
-
-Link to the rustdoc API from mdBook pages:
-
-```markdown
-See the [Rust API Documentation](./api/roup/index.html) for details.
-```
-
-## Configuration
-
-Key settings in `book.toml`:
-
-- **title**: "ROUP Documentation"
-- **cname**: "roup.ouankou.com" (custom domain)
-- **site-url**: "/" (root path)
-- **theme**: "rust" (Rust book style)
-- **search**: Enabled (full-text search)
-
-## Custom Domain Setup
-
-To use `roup.ouankou.com`:
-
-1. **DNS Configuration** (at your DNS provider):
-   ```
-   Type: CNAME
-   Name: roup
-   Value: ouankou.github.io
-   TTL: Auto/3600
-   ```
-
-2. **GitHub Pages Settings**:
-   - Repository → Settings → Pages
-   - Source: `gh-pages` branch
-   - Custom domain: `roup.ouankou.com`
-   - Enforce HTTPS: ✅
-
-3. **CNAME file**: Auto-created by workflow from `book.toml`
-
-## Troubleshooting
-
-### mdBook not found
-```bash
-cargo install mdbook
-```
-
-### Build fails
-```bash
-mdbook clean
-mdbook build
-```
-
-### Links to rustdoc broken
-Make sure rustdoc is copied to `book/api/`:
-```bash
-cargo doc --no-deps --all-features
-cp -r ../../target/doc/* book/api/
-```
-
-### Live reload not working
-Try:
-```bash
-mdbook serve --hostname 0.0.0.0
-```
-
-## Resources
-
-- **mdBook Guide**: https://rust-lang.github.io/mdBook/
-- **rustdoc Guide**: https://doc.rust-lang.org/rustdoc/
-- **GitHub Pages**: https://docs.github.com/en/pages
-
-## License
-
-Same as ROUP: MIT License
+When embedding code listings prefer mdBook's `{{#include}}` directive so the
+snippets stay in sync with source files that are built and tested elsewhere in
+the repository.

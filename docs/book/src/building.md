@@ -475,7 +475,7 @@ rustup update stable
 
 # Verify version
 rustc --version
-# Ensure your Rust version is at least 1.70.0
+# Ensure your Rust version is at least 1.85.0
 ```
 
 ### Windows: "VCRUNTIME140.dll missing"
