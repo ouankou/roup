@@ -38,7 +38,7 @@ ROUP is an **experimental** parser for OpenMP directives, written in safe Rust w
 ### 🛡️ Safe & Reliable
 
 - **99.1% safe Rust** - Memory safety guaranteed
-- **581 passing tests** - Comprehensive test coverage
+- **620 passing tests** - Comprehensive test coverage
 - **Fuzzing tested** - Handles malformed input gracefully
 - **NULL-safe C API** - Defensive checks at FFI boundary
 
@@ -258,7 +258,7 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &
 |--------|------|---------------|
 | **Development time** | Minutes (add dependency) | Weeks/months |
 | **OpenMP coverage** | 128 directives | You must implement all |
-| **Testing** | 581 tests included | You must write tests |
+| **Testing** | 620 tests included | You must write tests |
 | **Maintenance** | Active, updated for new OpenMP | You must maintain |
 | **Edge cases** | Handled (fuzzing tested) | Likely has bugs |
 | **Spec compliance** | Verified | Uncertain |
@@ -293,7 +293,7 @@ ROUP prioritizes safety without compromising usability:
 
 ### Testing
 
-- **581 tests** covering all features
+- **620 tests** covering all features
 - **Fuzzing** with random inputs
 - **Valgrind** verified (no leaks)
 - **Thread sanitizer** verified (no races)
@@ -587,7 +587,7 @@ All `unsafe` code is:
 - **Documented** with safety requirements
 - **NULL-checked** before dereferencing
 - **Isolated** to `src/c_api.rs`
-- **Tested** with 581 tests
+- **Tested** with 620 tests
 
 ---
 
@@ -598,7 +598,7 @@ ROUP has comprehensive test coverage:
 - **285 unit tests** - Core parsing logic
 - **234 integration tests** - Real-world usage scenarios
 - **62 doc tests** - Examples in documentation are auto-tested
-- **581 total tests** - All passing, zero warnings
+- **620 total tests** - All passing, zero warnings
 - **Cross-platform** - Tested on Linux, macOS, Windows
 
 Test categories:
