@@ -1668,29 +1668,21 @@ fn acc_directive_name_to_kind(name: *const c_char) -> i32 {
 /// Convert Rust Clause to C-compatible AccClause.
 ///
 /// ## Clause Kind Mapping (45 clauses):
-/// - 0 = async              - 23 = reduction        - 37 = copyout
-/// - 1 = wait               - 24 = read             - 38 = create
-/// - 2 = num_gangs          - 25 = self             - 39 = delete
-/// - 3 = num_workers        - 26 = tile             - 40 = device
-/// - 4 = vector_length      - 27 = use_device       - 41 = deviceptr
-/// - 5 = gang               - 28 = attach           - 42 = device_num
-/// - 6 = worker             - 29 = detach           - 43 = device_resident
-/// - 7 = vector             - 30 = finalize         - 44 = host
-/// - 8 = seq                - 31 = if_present
-/// - 9 = independent        - 32 = capture
-/// - 10 = auto              - 33 = write
-/// - 11 = collapse          - 34 = update (clause)
-/// - 12 = device_type       - 35 = copy
-/// - 13 = bind              - 36 = copyin
-/// - 14 = if
-/// - 15 = default
-/// - 16 = firstprivate
-/// - 17 = default_async
-/// - 18 = link
-/// - 19 = no_create
-/// - 20 = nohost
-/// - 21 = present
-/// - 22 = private
+/// - 0  = async             - 15 = default          - 30 = finalize
+/// - 1  = wait              - 16 = firstprivate     - 31 = if_present
+/// - 2  = num_gangs         - 17 = default_async    - 32 = capture
+/// - 3  = num_workers       - 18 = link             - 33 = write
+/// - 4  = vector_length     - 19 = no_create        - 34 = update (clause)
+/// - 5  = gang              - 20 = nohost           - 35 = copy
+/// - 6  = worker            - 21 = present          - 36 = copyin
+/// - 7  = vector            - 22 = private          - 37 = copyout
+/// - 8  = seq               - 23 = reduction        - 38 = create
+/// - 9  = independent       - 24 = read             - 39 = delete
+/// - 10 = auto              - 25 = self             - 40 = device
+/// - 11 = collapse          - 26 = tile             - 41 = deviceptr
+/// - 12 = device_type       - 27 = use_device       - 42 = device_num
+/// - 13 = bind              - 28 = attach           - 43 = device_resident
+/// - 14 = if                - 29 = detach           - 44 = host
 /// - 999 = unknown
 fn convert_acc_clause(clause: &Clause) -> AccClause {
     let normalized_name = clause.name.to_ascii_lowercase();

@@ -178,14 +178,16 @@ pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
     mappings
 }
 
-/// Calculate FNV-1a hash checksum of directive and clause mappings.
+/// Calculate FNV-1a hash checksum of directive and clause mappings (single-API version).
 ///
-/// **Note**: Superseded by `calculate_combined_checksum` which handles both OpenMP and OpenACC.
-/// Kept for potential single-API use cases and API stability.
+/// **Status**: No longer used by build.rs (superseded by `calculate_combined_checksum`).
+/// Retained for:
+/// - API stability (external tools may depend on this function)
+/// - Potential single-API verification use cases (OpenMP-only or OpenACC-only)
 ///
-/// Used to verify the generated header matches c_api.rs. Returns a 64-bit hash value.
+/// Returns a 64-bit FNV-1a hash of directive and clause mappings for verification.
 /// See module documentation for algorithm rationale.
-#[allow(dead_code)]
+#[allow(dead_code)] // Intentionally unused - kept for API stability
 pub fn calculate_checksum(directives: &[(String, i32)], clauses: &[(String, i32)]) -> u64 {
     let mut hash: u64 = FNV_OFFSET_BASIS;
 

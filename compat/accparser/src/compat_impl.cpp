@@ -66,33 +66,41 @@ extern "C" void setLang(OpenACCBaseLang lang) {
 // ============================================================================
 
 static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
-    // ROUP directive kind mapping using named constants
-    // See roup_constants.h and src/c_api.rs:acc_directive_name_to_kind()
-    // Note: ROUP supports both "enter data" (4) and "enter_data" (24) variants
+    // ROUP directive kind mapping using named constants from roup_constants.h
+    // Mapping from ROUP IDs (src/c_api.rs:acc_directive_name_to_kind lines 1636-1664)
+    // to accparser enum values (compat/accparser/accparser/src/OpenACCKinds.h)
+    //
+    // Note: ROUP supports both space and underscore variants for some directives:
+    //   - "enter data" (4) and "enter_data" (24) both map to ACCD_enter_data
+    //   - "exit data" (5) and "exit_data" (25) both map to ACCD_exit_data
+    //   - "host data" (11) and "host_data" (6) both map to ACCD_host_data
+    //   - "wait" (9) and "wait(...)" (26) both map to ACCD_wait
     switch (roup_kind) {
-        case ACC_DIRECTIVE_PARALLEL:    return ACCD_parallel;
-        case ACC_DIRECTIVE_LOOP:        return ACCD_loop;
-        case ACC_DIRECTIVE_KERNELS:     return ACCD_kernels;
-        case ACC_DIRECTIVE_DATA:        return ACCD_data;
-        case 4:                         return ACCD_enter_data;  // "enter data" (space)
-        case 5:                         return ACCD_exit_data;   // "exit data" (space)
-        case ACC_DIRECTIVE_HOST_DATA:   return ACCD_host_data;
-        case ACC_DIRECTIVE_ATOMIC:      return ACCD_atomic;
-        case ACC_DIRECTIVE_DECLARE:     return ACCD_declare;
-        case ACC_DIRECTIVE_WAIT:        return ACCD_wait;
-        case ACC_DIRECTIVE_END:         return ACCD_end;
-        case 11:                        return ACCD_cache;       // "cache" directive
-        case ACC_DIRECTIVE_UPDATE:      return ACCD_update;
-        case 13:                        return ACCD_parallel_loop;  // "parallel loop" composite
-        case 14:                        return ACCD_kernels_loop;   // "kernels loop" composite
-        case 15:                        return ACCD_serial_loop;    // "serial loop" composite
-        case ACC_DIRECTIVE_SERIAL:      return ACCD_serial;
-        case ACC_DIRECTIVE_ROUTINE:     return ACCD_routine;
-        case ACC_DIRECTIVE_SET:         return ACCD_set;
-        case ACC_DIRECTIVE_INIT:        return ACCD_init;
-        case ACC_DIRECTIVE_SHUTDOWN:    return ACCD_shutdown;
-        case ACC_DIRECTIVE_ENTER_DATA:  return ACCD_enter_data;  // "enter_data" (underscore)
-        case ACC_DIRECTIVE_EXIT_DATA:   return ACCD_exit_data;   // "exit_data" (underscore)
+        case ACC_DIRECTIVE_PARALLEL:    return ACCD_parallel;     // 0 = "parallel"
+        case ACC_DIRECTIVE_LOOP:        return ACCD_loop;         // 1 = "loop"
+        case ACC_DIRECTIVE_KERNELS:     return ACCD_kernels;      // 2 = "kernels"
+        case ACC_DIRECTIVE_DATA:        return ACCD_data;         // 3 = "data"
+        case 4:                         return ACCD_enter_data;   // 4 = "enter data" (space)
+        case 5:                         return ACCD_exit_data;    // 5 = "exit data" (space)
+        case ACC_DIRECTIVE_HOST_DATA:   return ACCD_host_data;    // 6 = "host_data" (underscore)
+        case ACC_DIRECTIVE_ATOMIC:      return ACCD_atomic;       // 7 = "atomic"
+        case ACC_DIRECTIVE_DECLARE:     return ACCD_declare;      // 8 = "declare"
+        case ACC_DIRECTIVE_WAIT:        return ACCD_wait;         // 9 = "wait"
+        case ACC_DIRECTIVE_END:         return ACCD_end;          // 10 = "end"
+        case 11:                        return ACCD_host_data;    // 11 = "host data" (space) - same as 6
+        case ACC_DIRECTIVE_UPDATE:      return ACCD_update;       // 12 = "update"
+        case 14:                        return ACCD_kernels_loop; // 14 = "kernels loop"
+        case 15:                        return ACCD_parallel_loop;// 15 = "parallel loop"
+        case 16:                        return ACCD_serial_loop;  // 16 = "serial loop"
+        case ACC_DIRECTIVE_SERIAL:      return ACCD_serial;       // 17 = "serial"
+        case ACC_DIRECTIVE_ROUTINE:     return ACCD_routine;      // 18 = "routine"
+        case ACC_DIRECTIVE_SET:         return ACCD_set;          // 19 = "set"
+        case ACC_DIRECTIVE_INIT:        return ACCD_init;         // 20 = "init"
+        case ACC_DIRECTIVE_SHUTDOWN:    return ACCD_shutdown;     // 21 = "shutdown"
+        case 23:                        return ACCD_cache;        // 23 = "cache(...)" with content
+        case ACC_DIRECTIVE_ENTER_DATA:  return ACCD_enter_data;   // 24 = "enter_data" (underscore)
+        case ACC_DIRECTIVE_EXIT_DATA:   return ACCD_exit_data;    // 25 = "exit_data" (underscore)
+        case 26:                        return ACCD_wait;         // 26 = "wait(...)" with arguments
         default:                        return ACCD_unknown;
     }
 }
@@ -169,7 +177,8 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
     }
     // If loop exited because we hit the limit (not because we found '\0'),
     // the input is too long or not null-terminated within bounds
-    if (input_len == ROUP_MAX_PRAGMA_LENGTH) {
+    // Check if we exited due to reaching the limit AND the last checked char wasn't NUL
+    if (input_len == ROUP_MAX_PRAGMA_LENGTH && (input_len == 0 || input[input_len - 1] != '\0')) {
         return nullptr;  // Input too long or not null-terminated within limit
     }
 
@@ -194,7 +203,8 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
     }
 
     // Call ROUP parser with language setting to honor setLang()
-    // Map acc parser language to ROUP language constants
+    // Map accparser language to ROUP language constants (roup_constants.h)
+    // ROUP_LANG_C = 0, ROUP_LANG_FORTRAN_FREE = 1, ROUP_LANG_FORTRAN_FIXED = 2
     int32_t roup_lang = (current_lang == ACC_Lang_Fortran) ? 1 : 0; // 0=C, 1=Fortran free-form
     AccDirective* roup_dir = acc_parse_with_language(input_str.c_str(), roup_lang);
     if (!roup_dir) {
