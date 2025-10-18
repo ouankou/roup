@@ -13,6 +13,8 @@ license = "BSD-3-Clause"
 # nom = parser combinator library for building parsers
 # Version 8.0.0 uses semantic versioning
 nom = "8.0.0"
+clap = { version = "4.5", features = ["derive"] }
+walkdir = "2.5"
 
 # FFI layer dependencies (100% safe Rust)
 once_cell = "1"     # Lazy static initialization
@@ -48,6 +50,10 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 [[bin]]
 name = "tester"
 path = "utils/tester.rs"
+
+[[bin]]
+name = "openmp_vv"
+path = "src/bin/openmp_vv.rs"
 
 # Benchmark configuration
 [[bench]]

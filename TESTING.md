@@ -365,6 +365,40 @@ Failed versions:
 
 This clearly shows which version failed and why.
 
+## OpenMP_VV Validation Harness
+
+ROUP can reuse the [OpenMP Validation & Verification](https://github.com/OpenMP-Validation-and-Verification/OpenMP_VV) test
+suite to sanity-check directive coverage across real-world programs.
+
+### Running the Harness
+
+```bash
+# Round-trip clang-formatted pragmas through ROUP
+cargo run --bin openmp_vv
+
+# Reuse an existing checkout (skips cloning into target/openmp_vv)
+cargo run --bin openmp_vv -- --repo-path /path/to/OpenMP_VV --skip-clone
+
+# Show every failure instead of truncating after 20 entries
+cargo run --bin openmp_vv -- --max-failures 0
+
+# Forward extra include paths or macros to clang
+cargo run --bin openmp_vv -- --clang-arg -I/path/to/include --clang-arg -DMACRO=1
+
+# Try a different formatting style
+cargo run --bin openmp_vv -- --clang-format-style google
+```
+
+The first run clones `OpenMP_VV` into `target/openmp_vv`. Subsequent executions reuse that clone unless you specify a
+custom `--repo-path`. The harness walks every C/C++ file under `tests/`, preprocesses it with `clang -E -P -fopenmp` to
+resolve macros and continuation markers, canonicalizes each `#pragma omp` line with `clang-format`, parses the formatted
+pragma with ROUP, prints it back out, runs `clang-format` again, and fails the round-trip if the canonicalized strings differ.
+
+Because `clang-format` has no Fortran formatter, Fortran sources are skipped. The report includes the total directives seen,
+successes, a breakdown of failure causes (preprocessing error, clang-format error, parse error, or round-trip mismatch), and
+a sample of the mismatching pragmas. Use `--max-failures` to control how many diagnostics appear in the summary and
+`--skip-clone` to enforce offline execution when the repository already exists locally.
+
 ## FAQ
 
 **Q: Why MSRV + stable instead of testing many versions?**
