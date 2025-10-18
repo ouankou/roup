@@ -112,7 +112,7 @@ openmp_clauses! {
     Nontemporal => { name: "nontemporal", rule: ClauseRule::Parenthesized },
     Notinbranch => { name: "notinbranch", rule: ClauseRule::Bare },
     Novariants => { name: "novariants", rule: ClauseRule::Flexible },
-    Nowait => { name: "nowait", rule: ClauseRule::Bare },
+    Nowait => { name: "nowait", rule: ClauseRule::Flexible },
     NumTasks => { name: "num_tasks", rule: ClauseRule::Parenthesized },
     NumTeams => { name: "num_teams", rule: ClauseRule::Parenthesized },
     NumThreads => { name: "num_threads", rule: ClauseRule::Parenthesized },
@@ -134,7 +134,7 @@ openmp_clauses! {
     Reverse => { name: "reverse", rule: ClauseRule::Flexible },
     ReverseOffload => { name: "reverse_offload", rule: ClauseRule::Bare },
     Safelen => { name: "safelen", rule: ClauseRule::Parenthesized },
-    Safesync => { name: "safesync", rule: ClauseRule::Bare },
+    Safesync => { name: "safesync", rule: ClauseRule::Flexible },
     Schedule => { name: "schedule", rule: ClauseRule::Parenthesized },
     SelfMaps => { name: "self_maps", rule: ClauseRule::Bare },
     SeqCst => { name: "seq_cst", rule: ClauseRule::Bare },
@@ -221,6 +221,7 @@ openmp_directives! {
     DistributeParallelDoSimd => "distribute parallel do simd",  // Fortran variant
     Do => "do",  // Fortran equivalent of FOR
     DoSimd => "do simd",  // Fortran equivalent of FOR SIMD
+    EndAssumes => "end assumes",
     EndDeclareTarget => "end declare target",
     EndDeclareVariant => "end declare variant",
     Error => "error",
@@ -237,6 +238,8 @@ openmp_directives! {
     MaskedTaskloop => "masked taskloop",
     MaskedTaskloopSimd => "masked taskloop simd",
     Master => "master",
+    MasterTaskloop => "master taskloop",
+    MasterTaskloopSimd => "master taskloop simd",
     Metadirective => "metadirective",
     BeginMetadirective => "begin metadirective",
     Nothing => "nothing",
@@ -326,11 +329,381 @@ pub fn clause_registry() -> ClauseRegistry {
     builder.build()
 }
 
+// Helper function to parse balanced parentheses and extract content
+fn parse_parenthesized_content(input: &str) -> nom::IResult<&str, String> {
+    use crate::lexer;
+    use nom::bytes::complete::tag;
+    use nom::error::{Error, ErrorKind};
+
+    // Skip whitespace and comments before the opening parenthesis
+    let (input, _) = lexer::skip_space_and_comments(input)?;
+
+    // Expect an opening parenthesis
+    let (input, _) = tag("(")(input)?;
+
+    // Find the matching closing parenthesis, tracking depth
+    let mut depth = 1;
+    let mut end_index = None;
+
+    for (idx, ch) in input.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    end_index = Some(idx);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let end_index = end_index.ok_or_else(|| nom::Err::Error(Error::new(input, ErrorKind::Fail)))?;
+
+    let raw_content = &input[..end_index];
+    let trimmed = raw_content.trim();
+    let normalized = lexer::collapse_line_continuations(trimmed);
+    let rest = &input[end_index + 1..];
+
+    Ok((rest, normalized.into_owned()))
+}
+
+// Custom parser for allocate directive: allocate(list) [clauses] or bare allocate
+fn parse_allocate_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized list (extended form)
+    if let Ok((rest, list_content)) = parse_parenthesized_content(input) {
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        // Reconstruct directive name with parenthesized list for correct unparsing
+        let full_name = format!("allocate({})", list_content);
+
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Owned(full_name),
+                clauses,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive { name, clauses }))
+    }
+}
+
+// Custom parser for threadprivate directive: threadprivate(list) or bare threadprivate
+fn parse_threadprivate_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized list (extended form)
+    if let Ok((rest, list_content)) = parse_parenthesized_content(input) {
+        // Reconstruct directive name with parenthesized list
+        let full_name = format!("threadprivate({})", list_content);
+
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Owned(full_name),
+                clauses: vec![],
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive { name, clauses }))
+    }
+}
+
+// Custom parser for declare target extended form: declare target(list)
+fn parse_declare_target_extended<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized list (extended form)
+    if let Ok((rest, list_content)) = parse_parenthesized_content(input) {
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        // Reconstruct directive name with parenthesized list
+        let full_name = format!("declare target({})", list_content);
+
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Owned(full_name),
+                clauses,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (basic form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive { name, clauses }))
+    }
+}
+
+// Custom parser for declare mapper directive: declare mapper(mapper-id) map-clause or bare
+fn parse_declare_mapper_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized mapper ID (extended form)
+    if let Ok((rest, mapper_id)) = parse_parenthesized_content(input) {
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        // Reconstruct directive name with parenthesized mapper ID
+        let full_name = format!("declare mapper({})", mapper_id);
+
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Owned(full_name),
+                clauses,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive { name, clauses }))
+    }
+}
+
+// Custom parser for declare variant directive: declare variant(function) match(...) or bare
+fn parse_declare_variant_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized function name (extended form)
+    if let Ok((rest, variant_func)) = parse_parenthesized_content(input) {
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        // Reconstruct directive name with parenthesized function name
+        let full_name = format!("declare variant({})", variant_func);
+
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Owned(full_name),
+                clauses,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive { name, clauses }))
+    }
+}
+
+// Custom parser for depobj directive: depobj(depobj-object) [clauses] or bare depobj
+fn parse_depobj_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized depobj identifier (extended form)
+    if let Ok((rest, depobj_id)) = parse_parenthesized_content(input) {
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        // Reconstruct directive name with parenthesized depobj identifier
+        let full_name = format!("depobj({})", depobj_id);
+
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Owned(full_name),
+                clauses,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive { name, clauses }))
+    }
+}
+
+// Custom parser for scan directive: scan exclusive(list) or scan inclusive(list) or bare scan
+fn parse_scan_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+    use nom::bytes::complete::tag;
+
+    let input_trimmed = input.trim_start();
+
+    // Try exclusive first
+    if let Ok((rest, _)) = tag::<_, _, nom::error::Error<&str>>("exclusive")(input_trimmed) {
+        if let Ok((rest, list_content)) = parse_parenthesized_content(rest) {
+            let full_name = format!("scan exclusive({})", list_content);
+            return Ok((
+                rest,
+                Directive {
+                    name: std::borrow::Cow::Owned(full_name),
+                    clauses: vec![],
+                },
+            ));
+        }
+    }
+
+    // Try inclusive
+    if let Ok((rest, _)) = tag::<_, _, nom::error::Error<&str>>("inclusive")(input_trimmed) {
+        if let Ok((rest, list_content)) = parse_parenthesized_content(rest) {
+            let full_name = format!("scan inclusive({})", list_content);
+            return Ok((
+                rest,
+                Directive {
+                    name: std::borrow::Cow::Owned(full_name),
+                    clauses: vec![],
+                },
+            ));
+        }
+    }
+
+    // Fall back to standard clause parsing (bare form)
+    let (rest, clauses) = clause_registry.parse_sequence(input)?;
+    Ok((rest, Directive { name, clauses }))
+}
+
+// Custom parser for cancel directive: cancel construct-type-clause or bare cancel
+fn parse_cancel_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+    use crate::lexer::lex_identifier_token;
+
+    let input_trimmed = input.trim_start();
+
+    // Try to parse the construct type (parallel, sections, for, taskgroup)
+    if let Ok((rest, construct_type)) = lex_identifier_token(input_trimmed) {
+        // Parse any additional clauses
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        // Create directive with construct type in name
+        let full_name = format!("cancel {}", construct_type);
+
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Owned(full_name),
+                clauses,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive { name, clauses }))
+    }
+}
+
+// Custom parser for groupprivate directive: groupprivate(list) [clauses] or bare groupprivate
+fn parse_groupprivate_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized list (extended form)
+    if let Ok((rest, list_content)) = parse_parenthesized_content(input) {
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        // Reconstruct directive name with parenthesized list for correct unparsing
+        let full_name = format!("groupprivate({})", list_content);
+
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Owned(full_name),
+                clauses,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive { name, clauses }))
+    }
+}
+
+// Custom parser for target_data directive (handles underscore variant)
+// Preserves the underscore form for round-trip correctness
+fn parse_target_data_directive<'a>(
+    _name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    let (rest, clauses) = clause_registry.parse_sequence(input)?;
+
+    Ok((
+        rest,
+        Directive {
+            name: std::borrow::Cow::Borrowed("target_data"),
+            clauses,
+        },
+    ))
+}
+
+// Directive names that have custom parsers (excluding target_data underscore variant)
+const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
+    "allocate",
+    "threadprivate",
+    "declare target",
+    "declare mapper",
+    "declare variant",
+    "depobj",
+    "scan",
+    "cancel",
+    "groupprivate",
+];
+
 pub fn directive_registry() -> DirectiveRegistry {
     let mut builder = DirectiveRegistryBuilder::new();
 
+    // Register custom parsers for directives with special syntax
+    builder = builder.register_custom("allocate", parse_allocate_directive);
+    builder = builder.register_custom("threadprivate", parse_threadprivate_directive);
+    builder = builder.register_custom("declare target", parse_declare_target_extended);
+    builder = builder.register_custom("declare mapper", parse_declare_mapper_directive);
+    builder = builder.register_custom("declare variant", parse_declare_variant_directive);
+    builder = builder.register_custom("depobj", parse_depobj_directive);
+    builder = builder.register_custom("scan", parse_scan_directive);
+    builder = builder.register_custom("cancel", parse_cancel_directive);
+    builder = builder.register_custom("groupprivate", parse_groupprivate_directive);
+
+    // Handle underscore variant of "target data"
+    builder = builder.register_custom("target_data", parse_target_data_directive);
+
+    // Register remaining directives as generic
     for directive in OpenMpDirective::ALL {
-        builder = builder.register_generic(directive.as_str());
+        let name = directive.as_str();
+        // Skip directives that already have custom parsers
+        if !CUSTOM_PARSER_DIRECTIVES.contains(&name) {
+            builder = builder.register_generic(name);
+        }
     }
 
     builder.build()

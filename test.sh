@@ -336,24 +336,37 @@ else
 fi
 
 # ===================================================================
-# 18. OpenMP_VV Round-Trip Validation
+# 18. OpenMP_VV Round-Trip Validation (REQUIRED: 100% pass rate)
 # ===================================================================
 echo "=== 18. OpenMP_VV Round-Trip Validation ==="
 openmp_vv_status="skipped"
 if command -v clang &>/dev/null && command -v clang-format &>/dev/null; then
-    echo -n "Running OpenMP_VV round-trip test... "
+    echo -n "Running OpenMP_VV round-trip test (100% required)... "
     if ./test_openmp_vv.sh > /tmp/test_openmp_vv.log 2>&1; then
-        echo -e "${GREEN}✓ PASS${NC}"
-        openmp_vv_status="passed"
-        # Show summary line from the script
-        grep "Success rate:" /tmp/test_openmp_vv.log || true
+        # Check that it's actually 100% (no failures)
+        failures=$(grep "^Failed:" /tmp/test_openmp_vv.log | grep -o "[0-9]*" || echo "0")
+        if [ "$failures" -eq 0 ]; then
+            echo -e "${GREEN}✓ PASS (100% success rate)${NC}"
+            openmp_vv_status="passed"
+            grep "Success rate:" /tmp/test_openmp_vv.log || true
+        else
+            echo -e "${RED}✗ FAIL - $failures pragmas failed (100% required)${NC}"
+            grep "Success rate:" /tmp/test_openmp_vv.log || true
+            echo "See /tmp/test_openmp_vv.log for details"
+            tail -50 /tmp/test_openmp_vv.log
+            exit 1
+        fi
     else
-        echo -e "${YELLOW}⚠ SKIP (some pragmas failed - this is expected during development)${NC}"
-        grep "Success rate:" /tmp/test_openmp_vv.log || true
-        # Don't fail the entire test suite for OpenMP_VV failures
+        echo -e "${RED}✗ FAIL - OpenMP_VV test script failed${NC}"
+        tail -50 /tmp/test_openmp_vv.log
+        exit 1
     fi
 else
-    echo -e "${YELLOW}⚠ SKIP (clang or clang-format not found)${NC}"
+    echo -e "${RED}✗ FAIL - clang and clang-format are REQUIRED for OpenMP_VV validation${NC}"
+    echo "   Install (Debian/Ubuntu): apt-get install clang clang-format"
+    echo "   Install (macOS): brew install llvm"
+    echo "   Install (Fedora/RHEL): dnf install clang clang-tools-extra"
+    exit 1
 fi
 
 # ===================================================================
