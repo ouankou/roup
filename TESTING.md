@@ -134,6 +134,29 @@ Runs all 19 test categories on your current Rust version:
 - Missing required files = FAIL
 - All tests are MANDATORY
 
+### test_openacc_vv.sh - OpenACC round-trip validation
+
+Validates ROUP against the upstream
+[OpenACCV-V](https://github.com/OpenACCUserGroup/OpenACCV-V) compatibility
+suite. The helper clones (or reuses) the test repository, builds the
+`roup_roundtrip` binary, extracts every `#pragma acc` / `!$acc` directive and
+checks that ROUP round-trips each directive losslessly.
+
+```bash
+# Default clone lives in target/openacc_vv
+./test_openacc_vv.sh
+
+# Reuse an existing checkout and pick a specific clang toolchain
+OPENACC_VV_PATH=$HOME/src/OpenACCV-V \
+CLANG=clang-16 \
+CLANG_FORMAT=clang-format-16 \
+    ./test_openacc_vv.sh
+```
+
+Requirements: `cargo`, `git`, `clang` and `clang-format`. See
+[`docs/OPENACC_VV.md`](docs/OPENACC_VV.md) for full details and troubleshooting
+tips.
+
 ### test_rust_versions.sh - Multi-Version Testing
 
 Tests your code against multiple Rust versions to catch version-specific issues **before** CI fails.
