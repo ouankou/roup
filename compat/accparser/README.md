@@ -106,8 +106,13 @@ accparser IR (OpenACCDirective, OpenACCClause)
 - Data: `copy`, `copyin`, `copyout`, `create`, `delete`, `present`
 - Loop: `gang`, `worker`, `vector`, `seq`, `independent`, `collapse`, `tile`
 - Other: `private`, `firstprivate`, `reduction`, `if`, `default`
+- Aliases: `pcopy`, `present_or_copy`, `pcopyin`, `present_or_copyin`, `pcopyout`,
+  `present_or_copyout`, `pcreate`, `present_or_create`, `dtype`
 
 See `src/roup_constants.h` for complete list.
+
+OpenACC support details and spec cross references live in
+[`docs/OPENACC_SUPPORT.md`](../../docs/OPENACC_SUPPORT.md).
 
 ## Testing
 

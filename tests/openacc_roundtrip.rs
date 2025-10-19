@@ -38,3 +38,75 @@ fn parses_wait_directive_with_clauses() {
     let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
     assert_eq!(roundtrip, "#pragma acc wait(1) async(2)");
 }
+
+#[test]
+fn roundtrip_cache_directive_with_clauses() {
+    let parser = openacc::parser();
+    let input = "#pragma acc cache(arr[0:10]) async(3)";
+    let (_, directive) = parser.parse(input).expect("should parse");
+
+    assert_eq!(directive.name, "cache(arr[0:10])");
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "async");
+    assert_eq!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized("3".into())
+    );
+
+    let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
+    assert_eq!(roundtrip, input);
+}
+
+#[test]
+fn parses_alias_clauses_without_renaming() {
+    let parser = openacc::parser();
+    let input = "#pragma acc data pcopy(a) present_or_copy(b) pcreate(c) present_or_create(d)";
+    let (_, directive) = parser.parse(input).expect("should parse");
+
+    let names: Vec<_> = directive.clauses.iter().map(|c| c.name.as_ref()).collect();
+    assert_eq!(
+        names,
+        vec!["pcopy", "present_or_copy", "pcreate", "present_or_create"]
+    );
+
+    for clause in &directive.clauses {
+        assert!(matches!(clause.kind, ClauseKind::Parenthesized(_)));
+    }
+
+    let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
+    assert_eq!(roundtrip, input);
+}
+
+#[test]
+fn parses_dtype_alias_on_loop_directive() {
+    let parser = openacc::parser();
+    let input = "#pragma acc loop dtype(*) vector";
+    let (_, directive) = parser.parse(input).expect("should parse");
+
+    assert_eq!(directive.clauses.len(), 2);
+    assert_eq!(directive.clauses[0].name, "dtype");
+    assert!(matches!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized(_)
+    ));
+    assert_eq!(directive.clauses[1].name, "vector");
+    assert_eq!(directive.clauses[1].kind, ClauseKind::Bare);
+
+    let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
+    assert_eq!(roundtrip, input);
+}
+
+#[test]
+fn parses_atomic_update_as_bare_clause() {
+    let parser = openacc::parser();
+    let input = "#pragma acc atomic update";
+    let (_, directive) = parser.parse(input).expect("should parse");
+
+    assert_eq!(directive.name, "atomic");
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "update");
+    assert_eq!(directive.clauses[0].kind, ClauseKind::Bare);
+
+    let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
+    assert_eq!(roundtrip, input);
+}
