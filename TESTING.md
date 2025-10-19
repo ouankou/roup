@@ -468,6 +468,76 @@ The validation uses two simple components:
 
 This approach is simpler and more maintainable than complex Rust-only solutions.
 
+## OpenACCV-V Round-Trip Validation
+
+ROUP can now validate OpenACC support against the [OpenACCV-V](https://github.com/OpenACCUserGroup/OpenACCV-V) test suite. Every `#pragma acc` or `!$acc` directive is parsed and re-emitted to ensure round-trip stability across both C/C++ and Fortran sources.
+
+### How It Works
+
+1. **Clone OpenACCV-V** (first run only, into `target/openacc_vv`).
+2. **Scan every source in `Tests/`** for OpenACC directives (C/C++ and Fortran).
+3. **Round-trip each directive** through `roup_roundtrip` configured for OpenACC, preserving dialect-specific language settings.
+4. **Normalize** both original and round-tripped directives by converting them to canonical `#pragma acc ...` strings and collapsing whitespace.
+5. **Report statistics**: totals, pass/fail counts, and overall success rate.
+
+### Running the Test
+
+```bash
+# Run OpenACCV-V validation (auto-clones repository if needed)
+./test_openacc_vv.sh
+
+# Or as part of the full test suite
+./test.sh  # Includes OpenACCV-V as section 20
+```
+
+### Using Existing Repository or Custom Tools
+
+```bash
+# Point to an existing clone
+OPENACC_VV_PATH=/path/to/OpenACCV-V ./test_openacc_vv.sh
+
+# Override the Python interpreter
+PYTHON=python ./test_openacc_vv.sh
+```
+
+### Example Output
+
+```
+=========================================
+  OpenACCV-V Round-Trip Validation
+=========================================
+
+Checking for required tools...
+✓ All required tools found
+
+Using existing OpenACCV-V at target/openacc_vv
+
+Building roup_roundtrip binary...
+✓ Binary built
+
+Files processed:        1338
+Files with directives:  1305
+Total directives:       6307
+  C/C++ directives:     5773
+  Fortran directives:   534
+
+Passed:                 6307
+Failed:                 0
+  Parse errors:         0
+  Mismatches:           0
+
+Success rate:           100.0%
+```
+
+### Requirements
+
+- **python3** – Runs the extraction/analysis helper script
+- **cargo** – Builds `roup_roundtrip`
+- **git** – Clones OpenACCV-V when needed
+
+Whitespace normalization is implemented directly in the script, so no external formatting tools are required.
+
+
 ## FAQ
 
 **Q: Why MSRV + stable instead of testing many versions?**

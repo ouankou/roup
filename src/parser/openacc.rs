@@ -169,6 +169,34 @@ fn parse_cache_directive<'a>(
     ))
 }
 
+fn parse_routine_directive<'a>(
+    mut name: Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use crate::lexer;
+
+    let (input, _) = lexer::skip_space_and_comments(input)?;
+
+    let (input, updated_name) = if input.starts_with('(') {
+        let (rest, content) = parse_parenthesized_content_inner(input)?;
+        let trimmed = content.trim();
+        if trimmed.is_empty() {
+            (rest, Cow::Owned(format!("{}()", name)))
+        } else {
+            (rest, Cow::Owned(format!("{}({})", name, trimmed)))
+        }
+    } else {
+        (input, name)
+    };
+
+    name = updated_name;
+
+    let (rest, clauses) = clause_registry.parse_sequence(input)?;
+
+    Ok((rest, super::Directive { name, clauses }))
+}
+
 fn parse_wait_directive<'a>(
     name: Cow<'a, str>,
     input: &'a str,
@@ -240,10 +268,11 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("cache", parse_cache_directive);
     builder = builder.register_custom("wait", parse_wait_directive);
     builder = builder.register_custom("end", parse_end_directive);
+    builder = builder.register_custom("routine", parse_routine_directive);
 
     for directive in OpenAccDirective::ALL {
         let name = directive.as_str();
-        if matches!(name, "cache" | "wait" | "end") {
+        if matches!(name, "cache" | "wait" | "end" | "routine") {
             continue;
         }
         builder = builder.register_generic(name);

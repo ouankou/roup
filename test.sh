@@ -396,7 +396,40 @@ else
 fi
 
 # ===================================================================
-# 20. All Features Test
+# 20. OpenACCV-V Round-Trip Validation (REQUIRED: 100% pass rate)
+# ===================================================================
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. OpenACCV-V Round-Trip Validation ==="
+openacc_vv_status="skipped"
+if command -v python3 &>/dev/null; then
+    echo -n "Running OpenACCV-V round-trip test (100% required)... "
+    if ./test_openacc_vv.sh > /tmp/test_openacc_vv.log 2>&1; then
+        failures=$(grep "^Failed:" /tmp/test_openacc_vv.log | grep -o "[0-9]*" || echo "0")
+        if [ "$failures" -eq 0 ]; then
+            echo -e "${GREEN}✓ PASS (100% success rate)${NC}"
+            openacc_vv_status="passed"
+            grep "Success rate:" /tmp/test_openacc_vv.log || true
+        else
+            echo -e "${RED}✗ FAIL - $failures directives failed (100% required)${NC}"
+            grep "Success rate:" /tmp/test_openacc_vv.log || true
+            echo "See /tmp/test_openacc_vv.log for details"
+            tail -50 /tmp/test_openacc_vv.log
+            exit 1
+        fi
+    else
+        echo -e "${RED}✗ FAIL - OpenACCV-V test script failed${NC}"
+        tail -50 /tmp/test_openacc_vv.log
+        exit 1
+    fi
+else
+    echo -e "${RED}✗ FAIL - python3 is REQUIRED for OpenACCV-V validation${NC}"
+    echo "   Install (Debian/Ubuntu): apt-get install python3"
+    echo "   Install (macOS): brew install python"
+    echo "   Install (Fedora/RHEL): dnf install python3"
+    exit 1
+fi
+
+# ===================================================================
+# 21. All Features Test
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. All Features Test ==="
 echo -n "Running tests with --all-features... "
@@ -409,7 +442,7 @@ else
 fi
 
 # ===================================================================
-# 21. Benchmark Tests
+# 22. Benchmark Tests
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Benchmark Tests ==="
 if [ ! -d "benches" ]; then
@@ -432,10 +465,17 @@ fi
 # ===================================================================
 echo ""
 echo "========================================"
+total_passed_categories=20
 if [ "$openmp_vv_status" = "passed" ]; then
-    echo -e "  ${GREEN}ALL 21 TEST CATEGORIES PASSED${NC}"
+    total_passed_categories=$((total_passed_categories + 1))
+fi
+if [ "$openacc_vv_status" = "passed" ]; then
+    total_passed_categories=$((total_passed_categories + 1))
+fi
+if [ "$total_passed_categories" -eq 22 ]; then
+    echo -e "  ${GREEN}ALL 22 TEST CATEGORIES PASSED${NC}"
 else
-    echo -e "  ${GREEN}20 TEST CATEGORIES PASSED${NC}"
+    echo -e "  ${GREEN}$total_passed_categories TEST CATEGORIES PASSED${NC}"
 fi
 echo "========================================"
 echo ""
@@ -454,6 +494,11 @@ if [ "$openmp_vv_status" = "passed" ]; then
     echo "  ✓ OpenMP_VV round-trip validation"
 elif [ "$openmp_vv_status" = "skipped" ]; then
     echo "  ⚠ OpenMP_VV round-trip validation (skipped)"
+fi
+if [ "$openacc_vv_status" = "passed" ]; then
+    echo "  ✓ OpenACCV-V round-trip validation"
+elif [ "$openacc_vv_status" = "skipped" ]; then
+    echo "  ⚠ OpenACCV-V round-trip validation (skipped)"
 fi
 echo "  ✓ All features tested"
 echo "  ✓ Benchmarks validated"
