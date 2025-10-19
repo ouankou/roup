@@ -146,7 +146,7 @@ pub fn clause_registry() -> ClauseRegistry {
 }
 
 fn parse_cache_directive<'a>(
-    _name: Cow<'a, str>,
+    name: Cow<'a, str>,
     input: &'a str,
     clause_registry: &ClauseRegistry,
 ) -> nom::IResult<&'a str, super::Directive<'a>> {
@@ -158,12 +158,13 @@ fn parse_cache_directive<'a>(
     let (rest_after_paren, content) = parse_parenthesized_content_inner(input)?;
     let (rest, clauses) = clause_registry.parse_sequence(rest_after_paren)?;
 
-    let full_name = format!("cache({})", content.trim());
+    let parameter = format!("({})", content.trim());
 
     Ok((
         rest,
         Directive {
-            name: Cow::Owned(full_name),
+            name,
+            parameter: Some(Cow::Owned(parameter)),
             clauses,
         },
     ))
@@ -182,22 +183,30 @@ fn parse_wait_directive<'a>(
         // FIX: parse_parenthesized_content_inner already handles the opening paren
         let (rest, content) = parse_parenthesized_content_inner(input)?;
         let (rest, clauses) = clause_registry.parse_sequence(rest)?;
-        let full_name = format!("wait({})", content.trim());
+        let parameter = format!("({})", content.trim());
         return Ok((
             rest,
             Directive {
-                name: Cow::Owned(full_name),
+                name,
+                parameter: Some(Cow::Owned(parameter)),
                 clauses,
             },
         ));
     }
 
     let (rest, clauses) = clause_registry.parse_sequence(input)?;
-    Ok((rest, Directive { name, clauses }))
+    Ok((
+        rest,
+        Directive {
+            name,
+            parameter: None,
+            clauses,
+        },
+    ))
 }
 
 fn parse_end_directive<'a>(
-    _name: Cow<'a, str>,
+    name: Cow<'a, str>,
     input: &'a str,
     clause_registry: &ClauseRegistry,
 ) -> nom::IResult<&'a str, super::Directive<'a>> {
@@ -220,15 +229,50 @@ fn parse_end_directive<'a>(
         }
     }
 
-    // Reassemble into full directive name
+    // Store the directive being ended as a parameter
     let directive = directive_parts.join(" ");
     let (rest, clauses) = clause_registry.parse_sequence(rest)?;
-    let full_name = format!("end {}", directive);
+    let parameter = format!(" {}", directive);
 
     Ok((
         rest,
         Directive {
-            name: Cow::Owned(full_name),
+            name,
+            parameter: Some(Cow::Owned(parameter)),
+            clauses,
+        },
+    ))
+}
+
+fn parse_routine_directive<'a>(
+    name: Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+    use crate::lexer;
+
+    let (input, _) = lexer::skip_space_and_comments(input)?;
+    if input.trim_start().starts_with('(') {
+        let (rest_after_paren, content) = parse_parenthesized_content_inner(input)?;
+        let (rest, clauses) = clause_registry.parse_sequence(rest_after_paren)?;
+        let parameter = format!("({})", content.trim());
+        return Ok((
+            rest,
+            Directive {
+                name,
+                parameter: Some(Cow::Owned(parameter)),
+                clauses,
+            },
+        ));
+    }
+
+    let (rest, clauses) = clause_registry.parse_sequence(input)?;
+    Ok((
+        rest,
+        Directive {
+            name,
+            parameter: None,
             clauses,
         },
     ))
@@ -240,10 +284,11 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("cache", parse_cache_directive);
     builder = builder.register_custom("wait", parse_wait_directive);
     builder = builder.register_custom("end", parse_end_directive);
+    builder = builder.register_custom("routine", parse_routine_directive);
 
     for directive in OpenAccDirective::ALL {
         let name = directive.as_str();
-        if matches!(name, "cache" | "wait" | "end") {
+        if matches!(name, "cache" | "wait" | "end" | "routine") {
             continue;
         }
         builder = builder.register_generic(name);

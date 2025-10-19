@@ -174,7 +174,14 @@ mod tests {
                 .parse(input)?;
             let (input, clauses) = clause_registry.parse_sequence(input)?;
 
-            Ok((input, Directive { name, clauses }))
+            Ok((
+                input,
+                Directive {
+                    name,
+                    parameter: None,
+                    clauses,
+                },
+            ))
         }
 
         let directive_registry = DirectiveRegistry::builder()

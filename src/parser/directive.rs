@@ -14,6 +14,7 @@ type DirectiveParserFn =
 #[derive(Debug, PartialEq, Eq)]
 pub struct Directive<'a> {
     pub name: Cow<'a, str>,
+    pub parameter: Option<Cow<'a, str>>,
     pub clauses: Vec<Clause<'a>>,
 }
 
@@ -30,19 +31,51 @@ impl Directive<'_> {
     /// # use std::borrow::Cow;
     /// let directive = Directive {
     ///     name: Cow::Borrowed("parallel"),
+    ///     parameter: None,
     ///     clauses: vec![],
     /// };
     /// assert_eq!(directive.to_pragma_string_with_prefix("#pragma acc"), "#pragma acc parallel");
     /// ```
     pub fn to_pragma_string_with_prefix(&self, prefix: &str) -> String {
+        // Default to no commas for backward compatibility (OpenMP style)
+        self.to_pragma_string_with_prefix_and_separator(prefix, false)
+    }
+
+    /// Convert directive to pragma string with custom prefix and clause separator
+    ///
+    /// # Example
+    /// ```
+    /// # use roup::parser::{Directive, Clause, ClauseKind};
+    /// # use std::borrow::Cow;
+    /// let directive = Directive {
+    ///     name: Cow::Borrowed("parallel"),
+    ///     parameter: None,
+    ///     clauses: vec![
+    ///         Clause { name: Cow::Borrowed("async"), kind: ClauseKind::Parenthesized(Cow::Borrowed("1")) },
+    ///         Clause { name: Cow::Borrowed("wait"), kind: ClauseKind::Parenthesized(Cow::Borrowed("2")) },
+    ///     ],
+    /// };
+    /// assert_eq!(directive.to_pragma_string_with_prefix_and_separator("#pragma acc", true), "#pragma acc parallel async(1), wait(2)");
+    /// ```
+    pub fn to_pragma_string_with_prefix_and_separator(
+        &self,
+        prefix: &str,
+        use_commas: bool,
+    ) -> String {
         let mut output = String::new();
         output.push_str(prefix);
         output.push(' ');
         output.push_str(self.name.as_ref());
+        if let Some(param) = &self.parameter {
+            output.push_str(param.as_ref());
+        }
         if !self.clauses.is_empty() {
             output.push(' ');
             for (idx, clause) in self.clauses.iter().enumerate() {
                 if idx > 0 {
+                    if use_commas {
+                        output.push(',');
+                    }
                     output.push(' ');
                 }
                 output.push_str(&clause.to_string());
@@ -55,6 +88,9 @@ impl Directive<'_> {
 impl fmt::Display for Directive<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "#pragma omp {}", self.name.as_ref())?;
+        if let Some(param) = &self.parameter {
+            write!(f, "{}", param.as_ref())?;
+        }
         if !self.clauses.is_empty() {
             write!(f, " ")?;
             for (idx, clause) in self.clauses.iter().enumerate() {
@@ -84,7 +120,14 @@ impl DirectiveRule {
         match self {
             DirectiveRule::Generic => {
                 let (input, clauses) = clause_registry.parse_sequence(input)?;
-                Ok((input, Directive { name, clauses }))
+                Ok((
+                    input,
+                    Directive {
+                        name,
+                        parameter: None,
+                        clauses,
+                    },
+                ))
             }
             DirectiveRule::Custom(parser) => parser(name, input, clause_registry),
         }
@@ -398,7 +441,14 @@ mod tests {
         let (input, _) = tag("custom:")(input)?;
         let (input, clauses) = clause_registry.parse_sequence(input)?;
 
-        Ok((input, Directive { name, clauses }))
+        Ok((
+            input,
+            Directive {
+                name,
+                parameter: None,
+                clauses,
+            },
+        ))
     }
 
     #[test]
@@ -426,6 +476,7 @@ mod tests {
     fn directive_display_includes_all_clauses() {
         let directive = Directive {
             name: "parallel".into(),
+            parameter: None,
             clauses: vec![
                 Clause {
                     name: "private".into(),
@@ -452,6 +503,7 @@ mod tests {
     fn directive_display_without_clauses() {
         let directive = Directive {
             name: "barrier".into(),
+            parameter: None,
             clauses: vec![],
         };
 
