@@ -12,7 +12,7 @@ This document serves as a complete keyword inventory for development and referen
 ## Coverage
 
 - **23 Directives/Constructs** - All compute, data, loop, synchronization, declaration, and runtime directives
-- **50+ Clauses** - All clause keywords
+- **49 Clauses** - All clause keywords, including `present_or_*` data variants and runtime controls
 - **Modifiers** - Data clause modifiers, gang/worker/vector modifiers, collapse modifiers
 - **Special Values** - Async values, device types, default values
 - **Reduction Operators** - All supported reduction operations
@@ -67,7 +67,7 @@ This document serves as a complete keyword inventory for development and referen
 ### Compute Clauses
 
 - `if` (§2.5.6; p.37; category: conditional; applicable to: parallel, serial, kernels, host_data, atomic, init, set, update)
-- `self` (§2.5.7; p.37; category: conditional; applicable to: parallel, serial, kernels; properties: execute on host without data movement)
+- `self[(condition)]` (§2.5.7; p.37; category: conditional; applicable to: parallel, serial, kernels; properties: execute on host without data movement)
 - `async` (§2.5.8, §2.16.1; pp.37, 99; category: synchronization; applicable to: parallel, serial, kernels, data, enter data, exit data, update, wait)
 - `wait` (§2.5.9, §2.16.2; pp.37, 100; category: synchronization; applicable to: parallel, serial, kernels, data, enter data, exit data, update)
 - `num_gangs` (§2.5.10; p.37; category: parallelism; applicable to: parallel, kernels; properties: specifies number of gangs)
@@ -87,6 +87,10 @@ This document serves as a complete keyword inventory for development and referen
 - `no_create` (§2.7.11; p.57; category: data allocation; properties: use if present, don't create)
 - `delete` (§2.7.12; p.58; category: data allocation; properties: deallocate from device)
 - `present` (§2.7.6; p.53; category: data presence; properties: data must be present on device)
+- `present_or_copy` (§2.7.6; p.53; category: data movement; properties: copy if not present, otherwise reuse existing device data)
+- `present_or_copyin` (§2.7.6; p.53; category: data movement; properties: copy to device only when data is absent)
+- `present_or_copyout` (§2.7.6; p.53; category: data movement; properties: copy from device only when data is present)
+- `present_or_create` (§2.7.6; p.53; category: data allocation; properties: create device data if absent, otherwise reuse present data)
 - `deviceptr` (§2.7.5; p.53; category: data presence; properties: device pointer)
 - `attach` (§2.7.13; p.59; category: pointer; properties: attach pointer to device address)
 - `detach` (§2.7.14; p.59; category: pointer; properties: detach pointer from device address)

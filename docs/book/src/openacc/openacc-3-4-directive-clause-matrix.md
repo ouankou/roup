@@ -14,7 +14,7 @@ This matrix cross-references every OpenACC 3.4 directive with its allowed clause
 - `if(condition)` — host vs device execution control (§2.5.6, p.37).
 - `self[(condition)]` — execute region on host without moving data (§2.5.7, p.37).
 - `reduction(operator:var-list)` — reduction variables imply copy semantics (§2.5.15, p.39).
-- Data clauses `copy`, `copyin`, `copyout`, `create`, `no_create`, `present`, `deviceptr`, `attach` each accept optional modifier lists from §2.7.4 (p.52) and actions defined in §§2.7.1–2.7.14 (pp.48–60).
+- Data clauses `copy`, `copyin`, `copyout`, `create`, `no_create`, `present`, `present_or_copy`, `present_or_copyin`, `present_or_copyout`, `present_or_create`, `deviceptr`, and `attach` each accept optional modifier lists from §2.7.4 (p.52) and actions defined in §§2.7.1–2.7.14 (pp.48–60).
 - `private(var-list)` — private instances per gang (§2.5.13, p.38).
 - `firstprivate(var-list)` — initialize privates from host values (§2.5.14, p.38).
 - `default(none|present)` — default data scoping (§2.5.16, p.40).
@@ -26,24 +26,24 @@ This matrix cross-references every OpenACC 3.4 directive with its allowed clause
 - `async[(async-argument)]` and `wait[(wait-argument)]` per §§2.16.1–2.16.2 (pp.99–100).
 - `num_gangs(int-expr)` — single argument specifying gangs per kernel (§2.5.10, p.37).
 - `num_workers(int-expr)` and `vector_length(int-expr)` as in §§2.5.11–2.5.12 (p.38).
-- `device_type`, `if`, `self`, and all data clauses (`copy`, `copyin`, `copyout`, `create`, `no_create`, `present`, `deviceptr`, `attach`) with modifiers per §§2.4 and 2.7.
+- `device_type`, `if`, `self`, and all data clauses (`copy`, `copyin`, `copyout`, `create`, `no_create`, `present`, `present_or_copy`, `present_or_copyin`, `present_or_copyout`, `present_or_create`, `deviceptr`, `attach`) with modifiers per §§2.4 and 2.7.
 - `default(none|present)` per §2.5.16 (p.40).
 
 ### Data construct (§2.6.5, p.43)
 - `if(condition)` for conditional region creation (§2.6.5, p.43).
 - `async[(async-argument)]` and `wait[(wait-argument)]` per §§2.16.1–2.16.2 (pp.99–100).
 - `device_type(device-type-list)` per §2.4 (p.31).
-- Data movement clauses `copy`, `copyin`, `copyout`, `create`, `no_create`, `present`, `deviceptr`, `attach` with modifier lists from §2.7.4 (p.52) and semantics in §§2.7.1–2.7.14 (pp.48–60).
+- Data movement clauses `copy`, `copyin`, `copyout`, `create`, `no_create`, `present`, `present_or_copy`, `present_or_copyin`, `present_or_copyout`, `present_or_create`, `deviceptr`, `attach` with modifier lists from §2.7.4 (p.52) and semantics in §§2.7.1–2.7.14 (pp.48–60).
 - `default(none|present)` (treated as in §2.5.16, p.40).
 
 ### Enter data directive (§2.6.6, p.45)
 - `if(condition)` optional guard (§2.6.6, p.45).
 - `async[(async-argument)]` and `wait[(wait-argument)]` per §§2.16.1–2.16.2 (pp.99–100).
-- `copyin([modifier-list:]var-list)`, `create([modifier-list:]var-list)`, and `attach(var-list)` with data clause modifiers from §2.7.4 (p.52).
+- `copyin([modifier-list:]var-list)`, `present_or_copyin([modifier-list:]var-list)`, `present_or_create([modifier-list:]var-list)`, `create([modifier-list:]var-list)`, and `attach(var-list)` with data clause modifiers from §2.7.4 (p.52).
 
 ### Exit data directive (§2.6.6, p.45)
 - `if(condition)`, `async[(async-argument)]`, `wait[(wait-argument)]` as above.
-- `copyout([modifier-list:]var-list)`, `delete(var-list)`, `detach(var-list)` with modifiers from §2.7.4 (p.52) and clause semantics in §§2.7.9–2.7.14 (pp.56–60).
+- `copyout([modifier-list:]var-list)`, `present_or_copyout([modifier-list:]var-list)`, `delete(var-list)`, `detach(var-list)` with modifiers from §2.7.4 (p.52) and clause semantics in §§2.7.9–2.7.14 (pp.56–60).
 - `finalize` — forces dynamic reference counters to zero (§2.6.6, p.46).
 
 ### Host_data construct (§2.8, p.62)
@@ -71,7 +71,7 @@ This matrix cross-references every OpenACC 3.4 directive with its allowed clause
 - Optional `if(condition)` clause (§2.12, p.77).
 
 ### Declare directive (§2.13, pp.81–84)
-- Data clauses `copy`, `copyin`, `copyout`, `create`, `present`, `deviceptr` as in §2.13 (pp.82–83).
+- Data clauses `copy`, `copyin`, `copyout`, `create`, `present`, `present_or_copy`, `present_or_copyin`, `present_or_copyout`, `present_or_create`, `deviceptr` as in §2.13 (pp.82–83).
 - `device_resident(var-list)` (§2.13.1, p.82).
 - `link(var-list)` for static linkage of device allocations (§2.13.3, p.84).
 

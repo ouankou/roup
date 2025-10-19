@@ -1667,7 +1667,7 @@ fn acc_directive_name_to_kind(name: *const c_char) -> i32 {
 
 /// Convert Rust Clause to C-compatible AccClause.
 ///
-/// ## Clause Kind Mapping (45 clauses):
+/// ## Clause Kind Mapping (49 clauses):
 /// - 0  = async             - 15 = default          - 30 = finalize
 /// - 1  = wait              - 16 = firstprivate     - 31 = if_present
 /// - 2  = num_gangs         - 17 = default_async    - 32 = capture
@@ -1683,6 +1683,8 @@ fn acc_directive_name_to_kind(name: *const c_char) -> i32 {
 /// - 12 = device_type       - 27 = use_device       - 42 = device_num
 /// - 13 = bind              - 28 = attach           - 43 = device_resident
 /// - 14 = if                - 29 = detach           - 44 = host
+/// - 45 = present_or_copy   - 47 = present_or_copyout
+/// - 46 = present_or_copyin - 48 = present_or_create
 /// - 999 = unknown
 fn convert_acc_clause(clause: &Clause) -> AccClause {
     let normalized_name = clause.name.to_ascii_lowercase();
@@ -1712,6 +1714,10 @@ fn convert_acc_clause(clause: &Clause) -> AccClause {
         "no_create" => (19, ()),
         "nohost" => (20, ()),
         "present" => (21, ()),
+        "present_or_copy" => (45, ()),
+        "present_or_copyin" => (46, ()),
+        "present_or_copyout" => (47, ()),
+        "present_or_create" => (48, ()),
         "private" => (22, ()),
         "reduction" => (23, ()),
         "read" => (24, ()),
@@ -1769,6 +1775,47 @@ fn free_acc_clause_data(clause: &AccClause) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn convert_acc_clause_covers_all_keywords() {
+        use crate::parser::openacc::OpenAccClause;
+        use crate::parser::{Clause, ClauseKind, ClauseRule};
+        use std::borrow::Cow;
+
+        for clause in OpenAccClause::ALL {
+            let clause_name = clause.name();
+            let expects_parentheses = matches!(clause.rule(), ClauseRule::Parenthesized);
+            let sample_kind = if expects_parentheses {
+                ClauseKind::Parenthesized(Cow::Borrowed("value"))
+            } else {
+                ClauseKind::Bare
+            };
+
+            let clause = Clause {
+                name: Cow::Borrowed(clause_name),
+                kind: sample_kind,
+            };
+
+            let converted = convert_acc_clause(&clause);
+            assert_ne!(converted.kind, 999, "clause {} should map", clause_name);
+
+            if expects_parentheses {
+                assert!(
+                    !converted.expressions.is_null(),
+                    "clause {} should expose expressions",
+                    clause_name
+                );
+            } else {
+                assert!(
+                    converted.expressions.is_null(),
+                    "clause {} should not expose expressions",
+                    clause_name
+                );
+            }
+
+            super::free_acc_clause_data(&converted);
+        }
+    }
 
     #[test]
     fn test_fortran_directive_name_normalization() {

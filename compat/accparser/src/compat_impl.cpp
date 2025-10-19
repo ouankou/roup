@@ -131,6 +131,10 @@ static OpenACCClauseKind mapRoupToAccparserClause(int32_t roup_kind) {
         case ACC_CLAUSE_NO_CREATE:       return ACCC_no_create;
         case ACC_CLAUSE_NOHOST:          return ACCC_nohost;
         case ACC_CLAUSE_PRESENT:         return ACCC_present;
+        case ACC_CLAUSE_PRESENT_OR_COPY:   return ACCC_present_or_copy;
+        case ACC_CLAUSE_PRESENT_OR_COPYIN: return ACCC_present_or_copyin;
+        case ACC_CLAUSE_PRESENT_OR_COPYOUT: return ACCC_present_or_copyout;
+        case ACC_CLAUSE_PRESENT_OR_CREATE: return ACCC_present_or_create;
         case ACC_CLAUSE_PRIVATE:         return ACCC_private;
         case ACC_CLAUSE_REDUCTION:       return ACCC_reduction;
         case ACC_CLAUSE_READ:            return ACCC_read;

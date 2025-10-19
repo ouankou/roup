@@ -20,6 +20,10 @@
 
 - [API Reference](./api-reference.md)
 - [OpenMP Support Matrix](./openmp-support.md)
+- [OpenACC Support Matrix](./openacc-support.md)
+- [OpenACC 3.4 Directive Catalogue](./openacc/openacc-3-4-directives-clauses.md)
+- [OpenACC 3.4 Directive–Clause Matrix](./openacc/openacc-3-4-directive-clause-matrix.md)
+- [OpenACC 3.4 Restrictions](./openacc/openacc-3-4-restrictions.md)
 - [OpenMP 6.0 Directive Catalogue](./openmp60-directives-clauses.md)
 - [OpenMP 6.0 Directive–Clause Components](./openmp60-directive-clause-components.md)
 - [OpenMP 6.0 Restrictions](./openmp60-restrictions.md)
