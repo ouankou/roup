@@ -27,7 +27,8 @@ fn parses_wait_directive_with_clauses() {
     let input = "#pragma acc wait(1) async(2)";
     let (_, directive) = parser.parse(input).expect("should parse");
 
-    assert_eq!(directive.name, "wait(1)");
+    assert_eq!(directive.name, "wait");
+    assert_eq!(directive.parameter, Some("(1)".into()));
     assert_eq!(directive.clauses.len(), 1);
     assert_eq!(directive.clauses[0].name, "async");
     assert_eq!(
@@ -45,7 +46,8 @@ fn roundtrip_cache_directive_with_clauses() {
     let input = "#pragma acc cache(arr[0:10]) async(3)";
     let (_, directive) = parser.parse(input).expect("should parse");
 
-    assert_eq!(directive.name, "cache(arr[0:10])");
+    assert_eq!(directive.name, "cache");
+    assert_eq!(directive.parameter, Some("(arr[0:10])".into()));
     assert_eq!(directive.clauses.len(), 1);
     assert_eq!(directive.clauses[0].name, "async");
     assert_eq!(

@@ -106,7 +106,7 @@ $ ./test_rust_versions.sh
 
 ### test.sh - Comprehensive Local Testing
 
-Runs all 19 test categories on your current Rust version:
+Runs all 22 test categories on your current Rust version:
 
 1. Code formatting (`cargo fmt --check`)
 2. Debug build
@@ -126,8 +126,10 @@ Runs all 19 test categories on your current Rust version:
 16. Header verification
 17. Warning check (zero tolerance)
 18. Clippy lints (zero tolerance)
-19. All features test
-20. Benchmarks
+19. OpenMP_VV round-trip validation (100% required)
+20. OpenACCV-V round-trip validation (100% required)
+21. All features test
+22. Benchmarks
 
 **Zero-Tolerance Policy:**
 - Any warning = FAIL
@@ -323,7 +325,7 @@ clippy 0.1.90 (1159e78c47 2025-09-14)
 Running cargo fmt --check... ✓ PASS
 ...
 ========================================
-  ALL 19 TEST CATEGORIES PASSED
+  ALL 22 TEST CATEGORIES PASSED
 ========================================
 ```
 
@@ -468,6 +470,100 @@ The validation uses two simple components:
 
 This approach is simpler and more maintainable than complex Rust-only solutions.
 
+## OpenACCV-V Round-Trip Validation
+
+ROUP can validate itself against the [OpenACCV-V](https://github.com/OpenACCUserGroup/OpenACCV-V) test suite by round-tripping every directive through the parser. The flow mirrors the OpenMP validation but supports both C/C++ `#pragma acc` and Fortran `!$acc` forms.
+
+### How It Works
+
+The validation process:
+
+1. **Clone OpenACCV-V** (automatically on first run to `target/openacc_vv`)
+2. **Find all C/C++/Fortran test files** in the `Tests/` directory
+3. **Extract OpenACC directives** (lines with `#pragma acc`, `!$acc`, `c$acc`, `*$acc`)
+4. **Round-trip each directive**:
+   - Normalize original with bash whitespace collapsing
+   - Parse with ROUP → unparse to string
+   - Normalize round-tripped version with bash
+   - Compare with string equality
+5. **Report statistics**: total directives, pass/fail counts, success rate
+
+### Running the Test
+
+```bash
+# Run OpenACCV-V validation (auto-clones repository if needed)
+./test_openacc_vv.sh
+
+# Or as part of the full test suite
+./test.sh  # Includes OpenACCV-V as section 20
+```
+
+### Using Existing Repository
+
+If you already have OpenACCV-V cloned elsewhere:
+
+```bash
+# Point to existing clone
+OPENACC_VV_PATH=/path/to/OpenACCV-V ./test_openacc_vv.sh
+```
+
+### Example Output
+
+```
+=========================================
+  OpenACCV-V Round-Trip Validation
+=========================================
+
+Checking for required tools...
+✓ All required tools found
+
+Using existing OpenACCV-V at target/openacc_vv
+
+Building roup_roundtrip binary...
+✓ Binary built
+
+Running OpenACCV-V validator...
+=========================================
+  OpenACCV-V Round-Trip Validation
+=========================================
+
+Files processed:        1336
+Files with pragmas:     1304
+Total pragmas:          9417
+
+Passed:                 9417
+Failed:                 0
+  Parse errors:         0
+  Mismatches:           0
+
+Success rate:           100.0%
+```
+
+### Requirements
+
+- **cargo** - To build the `roup_roundtrip` binary
+- **git** - To clone OpenACCV-V (if not already present)
+
+The test gracefully skips if requirements are not met.
+
+### Implementation Details
+
+The validation uses two simple components:
+
+1. **`roup_roundtrip --acc` binary** (~120 lines of Rust):
+   - Reads one directive from stdin
+   - Detects language (C/C++ or Fortran)
+   - Parses and unparses it
+   - Prints to stdout
+   - Exits with code 1 on parse error
+
+2. **`test_openacc_vv.sh` script** (~230 lines of bash):
+   - Orchestrates the entire workflow
+   - Uses standard Unix tools (find, grep, sed)
+   - Tracks statistics and formats output
+
+This approach is simpler and more maintainable than complex Rust-only solutions.
+
 ## FAQ
 
 **Q: Why MSRV + stable instead of testing many versions?**
@@ -492,7 +588,7 @@ A: Install it from https://rustup.rs/ - it's the standard Rust toolchain manager
 A: You can, but CI will catch the issue later. Testing locally saves you a round-trip to CI (faster feedback).
 
 **Q: What's the difference between test.sh and test_rust_versions.sh?**
-- `test.sh`: Comprehensive (19 categories) on YOUR current Rust version
+- `test.sh`: Comprehensive (22 categories) on YOUR current Rust version
 - `test_rust_versions.sh`: Critical checks (4 checks) on MULTIPLE Rust versions (MSRV + stable)
 
 Use both for maximum confidence!

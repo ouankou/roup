@@ -88,10 +88,24 @@ impl ClauseRegistry {
     pub fn parse_sequence<'a>(&self, input: &'a str) -> IResult<&'a str, Vec<Clause<'a>>> {
         let (input, _) = crate::lexer::skip_space_and_comments(input)?;
         let parse_clause = |input| self.parse_clause(input);
-        // allow comments and whitespace between clauses (and before the first clause)
-        let (input, clauses) =
-            separated_list0(|i| crate::lexer::skip_space1_and_comments(i), parse_clause)
-                .parse(input)?;
+        let separator = |i| {
+            let original = i;
+            let (i, _) = crate::lexer::skip_space_and_comments(i)?;
+            let consumed_ws = i.len() != original.len();
+            let (i, comma) = nom::combinator::opt(nom::character::complete::char(',')).parse(i)?;
+            if comma.is_some() {
+                let (i, _) = crate::lexer::skip_space_and_comments(i)?;
+                Ok((i, ()))
+            } else if consumed_ws {
+                Ok((i, ()))
+            } else {
+                Err(nom::Err::Error(nom::error::Error::new(
+                    i,
+                    nom::error::ErrorKind::Space,
+                )))
+            }
+        };
+        let (input, clauses) = separated_list0(separator, parse_clause).parse(input)?;
         let (input, _) = crate::lexer::skip_space_and_comments(input)?;
         Ok((input, clauses))
     }

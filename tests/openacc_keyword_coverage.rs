@@ -25,15 +25,15 @@ fn all_openacc34_directives_parse() {
         ("#pragma acc serial loop seq", "serial loop"),
         ("#pragma acc atomic update", "atomic"),
         ("#pragma acc atomic capture", "atomic"),
-        ("#pragma acc cache(arr)", "cache(arr)"),
-        ("#pragma acc wait(1)", "wait(1)"),
+        ("#pragma acc cache(arr)", "cache"),
+        ("#pragma acc wait(1)", "wait"),
         ("#pragma acc declare create(a)", "declare"),
         ("#pragma acc routine gang", "routine"),
         ("#pragma acc init device_type(default)", "init"),
         ("#pragma acc shutdown", "shutdown"),
         ("#pragma acc set device_num(0)", "set"),
         ("#pragma acc update host(a)", "update"),
-        ("#pragma acc end parallel loop", "end parallel loop"),
+        ("#pragma acc end parallel loop", "end"),
     ];
 
     for (pragma, expected_name) in cases {

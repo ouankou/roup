@@ -92,21 +92,32 @@ pub fn lex_fortran_free_sentinel_with_prefix<'a>(
     // Skip optional leading whitespace (common in indented Fortran code)
     let (after_space, _) = skip_space_and_comments(input)?;
 
+    // Try full form first (!$omp, !$acc, etc.)
     let expected = format!("!${}", prefix);
     if after_space
         .get(..expected.len())
         .is_some_and(|s| s.eq_ignore_ascii_case(&expected))
     {
-        Ok((
+        return Ok((
             &after_space[expected.len()..],
             &after_space[..expected.len()],
-        ))
-    } else {
-        Err(nom::Err::Error(nom::error::Error::new(
-            input,
-            nom::error::ErrorKind::Tag,
-        )))
+        ));
     }
+
+    // Try short form (!$) for OpenMP and OpenACC
+    let lower = prefix.to_ascii_lowercase();
+    if (lower == "omp" || lower == "acc")
+        && after_space
+            .get(..2)
+            .is_some_and(|s| s.eq_ignore_ascii_case("!$"))
+    {
+        return Ok((&after_space[2..], &after_space[..2]));
+    }
+
+    Err(nom::Err::Error(nom::error::Error::new(
+        input,
+        nom::error::ErrorKind::Tag,
+    )))
 }
 
 /// Parse Fortran free-form sentinel "!$OMP" (case-insensitive)
@@ -460,8 +471,8 @@ fn match_fortran_sentinel_with_prefix(input: &str, prefix: &str) -> Option<usize
     for sentinel in ["!$", "c$", "*$"] {
         candidates.push(format!("{}{}", sentinel, lower));
     }
-    // Short forms (!$, c$, *$) are only valid for OpenMP, not OpenACC
-    if lower == "omp" {
+    // Short forms (!$, c$, *$) are valid for both OpenMP and OpenACC
+    if lower == "omp" || lower == "acc" {
         candidates.extend(["!$".to_string(), "c$".to_string(), "*$".to_string()]);
     }
 

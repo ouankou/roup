@@ -763,6 +763,7 @@ pub fn parse_clause_data<'a>(
 /// # use roup::ir::{convert::convert_directive, Language, SourceLocation, ParserConfig};
 /// let directive = Directive {
 ///     name: "parallel".into(),
+///     parameter: None,
 ///     clauses: vec![
 ///         Clause {
 ///             name: "default".into(),
@@ -973,6 +974,7 @@ mod tests {
     fn test_convert_directive_simple() {
         let directive = Directive {
             name: "parallel".into(),
+            parameter: None,
             clauses: vec![],
         };
         let config = ParserConfig::default();
@@ -986,6 +988,7 @@ mod tests {
     fn test_convert_directive_with_clauses() {
         let directive = Directive {
             name: "parallel".into(),
+            parameter: None,
             clauses: vec![
                 Clause {
                     name: "default".into(),
