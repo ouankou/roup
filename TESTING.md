@@ -468,6 +468,65 @@ The validation uses two simple components:
 
 This approach is simpler and more maintainable than complex Rust-only solutions.
 
+## OpenACCV-V Round-Trip Validation
+
+The [OpenACCV-V](https://github.com/OpenACCUserGroup/OpenACCV-V) suite exercises OpenACC directives across C, C++, and Fortran sources. ROUP round-trips every directive through the OpenACC parser to guarantee semantic fidelity.
+
+### How It Works
+
+1. **Clone OpenACCV-V** (automatically on first run into `target/openacc_vv`).
+2. **Collect directives** from `.c`, `.cpp`, `.F90`, `.F`, and related files under `Tests/`.
+3. **Normalize optional punctuation** (commas between clauses, spacing before parentheses) without altering meaning.
+4. **Round-trip each directive** using the `roup_roundtrip_acc` binary.
+5. **Re-parse canonical output** to verify the structure matches the original directive.
+6. **Emit JSON metrics** to `target/openacc_vv_report.json` alongside the console summary.
+
+### Running the Test
+
+```bash
+# Run OpenACCV-V validation (auto-clones repository if needed)
+./test_openacc_vv.sh
+
+# Or as part of the comprehensive suite
+./test.sh  # Includes OpenACCV-V as section 20
+```
+
+### Using an Existing Clone
+
+```bash
+# Reuse an existing checkout
+OPENACC_VV_PATH=/path/to/OpenACCV-V ./test_openacc_vv.sh
+```
+
+### Example Output
+
+```
+=========================================
+  OpenACCV-V Round-Trip Validation
+=========================================
+
+Files processed:        1336
+Files with directives:  1304
+Total directives:       9417
+
+Passed:                9417
+Failed:                0
+  Parse errors:        0
+  Mismatches:          0
+
+Success rate:          100.0%
+
+JSON report written to target/openacc_vv_report.json
+```
+
+### Requirements
+
+- **python3** – Directive harvesting and reporting (`scripts/run_openacc_vv.py`).
+- **cargo** – Builds the `roup_roundtrip_acc` binary.
+- **git** – Clones OpenACCV-V when no local checkout exists.
+
+The script exits with a non-zero status if any directive fails to round-trip.
+
 ## FAQ
 
 **Q: Why MSRV + stable instead of testing many versions?**
