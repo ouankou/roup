@@ -1,0 +1,534 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>OpenACC 3.4 Directive–Clause Matrix - ROUP Documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ROUP Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/openacc/openacc-3-4-directive-clause-matrix.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="openacc-34-directiveclause-matrix"><a class="header" href="#openacc-34-directiveclause-matrix">OpenACC 3.4 Directive–Clause Matrix</a></h1>
+<p>This matrix cross-references every OpenACC 3.4 directive with its allowed clauses and enumerates the clause-level modifiers and arguments. Section numbers and page references point back to the canonical OpenACC 3.4 PDF so that every entry can be validated directly against the specification. Use this document together with the directive/clauses index and the restrictions digest to obtain a complete, single-source view of the standard.</p>
+<h2 id="directive-coverage"><a class="header" href="#directive-coverage">Directive coverage</a></h2>
+<h3 id="parallel-construct-251-p33"><a class="header" href="#parallel-construct-251-p33">Parallel construct (§2.5.1, p.33)</a></h3>
+<ul>
+<li><code>async [(async-argument)]</code> — asynchronous queue selection; semantics defined in §2.16.1 (p.99) with async-argument rules in §2.16 (p.98).</li>
+<li><code>wait [(wait-argument)]</code> — queue synchronization; wait-argument syntax in §2.16 (p.99) and clause behavior in §2.16.2 (p.100).</li>
+<li><code>num_gangs(int-expr-list)</code> — up to three gang dimensions (missing entries default to 1) for parallel regions; details in §2.5.10 (p.37).</li>
+<li><code>num_workers(int-expr)</code> — worker count per gang (§2.5.11, p.38).</li>
+<li><code>vector_length(int-expr)</code> — vector lane count per worker (§2.5.12, p.38).</li>
+<li><code>device_type(device-type-list)</code> — device-specific clause selection (§2.4, p.31).</li>
+<li><code>if(condition)</code> — host vs device execution control (§2.5.6, p.37).</li>
+<li><code>self[(condition)]</code> — execute region on host without moving data (§2.5.7, p.37).</li>
+<li><code>reduction(operator:var-list)</code> — reduction variables imply copy semantics (§2.5.15, p.39).</li>
+<li>Data clauses <code>copy</code>, <code>copyin</code>, <code>copyout</code>, <code>create</code>, <code>no_create</code>, <code>present</code>, <code>deviceptr</code>, <code>attach</code> each accept optional modifier lists from §2.7.4 (p.52) and actions defined in §§2.7.1–2.7.14 (pp.48–60).</li>
+<li><code>private(var-list)</code> — private instances per gang (§2.5.13, p.38).</li>
+<li><code>firstprivate(var-list)</code> — initialize privates from host values (§2.5.14, p.38).</li>
+<li><code>default(none|present)</code> — default data scoping (§2.5.16, p.40).</li>
+</ul>
+<h3 id="serial-construct-252-p34"><a class="header" href="#serial-construct-252-p34">Serial construct (§2.5.2, p.34)</a></h3>
+<ul>
+<li>Permits the same clauses as the parallel construct except that <code>num_gangs</code>, <code>num_workers</code>, and <code>vector_length</code> are forbidden (§2.5.2, p.34). Other clause semantics match the sections cited above.</li>
+</ul>
+<h3 id="kernels-construct-253-p35"><a class="header" href="#kernels-construct-253-p35">Kernels construct (§2.5.3, p.35)</a></h3>
+<ul>
+<li><code>async[(async-argument)]</code> and <code>wait[(wait-argument)]</code> per §§2.16.1–2.16.2 (pp.99–100).</li>
+<li><code>num_gangs(int-expr)</code> — single argument specifying gangs per kernel (§2.5.10, p.37).</li>
+<li><code>num_workers(int-expr)</code> and <code>vector_length(int-expr)</code> as in §§2.5.11–2.5.12 (p.38).</li>
+<li><code>device_type</code>, <code>if</code>, <code>self</code>, and all data clauses (<code>copy</code>, <code>copyin</code>, <code>copyout</code>, <code>create</code>, <code>no_create</code>, <code>present</code>, <code>deviceptr</code>, <code>attach</code>) with modifiers per §§2.4 and 2.7.</li>
+<li><code>default(none|present)</code> per §2.5.16 (p.40).</li>
+</ul>
+<h3 id="data-construct-265-p43"><a class="header" href="#data-construct-265-p43">Data construct (§2.6.5, p.43)</a></h3>
+<ul>
+<li><code>if(condition)</code> for conditional region creation (§2.6.5, p.43).</li>
+<li><code>async[(async-argument)]</code> and <code>wait[(wait-argument)]</code> per §§2.16.1–2.16.2 (pp.99–100).</li>
+<li><code>device_type(device-type-list)</code> per §2.4 (p.31).</li>
+<li>Data movement clauses <code>copy</code>, <code>copyin</code>, <code>copyout</code>, <code>create</code>, <code>no_create</code>, <code>present</code>, <code>deviceptr</code>, <code>attach</code> with modifier lists from §2.7.4 (p.52) and semantics in §§2.7.1–2.7.14 (pp.48–60).</li>
+<li><code>default(none|present)</code> (treated as in §2.5.16, p.40).</li>
+</ul>
+<h3 id="enter-data-directive-266-p45"><a class="header" href="#enter-data-directive-266-p45">Enter data directive (§2.6.6, p.45)</a></h3>
+<ul>
+<li><code>if(condition)</code> optional guard (§2.6.6, p.45).</li>
+<li><code>async[(async-argument)]</code> and <code>wait[(wait-argument)]</code> per §§2.16.1–2.16.2 (pp.99–100).</li>
+<li><code>copyin([modifier-list:]var-list)</code>, <code>create([modifier-list:]var-list)</code>, and <code>attach(var-list)</code> with data clause modifiers from §2.7.4 (p.52).</li>
+</ul>
+<h3 id="exit-data-directive-266-p45"><a class="header" href="#exit-data-directive-266-p45">Exit data directive (§2.6.6, p.45)</a></h3>
+<ul>
+<li><code>if(condition)</code>, <code>async[(async-argument)]</code>, <code>wait[(wait-argument)]</code> as above.</li>
+<li><code>copyout([modifier-list:]var-list)</code>, <code>delete(var-list)</code>, <code>detach(var-list)</code> with modifiers from §2.7.4 (p.52) and clause semantics in §§2.7.9–2.7.14 (pp.56–60).</li>
+<li><code>finalize</code> — forces dynamic reference counters to zero (§2.6.6, p.46).</li>
+</ul>
+<h3 id="host_data-construct-28-p62"><a class="header" href="#host_data-construct-28-p62">Host_data construct (§2.8, p.62)</a></h3>
+<ul>
+<li><code>use_device(var-list)</code> — maps host pointers to device addresses (§2.8.1, p.63).</li>
+<li><code>if(condition)</code> and <code>if_present</code> clauses (§§2.8.2–2.8.3, p.63).</li>
+</ul>
+<h3 id="loop-construct-29-p64"><a class="header" href="#loop-construct-29-p64">Loop construct (§2.9, p.64)</a></h3>
+<ul>
+<li><code>collapse([force:]n)</code> — loop nest collapsing with optional <code>force</code> qualifier (§2.9.1, p.65).</li>
+<li><code>gang[(gang-arg-list)]</code> — optional <code>num:</code>, <code>dim:</code>, and <code>static:</code> modifiers per §2.9.2 (pp.66–67).</li>
+<li><code>worker[( [num:]int-expr )]</code> (§2.9.3, p.68).</li>
+<li><code>vector[( [length:]int-expr )]</code> (§2.9.4, p.68).</li>
+<li><code>seq</code>, <code>independent</code>, and <code>auto</code> exclusivity rules in §§2.9.5–2.9.7 (pp.68–69).</li>
+<li><code>tile(size-expr-list)</code> with optional <code>*</code> entries (§2.9.8, p.69).</li>
+<li><code>device_type(device-type-list)</code> per §2.9.9 (p.70).</li>
+<li><code>private(var-list)</code> (§2.9.10, p.70) and <code>reduction(operator:var-list)</code> (§2.9.11, p.71).</li>
+</ul>
+<h3 id="cache-directive-210-p75"><a class="header" href="#cache-directive-210-p75">Cache directive (§2.10, p.75)</a></h3>
+<ul>
+<li><code>cache([readonly:]var-list)</code> — optional <code>readonly</code> modifier constrains writes (§2.10, p.75).</li>
+</ul>
+<h3 id="combined-constructs-211-p75"><a class="header" href="#combined-constructs-211-p75">Combined constructs (§2.11, p.75)</a></h3>
+<ul>
+<li><code>parallel loop</code>, <code>serial loop</code>, and <code>kernels loop</code> accept any clause allowed on both the outer construct and the loop construct; reductions imply <code>copy</code> semantics (§2.11, pp.75–76).</li>
+</ul>
+<h3 id="atomic-construct-212-pp7780"><a class="header" href="#atomic-construct-212-pp7780">Atomic construct (§2.12, pp.77–80)</a></h3>
+<ul>
+<li>Optional <code>atomic-clause</code> of <code>read</code>, <code>write</code>, <code>update</code>, or <code>capture</code>; Fortran syntax variants follow §2.12 (pp.77–80).</li>
+<li>Optional <code>if(condition)</code> clause (§2.12, p.77).</li>
+</ul>
+<h3 id="declare-directive-213-pp8184"><a class="header" href="#declare-directive-213-pp8184">Declare directive (§2.13, pp.81–84)</a></h3>
+<ul>
+<li>Data clauses <code>copy</code>, <code>copyin</code>, <code>copyout</code>, <code>create</code>, <code>present</code>, <code>deviceptr</code> as in §2.13 (pp.82–83).</li>
+<li><code>device_resident(var-list)</code> (§2.13.1, p.82).</li>
+<li><code>link(var-list)</code> for static linkage of device allocations (§2.13.3, p.84).</li>
+</ul>
+<h3 id="init-directive-2141-p84"><a class="header" href="#init-directive-2141-p84">Init directive (§2.14.1, p.84)</a></h3>
+<ul>
+<li><code>device_type(device-type-list)</code> and <code>device_num(int-expr)</code> to select targets (§2.14.1, p.84).</li>
+<li>Optional <code>if(condition)</code> guard (§2.14.1, p.84).</li>
+</ul>
+<h3 id="shutdown-directive-2142-p85"><a class="header" href="#shutdown-directive-2142-p85">Shutdown directive (§2.14.2, p.85)</a></h3>
+<ul>
+<li>Same clause set as <code>init</code>: <code>device_type</code>, <code>device_num</code>, and optional <code>if(condition)</code> (§2.14.2, p.85).</li>
+</ul>
+<h3 id="set-directive-2143-p87"><a class="header" href="#set-directive-2143-p87">Set directive (§2.14.3, p.87)</a></h3>
+<ul>
+<li><code>default_async(async-argument)</code> — sets the default queue (§2.14.3, p.87).</li>
+<li><code>device_num(int-expr)</code> and <code>device_type(device-type-list)</code> adjust internal control variables (§2.14.3, p.87).</li>
+<li>Optional <code>if(condition)</code> (§2.14.3, p.87).</li>
+</ul>
+<h3 id="update-directive-2144-p88"><a class="header" href="#update-directive-2144-p88">Update directive (§2.14.4, p.88)</a></h3>
+<ul>
+<li><code>async[(async-argument)]</code>, <code>wait[(wait-argument)]</code>, <code>device_type(device-type-list)</code>, and <code>if(condition)</code> as above.</li>
+<li><code>if_present</code> skip modifier (§2.14.4, p.89).</li>
+<li>Data movement clauses <code>self(var-list)</code>, <code>host(var-list)</code>, <code>device(var-list)</code> with semantics in §2.14.4 (pp.88–89).</li>
+</ul>
+<h3 id="wait-directive-2163-p100-see-also-2145"><a class="header" href="#wait-directive-2163-p100-see-also-2145">Wait directive (§2.16.3, p.100; see also §2.14.5)</a></h3>
+<ul>
+<li>Optional <code>wait-argument</code> tuple <code>[devnum:int-expr:][queues:]async-argument-list</code> per §2.16 (p.99).</li>
+<li>Optional <code>async[(async-argument)]</code> to queue the wait (§2.16.3, p.100).</li>
+<li>Optional <code>if(condition)</code> (§2.16.3, p.100).</li>
+</ul>
+<h3 id="routine-directive-2151-pp9197"><a class="header" href="#routine-directive-2151-pp9197">Routine directive (§2.15.1, pp.91–97)</a></h3>
+<ul>
+<li>Parallelism clauses <code>gang[(dim:int-expr)]</code>, <code>worker</code>, <code>vector</code>, and <code>seq</code> define callable levels (§2.15.1, pp.91–93).</li>
+<li><code>bind(name|string)</code> for device linkage (§2.15.1, pp.93–94).</li>
+<li><code>device_type(device-type-list)</code> for specialization (§2.15.1, pp.94–95).</li>
+<li><code>nohost</code> to omit host compilation (§2.15.1, pp.94–95).</li>
+</ul>
+<h3 id="do-concurrent-integration-2172-p102"><a class="header" href="#do-concurrent-integration-2172-p102">Do concurrent integration (§2.17.2, p.102)</a></h3>
+<ul>
+<li>When combined with loop constructs, <code>local</code>, <code>local_init</code>, <code>shared</code>, and <code>default(none)</code> locality specs map to <code>private</code>, <code>firstprivate</code>, <code>copy</code>, and <code>default(none)</code> clauses on the enclosing compute construct (§2.17.2, p.102).</li>
+</ul>
+<h2 id="clause-reference"><a class="header" href="#clause-reference">Clause reference</a></h2>
+<h3 id="device-specific-clause-24-pp3133"><a class="header" href="#device-specific-clause-24-pp3133">Device-specific clause (§2.4, pp.31–33)</a></h3>
+<ul>
+<li><code>device_type(device-type-list)</code> partitions clause lists by architecture name or <code>*</code>; default clauses apply when no device-specific override exists (§2.4, pp.31–33).</li>
+<li>Abbreviation <code>dtype</code> is permitted (§2.4, p.31).</li>
+<li>Device-specific clauses are limited per directive as documented in each directive section.</li>
+</ul>
+<h3 id="if-clause-256--282-p37--p63"><a class="header" href="#if-clause-256--282-p37--p63">if clause (§§2.5.6 &amp; 2.8.2, p.37 &amp; p.63)</a></h3>
+<ul>
+<li>Compute constructs: true runs on the device; false reverts to host execution (§2.5.6, p.37).</li>
+<li>Host_data: governs creation of device pointer aliases (§2.8.2, p.63).</li>
+<li>Enter/exit/update data: conditional data movement (§2.6.6, p.45; §2.14.4, p.88).</li>
+</ul>
+<h3 id="self-clause-257--2144-pp37--88"><a class="header" href="#self-clause-257--2144-pp37--88">self clause (§§2.5.7 &amp; 2.14.4, pp.37 &amp; 88)</a></h3>
+<ul>
+<li>On compute constructs, <code>self[(condition)]</code> forces host execution when true (§2.5.7, p.37).</li>
+<li>On update, <code>self(var-list)</code> copies from device to host for uncaptured data (§2.14.4, p.88).</li>
+</ul>
+<h3 id="async-clause-2161-p99"><a class="header" href="#async-clause-2161-p99">async clause (§2.16.1, p.99)</a></h3>
+<ul>
+<li>Allowed on parallel, serial, kernels, data constructs, enter/exit data, update, and wait directives (§2.16.1, p.99).</li>
+<li><code>async-argument</code> values: nonnegative integers or <code>acc_async_default</code>, <code>acc_async_noval</code>, <code>acc_async_sync</code> (§2.16, p.98).</li>
+<li>Missing clause implies synchronous execution; empty argument implies <code>acc_async_noval</code> (§2.16.1, p.99).</li>
+</ul>
+<h3 id="wait-clause-2162-p100"><a class="header" href="#wait-clause-2162-p100">wait clause (§2.16.2, p.100)</a></h3>
+<ul>
+<li>Accepts the <code>wait-argument</code> tuple defined in §2.16 (p.99).</li>
+<li>Without arguments waits on all queues of the current device; with arguments delays launch until specified queues drain (§2.16.2, p.100).</li>
+</ul>
+<h3 id="num_gangs-clause-2510-p37"><a class="header" href="#num_gangs-clause-2510-p37">num_gangs clause (§2.5.10, p.37)</a></h3>
+<ul>
+<li>Parallel construct: up to three integers for gang dimensions; defaults to 1 when omitted (§2.5.10, p.37).</li>
+<li>Kernels construct: single argument per generated kernel (§2.5.10, p.37).</li>
+<li>Implementations may cap values based on device limits (§2.5.10, p.37).</li>
+</ul>
+<h3 id="num_workers-clause-2511-p38"><a class="header" href="#num_workers-clause-2511-p38">num_workers clause (§2.5.11, p.38)</a></h3>
+<ul>
+<li>Sets workers per gang; unspecified defaults are implementation-defined (§2.5.11, p.38).</li>
+</ul>
+<h3 id="vector_length-clause-2512-p38"><a class="header" href="#vector_length-clause-2512-p38">vector_length clause (§2.5.12, p.38)</a></h3>
+<ul>
+<li>Sets vector lanes per worker; unspecified defaults are implementation-defined (§2.5.12, p.38).</li>
+</ul>
+<h3 id="private-clause-2513--2910-pp38--70"><a class="header" href="#private-clause-2513--2910-pp38--70">private clause (§§2.5.13 &amp; 2.9.10, pp.38 &amp; 70)</a></h3>
+<ul>
+<li>Compute constructs: allocate private copies for gang members (§2.5.13, p.38).</li>
+<li>Loop constructs: each iteration gets a private copy; allowed only where clause lists permit (§2.9.10, p.70).</li>
+</ul>
+<h3 id="firstprivate-clause-2514-p38"><a class="header" href="#firstprivate-clause-2514-p38">firstprivate clause (§2.5.14, p.38)</a></h3>
+<ul>
+<li>Initializes private variables from original values at region entry (§2.5.14, p.38).</li>
+</ul>
+<h3 id="reduction-clause-2515--2911-pp39--71"><a class="header" href="#reduction-clause-2515--2911-pp39--71">reduction clause (§§2.5.15 &amp; 2.9.11, pp.39 &amp; 71)</a></h3>
+<ul>
+<li>Supports operators <code>+</code>, <code>*</code>, <code>max</code>, <code>min</code>, bitwise ops, logical ops, and Fortran <code>iand/ior/ieor</code> with initialization table specified in §2.5.15 (pp.39–40).</li>
+<li>Applies element-wise to arrays/subarrays; implies appropriate data clauses (§2.5.15, p.39).</li>
+<li>Loop reductions follow §2.9.11 (pp.71–72).</li>
+</ul>
+<h3 id="default-clause-2516-p40"><a class="header" href="#default-clause-2516-p40">default clause (§2.5.16, p.40)</a></h3>
+<ul>
+<li><code>default(none)</code> requires explicit data clauses; <code>default(present)</code> asserts device presence (§2.5.16, p.40).</li>
+</ul>
+<h3 id="data-clause-framework-27274-pp4853"><a class="header" href="#data-clause-framework-27274-pp4853">Data clause framework (§§2.7–2.7.4, pp.48–53)</a></h3>
+<ul>
+<li>Data specification syntax in §2.7.1 (pp.48–49).</li>
+<li>Data actions (<code>copy</code>, <code>create</code>, <code>delete</code>, etc.) in §2.7.2 (pp.50–52).</li>
+<li>Error conditions in §2.7.3 (p.52).</li>
+<li>Modifier list tokens: <code>always</code>, <code>alwaysin</code>, <code>alwaysout</code>, <code>capture</code>, <code>readonly</code>, <code>zero</code> (§2.7.4, p.52).</li>
+</ul>
+<h3 id="deviceptr-clause-275-p53"><a class="header" href="#deviceptr-clause-275-p53">deviceptr clause (§2.7.5, p.53)</a></h3>
+<ul>
+<li>Treats variables as preallocated device pointers; disallows conflicting data actions (§2.7.5, p.53).</li>
+</ul>
+<h3 id="present-clause-276-p53"><a class="header" href="#present-clause-276-p53">present clause (§2.7.6, p.53)</a></h3>
+<ul>
+<li>Requires data to exist on the device; raises errors otherwise (§2.7.6, p.53).</li>
+</ul>
+<h3 id="copycopyincopyout-clauses-277279-pp5456"><a class="header" href="#copycopyincopyout-clauses-277279-pp5456">copy/copyin/copyout clauses (§§2.7.7–2.7.9, pp.54–56)</a></h3>
+<ul>
+<li><code>copy</code> performs in/out transfers; <code>copyin</code> is host→device; <code>copyout</code> is device→host (§§2.7.7–2.7.9, pp.54–56).</li>
+<li>Respect modifier semantics from §2.7.4.</li>
+</ul>
+<h3 id="create-clause-2710--2132-pp57--83"><a class="header" href="#create-clause-2710--2132-pp57--83">create clause (§§2.7.10 &amp; 2.13.2, pp.57 &amp; 83)</a></h3>
+<ul>
+<li>Allocates device storage without transfer (§2.7.10, p.57); declare directive variant described in §2.13.2 (p.83).</li>
+</ul>
+<h3 id="no_create-clause-2711-p57"><a class="header" href="#no_create-clause-2711-p57">no_create clause (§2.7.11, p.57)</a></h3>
+<ul>
+<li>Asserts that data already exists on device; no allocation occurs (§2.7.11, p.57).</li>
+</ul>
+<h3 id="delete-clause-2712-p58"><a class="header" href="#delete-clause-2712-p58">delete clause (§2.7.12, p.58)</a></h3>
+<ul>
+<li>Deallocates device storage at region exit (§2.7.12, p.58).</li>
+</ul>
+<h3 id="attachdetach-clauses-27132714-pp5960"><a class="header" href="#attachdetach-clauses-27132714-pp5960">attach/detach clauses (§§2.7.13–2.7.14, pp.59–60)</a></h3>
+<ul>
+<li>Manage pointer attachments to device memory (§§2.7.13–2.7.14, pp.59–60).</li>
+</ul>
+<h3 id="use_device-clause-281-p63"><a class="header" href="#use_device-clause-281-p63">use_device clause (§2.8.1, p.63)</a></h3>
+<ul>
+<li>Temporarily remaps host pointers to device addresses within host_data regions (§2.8.1, p.63).</li>
+</ul>
+<h3 id="if_present-clause-283--2144-pp63--89"><a class="header" href="#if_present-clause-283--2144-pp63--89">if_present clause (§§2.8.3 &amp; 2.14.4, pp.63 &amp; 89)</a></h3>
+<ul>
+<li>Skips operations when data is absent on the device (§2.8.3, p.63; §2.14.4, p.89).</li>
+</ul>
+<h3 id="collapse-clause-291-p65"><a class="header" href="#collapse-clause-291-p65">collapse clause (§2.9.1, p.65)</a></h3>
+<ul>
+<li>Optional <code>force</code> keyword overrides dependency analysis; requires positive iteration counts (§2.9.1, p.65).</li>
+</ul>
+<h3 id="gang-clause-292-pp6667"><a class="header" href="#gang-clause-292-pp6667">gang clause (§2.9.2, pp.66–67)</a></h3>
+<ul>
+<li><code>gang-arg-list</code> allows one each of <code>num:</code>, <code>dim:</code>, <code>static:</code> modifiers; <code>dim</code> is limited to 1–3 (§2.9.2, pp.66–67).</li>
+</ul>
+<h3 id="worker-clause-293-p68"><a class="header" href="#worker-clause-293-p68">worker clause (§2.9.3, p.68)</a></h3>
+<ul>
+<li>Optional <code>num:</code> argument; interacts with compute scopes as described in §2.9.3 (p.68).</li>
+</ul>
+<h3 id="vector-clause-294-p68"><a class="header" href="#vector-clause-294-p68">vector clause (§2.9.4, p.68)</a></h3>
+<ul>
+<li>Optional <code>length:</code> argument; selects vector mode (§2.9.4, p.68).</li>
+</ul>
+<h3 id="seq-clause-295-p68"><a class="header" href="#seq-clause-295-p68">seq clause (§2.9.5, p.68)</a></h3>
+<ul>
+<li>Forces sequential execution of the associated loop (§2.9.5, p.68).</li>
+</ul>
+<h3 id="independent-clause-296-p69"><a class="header" href="#independent-clause-296-p69">independent clause (§2.9.6, p.69)</a></h3>
+<ul>
+<li>Asserts absence of cross-iteration dependencies (§2.9.6, p.69).</li>
+</ul>
+<h3 id="auto-clause-297-p69"><a class="header" href="#auto-clause-297-p69">auto clause (§2.9.7, p.69)</a></h3>
+<ul>
+<li>Delegates loop scheduling to implementation; interacts with routine clause inference (§2.9.7, p.69).</li>
+</ul>
+<h3 id="tile-clause-298-p69"><a class="header" href="#tile-clause-298-p69">tile clause (§2.9.8, p.69)</a></h3>
+<ul>
+<li>Breaks iteration space into tile sizes; <code>*</code> uses runtime-determined tile length (§2.9.8, p.69).</li>
+</ul>
+<h3 id="device_type-clause-on-loops-299-p70"><a class="header" href="#device_type-clause-on-loops-299-p70">device_type clause on loops (§2.9.9, p.70)</a></h3>
+<ul>
+<li>Restricts subsequent clauses to specified device types (§2.9.9, p.70).</li>
+</ul>
+<h3 id="device_resident-clause-2131-pp8283"><a class="header" href="#device_resident-clause-2131-pp8283">device_resident clause (§2.13.1, pp.82–83)</a></h3>
+<ul>
+<li>Forces static device allocation with reference counting rules (§2.13.1, pp.82–83).</li>
+</ul>
+<h3 id="link-clause-2133-p84"><a class="header" href="#link-clause-2133-p84">link clause (§2.13.3, p.84)</a></h3>
+<ul>
+<li>Creates persistent device linkages for large host data (§2.13.3, pp.83–84).</li>
+</ul>
+<h3 id="bind-clause-2151-pp9394"><a class="header" href="#bind-clause-2151-pp9394">bind clause (§2.15.1, pp.93–94)</a></h3>
+<ul>
+<li>Sets alternate device symbol name (identifier or string) (§2.15.1, pp.93–94).</li>
+</ul>
+<h3 id="device_num-and-default_async-clauses-2143-p87"><a class="header" href="#device_num-and-default_async-clauses-2143-p87">device_num and default_async clauses (§2.14.3, p.87)</a></h3>
+<ul>
+<li>Modify internal control variables <code>acc-current-device-num-var</code> and <code>acc-default-async-var</code> (§2.14.3, p.87).</li>
+</ul>
+<h3 id="nohost-clause-2151-pp9495"><a class="header" href="#nohost-clause-2151-pp9495">nohost clause (§2.15.1, pp.94–95)</a></h3>
+<ul>
+<li>Suppresses host code generation for routines; cascades to dependent procedures (§2.15.1, pp.94–95).</li>
+</ul>
+<h3 id="finalize-clause-266-p46"><a class="header" href="#finalize-clause-266-p46">finalize clause (§2.6.6, p.46)</a></h3>
+<ul>
+<li>Available on <code>exit data</code>; zeroes dynamic and attachment counters (§2.6.6, p.46).</li>
+</ul>
+<h3 id="wait-argument-modifiers-216-p99"><a class="header" href="#wait-argument-modifiers-216-p99">wait-argument modifiers (§2.16, p.99)</a></h3>
+<ul>
+<li><code>devnum:int-expr:</code> selects device; optional <code>queues:</code> prefix clarifies async argument list (§2.16, p.99).</li>
+</ul>
+<h3 id="async-value-semantics-216-p98"><a class="header" href="#async-value-semantics-216-p98">async-value semantics (§2.16, p.98)</a></h3>
+<ul>
+<li>Maps async arguments to queue identifiers; <code>acc_async_sync</code> enforces synchronous completion, <code>acc_async_noval</code> uses default queue (§2.16, p.98).</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../openacc/openacc-3-4-directives-clauses.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../openacc/openacc-3-4-restrictions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../openacc/openacc-3-4-directives-clauses.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../openacc/openacc-3-4-restrictions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

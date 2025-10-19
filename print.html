@@ -4216,6 +4216,698 @@ specification. The canonical listings live in the generated reference chapters:<
 The <code>tests/openmp_keyword_coverage.rs</code> integration test keeps the registry in
 sync with the specification, and additional round-trip tests validate parsing,
 IR conversion, and display.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="openacc-support"><a class="header" href="#openacc-support">OpenACC support</a></h1>
+<p>ROUP implements the complete OpenACC 3.4 directive and clause vocabulary. The
+reference chapters below catalogue every keyword and restriction with section
+and page references back to the official specification PDF.</p>
+<ul>
+<li><a href="./openacc/openacc-3-4-directives-clauses.html">Directive and clause index</a></li>
+<li><a href="./openacc/openacc-3-4-directive-clause-matrix.html">Directive–clause matrix</a></li>
+<li><a href="./openacc/openacc-3-4-restrictions.html">Restriction digest</a></li>
+</ul>
+<h2 id="quick-facts-1"><a class="header" href="#quick-facts-1">Quick facts</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Details</th></tr></thead><tbody>
+<tr><td>OpenACC version</td><td>3.4</td></tr>
+<tr><td>Directive keywords</td><td>24 (including space/underscore aliases)</td></tr>
+<tr><td>Clause keywords</td><td>49</td></tr>
+<tr><td>Languages</td><td>C, C++, Fortran (free &amp; fixed form)</td></tr>
+<tr><td>Automated tests</td><td>Full directive and clause round-trip coverage</td></tr>
+</tbody></table>
+</div>
+<p>Unknown directives and clauses are rejected so unsupported constructs fail fast.
+The <code>tests/openacc_roundtrip.rs</code> suite keeps the registry in sync with the
+specification and exercises round-trip formatting for every keyword, and the C
+API mappings are validated to guarantee consistent clause kind values.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="openacc-34-directives-and-clauses"><a class="header" href="#openacc-34-directives-and-clauses">OpenACC 3.4 Directives and Clauses</a></h1>
+<p>This comprehensive reference catalogue documents <strong>all</strong> OpenACC 3.4 keywords from the <a href="https://www.openacc.org/sites/default/files/inline-files/OpenACC_3.4.pdf">OpenACC Application Programming Interface Version 3.4</a> specification.</p>
+<h2 id="purpose"><a class="header" href="#purpose">Purpose</a></h2>
+<p>This document serves as a complete keyword inventory for development and reference. Each entry includes:</p>
+<ul>
+<li>Specification section and page numbers</li>
+<li>Categorization and properties</li>
+<li>No duplication - each keyword appears once</li>
+</ul>
+<h2 id="coverage"><a class="header" href="#coverage">Coverage</a></h2>
+<ul>
+<li><strong>24 Directives/Constructs</strong> - All compute, data, loop, synchronization, declaration, and runtime directives (including space/underscore alias forms)</li>
+<li><strong>50+ Clauses</strong> - All clause keywords</li>
+<li><strong>Modifiers</strong> - Data clause modifiers, gang/worker/vector modifiers, collapse modifiers</li>
+<li><strong>Special Values</strong> - Async values, device types, default values</li>
+<li><strong>Reduction Operators</strong> - All supported reduction operations</li>
+<li><strong>Parallelism Levels</strong> - Gang, worker, vector, seq</li>
+</ul>
+<h2 id="directives-and-constructs"><a class="header" href="#directives-and-constructs">Directives and Constructs</a></h2>
+<h3 id="compute-constructs"><a class="header" href="#compute-constructs">Compute Constructs</a></h3>
+<ul>
+<li><code>parallel</code> (§2.5.1; p.33; category: compute; association: block; properties: creates gang-worker-vector parallelism)</li>
+<li><code>serial</code> (§2.5.2; p.34; category: compute; association: block; properties: serialized execution on device)</li>
+<li><code>kernels</code> (§2.5.3; p.35; category: compute; association: block; properties: compiler-optimized kernel launch)</li>
+</ul>
+<h3 id="data-constructs"><a class="header" href="#data-constructs">Data Constructs</a></h3>
+<ul>
+<li><code>data</code> (§2.6.5; p.43; category: data; association: block; properties: structured data lifetime)</li>
+<li><code>enter data</code> (§2.6.6; p.45; category: data; association: executable; properties: dynamic data region entry)</li>
+<li><code>exit data</code> (§2.6.6; p.45; category: data; association: executable; properties: dynamic data region exit)</li>
+<li><code>host_data</code> (§2.8; p.62; category: data; association: block; properties: host pointer mapping)</li>
+</ul>
+<h3 id="loop-constructs"><a class="header" href="#loop-constructs">Loop Constructs</a></h3>
+<ul>
+<li><code>loop</code> (§2.9; p.64; category: loop; association: loop nest; properties: loop parallelization)</li>
+<li><code>parallel loop</code> (§2.11; p.75; category: combined; association: loop nest; properties: parallel + loop combined)</li>
+<li><code>serial loop</code> (§2.11; p.75; category: combined; association: loop nest; properties: serial + loop combined)</li>
+<li><code>kernels loop</code> (§2.11; p.75; category: combined; association: loop nest; properties: kernels + loop combined)</li>
+</ul>
+<h3 id="synchronization-constructs"><a class="header" href="#synchronization-constructs">Synchronization Constructs</a></h3>
+<ul>
+<li><code>atomic</code> (§2.12; p.77; category: synchronization; association: statement; properties: atomic memory operations)</li>
+<li><code>cache</code> (§2.10; p.75; category: synchronization; association: loop; properties: cache hint)</li>
+<li><code>wait</code> (§2.16.3; p.100; category: synchronization; association: executable; properties: async queue synchronization)</li>
+</ul>
+<h3 id="declaration-directives"><a class="header" href="#declaration-directives">Declaration Directives</a></h3>
+<ul>
+<li><code>declare</code> (§2.13; p.81; category: declarative; association: scope; properties: device data declaration)</li>
+<li><code>routine</code> (§2.15.1; p.91; category: declarative; association: function; properties: device routine declaration)</li>
+</ul>
+<h3 id="runtime-directives"><a class="header" href="#runtime-directives">Runtime Directives</a></h3>
+<ul>
+<li><code>init</code> (§2.14.1; p.84; category: runtime; association: executable; properties: device initialization)</li>
+<li><code>shutdown</code> (§2.14.2; p.85; category: runtime; association: executable; properties: device shutdown)</li>
+<li><code>set</code> (§2.14.3; p.87; category: runtime; association: executable; properties: runtime configuration)</li>
+<li><code>update</code> (§2.14.4; p.88; category: runtime; association: executable; properties: explicit data transfer)</li>
+</ul>
+<h3 id="special-constructs"><a class="header" href="#special-constructs">Special Constructs</a></h3>
+<ul>
+<li><code>do concurrent</code> (§2.17.2; p.102; category: integration; association: Fortran; properties: Fortran do concurrent mapping)</li>
+</ul>
+<h2 id="clauses"><a class="header" href="#clauses">Clauses</a></h2>
+<h3 id="compute-clauses"><a class="header" href="#compute-clauses">Compute Clauses</a></h3>
+<ul>
+<li><code>if</code> (§2.5.6; p.37; category: conditional; applicable to: parallel, serial, kernels, host_data, atomic, init, set, update)</li>
+<li><code>self</code> (§2.5.7; p.37; category: conditional; applicable to: parallel, serial, kernels; properties: execute on host without data movement)</li>
+<li><code>async</code> (§2.5.8, §2.16.1; pp.37, 99; category: synchronization; applicable to: parallel, serial, kernels, data, enter data, exit data, update, wait)</li>
+<li><code>wait</code> (§2.5.9, §2.16.2; pp.37, 100; category: synchronization; applicable to: parallel, serial, kernels, data, enter data, exit data, update)</li>
+<li><code>num_gangs</code> (§2.5.10; p.37; category: parallelism; applicable to: parallel, kernels; properties: specifies number of gangs)</li>
+<li><code>num_workers</code> (§2.5.11; p.38; category: parallelism; applicable to: parallel, kernels; properties: specifies workers per gang)</li>
+<li><code>vector_length</code> (§2.5.12; p.38; category: parallelism; applicable to: parallel, kernels; properties: specifies vector length per worker)</li>
+<li><code>private</code> (§2.5.13, §2.9.10; pp.38, 70; category: data sharing; applicable to: parallel, serial, kernels, loop)</li>
+<li><code>firstprivate</code> (§2.5.14; p.38; category: data sharing; applicable to: parallel, serial, kernels; properties: initialized private variables)</li>
+<li><code>reduction</code> (§2.5.15, §2.9.11; pp.39, 71; category: data sharing; applicable to: parallel, kernels, loop; properties: reduction operations)</li>
+<li><code>default</code> (§2.5.16; p.40; category: data sharing; applicable to: parallel, serial, kernels, data; properties: values are none or present)</li>
+</ul>
+<h3 id="data-clauses"><a class="header" href="#data-clauses">Data Clauses</a></h3>
+<ul>
+<li><code>copy</code> (§2.7.7; p.54; category: data movement; properties: copy in and copy out)</li>
+<li><code>copyin</code> (§2.7.8; p.55; category: data movement; properties: copy to device)</li>
+<li><code>copyout</code> (§2.7.9; p.56; category: data movement; properties: copy from device)</li>
+<li><code>create</code> (§2.7.10, §2.13.2; pp.57, 83; category: data allocation; properties: allocate on device)</li>
+<li><code>no_create</code> (§2.7.11; p.57; category: data allocation; properties: use if present, don't create)</li>
+<li><code>delete</code> (§2.7.12; p.58; category: data allocation; properties: deallocate from device)</li>
+<li><code>present</code> (§2.7.6; p.53; category: data presence; properties: data must be present on device)</li>
+<li><code>deviceptr</code> (§2.7.5; p.53; category: data presence; properties: device pointer)</li>
+<li><code>attach</code> (§2.7.13; p.59; category: pointer; properties: attach pointer to device address)</li>
+<li><code>detach</code> (§2.7.14; p.59; category: pointer; properties: detach pointer from device address)</li>
+</ul>
+<blockquote>
+<p><strong>Synonyms:</strong> The specification preserves historical aliases such as
+<code>pcopy</code>, <code>pcopyin</code>, <code>pcopyout</code>, <code>pcreate</code> and their <code>present_or_*</code>
+counterparts. ROUP registers each alias alongside the canonical clause name
+so original source spellings are retained during parsing.</p>
+</blockquote>
+<h3 id="host-device-interaction-clauses"><a class="header" href="#host-device-interaction-clauses">Host-Device Interaction Clauses</a></h3>
+<ul>
+<li><code>use_device</code> (§2.8.1; p.63; category: host access; applicable to: host_data; properties: map device pointers to host)</li>
+<li><code>if_present</code> (§2.8.3; p.63; category: conditional; applicable to: host_data, update; properties: conditional on presence)</li>
+</ul>
+<h3 id="loop-clauses"><a class="header" href="#loop-clauses">Loop Clauses</a></h3>
+<ul>
+<li><code>collapse</code> (§2.9.1; p.65; category: loop transformation; applicable to: loop; properties: collapse nested loops)</li>
+<li><code>gang</code> (§2.9.2; p.66; category: parallelism; applicable to: loop; properties: gang-level parallelism)</li>
+<li><code>worker</code> (§2.9.3; p.68; category: parallelism; applicable to: loop; properties: worker-level parallelism)</li>
+<li><code>vector</code> (§2.9.4; p.68; category: parallelism; applicable to: loop; properties: vector-level parallelism)</li>
+<li><code>seq</code> (§2.9.5; p.68; category: parallelism; applicable to: loop; properties: sequential execution)</li>
+<li><code>independent</code> (§2.9.6; p.69; category: parallelism; applicable to: loop; properties: loop iterations are independent)</li>
+<li><code>auto</code> (§2.9.7; p.69; category: parallelism; applicable to: loop; properties: compiler decides parallelism)</li>
+<li><code>tile</code> (§2.9.8; p.69; category: loop transformation; applicable to: loop; properties: tile nested loops)</li>
+<li><code>device_type</code> (§2.9.9; p.70; category: device-specific; applicable to: loop, compute constructs; properties: device-specific clauses)</li>
+</ul>
+<h3 id="declaration-clauses"><a class="header" href="#declaration-clauses">Declaration Clauses</a></h3>
+<ul>
+<li><code>device_resident</code> (§2.13.1; p.82; category: data declaration; applicable to: declare; properties: data resides on device)</li>
+<li><code>link</code> (§2.13.3; p.84; category: data declaration; applicable to: declare; properties: static device linkage)</li>
+</ul>
+<h3 id="special-clauses"><a class="header" href="#special-clauses">Special Clauses</a></h3>
+<ul>
+<li><code>finalize</code> (§2.6.6; p.46; category: data management; applicable to: exit data; properties: force deallocation)</li>
+<li><code>bind</code> (§2.15.1; p.92; category: routine; applicable to: routine; properties: specify device routine name)</li>
+<li><code>nohost</code> (§2.15.1; p.93; category: routine; applicable to: routine; properties: routine only on device)</li>
+</ul>
+<h2 id="modifiers"><a class="header" href="#modifiers">Modifiers</a></h2>
+<p>Modifiers are keywords that modify the behavior of clauses. They appear as part of clause syntax to refine clause semantics.</p>
+<h3 id="data-clause-modifiers"><a class="header" href="#data-clause-modifiers">Data Clause Modifiers</a></h3>
+<ul>
+<li><code>always</code> (§2.7.4; p.52; data clause modifier; forces data transfer even if present)</li>
+<li><code>zero</code> (§2.7.4; p.52; data clause modifier; zero memory on allocation)</li>
+<li><code>readonly</code> (§2.7.4; p.52; data clause modifier; read-only access)</li>
+</ul>
+<h3 id="gang-clause-modifiers"><a class="header" href="#gang-clause-modifiers">Gang Clause Modifiers</a></h3>
+<ul>
+<li><code>num</code> (§2.9.2; p.66; gang modifier; specifies number of gangs)</li>
+<li><code>dim</code> (§2.9.2; p.67; gang modifier; specifies gang dimension)</li>
+<li><code>static</code> (§2.9.2; p.67; gang modifier; static gang distribution)</li>
+</ul>
+<h3 id="worker-clause-modifiers"><a class="header" href="#worker-clause-modifiers">Worker Clause Modifiers</a></h3>
+<ul>
+<li><code>num</code> (§2.9.3; p.68; worker modifier; specifies number of workers)</li>
+</ul>
+<h3 id="vector-clause-modifiers"><a class="header" href="#vector-clause-modifiers">Vector Clause Modifiers</a></h3>
+<ul>
+<li><code>length</code> (§2.9.4; p.68; vector modifier; specifies vector length)</li>
+</ul>
+<h3 id="collapse-clause-modifiers"><a class="header" href="#collapse-clause-modifiers">Collapse Clause Modifiers</a></h3>
+<ul>
+<li><code>force</code> (§2.9.1; p.65; collapse modifier; force collapse even with dependencies)</li>
+</ul>
+<h3 id="cache-clause-modifiers"><a class="header" href="#cache-clause-modifiers">Cache Clause Modifiers</a></h3>
+<ul>
+<li><code>readonly</code> (§2.10; p.75; cache modifier; read-only cache hint)</li>
+</ul>
+<h2 id="special-values-and-constants"><a class="header" href="#special-values-and-constants">Special Values and Constants</a></h2>
+<h3 id="async-values"><a class="header" href="#async-values">Async Values</a></h3>
+<ul>
+<li><code>acc_async_default</code> (§2.16; p.98; async value; default async queue)</li>
+<li><code>acc_async_noval</code> (§2.16; p.98; async value; no async queue specified)</li>
+<li><code>acc_async_sync</code> (§2.16; p.98; async value; synchronous execution)</li>
+</ul>
+<h3 id="device-types"><a class="header" href="#device-types">Device Types</a></h3>
+<ul>
+<li><code>*</code> (§2.4; p.31; device type; all device types)</li>
+<li><code>host</code> (§2.4; p.31; device type; host device)</li>
+<li><code>nvidia</code> (§2.4; p.31; device type; NVIDIA devices)</li>
+<li><code>radeon</code> (§2.4; p.31; device type; AMD Radeon devices)</li>
+<li><code>default</code> (§2.4; p.31; device type; implementation default)</li>
+</ul>
+<h3 id="default-clause-values"><a class="header" href="#default-clause-values">Default Clause Values</a></h3>
+<ul>
+<li><code>none</code> (§2.5.16; p.40; default value; no implicit data sharing)</li>
+<li><code>present</code> (§2.5.16; p.40; default value; assume all data present)</li>
+</ul>
+<h2 id="reduction-operators"><a class="header" href="#reduction-operators">Reduction Operators</a></h2>
+<p>Operators used with the <code>reduction</code> clause for parallel reduction operations.</p>
+<h3 id="arithmetic-operators"><a class="header" href="#arithmetic-operators">Arithmetic Operators</a></h3>
+<ul>
+<li><code>+</code> (§2.5.15, §2.9.11; pp.39, 71; addition)</li>
+<li><code>*</code> (§2.5.15, §2.9.11; pp.39, 71; multiplication)</li>
+<li><code>max</code> (§2.5.15, §2.9.11; pp.39, 71; maximum value)</li>
+<li><code>min</code> (§2.5.15, §2.9.11; pp.39, 71; minimum value)</li>
+</ul>
+<h3 id="bitwise-operators"><a class="header" href="#bitwise-operators">Bitwise Operators</a></h3>
+<ul>
+<li><code>&amp;</code> (§2.5.15, §2.9.11; pp.39, 71; bitwise AND)</li>
+<li><code>|</code> (§2.5.15, §2.9.11; pp.39, 71; bitwise OR)</li>
+<li><code>^</code> (§2.5.15, §2.9.11; pp.39, 71; bitwise XOR)</li>
+</ul>
+<h3 id="logical-operators"><a class="header" href="#logical-operators">Logical Operators</a></h3>
+<ul>
+<li><code>&amp;&amp;</code> (§2.5.15, §2.9.11; pp.39, 71; logical AND)</li>
+<li><code>||</code> (§2.5.15, §2.9.11; pp.39, 71; logical OR)</li>
+</ul>
+<h3 id="fortran-specific-operators"><a class="header" href="#fortran-specific-operators">Fortran-Specific Operators</a></h3>
+<ul>
+<li><code>.and.</code> (§2.5.15, §2.9.11; pp.39, 71; Fortran logical AND)</li>
+<li><code>.or.</code> (§2.5.15, §2.9.11; pp.39, 71; Fortran logical OR)</li>
+<li><code>.eqv.</code> (§2.5.15, §2.9.11; pp.39, 71; Fortran logical equivalence)</li>
+<li><code>.neqv.</code> (§2.5.15, §2.9.11; pp.39, 71; Fortran logical non-equivalence)</li>
+<li><code>iand</code> (§2.5.15, §2.9.11; pp.39, 71; Fortran bitwise AND)</li>
+<li><code>ior</code> (§2.5.15, §2.9.11; pp.39, 71; Fortran bitwise OR)</li>
+<li><code>ieor</code> (§2.5.15, §2.9.11; pp.39, 71; Fortran bitwise XOR)</li>
+</ul>
+<h2 id="parallelism-levels"><a class="header" href="#parallelism-levels">Parallelism Levels</a></h2>
+<p>OpenACC defines a three-level parallelism hierarchy:</p>
+<ul>
+<li><code>gang</code> (§2.2.3; p.23; parallelism level; coarse-grain parallelism, analogous to thread blocks)</li>
+<li><code>worker</code> (§2.2.3; p.23; parallelism level; medium-grain parallelism, analogous to threads)</li>
+<li><code>vector</code> (§2.2.3; p.23; parallelism level; fine-grain parallelism, analogous to SIMD lanes)</li>
+<li><code>seq</code> (§2.9.5; p.68; parallelism level; sequential execution, no parallelism)</li>
+</ul>
+<h2 id="atomic-operation-keywords"><a class="header" href="#atomic-operation-keywords">Atomic Operation Keywords</a></h2>
+<ul>
+<li><code>read</code> (§2.12; p.77; atomic operation; atomic read)</li>
+<li><code>write</code> (§2.12; p.78; atomic operation; atomic write)</li>
+<li><code>update</code> (§2.12; p.78; atomic operation; atomic update)</li>
+<li><code>capture</code> (§2.12; p.79; atomic operation; atomic capture)</li>
+</ul>
+<h2 id="runtime-clause-keywords"><a class="header" href="#runtime-clause-keywords">Runtime Clause Keywords</a></h2>
+<h3 id="set-directive-clauses"><a class="header" href="#set-directive-clauses">Set Directive Clauses</a></h3>
+<ul>
+<li><code>device_type</code> (§2.14.3; p.87; applicable to: set; specifies device type)</li>
+<li><code>device_num</code> (§2.14.3; p.87; applicable to: set; specifies device number)</li>
+<li><code>default_async</code> (§2.14.3; p.87; applicable to: set; sets default async queue)</li>
+</ul>
+<h3 id="update-directive-clauses"><a class="header" href="#update-directive-clauses">Update Directive Clauses</a></h3>
+<ul>
+<li><code>self</code> (§2.14.4; p.88; applicable to: update; copy to host)</li>
+<li><code>host</code> (§2.14.4; p.88; applicable to: update; alias for self)</li>
+<li><code>device</code> (§2.14.4; p.88; applicable to: update; copy to device)</li>
+</ul>
+<h3 id="routine-directive-clauses"><a class="header" href="#routine-directive-clauses">Routine Directive Clauses</a></h3>
+<ul>
+<li><code>gang</code> (§2.15.1; p.92; applicable to: routine; routine contains gang-level parallelism)</li>
+<li><code>worker</code> (§2.15.1; p.92; applicable to: routine; routine contains worker-level parallelism)</li>
+<li><code>vector</code> (§2.15.1; p.92; applicable to: routine; routine contains vector-level parallelism)</li>
+<li><code>seq</code> (§2.15.1; p.92; applicable to: routine; routine is sequential)</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="openacc-34-directiveclause-matrix"><a class="header" href="#openacc-34-directiveclause-matrix">OpenACC 3.4 Directive–Clause Matrix</a></h1>
+<p>This matrix cross-references every OpenACC 3.4 directive with its allowed clauses and enumerates the clause-level modifiers and arguments. Section numbers and page references point back to the canonical OpenACC 3.4 PDF so that every entry can be validated directly against the specification. Use this document together with the directive/clauses index and the restrictions digest to obtain a complete, single-source view of the standard.</p>
+<h2 id="directive-coverage"><a class="header" href="#directive-coverage">Directive coverage</a></h2>
+<h3 id="parallel-construct-251-p33"><a class="header" href="#parallel-construct-251-p33">Parallel construct (§2.5.1, p.33)</a></h3>
+<ul>
+<li><code>async [(async-argument)]</code> — asynchronous queue selection; semantics defined in §2.16.1 (p.99) with async-argument rules in §2.16 (p.98).</li>
+<li><code>wait [(wait-argument)]</code> — queue synchronization; wait-argument syntax in §2.16 (p.99) and clause behavior in §2.16.2 (p.100).</li>
+<li><code>num_gangs(int-expr-list)</code> — up to three gang dimensions (missing entries default to 1) for parallel regions; details in §2.5.10 (p.37).</li>
+<li><code>num_workers(int-expr)</code> — worker count per gang (§2.5.11, p.38).</li>
+<li><code>vector_length(int-expr)</code> — vector lane count per worker (§2.5.12, p.38).</li>
+<li><code>device_type(device-type-list)</code> — device-specific clause selection (§2.4, p.31).</li>
+<li><code>if(condition)</code> — host vs device execution control (§2.5.6, p.37).</li>
+<li><code>self[(condition)]</code> — execute region on host without moving data (§2.5.7, p.37).</li>
+<li><code>reduction(operator:var-list)</code> — reduction variables imply copy semantics (§2.5.15, p.39).</li>
+<li>Data clauses <code>copy</code>, <code>copyin</code>, <code>copyout</code>, <code>create</code>, <code>no_create</code>, <code>present</code>, <code>deviceptr</code>, <code>attach</code> each accept optional modifier lists from §2.7.4 (p.52) and actions defined in §§2.7.1–2.7.14 (pp.48–60).</li>
+<li><code>private(var-list)</code> — private instances per gang (§2.5.13, p.38).</li>
+<li><code>firstprivate(var-list)</code> — initialize privates from host values (§2.5.14, p.38).</li>
+<li><code>default(none|present)</code> — default data scoping (§2.5.16, p.40).</li>
+</ul>
+<h3 id="serial-construct-252-p34"><a class="header" href="#serial-construct-252-p34">Serial construct (§2.5.2, p.34)</a></h3>
+<ul>
+<li>Permits the same clauses as the parallel construct except that <code>num_gangs</code>, <code>num_workers</code>, and <code>vector_length</code> are forbidden (§2.5.2, p.34). Other clause semantics match the sections cited above.</li>
+</ul>
+<h3 id="kernels-construct-253-p35"><a class="header" href="#kernels-construct-253-p35">Kernels construct (§2.5.3, p.35)</a></h3>
+<ul>
+<li><code>async[(async-argument)]</code> and <code>wait[(wait-argument)]</code> per §§2.16.1–2.16.2 (pp.99–100).</li>
+<li><code>num_gangs(int-expr)</code> — single argument specifying gangs per kernel (§2.5.10, p.37).</li>
+<li><code>num_workers(int-expr)</code> and <code>vector_length(int-expr)</code> as in §§2.5.11–2.5.12 (p.38).</li>
+<li><code>device_type</code>, <code>if</code>, <code>self</code>, and all data clauses (<code>copy</code>, <code>copyin</code>, <code>copyout</code>, <code>create</code>, <code>no_create</code>, <code>present</code>, <code>deviceptr</code>, <code>attach</code>) with modifiers per §§2.4 and 2.7.</li>
+<li><code>default(none|present)</code> per §2.5.16 (p.40).</li>
+</ul>
+<h3 id="data-construct-265-p43"><a class="header" href="#data-construct-265-p43">Data construct (§2.6.5, p.43)</a></h3>
+<ul>
+<li><code>if(condition)</code> for conditional region creation (§2.6.5, p.43).</li>
+<li><code>async[(async-argument)]</code> and <code>wait[(wait-argument)]</code> per §§2.16.1–2.16.2 (pp.99–100).</li>
+<li><code>device_type(device-type-list)</code> per §2.4 (p.31).</li>
+<li>Data movement clauses <code>copy</code>, <code>copyin</code>, <code>copyout</code>, <code>create</code>, <code>no_create</code>, <code>present</code>, <code>deviceptr</code>, <code>attach</code> with modifier lists from §2.7.4 (p.52) and semantics in §§2.7.1–2.7.14 (pp.48–60).</li>
+<li><code>default(none|present)</code> (treated as in §2.5.16, p.40).</li>
+</ul>
+<h3 id="enter-data-directive-266-p45"><a class="header" href="#enter-data-directive-266-p45">Enter data directive (§2.6.6, p.45)</a></h3>
+<ul>
+<li><code>if(condition)</code> optional guard (§2.6.6, p.45).</li>
+<li><code>async[(async-argument)]</code> and <code>wait[(wait-argument)]</code> per §§2.16.1–2.16.2 (pp.99–100).</li>
+<li><code>copyin([modifier-list:]var-list)</code>, <code>create([modifier-list:]var-list)</code>, and <code>attach(var-list)</code> with data clause modifiers from §2.7.4 (p.52).</li>
+</ul>
+<h3 id="exit-data-directive-266-p45"><a class="header" href="#exit-data-directive-266-p45">Exit data directive (§2.6.6, p.45)</a></h3>
+<ul>
+<li><code>if(condition)</code>, <code>async[(async-argument)]</code>, <code>wait[(wait-argument)]</code> as above.</li>
+<li><code>copyout([modifier-list:]var-list)</code>, <code>delete(var-list)</code>, <code>detach(var-list)</code> with modifiers from §2.7.4 (p.52) and clause semantics in §§2.7.9–2.7.14 (pp.56–60).</li>
+<li><code>finalize</code> — forces dynamic reference counters to zero (§2.6.6, p.46).</li>
+</ul>
+<h3 id="host_data-construct-28-p62"><a class="header" href="#host_data-construct-28-p62">Host_data construct (§2.8, p.62)</a></h3>
+<ul>
+<li><code>use_device(var-list)</code> — maps host pointers to device addresses (§2.8.1, p.63).</li>
+<li><code>if(condition)</code> and <code>if_present</code> clauses (§§2.8.2–2.8.3, p.63).</li>
+</ul>
+<h3 id="loop-construct-29-p64"><a class="header" href="#loop-construct-29-p64">Loop construct (§2.9, p.64)</a></h3>
+<ul>
+<li><code>collapse([force:]n)</code> — loop nest collapsing with optional <code>force</code> qualifier (§2.9.1, p.65).</li>
+<li><code>gang[(gang-arg-list)]</code> — optional <code>num:</code>, <code>dim:</code>, and <code>static:</code> modifiers per §2.9.2 (pp.66–67).</li>
+<li><code>worker[( [num:]int-expr )]</code> (§2.9.3, p.68).</li>
+<li><code>vector[( [length:]int-expr )]</code> (§2.9.4, p.68).</li>
+<li><code>seq</code>, <code>independent</code>, and <code>auto</code> exclusivity rules in §§2.9.5–2.9.7 (pp.68–69).</li>
+<li><code>tile(size-expr-list)</code> with optional <code>*</code> entries (§2.9.8, p.69).</li>
+<li><code>device_type(device-type-list)</code> per §2.9.9 (p.70).</li>
+<li><code>private(var-list)</code> (§2.9.10, p.70) and <code>reduction(operator:var-list)</code> (§2.9.11, p.71).</li>
+</ul>
+<h3 id="cache-directive-210-p75"><a class="header" href="#cache-directive-210-p75">Cache directive (§2.10, p.75)</a></h3>
+<ul>
+<li><code>cache([readonly:]var-list)</code> — optional <code>readonly</code> modifier constrains writes (§2.10, p.75).</li>
+</ul>
+<h3 id="combined-constructs-211-p75"><a class="header" href="#combined-constructs-211-p75">Combined constructs (§2.11, p.75)</a></h3>
+<ul>
+<li><code>parallel loop</code>, <code>serial loop</code>, and <code>kernels loop</code> accept any clause allowed on both the outer construct and the loop construct; reductions imply <code>copy</code> semantics (§2.11, pp.75–76).</li>
+</ul>
+<h3 id="atomic-construct-212-pp7780"><a class="header" href="#atomic-construct-212-pp7780">Atomic construct (§2.12, pp.77–80)</a></h3>
+<ul>
+<li>Optional <code>atomic-clause</code> of <code>read</code>, <code>write</code>, <code>update</code>, or <code>capture</code>; Fortran syntax variants follow §2.12 (pp.77–80).</li>
+<li>Optional <code>if(condition)</code> clause (§2.12, p.77).</li>
+</ul>
+<h3 id="declare-directive-213-pp8184"><a class="header" href="#declare-directive-213-pp8184">Declare directive (§2.13, pp.81–84)</a></h3>
+<ul>
+<li>Data clauses <code>copy</code>, <code>copyin</code>, <code>copyout</code>, <code>create</code>, <code>present</code>, <code>deviceptr</code> as in §2.13 (pp.82–83).</li>
+<li><code>device_resident(var-list)</code> (§2.13.1, p.82).</li>
+<li><code>link(var-list)</code> for static linkage of device allocations (§2.13.3, p.84).</li>
+</ul>
+<h3 id="init-directive-2141-p84"><a class="header" href="#init-directive-2141-p84">Init directive (§2.14.1, p.84)</a></h3>
+<ul>
+<li><code>device_type(device-type-list)</code> and <code>device_num(int-expr)</code> to select targets (§2.14.1, p.84).</li>
+<li>Optional <code>if(condition)</code> guard (§2.14.1, p.84).</li>
+</ul>
+<h3 id="shutdown-directive-2142-p85"><a class="header" href="#shutdown-directive-2142-p85">Shutdown directive (§2.14.2, p.85)</a></h3>
+<ul>
+<li>Same clause set as <code>init</code>: <code>device_type</code>, <code>device_num</code>, and optional <code>if(condition)</code> (§2.14.2, p.85).</li>
+</ul>
+<h3 id="set-directive-2143-p87"><a class="header" href="#set-directive-2143-p87">Set directive (§2.14.3, p.87)</a></h3>
+<ul>
+<li><code>default_async(async-argument)</code> — sets the default queue (§2.14.3, p.87).</li>
+<li><code>device_num(int-expr)</code> and <code>device_type(device-type-list)</code> adjust internal control variables (§2.14.3, p.87).</li>
+<li>Optional <code>if(condition)</code> (§2.14.3, p.87).</li>
+</ul>
+<h3 id="update-directive-2144-p88"><a class="header" href="#update-directive-2144-p88">Update directive (§2.14.4, p.88)</a></h3>
+<ul>
+<li><code>async[(async-argument)]</code>, <code>wait[(wait-argument)]</code>, <code>device_type(device-type-list)</code>, and <code>if(condition)</code> as above.</li>
+<li><code>if_present</code> skip modifier (§2.14.4, p.89).</li>
+<li>Data movement clauses <code>self(var-list)</code>, <code>host(var-list)</code>, <code>device(var-list)</code> with semantics in §2.14.4 (pp.88–89).</li>
+</ul>
+<h3 id="wait-directive-2163-p100-see-also-2145"><a class="header" href="#wait-directive-2163-p100-see-also-2145">Wait directive (§2.16.3, p.100; see also §2.14.5)</a></h3>
+<ul>
+<li>Optional <code>wait-argument</code> tuple <code>[devnum:int-expr:][queues:]async-argument-list</code> per §2.16 (p.99).</li>
+<li>Optional <code>async[(async-argument)]</code> to queue the wait (§2.16.3, p.100).</li>
+<li>Optional <code>if(condition)</code> (§2.16.3, p.100).</li>
+</ul>
+<h3 id="routine-directive-2151-pp9197"><a class="header" href="#routine-directive-2151-pp9197">Routine directive (§2.15.1, pp.91–97)</a></h3>
+<ul>
+<li>Parallelism clauses <code>gang[(dim:int-expr)]</code>, <code>worker</code>, <code>vector</code>, and <code>seq</code> define callable levels (§2.15.1, pp.91–93).</li>
+<li><code>bind(name|string)</code> for device linkage (§2.15.1, pp.93–94).</li>
+<li><code>device_type(device-type-list)</code> for specialization (§2.15.1, pp.94–95).</li>
+<li><code>nohost</code> to omit host compilation (§2.15.1, pp.94–95).</li>
+</ul>
+<h3 id="do-concurrent-integration-2172-p102"><a class="header" href="#do-concurrent-integration-2172-p102">Do concurrent integration (§2.17.2, p.102)</a></h3>
+<ul>
+<li>When combined with loop constructs, <code>local</code>, <code>local_init</code>, <code>shared</code>, and <code>default(none)</code> locality specs map to <code>private</code>, <code>firstprivate</code>, <code>copy</code>, and <code>default(none)</code> clauses on the enclosing compute construct (§2.17.2, p.102).</li>
+</ul>
+<h2 id="clause-reference"><a class="header" href="#clause-reference">Clause reference</a></h2>
+<h3 id="device-specific-clause-24-pp3133"><a class="header" href="#device-specific-clause-24-pp3133">Device-specific clause (§2.4, pp.31–33)</a></h3>
+<ul>
+<li><code>device_type(device-type-list)</code> partitions clause lists by architecture name or <code>*</code>; default clauses apply when no device-specific override exists (§2.4, pp.31–33).</li>
+<li>Abbreviation <code>dtype</code> is permitted (§2.4, p.31).</li>
+<li>Device-specific clauses are limited per directive as documented in each directive section.</li>
+</ul>
+<h3 id="if-clause-256--282-p37--p63"><a class="header" href="#if-clause-256--282-p37--p63">if clause (§§2.5.6 &amp; 2.8.2, p.37 &amp; p.63)</a></h3>
+<ul>
+<li>Compute constructs: true runs on the device; false reverts to host execution (§2.5.6, p.37).</li>
+<li>Host_data: governs creation of device pointer aliases (§2.8.2, p.63).</li>
+<li>Enter/exit/update data: conditional data movement (§2.6.6, p.45; §2.14.4, p.88).</li>
+</ul>
+<h3 id="self-clause-257--2144-pp37--88"><a class="header" href="#self-clause-257--2144-pp37--88">self clause (§§2.5.7 &amp; 2.14.4, pp.37 &amp; 88)</a></h3>
+<ul>
+<li>On compute constructs, <code>self[(condition)]</code> forces host execution when true (§2.5.7, p.37).</li>
+<li>On update, <code>self(var-list)</code> copies from device to host for uncaptured data (§2.14.4, p.88).</li>
+</ul>
+<h3 id="async-clause-2161-p99"><a class="header" href="#async-clause-2161-p99">async clause (§2.16.1, p.99)</a></h3>
+<ul>
+<li>Allowed on parallel, serial, kernels, data constructs, enter/exit data, update, and wait directives (§2.16.1, p.99).</li>
+<li><code>async-argument</code> values: nonnegative integers or <code>acc_async_default</code>, <code>acc_async_noval</code>, <code>acc_async_sync</code> (§2.16, p.98).</li>
+<li>Missing clause implies synchronous execution; empty argument implies <code>acc_async_noval</code> (§2.16.1, p.99).</li>
+</ul>
+<h3 id="wait-clause-2162-p100"><a class="header" href="#wait-clause-2162-p100">wait clause (§2.16.2, p.100)</a></h3>
+<ul>
+<li>Accepts the <code>wait-argument</code> tuple defined in §2.16 (p.99).</li>
+<li>Without arguments waits on all queues of the current device; with arguments delays launch until specified queues drain (§2.16.2, p.100).</li>
+</ul>
+<h3 id="num_gangs-clause-2510-p37"><a class="header" href="#num_gangs-clause-2510-p37">num_gangs clause (§2.5.10, p.37)</a></h3>
+<ul>
+<li>Parallel construct: up to three integers for gang dimensions; defaults to 1 when omitted (§2.5.10, p.37).</li>
+<li>Kernels construct: single argument per generated kernel (§2.5.10, p.37).</li>
+<li>Implementations may cap values based on device limits (§2.5.10, p.37).</li>
+</ul>
+<h3 id="num_workers-clause-2511-p38"><a class="header" href="#num_workers-clause-2511-p38">num_workers clause (§2.5.11, p.38)</a></h3>
+<ul>
+<li>Sets workers per gang; unspecified defaults are implementation-defined (§2.5.11, p.38).</li>
+</ul>
+<h3 id="vector_length-clause-2512-p38"><a class="header" href="#vector_length-clause-2512-p38">vector_length clause (§2.5.12, p.38)</a></h3>
+<ul>
+<li>Sets vector lanes per worker; unspecified defaults are implementation-defined (§2.5.12, p.38).</li>
+</ul>
+<h3 id="private-clause-2513--2910-pp38--70"><a class="header" href="#private-clause-2513--2910-pp38--70">private clause (§§2.5.13 &amp; 2.9.10, pp.38 &amp; 70)</a></h3>
+<ul>
+<li>Compute constructs: allocate private copies for gang members (§2.5.13, p.38).</li>
+<li>Loop constructs: each iteration gets a private copy; allowed only where clause lists permit (§2.9.10, p.70).</li>
+</ul>
+<h3 id="firstprivate-clause-2514-p38"><a class="header" href="#firstprivate-clause-2514-p38">firstprivate clause (§2.5.14, p.38)</a></h3>
+<ul>
+<li>Initializes private variables from original values at region entry (§2.5.14, p.38).</li>
+</ul>
+<h3 id="reduction-clause-2515--2911-pp39--71"><a class="header" href="#reduction-clause-2515--2911-pp39--71">reduction clause (§§2.5.15 &amp; 2.9.11, pp.39 &amp; 71)</a></h3>
+<ul>
+<li>Supports operators <code>+</code>, <code>*</code>, <code>max</code>, <code>min</code>, bitwise ops, logical ops, and Fortran <code>iand/ior/ieor</code> with initialization table specified in §2.5.15 (pp.39–40).</li>
+<li>Applies element-wise to arrays/subarrays; implies appropriate data clauses (§2.5.15, p.39).</li>
+<li>Loop reductions follow §2.9.11 (pp.71–72).</li>
+</ul>
+<h3 id="default-clause-2516-p40"><a class="header" href="#default-clause-2516-p40">default clause (§2.5.16, p.40)</a></h3>
+<ul>
+<li><code>default(none)</code> requires explicit data clauses; <code>default(present)</code> asserts device presence (§2.5.16, p.40).</li>
+</ul>
+<h3 id="data-clause-framework-27274-pp4853"><a class="header" href="#data-clause-framework-27274-pp4853">Data clause framework (§§2.7–2.7.4, pp.48–53)</a></h3>
+<ul>
+<li>Data specification syntax in §2.7.1 (pp.48–49).</li>
+<li>Data actions (<code>copy</code>, <code>create</code>, <code>delete</code>, etc.) in §2.7.2 (pp.50–52).</li>
+<li>Error conditions in §2.7.3 (p.52).</li>
+<li>Modifier list tokens: <code>always</code>, <code>alwaysin</code>, <code>alwaysout</code>, <code>capture</code>, <code>readonly</code>, <code>zero</code> (§2.7.4, p.52).</li>
+</ul>
+<h3 id="deviceptr-clause-275-p53"><a class="header" href="#deviceptr-clause-275-p53">deviceptr clause (§2.7.5, p.53)</a></h3>
+<ul>
+<li>Treats variables as preallocated device pointers; disallows conflicting data actions (§2.7.5, p.53).</li>
+</ul>
+<h3 id="present-clause-276-p53"><a class="header" href="#present-clause-276-p53">present clause (§2.7.6, p.53)</a></h3>
+<ul>
+<li>Requires data to exist on the device; raises errors otherwise (§2.7.6, p.53).</li>
+</ul>
+<h3 id="copycopyincopyout-clauses-277279-pp5456"><a class="header" href="#copycopyincopyout-clauses-277279-pp5456">copy/copyin/copyout clauses (§§2.7.7–2.7.9, pp.54–56)</a></h3>
+<ul>
+<li><code>copy</code> performs in/out transfers; <code>copyin</code> is host→device; <code>copyout</code> is device→host (§§2.7.7–2.7.9, pp.54–56).</li>
+<li>Respect modifier semantics from §2.7.4.</li>
+</ul>
+<h3 id="create-clause-2710--2132-pp57--83"><a class="header" href="#create-clause-2710--2132-pp57--83">create clause (§§2.7.10 &amp; 2.13.2, pp.57 &amp; 83)</a></h3>
+<ul>
+<li>Allocates device storage without transfer (§2.7.10, p.57); declare directive variant described in §2.13.2 (p.83).</li>
+</ul>
+<h3 id="no_create-clause-2711-p57"><a class="header" href="#no_create-clause-2711-p57">no_create clause (§2.7.11, p.57)</a></h3>
+<ul>
+<li>Asserts that data already exists on device; no allocation occurs (§2.7.11, p.57).</li>
+</ul>
+<h3 id="delete-clause-2712-p58"><a class="header" href="#delete-clause-2712-p58">delete clause (§2.7.12, p.58)</a></h3>
+<ul>
+<li>Deallocates device storage at region exit (§2.7.12, p.58).</li>
+</ul>
+<h3 id="attachdetach-clauses-27132714-pp5960"><a class="header" href="#attachdetach-clauses-27132714-pp5960">attach/detach clauses (§§2.7.13–2.7.14, pp.59–60)</a></h3>
+<ul>
+<li>Manage pointer attachments to device memory (§§2.7.13–2.7.14, pp.59–60).</li>
+</ul>
+<h3 id="use_device-clause-281-p63"><a class="header" href="#use_device-clause-281-p63">use_device clause (§2.8.1, p.63)</a></h3>
+<ul>
+<li>Temporarily remaps host pointers to device addresses within host_data regions (§2.8.1, p.63).</li>
+</ul>
+<h3 id="if_present-clause-283--2144-pp63--89"><a class="header" href="#if_present-clause-283--2144-pp63--89">if_present clause (§§2.8.3 &amp; 2.14.4, pp.63 &amp; 89)</a></h3>
+<ul>
+<li>Skips operations when data is absent on the device (§2.8.3, p.63; §2.14.4, p.89).</li>
+</ul>
+<h3 id="collapse-clause-291-p65"><a class="header" href="#collapse-clause-291-p65">collapse clause (§2.9.1, p.65)</a></h3>
+<ul>
+<li>Optional <code>force</code> keyword overrides dependency analysis; requires positive iteration counts (§2.9.1, p.65).</li>
+</ul>
+<h3 id="gang-clause-292-pp6667"><a class="header" href="#gang-clause-292-pp6667">gang clause (§2.9.2, pp.66–67)</a></h3>
+<ul>
+<li><code>gang-arg-list</code> allows one each of <code>num:</code>, <code>dim:</code>, <code>static:</code> modifiers; <code>dim</code> is limited to 1–3 (§2.9.2, pp.66–67).</li>
+</ul>
+<h3 id="worker-clause-293-p68"><a class="header" href="#worker-clause-293-p68">worker clause (§2.9.3, p.68)</a></h3>
+<ul>
+<li>Optional <code>num:</code> argument; interacts with compute scopes as described in §2.9.3 (p.68).</li>
+</ul>
+<h3 id="vector-clause-294-p68"><a class="header" href="#vector-clause-294-p68">vector clause (§2.9.4, p.68)</a></h3>
+<ul>
+<li>Optional <code>length:</code> argument; selects vector mode (§2.9.4, p.68).</li>
+</ul>
+<h3 id="seq-clause-295-p68"><a class="header" href="#seq-clause-295-p68">seq clause (§2.9.5, p.68)</a></h3>
+<ul>
+<li>Forces sequential execution of the associated loop (§2.9.5, p.68).</li>
+</ul>
+<h3 id="independent-clause-296-p69"><a class="header" href="#independent-clause-296-p69">independent clause (§2.9.6, p.69)</a></h3>
+<ul>
+<li>Asserts absence of cross-iteration dependencies (§2.9.6, p.69).</li>
+</ul>
+<h3 id="auto-clause-297-p69"><a class="header" href="#auto-clause-297-p69">auto clause (§2.9.7, p.69)</a></h3>
+<ul>
+<li>Delegates loop scheduling to implementation; interacts with routine clause inference (§2.9.7, p.69).</li>
+</ul>
+<h3 id="tile-clause-298-p69"><a class="header" href="#tile-clause-298-p69">tile clause (§2.9.8, p.69)</a></h3>
+<ul>
+<li>Breaks iteration space into tile sizes; <code>*</code> uses runtime-determined tile length (§2.9.8, p.69).</li>
+</ul>
+<h3 id="device_type-clause-on-loops-299-p70"><a class="header" href="#device_type-clause-on-loops-299-p70">device_type clause on loops (§2.9.9, p.70)</a></h3>
+<ul>
+<li>Restricts subsequent clauses to specified device types (§2.9.9, p.70).</li>
+</ul>
+<h3 id="device_resident-clause-2131-pp8283"><a class="header" href="#device_resident-clause-2131-pp8283">device_resident clause (§2.13.1, pp.82–83)</a></h3>
+<ul>
+<li>Forces static device allocation with reference counting rules (§2.13.1, pp.82–83).</li>
+</ul>
+<h3 id="link-clause-2133-p84"><a class="header" href="#link-clause-2133-p84">link clause (§2.13.3, p.84)</a></h3>
+<ul>
+<li>Creates persistent device linkages for large host data (§2.13.3, pp.83–84).</li>
+</ul>
+<h3 id="bind-clause-2151-pp9394"><a class="header" href="#bind-clause-2151-pp9394">bind clause (§2.15.1, pp.93–94)</a></h3>
+<ul>
+<li>Sets alternate device symbol name (identifier or string) (§2.15.1, pp.93–94).</li>
+</ul>
+<h3 id="device_num-and-default_async-clauses-2143-p87"><a class="header" href="#device_num-and-default_async-clauses-2143-p87">device_num and default_async clauses (§2.14.3, p.87)</a></h3>
+<ul>
+<li>Modify internal control variables <code>acc-current-device-num-var</code> and <code>acc-default-async-var</code> (§2.14.3, p.87).</li>
+</ul>
+<h3 id="nohost-clause-2151-pp9495"><a class="header" href="#nohost-clause-2151-pp9495">nohost clause (§2.15.1, pp.94–95)</a></h3>
+<ul>
+<li>Suppresses host code generation for routines; cascades to dependent procedures (§2.15.1, pp.94–95).</li>
+</ul>
+<h3 id="finalize-clause-266-p46"><a class="header" href="#finalize-clause-266-p46">finalize clause (§2.6.6, p.46)</a></h3>
+<ul>
+<li>Available on <code>exit data</code>; zeroes dynamic and attachment counters (§2.6.6, p.46).</li>
+</ul>
+<h3 id="wait-argument-modifiers-216-p99"><a class="header" href="#wait-argument-modifiers-216-p99">wait-argument modifiers (§2.16, p.99)</a></h3>
+<ul>
+<li><code>devnum:int-expr:</code> selects device; optional <code>queues:</code> prefix clarifies async argument list (§2.16, p.99).</li>
+</ul>
+<h3 id="async-value-semantics-216-p98"><a class="header" href="#async-value-semantics-216-p98">async-value semantics (§2.16, p.98)</a></h3>
+<ul>
+<li>Maps async arguments to queue identifiers; <code>acc_async_sync</code> enforces synchronous completion, <code>acc_async_noval</code> uses default queue (§2.16, p.98).</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="openacc-34-directive-and-clause-restrictions"><a class="header" href="#openacc-34-directive-and-clause-restrictions">OpenACC 3.4 Directive and Clause Restrictions</a></h1>
+<p>This digest enumerates every rule, restriction, and mandatory condition attached to OpenACC 3.4 directives and clauses. Entries are grouped by the section that defines the constraint. Page references match the official specification pagination so each item can be cross-checked word-for-word.</p>
+<h2 id="compute-constructs-254-p36"><a class="header" href="#compute-constructs-254-p36">Compute constructs (§2.5.4, p.36)</a></h2>
+<ul>
+<li>Programs must not branch into or out of a compute construct.</li>
+<li>Only the <code>async</code>, <code>wait</code>, <code>num_gangs</code>, <code>num_workers</code>, and <code>vector_length</code> clauses may follow a <code>device_type</code> clause on any compute construct.</li>
+<li>At most one <code>if</code> clause may appear on a compute construct.</li>
+<li>At most one <code>default</code> clause may appear and its value must be either <code>none</code> or <code>present</code>.</li>
+<li>A <code>reduction</code> clause must not appear on a <code>parallel</code> construct whose <code>num_gangs</code> clause has more than one argument.</li>
+</ul>
+<h2 id="compute-construct-errors-255-p37"><a class="header" href="#compute-construct-errors-255-p37">Compute construct errors (§2.5.5, p.37)</a></h2>
+<ul>
+<li>Errors raised by violating compute construct semantics follow §2.5.5; implementations must signal <code>acc_error_host_only</code>, <code>acc_error_invalid_compute_region</code>, <code>acc_error_invalid_parallelism</code>, or <code>acc_error_invalid_matrix_shape</code> as described in the specification when these conditions are detected.</li>
+</ul>
+<h2 id="enterexit-data-directives-266-p46"><a class="header" href="#enterexit-data-directives-266-p46">Enter/exit data directives (§2.6.6, p.46)</a></h2>
+<ul>
+<li><code>enter data</code> directives must include at least one of: <code>copyin</code>, <code>create</code>, or <code>attach</code>.</li>
+<li><code>exit data</code> directives must include at least one of: <code>copyout</code>, <code>delete</code>, or <code>detach</code>.</li>
+<li>Only one <code>if</code> clause may appear on either directive.</li>
+<li><code>finalize</code> on <code>exit data</code> resets dynamic and attachment counters to zero for the listed variables; without it the counters are decremented normally.</li>
+</ul>
+<h2 id="data-environment-26-pp4347"><a class="header" href="#data-environment-26-pp4347">Data environment (§2.6, pp.43–47)</a></h2>
+<ul>
+<li>Implicit data lifetime management must obey the reference counter semantics in §§2.6.3–2.6.8; structured and dynamic counters must never become negative.</li>
+<li>Pointer attachments must respect the attach/detach counter pairing in §§2.6.7–2.6.8.</li>
+</ul>
+<h2 id="host_data-construct-28-pp6263"><a class="header" href="#host_data-construct-28-pp6263">Host_data construct (§2.8, pp.62–63)</a></h2>
+<ul>
+<li><code>use_device</code> lists must reference variables that are present on the device; otherwise behavior is undefined.</li>
+<li>Host pointers aliased inside <code>host_data</code> regions must not be dereferenced on the host while mapped to device addresses.</li>
+</ul>
+<h2 id="loop-construct-29-pp6471"><a class="header" href="#loop-construct-29-pp6471">Loop construct (§2.9, pp.64–71)</a></h2>
+<ul>
+<li>Only <code>collapse</code>, <code>gang</code>, <code>worker</code>, <code>vector</code>, <code>seq</code>, <code>independent</code>, <code>auto</code>, and <code>tile</code> clauses may follow a <code>device_type</code> clause.</li>
+<li><code>worker</code> and <code>vector</code> clause arguments must be invariant within the surrounding <code>kernels</code> region.</li>
+<li>Loops without <code>seq</code> must satisfy: loop variable is integer/pointer/random-access iterator, iteration monotonicity, and constant-time trip count computation.</li>
+<li>Only one of <code>seq</code>, <code>independent</code>, or <code>auto</code> may appear.</li>
+<li><code>gang</code>, <code>worker</code>, and <code>vector</code> clauses are mutually exclusive with an explicit <code>seq</code> clause.</li>
+<li>A loop with a gang/worker/vector clause must not lexically enclose another loop with an equal or higher parallelism level unless the parent compute scope differs.</li>
+<li>At most one <code>gang</code> clause may appear per loop construct.</li>
+<li><code>tile</code> and <code>collapse</code> must not be combined on loops associated with <code>do concurrent</code>.</li>
+<li>Each associated loop in a <code>tile</code> construct (except the innermost) must contain exactly one loop or loop nest.</li>
+<li><code>private</code> clauses on loops must honor Fortran optional argument rules (§2.17.1, p.100).</li>
+</ul>
+<h2 id="cache-directive-210-p75-1"><a class="header" href="#cache-directive-210-p75-1">Cache directive (§2.10, p.75)</a></h2>
+<ul>
+<li>References within the loop iteration must stay inside the index ranges listed in the <code>cache</code> directive.</li>
+<li>Fortran optional arguments used in <code>cache</code> directives must follow §2.17.1.</li>
+</ul>
+<h2 id="combined-constructs-211-p76"><a class="header" href="#combined-constructs-211-p76">Combined constructs (§2.11, p.76)</a></h2>
+<ul>
+<li>Combined constructs inherit all restrictions from their constituent <code>parallel</code>, <code>serial</code>, <code>kernels</code>, and <code>loop</code> components.</li>
+</ul>
+<h2 id="atomic-construct-212-pp7781"><a class="header" href="#atomic-construct-212-pp7781">Atomic construct (§2.12, pp.77–81)</a></h2>
+<ul>
+<li>All atomic accesses to a given storage location must use the same type and type parameters.</li>
+<li>The storage location designated by <code>x</code> must not exceed the hardware’s maximum native atomic width.</li>
+<li>At most one <code>if</code> clause may appear on an atomic construct.</li>
+</ul>
+<h2 id="declare-directive-213-pp8184-1"><a class="header" href="#declare-directive-213-pp8184-1">Declare directive (§2.13, pp.81–84)</a></h2>
+<ul>
+<li><code>declare</code> must share scope with the declared variables (or enclosing function/module scope for Fortran).</li>
+<li>At least one clause is required.</li>
+<li>Clause arguments must be variable names or Fortran common block names; each variable may appear only once across <code>declare</code> clauses within a program unit.</li>
+<li>Fortran assumed-size dummy arrays cannot appear; pointer arrays lose association on the device.</li>
+<li>Fortran module declaration sections allow only <code>create</code>, <code>copyin</code>, <code>device_resident</code>, and <code>link</code>; C/C++ global scope allows only <code>create</code>, <code>copyin</code>, <code>deviceptr</code>, <code>device_resident</code>, and <code>link</code>.</li>
+<li>C/C++ extern variables are limited to <code>create</code>, <code>copyin</code>, <code>deviceptr</code>, <code>device_resident</code>, and <code>link</code>.</li>
+<li><code>link</code> clauses must appear at global/module scope or reference extern/common-block entities.</li>
+<li><code>declare</code> regions must not contain <code>longjmp</code>/<code>setjmp</code> mismatches or uncaught C++ exceptions.</li>
+<li>Fortran optional dummy arguments in data clauses must respect §2.17.1.</li>
+</ul>
+<h2 id="init-directive-2141-p85"><a class="header" href="#init-directive-2141-p85">Init directive (§2.14.1, p.85)</a></h2>
+<ul>
+<li>May appear only in host code.</li>
+<li>Re-initializing with different device types without shutting down is implementation-defined.</li>
+<li>Initializing a device type not used by compiled accelerator regions yields undefined behavior.</li>
+</ul>
+<h2 id="shutdown-directive-2142-p85-1"><a class="header" href="#shutdown-directive-2142-p85-1">Shutdown directive (§2.14.2, p.85)</a></h2>
+<ul>
+<li>May appear only in host code.</li>
+</ul>
+<h2 id="set-directive-2143-p87-1"><a class="header" href="#set-directive-2143-p87-1">Set directive (§2.14.3, p.87)</a></h2>
+<ul>
+<li>Host-only directive.</li>
+<li><code>default_async</code> accepts only valid async identifiers; <code>acc_async_noval</code> has no effect, <code>acc_async_sync</code> forces synchronous execution on the default queue, and <code>acc_async_default</code> restores the initial queue.</li>
+<li>Must include at least one of <code>default_async</code>, <code>device_num</code>, or <code>device_type</code>.</li>
+<li>Duplicate clause kinds are forbidden on the same directive.</li>
+</ul>
+<h2 id="update-directive-2144-pp8890"><a class="header" href="#update-directive-2144-pp8890">Update directive (§2.14.4, pp.88–90)</a></h2>
+<ul>
+<li>Requires at least one of <code>self</code>, <code>host</code>, or <code>device</code> clauses.</li>
+<li>If <code>if_present</code> is absent, all listed variables must already be present on the device.</li>
+<li>Only <code>async</code> and <code>wait</code> clauses may follow <code>device_type</code>.</li>
+<li>At most one <code>if</code> clause may appear; it must evaluate to a scalar logical/integer value (Fortran vs C/C++ rules).</li>
+<li>Noncontiguous subarrays are permitted; implementations may choose between multiple transfers or pack/unpack strategies but must not transfer outside the minimal containing contiguous region.</li>
+<li>Struct/class and derived-type member restrictions follow §2.14.4; parent objects cannot simultaneously use subarray notation with member subarrays.</li>
+<li>Fortran optional arguments in <code>self</code>, <code>host</code>, and <code>device</code> follow §2.17.1.</li>
+<li>Directive must occupy a statement position (cannot replace the body after conditional headers or labels).</li>
+</ul>
+<h2 id="wait-directive-2163-p100"><a class="header" href="#wait-directive-2163-p100">Wait directive (§2.16.3, p.100)</a></h2>
+<ul>
+<li><code>devnum</code> values in wait-arguments must identify valid devices; invalid values trigger runtime errors (§2.16.3).</li>
+<li>Queue identifiers must be valid async arguments or errors result (§2.16.3).</li>
+</ul>
+<h2 id="routine-directive-2151-pp9197-1"><a class="header" href="#routine-directive-2151-pp9197-1">Routine directive (§2.15.1, pp.91–97)</a></h2>
+<ul>
+<li>Implicit routine directives derive from usage; implementations must propagate relevant clauses to dependent procedures and avoid infinite recursion when determining implicit attributes.</li>
+<li><code>gang</code> dimension argument must be an integer constant expression in {1,2,3}.</li>
+<li><code>worker</code> routines cannot be parents of gang routines; <code>vector</code> routines cannot be parents of worker or gang routines; <code>seq</code> routines cannot be parents of parallel routines.</li>
+<li>Procedures compiled with <code>nohost</code> must not be called from host-only regions; enclosing procedures must also carry <code>nohost</code> when they call such routines.</li>
+</ul>
+<h2 id="do-concurrent-integration-2172-pp102103"><a class="header" href="#do-concurrent-integration-2172-pp102103">Do concurrent integration (§2.17.2, pp.102–103)</a></h2>
+<ul>
+<li>When mapping Fortran <code>do concurrent</code> locality specs to OpenACC clauses, users must ensure host/device sharing matches the specified locality (e.g., <code>local</code> to <code>private</code>, <code>local_init</code> to <code>firstprivate</code>).</li>
+</ul>
+<h2 id="data-clauses-272714-pp4860"><a class="header" href="#data-clauses-272714-pp4860">Data clauses (§§2.7–2.7.14, pp.48–60)</a></h2>
+<ul>
+<li>Clause arguments must reference contiguous array sections or pointer references as defined in §2.7.1.</li>
+<li>Overlapping array sections in data clauses yield unspecified behavior (§2.7.1).</li>
+<li>Modifier keywords (<code>always</code>, <code>alwaysin</code>, <code>alwaysout</code>, <code>capture</code>, <code>readonly</code>, <code>zero</code>) enforce the transfer behaviors in §2.7.4 and must not contradict device pointer semantics.</li>
+<li><code>deviceptr</code> variables cannot appear in other data clauses in the same region (§2.7.5).</li>
+<li><code>present</code> clauses require existing device data; absence triggers runtime errors (§2.7.6).</li>
+<li><code>no_create</code> forbids allocation and therefore requires prior presence (§2.7.11).</li>
+<li><code>attach</code>/<code>detach</code> must pair with pointer lifetimes and respect attachment counters (§§2.7.13–2.7.14).</li>
+</ul>
+<h2 id="cache-clause-210-p75"><a class="header" href="#cache-clause-210-p75">Cache clause (§2.10, p.75)</a></h2>
+<ul>
+<li>Array references must remain within the listed cache ranges per iteration; violations are undefined.</li>
+</ul>
+<h2 id="clause-argument-rules-216-p98"><a class="header" href="#clause-argument-rules-216-p98">Clause argument rules (§2.16, p.98)</a></h2>
+<ul>
+<li><code>async-argument</code> values are limited to nonnegative integers or the special constants <code>acc_async_default</code>, <code>acc_async_noval</code>, <code>acc_async_sync</code>.</li>
+<li><code>wait-argument</code> syntax <code>[devnum:int-expr:][queues:]async-argument-list</code> requires valid device numbers and async identifiers.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="openmp-60-directives-and-clauses"><a class="header" href="#openmp-60-directives-and-clauses">OpenMP 6.0 Directives and Clauses</a></h1>
 <p>This catalogue is derived directly from the ROUP parser's keyword registries and
 shows exactly which OpenMP 6.0 directive and clause tokens are recognised.  The

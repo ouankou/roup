@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>OpenMP Support Matrix - ROUP Documentation</title>
+        <title>OpenACC Support Matrix - ROUP Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -147,7 +147,7 @@
                         <a href="https://github.com/ouankou/roup" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/openmp-support.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/ouankou/roup/edit/main/docs/book/src/openacc-support.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -181,37 +181,38 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="openmp-support"><a class="header" href="#openmp-support">OpenMP support</a></h1>
-<p>ROUP registers every directive and clause keyword from the OpenMP 6.0
-specification. The canonical listings live in the generated reference chapters:</p>
+                        <h1 id="openacc-support"><a class="header" href="#openacc-support">OpenACC support</a></h1>
+<p>ROUP implements the complete OpenACC 3.4 directive and clause vocabulary. The
+reference chapters below catalogue every keyword and restriction with section
+and page references back to the official specification PDF.</p>
 <ul>
-<li><a href="./openmp60-directives-clauses.html">Directive catalogue</a></li>
-<li><a href="./openmp60-directive-clause-components.html">Directive/clause components</a></li>
-<li><a href="./openmp60-restrictions.html">Restrictions</a></li>
+<li><a href="./openacc/openacc-3-4-directives-clauses.html">Directive and clause index</a></li>
+<li><a href="./openacc/openacc-3-4-directive-clause-matrix.html">Directive–clause matrix</a></li>
+<li><a href="./openacc/openacc-3-4-restrictions.html">Restriction digest</a></li>
 </ul>
 <h2 id="quick-facts"><a class="header" href="#quick-facts">Quick facts</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Feature</th><th>Details</th></tr></thead><tbody>
-<tr><td>OpenMP versions</td><td>3.0 – 6.0</td></tr>
-<tr><td>Directive keywords</td><td>128</td></tr>
-<tr><td>Clause keywords</td><td>132</td></tr>
-<tr><td>Languages</td><td>C, C++, Fortran</td></tr>
-<tr><td>Automated tests</td><td>620</td></tr>
+<tr><td>OpenACC version</td><td>3.4</td></tr>
+<tr><td>Directive keywords</td><td>24 (including space/underscore aliases)</td></tr>
+<tr><td>Clause keywords</td><td>49</td></tr>
+<tr><td>Languages</td><td>C, C++, Fortran (free &amp; fixed form)</td></tr>
+<tr><td>Automated tests</td><td>Full directive and clause round-trip coverage</td></tr>
 </tbody></table>
 </div>
 <p>Unknown directives and clauses are rejected so unsupported constructs fail fast.
-The <code>tests/openmp_keyword_coverage.rs</code> integration test keeps the registry in
-sync with the specification, and additional round-trip tests validate parsing,
-IR conversion, and display.</p>
+The <code>tests/openacc_roundtrip.rs</code> suite keeps the registry in sync with the
+specification and exercises round-trip formatting for every keyword, and the C
+API mappings are validated to guarantee consistent clause kind values.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="api-reference.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="openmp-support.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="openacc-support.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="openacc/openacc-3-4-directives-clauses.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -221,11 +222,11 @@ IR conversion, and display.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="api-reference.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="openmp-support.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="openacc-support.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="openacc/openacc-3-4-directives-clauses.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
