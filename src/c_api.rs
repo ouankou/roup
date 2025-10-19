@@ -1667,16 +1667,16 @@ fn acc_directive_name_to_kind(name: *const c_char) -> i32 {
 
 /// Convert Rust Clause to C-compatible AccClause.
 ///
-/// ## Clause Kind Mapping (45 clauses):
+/// ## Clause Kind Mapping (45 canonical clauses):
 /// - 0  = async             - 15 = default          - 30 = finalize
 /// - 1  = wait              - 16 = firstprivate     - 31 = if_present
 /// - 2  = num_gangs         - 17 = default_async    - 32 = capture
 /// - 3  = num_workers       - 18 = link             - 33 = write
 /// - 4  = vector_length     - 19 = no_create        - 34 = update (clause)
-/// - 5  = gang              - 20 = nohost           - 35 = copy
-/// - 6  = worker            - 21 = present          - 36 = copyin
-/// - 7  = vector            - 22 = private          - 37 = copyout
-/// - 8  = seq               - 23 = reduction        - 38 = create
+/// - 5  = gang              - 20 = nohost           - 35 = copy / present_or_copy / pcopy
+/// - 6  = worker            - 21 = present          - 36 = copyin / present_or_copyin / pcopyin
+/// - 7  = vector            - 22 = private          - 37 = copyout / present_or_copyout / pcopyout
+/// - 8  = seq               - 23 = reduction        - 38 = create / present_or_create / pcreate
 /// - 9  = independent       - 24 = read             - 39 = delete
 /// - 10 = auto              - 25 = self             - 40 = device
 /// - 11 = collapse          - 26 = tile             - 41 = deviceptr
@@ -1726,10 +1726,10 @@ fn convert_acc_clause(clause: &Clause) -> AccClause {
         "write" => (33, ()),
         "update" => (34, ()),
         // Data clauses
-        "copy" => (35, ()),
-        "copyin" => (36, ()),
-        "copyout" => (37, ()),
-        "create" => (38, ()),
+        "copy" | "present_or_copy" | "pcopy" => (35, ()),
+        "copyin" | "present_or_copyin" | "pcopyin" => (36, ()),
+        "copyout" | "present_or_copyout" | "pcopyout" => (37, ()),
+        "create" | "present_or_create" | "pcreate" => (38, ()),
         "delete" => (39, ()),
         "device" => (40, ()),
         "deviceptr" => (41, ()),

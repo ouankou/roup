@@ -1,6 +1,6 @@
-# ROUP: Rust-based OpenMP Parser
+# ROUP: Rust-based OpenMP & OpenACC Parser
 
-Rust-first parsing for OpenMP directives with C and C++ bindings.
+Rust-first parsing for OpenMP 6.0 and OpenACC 3.4 directives with C and C++ bindings.
 
 [![Docs](https://img.shields.io/badge/docs-roup.ouankou.com-blue)](https://roup.ouankou.com)
 [![Status](https://img.shields.io/badge/status-experimental-orange)](https://github.com/ouankou/roup)
@@ -26,6 +26,8 @@ Need platform-specific notes? See the [building guide](https://roup.ouankou.com/
 ## Why ROUP?
 
 - **OpenMP 3.0–6.0 coverage**: directives, clauses, and combined forms.
+- **OpenACC 3.4 coverage**: complete directive and clause keyword support (see
+  [`docs/OPENACC_SUPPORT.md`](docs/OPENACC_SUPPORT.md)).
 - **Multi-language APIs**: idiomatic Rust plus C and C++17 bindings.
 - **Tight unsafe boundary**: the FFI layer is the only unsafe code.
 - **Thorough testing**: 620+ automated tests across languages.

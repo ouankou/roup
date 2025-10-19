@@ -11,7 +11,8 @@ This document details the design and implementation plan for the accparser compa
 ### Progress So Far
 
 ✅ **Completed**:
-- OpenACC parsing infrastructure (30+ clauses, 23+ directives)
+- OpenACC parsing infrastructure (full 3.4 keyword set: 21 directives + aliases,
+  45 canonical clauses + legacy synonyms)
 - Round-trip parsing tests (2/2 passing)
 - All P1 bugs from PR #66 fixed
 - Comprehensive accparser and ompparser compat layer analysis

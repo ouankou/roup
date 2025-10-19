@@ -175,6 +175,34 @@ TEST(present_clause) {
     ASSERT_EQ(dir->getKind(), ACCD_data);
 }
 
+TEST(present_or_alias_clauses) {
+    struct {
+        const char* clause;
+        OpenACCClauseKind expected_kind;
+    } cases[] = {
+        {"present_or_copy(x)", ACCC_copy},
+        {"pcopy(x)", ACCC_copy},
+        {"present_or_copyin(x)", ACCC_copyin},
+        {"pcopyin(x)", ACCC_copyin},
+        {"present_or_copyout(x)", ACCC_copyout},
+        {"pcopyout(x)", ACCC_copyout},
+        {"present_or_create(x)", ACCC_create},
+        {"pcreate(x)", ACCC_create},
+    };
+
+    for (const auto& test : cases) {
+        std::string pragma = std::string("acc data ") + test.clause;
+        DirectivePtr dir(parseOpenACC(pragma.c_str(), nullptr));
+        ASSERT(dir != nullptr);
+
+        auto* clauses = dir->getAllClauses();
+        auto it = clauses->find(test.expected_kind);
+        ASSERT(it != clauses->end());
+        ASSERT(it->second != nullptr);
+        ASSERT(!it->second->empty());
+    }
+}
+
 // =============================================================================
 // Loop Clause Tests
 // =============================================================================
@@ -298,6 +326,7 @@ int main() {
     run_copyout_clause();
     run_create_clause();
     run_present_clause();
+    run_present_or_alias_clauses();
 
     std::cout << "\nLoop Clauses:" << std::endl;
     run_gang_clause();

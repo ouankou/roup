@@ -1,3 +1,4 @@
+use roup::lexer::Language;
 use roup::parser::{openacc, parse_acc_directive, ClauseKind};
 
 #[test]
@@ -37,4 +38,52 @@ fn parses_wait_directive_with_clauses() {
 
     let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
     assert_eq!(roundtrip, "#pragma acc wait(1) async(2)");
+}
+
+#[test]
+fn parses_present_or_copy_data_clause() {
+    let input = "#pragma acc data present_or_copy(a)";
+    let (_, directive) = parse_acc_directive(input).expect("should parse");
+
+    assert_eq!(directive.name, "data");
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "present_or_copy");
+    assert!(matches!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized(_)
+    ));
+
+    let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
+    assert_eq!(roundtrip, "#pragma acc data present_or_copy(a)");
+}
+
+#[test]
+fn parses_pcopy_alias_clause() {
+    let input = "#pragma acc data pcopy(b)";
+    let (_, directive) = parse_acc_directive(input).expect("should parse");
+
+    assert_eq!(directive.name, "data");
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "pcopy");
+    assert!(matches!(
+        directive.clauses[0].kind,
+        ClauseKind::Parenthesized(_)
+    ));
+
+    let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
+    assert_eq!(roundtrip, "#pragma acc data pcopy(b)");
+}
+
+#[test]
+fn fortran_present_or_copy_uppercase_roundtrip() {
+    let parser = openacc::parser().with_language(Language::FortranFree);
+    let input = "!$ACC DATA PRESENT_OR_COPY(A)";
+    let (_, directive) = parser.parse(input).expect("should parse");
+
+    assert_eq!(directive.name, "data");
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "present_or_copy");
+
+    let roundtrip = directive.to_pragma_string_with_prefix("!$acc");
+    assert_eq!(roundtrip, "!$acc data present_or_copy(A)");
 }

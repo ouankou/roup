@@ -362,14 +362,19 @@ fn parse_directive_arm(arm: &Arm) -> Option<(String, i32)> {
 /// Extract (name, number) from a match arm like: "clause-name" => (number, ClauseData)
 fn parse_clause_arm(arm: &Arm) -> Option<(String, i32)> {
     // Extract pattern (the "clause-name" part)
-    let name = if let Pat::Lit(PatLit {
-        lit: Lit::Str(lit_str),
-        ..
-    }) = &arm.pat
-    {
-        lit_str.value()
-    } else {
-        return None;
+    let name = match &arm.pat {
+        Pat::Lit(PatLit {
+            lit: Lit::Str(lit_str),
+            ..
+        }) => lit_str.value(),
+        Pat::Or(or_pat) => or_pat.cases.iter().find_map(|case| match case {
+            Pat::Lit(PatLit {
+                lit: Lit::Str(lit_str),
+                ..
+            }) => Some(lit_str.value()),
+            _ => None,
+        })?,
+        _ => return None,
     };
 
     // Extract number from tuple body: (number, ClauseData)
