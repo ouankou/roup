@@ -88,6 +88,8 @@ echo "Step 5/5: Running tests..."
 
 if [ -f "./accparser_example" ]; then
     LD_LIBRARY_PATH=. ./accparser_example
+    LD_LIBRARY_PATH=. ./comprehensive_test
+    LD_LIBRARY_PATH=. ctest --output-on-failure
     status "Tests passed"
 else
     warn "Test binary not found"

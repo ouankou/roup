@@ -86,6 +86,12 @@ TEST(exit_data) {
     ASSERT_EQ(dir->getKind(), ACCD_exit_data);
 }
 
+TEST(host_data_space_variant) {
+    DirectivePtr dir(parseOpenACC("acc host data use_device(ptr)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_host_data);
+}
+
 // =============================================================================
 // Clause Tests
 // =============================================================================
@@ -123,6 +129,12 @@ TEST(wait_clause) {
     ASSERT_EQ(dir->getKind(), ACCD_parallel);
 }
 
+TEST(wait_with_arguments) {
+    DirectivePtr dir(parseOpenACC("acc wait(1)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_wait);
+}
+
 TEST(private_clause) {
     DirectivePtr dir(parseOpenACC("acc parallel private(x,y)", nullptr));
     ASSERT(dir != nullptr);
@@ -139,6 +151,16 @@ TEST(reduction_clause) {
     DirectivePtr dir(parseOpenACC("acc parallel reduction(+:sum)", nullptr));
     ASSERT(dir != nullptr);
     ASSERT_EQ(dir->getKind(), ACCD_parallel);
+}
+
+TEST(atomic_update_clause_roundtrip) {
+    DirectivePtr dir(parseOpenACC("acc atomic update", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_atomic);
+    auto* ordered = dir->getClausesInOriginalOrder();
+    ASSERT(ordered != nullptr);
+    ASSERT_EQ(ordered->size(), 1u);
+    ASSERT_EQ(ordered->at(0)->getKind(), ACCC_update);
 }
 
 // =============================================================================
@@ -173,6 +195,27 @@ TEST(present_clause) {
     DirectivePtr dir(parseOpenACC("acc data present(x)", nullptr));
     ASSERT(dir != nullptr);
     ASSERT_EQ(dir->getKind(), ACCD_data);
+}
+
+TEST(data_clause_aliases_roundtrip) {
+    DirectivePtr dir(parseOpenACC(
+        "acc data pcopy(a) present_or_copy(b) pcopyin(c) present_or_copyin(d) "
+        "pcopyout(e) present_or_copyout(f) pcreate(g) present_or_create(h)",
+        nullptr));
+    ASSERT(dir != nullptr);
+    auto* all_clauses = dir->getAllClauses();
+    ASSERT(all_clauses != nullptr);
+
+    auto check_clause = [&](OpenACCClauseKind kind) {
+        auto it = all_clauses->find(kind);
+        ASSERT(it != all_clauses->end());
+        ASSERT(!it->second->empty());
+    };
+
+    check_clause(ACCC_copy);
+    check_clause(ACCC_copyin);
+    check_clause(ACCC_copyout);
+    check_clause(ACCC_create);
 }
 
 // =============================================================================
@@ -219,6 +262,16 @@ TEST(tile_clause) {
     DirectivePtr dir(parseOpenACC("acc loop tile(8,8)", nullptr));
     ASSERT(dir != nullptr);
     ASSERT_EQ(dir->getKind(), ACCD_loop);
+}
+
+TEST(dtype_alias_clause) {
+    DirectivePtr dir(parseOpenACC("acc loop dtype(*) vector", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_loop);
+    auto* ordered = dir->getClausesInOriginalOrder();
+    ASSERT(ordered != nullptr);
+    ASSERT(ordered->size() >= 1);
+    ASSERT_EQ(ordered->at(0)->getKind(), ACCC_device_type);
 }
 
 // =============================================================================
@@ -281,6 +334,7 @@ int main() {
     run_data();
     run_enter_data();
     run_exit_data();
+    run_host_data_space_variant();
 
     std::cout << "\nCompute Clauses:" << std::endl;
     run_num_gangs_clause();
@@ -288,9 +342,11 @@ int main() {
     run_vector_length_clause();
     run_async_clause();
     run_wait_clause();
+    run_wait_with_arguments();
     run_private_clause();
     run_firstprivate_clause();
     run_reduction_clause();
+    run_atomic_update_clause_roundtrip();
 
     std::cout << "\nData Clauses:" << std::endl;
     run_copy_clause();
@@ -298,6 +354,7 @@ int main() {
     run_copyout_clause();
     run_create_clause();
     run_present_clause();
+    run_data_clause_aliases_roundtrip();
 
     std::cout << "\nLoop Clauses:" << std::endl;
     run_gang_clause();
@@ -307,6 +364,7 @@ int main() {
     run_independent_clause();
     run_collapse_clause();
     run_tile_clause();
+    run_dtype_alias_clause();
 
     std::cout << "\nError Handling:" << std::endl;
     run_null_input();

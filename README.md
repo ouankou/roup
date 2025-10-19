@@ -26,6 +26,8 @@ Need platform-specific notes? See the [building guide](https://roup.ouankou.com/
 ## Why ROUP?
 
 - **OpenMP 3.0–6.0 coverage**: directives, clauses, and combined forms.
+- **OpenACC 3.4 coverage**: full directive and clause matrix documented in
+  [`docs/OPENACC_SUPPORT.md`](docs/OPENACC_SUPPORT.md).
 - **Multi-language APIs**: idiomatic Rust plus C and C++17 bindings.
 - **Tight unsafe boundary**: the FFI layer is the only unsafe code.
 - **Thorough testing**: 620+ automated tests across languages.
@@ -41,6 +43,7 @@ All guides live at [roup.ouankou.com](https://roup.ouankou.com):
 - [C++ tutorial](https://roup.ouankou.com/cpp-tutorial.html)
 - [API reference](https://roup.ouankou.com/api-reference.html)
 - [Architecture](https://roup.ouankou.com/architecture.html)
+- [OpenACC support matrix](docs/OPENACC_SUPPORT.md)
 
 ## Minimal example
 

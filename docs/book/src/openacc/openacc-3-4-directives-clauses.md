@@ -11,7 +11,7 @@ This document serves as a complete keyword inventory for development and referen
 
 ## Coverage
 
-- **23 Directives/Constructs** - All compute, data, loop, synchronization, declaration, and runtime directives
+- **24 Directives/Constructs** - All compute, data, loop, synchronization, declaration, and runtime directives (including space/underscore alias forms)
 - **50+ Clauses** - All clause keywords
 - **Modifiers** - Data clause modifiers, gang/worker/vector modifiers, collapse modifiers
 - **Special Values** - Async values, device types, default values
@@ -90,6 +90,11 @@ This document serves as a complete keyword inventory for development and referen
 - `deviceptr` (§2.7.5; p.53; category: data presence; properties: device pointer)
 - `attach` (§2.7.13; p.59; category: pointer; properties: attach pointer to device address)
 - `detach` (§2.7.14; p.59; category: pointer; properties: detach pointer from device address)
+
+> **Synonyms:** The specification preserves historical aliases such as
+> `pcopy`, `pcopyin`, `pcopyout`, `pcreate` and their `present_or_*`
+> counterparts. ROUP registers each alias alongside the canonical clause name
+> so original source spellings are retained during parsing.
 
 ### Host-Device Interaction Clauses
 
