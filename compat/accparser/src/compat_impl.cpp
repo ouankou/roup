@@ -154,6 +154,14 @@ static OpenACCClauseKind mapRoupToAccparserClause(int32_t roup_kind) {
         case ACC_CLAUSE_DEVICE_NUM:      return ACCC_device_num;
         case ACC_CLAUSE_DEVICE_RESIDENT: return ACCC_device_resident;
         case ACC_CLAUSE_HOST:            return ACCC_host;
+        case ACC_CLAUSE_PRESENT_OR_COPY:   return ACCC_copy;
+        case ACC_CLAUSE_PRESENT_OR_COPYIN: return ACCC_copyin;
+        case ACC_CLAUSE_PRESENT_OR_COPYOUT:return ACCC_copyout;
+        case ACC_CLAUSE_PRESENT_OR_CREATE:return ACCC_create;
+        case ACC_CLAUSE_PCOPY:             return ACCC_copy;
+        case ACC_CLAUSE_PCOPYIN:           return ACCC_copyin;
+        case ACC_CLAUSE_PCOPYOUT:          return ACCC_copyout;
+        case ACC_CLAUSE_PCREATE:           return ACCC_create;
         default:                         return ACCC_unknown;
     }
 }

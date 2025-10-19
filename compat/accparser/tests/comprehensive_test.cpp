@@ -175,6 +175,54 @@ TEST(present_clause) {
     ASSERT_EQ(dir->getKind(), ACCD_data);
 }
 
+TEST(present_or_copy_clause) {
+    DirectivePtr dir(parseOpenACC("acc data present_or_copy(x)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_data);
+}
+
+TEST(present_or_copyin_clause) {
+    DirectivePtr dir(parseOpenACC("acc data present_or_copyin(x)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_data);
+}
+
+TEST(present_or_copyout_clause) {
+    DirectivePtr dir(parseOpenACC("acc data present_or_copyout(x)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_data);
+}
+
+TEST(present_or_create_clause) {
+    DirectivePtr dir(parseOpenACC("acc data present_or_create(x)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_data);
+}
+
+TEST(pcopy_clause) {
+    DirectivePtr dir(parseOpenACC("acc data pcopy(x)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_data);
+}
+
+TEST(pcopyin_clause) {
+    DirectivePtr dir(parseOpenACC("acc data pcopyin(x)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_data);
+}
+
+TEST(pcopyout_clause) {
+    DirectivePtr dir(parseOpenACC("acc data pcopyout(x)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_data);
+}
+
+TEST(pcreate_clause) {
+    DirectivePtr dir(parseOpenACC("acc data pcreate(x)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_data);
+}
+
 // =============================================================================
 // Loop Clause Tests
 // =============================================================================
@@ -219,6 +267,16 @@ TEST(tile_clause) {
     DirectivePtr dir(parseOpenACC("acc loop tile(8,8)", nullptr));
     ASSERT(dir != nullptr);
     ASSERT_EQ(dir->getKind(), ACCD_loop);
+}
+
+// =============================================================================
+// Runtime Clause Tests
+// =============================================================================
+
+TEST(update_self_clause) {
+    DirectivePtr dir(parseOpenACC("acc update self(buf)", nullptr));
+    ASSERT(dir != nullptr);
+    ASSERT_EQ(dir->getKind(), ACCD_update);
 }
 
 // =============================================================================
@@ -298,6 +356,14 @@ int main() {
     run_copyout_clause();
     run_create_clause();
     run_present_clause();
+    run_present_or_copy_clause();
+    run_present_or_copyin_clause();
+    run_present_or_copyout_clause();
+    run_present_or_create_clause();
+    run_pcopy_clause();
+    run_pcopyin_clause();
+    run_pcopyout_clause();
+    run_pcreate_clause();
 
     std::cout << "\nLoop Clauses:" << std::endl;
     run_gang_clause();
@@ -307,6 +373,9 @@ int main() {
     run_independent_clause();
     run_collapse_clause();
     run_tile_clause();
+
+    std::cout << "\nRuntime Clauses:" << std::endl;
+    run_update_self_clause();
 
     std::cout << "\nError Handling:" << std::endl;
     run_null_input();

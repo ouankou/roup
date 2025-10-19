@@ -179,6 +179,7 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &
 </details>
 
 [Full OpenMP Support Matrix →](./openmp-support.md)
+[OpenACC Support Matrix →](./openacc-support.md)
 
 ### 🔍 Rich Clause Support
 

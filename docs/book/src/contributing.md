@@ -311,6 +311,7 @@ docs/book/src/
 ├── api-reference.md     # API reference
 ├── architecture.md      # Internal design
 ├── openmp-support.md    # OpenMP support matrix
+├── openacc-support.md   # OpenACC support matrix
 ├── contributing.md      # This file
 └── faq.md              # Frequently asked questions
 ```text
@@ -450,7 +451,7 @@ OpenMP 6.0 introduced a new `loop` directive as a more generic alternative to `f
 ## How
 - Added `Loop` variant to `DirectiveKind` enum
 - Added parsing logic in `directive.rs`
-- Updated OpenMP support matrix
+- Updated OpenMP/OpenACC support matrices where applicable
 
 ## Testing
 - Added 15 new test cases covering various `loop` directive forms

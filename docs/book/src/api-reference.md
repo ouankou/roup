@@ -311,6 +311,7 @@ The C API provides `roup_directive_kind()` which returns an integer representing
 - Advanced: `metadirective`, `declare variant`, `assume`
 
 For a complete list of all 120+ supported directives with version compatibility, see the [OpenMP Support Matrix](./openmp-support.md).
+The OpenACC catalogue lives in the [OpenACC Support Matrix](./openacc-support.md).
 
 #### Clause Kinds (Integer Discriminants)
 

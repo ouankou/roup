@@ -1736,6 +1736,14 @@ fn convert_acc_clause(clause: &Clause) -> AccClause {
         "device_num" => (42, ()),
         "device_resident" => (43, ()),
         "host" => (44, ()),
+        "present_or_copy" => (45, ()),
+        "present_or_copyin" => (46, ()),
+        "present_or_copyout" => (47, ()),
+        "present_or_create" => (48, ()),
+        "pcopy" => (49, ()),
+        "pcopyin" => (50, ()),
+        "pcopyout" => (51, ()),
+        "pcreate" => (52, ()),
         _ => (999, ()),
     };
 
