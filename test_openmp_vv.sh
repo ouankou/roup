@@ -14,6 +14,7 @@
 #   ./test_openmp_vv.sh                        # Auto-clone to target/openmp_vv
 #   OPENMP_VV_PATH=/path ./test_openmp_vv.sh   # Use existing clone
 #   CLANG=clang-15 ./test_openmp_vv.sh         # Use specific clang version
+#   PARALLEL_JOBS=8 ./test_openmp_vv.sh        # Control parallel execution
 #
 
 set -euo pipefail
@@ -25,6 +26,15 @@ TESTS_DIR="tests"
 CLANG="${CLANG:-clang}"
 CLANG_FORMAT="${CLANG_FORMAT:-clang-format}"
 MAX_DISPLAY_FAILURES=10
+# Fallback for systems without nproc (e.g., macOS)
+if command -v nproc >/dev/null 2>&1; then
+    DEFAULT_JOBS=$(nproc)
+elif command -v getconf >/dev/null 2>&1; then
+    DEFAULT_JOBS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo "1")
+else
+    DEFAULT_JOBS=1
+fi
+PARALLEL_JOBS="${PARALLEL_JOBS:-$DEFAULT_JOBS}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -97,58 +107,130 @@ total_files=${#source_files[@]}
 echo "Found $total_files C/C++ files"
 echo ""
 
-echo "Processing files..."
-echo ""
+# Function to process a single file
+process_file() {
+    local file="$1"
+    local temp_dir="$2"
+    # Use hash of full file path to avoid collisions (e.g., file-name.c vs file_name.c)
+    local file_hash
+    if command -v sha1sum >/dev/null 2>&1; then
+        file_hash=$(echo -n "$file" | sha1sum | awk '{print $1}')
+    elif command -v shasum >/dev/null 2>&1; then
+        file_hash=$(echo -n "$file" | shasum | awk '{print $1}')
+    elif command -v md5sum >/dev/null 2>&1; then
+        file_hash=$(echo -n "$file" | md5sum | awk '{print $1}')
+    else
+        # Fallback: use full path with character substitution (less safe but functional)
+        file_hash=$(echo "$file" | sed 's/[^a-zA-Z0-9]/_/g')
+    fi
+    local file_id="$file_hash"
+    local result_file="$temp_dir/result_$file_id"
 
-# Process each file
-for file in "${source_files[@]}"; do
     # Preprocess with clang
-    preprocessed=$("$CLANG" -E -P -CC -fopenmp -I"$(dirname "$file")" "$file" 2>/dev/null || true)
+    local preprocessed=$("$CLANG" -E -P -CC -fopenmp -I"$(dirname "$file")" "$file" 2>/dev/null || true)
 
     if [ -z "$preprocessed" ]; then
-        continue
+        echo "0 0 0 0" > "$result_file"
+        return
     fi
 
     # Extract pragmas (lines starting with #pragma omp, with optional leading whitespace)
     mapfile -t pragmas < <(echo "$preprocessed" | grep -E '^[[:space:]]*#pragma[[:space:]]+omp' || true)
 
     if [ ${#pragmas[@]} -eq 0 ]; then
-        continue
+        echo "0 0 0 0" > "$result_file"
+        return
     fi
 
-    files_with_pragmas=$((files_with_pragmas + 1))
+    local file_pragmas=${#pragmas[@]}
+    local file_passed=0
+    local file_failed=0
+    local file_parse_errors=0
 
     # Process each pragma
     for pragma in "${pragmas[@]}"; do
-        total_pragmas=$((total_pragmas + 1))
-
         # Normalize original pragma with clang-format
-        original_formatted=$(echo "$pragma" | "$CLANG_FORMAT" 2>/dev/null || echo "$pragma")
+        local original_formatted=$(echo "$pragma" | "$CLANG_FORMAT" 2>/dev/null || echo "$pragma")
 
         # Round-trip through ROUP
         if ! roundtrip=$(echo "$pragma" | "$ROUNDTRIP_BIN" 2>/dev/null); then
-            parse_errors=$((parse_errors + 1))
-            failed=$((failed + 1))
-            failure_files+=("$file")
-            failure_pragmas+=("$pragma")
-            failure_reasons+=("Parse error")
+            file_parse_errors=$((file_parse_errors + 1))
+            file_failed=$((file_failed + 1))
+            echo "$file|$pragma|Parse error" >> "$temp_dir/failures_$file_id"
             continue
         fi
 
         # Normalize round-tripped pragma with clang-format
-        roundtrip_formatted=$(echo "$roundtrip" | "$CLANG_FORMAT" 2>/dev/null || echo "$roundtrip")
+        local roundtrip_formatted=$(echo "$roundtrip" | "$CLANG_FORMAT" 2>/dev/null || echo "$roundtrip")
 
         # Compare
         if [ "$original_formatted" = "$roundtrip_formatted" ]; then
-            passed=$((passed + 1))
+            file_passed=$((file_passed + 1))
         else
-            failed=$((failed + 1))
-            failure_files+=("$file")
-            failure_pragmas+=("$pragma")
-            failure_reasons+=("Mismatch: got '$roundtrip'")
+            file_failed=$((file_failed + 1))
+            echo "$file|$pragma|Mismatch: got '$roundtrip'" >> "$temp_dir/failures_$file_id"
         fi
     done
+
+    # Output: has_pragmas total_pragmas passed failed parse_errors
+    echo "1 $file_pragmas $file_passed $file_failed $file_parse_errors" > "$result_file"
+}
+
+export -f process_file
+export CLANG CLANG_FORMAT ROUNDTRIP_BIN
+
+echo "Processing files in parallel (using $PARALLEL_JOBS jobs)..."
+echo ""
+
+# Create temporary directory for results
+temp_dir=$(mktemp -d)
+trap "rm -rf $temp_dir" EXIT
+
+# Process files in parallel (use null-terminated input and positional args to avoid
+# filename splitting and shell interpolation of special characters)
+printf '%s\0' "${source_files[@]}" | xargs -0 -P "$PARALLEL_JOBS" -I {} bash -c 'process_file "$1" "$2"' _ {} "$temp_dir"
+
+# Collect results
+for file in "${source_files[@]}"; do
+    # Use same hash generation as in process_file
+    file_hash=""
+    if command -v sha1sum >/dev/null 2>&1; then
+        file_hash=$(echo -n "$file" | sha1sum | awk '{print $1}')
+    elif command -v shasum >/dev/null 2>&1; then
+        file_hash=$(echo -n "$file" | shasum | awk '{print $1}')
+    elif command -v md5sum >/dev/null 2>&1; then
+        file_hash=$(echo -n "$file" | md5sum | awk '{print $1}')
+    else
+        file_hash=$(echo "$file" | sed 's/[^a-zA-Z0-9]/_/g')
+    fi
+    file_id="$file_hash"
+    result_file="$temp_dir/result_$file_id"
+
+    if [ -f "$result_file" ]; then
+        read -r has_pragmas file_pragmas file_passed file_failed file_parse_errors < "$result_file"
+
+        if [ "$has_pragmas" -eq 1 ]; then
+            files_with_pragmas=$((files_with_pragmas + 1))
+        fi
+
+        total_pragmas=$((total_pragmas + file_pragmas))
+        passed=$((passed + file_passed))
+        failed=$((failed + file_failed))
+        parse_errors=$((parse_errors + file_parse_errors))
+    fi
 done
+
+# Read failure details from all per-file failure logs
+# Enable nullglob to handle case where no failure files exist
+shopt -s nullglob
+for failure_file in "$temp_dir"/failures_*; do
+    while IFS='|' read -r file pragma reason; do
+        failure_files+=("$file")
+        failure_pragmas+=("$pragma")
+        failure_reasons+=("$reason")
+    done < "$failure_file"
+done
+shopt -u nullglob
 
 echo ""
 echo "========================================="
