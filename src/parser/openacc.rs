@@ -232,7 +232,8 @@ fn parse_end_directive<'a>(
     // Store the directive being ended as a parameter
     let directive = directive_parts.join(" ");
     let (rest, clauses) = clause_registry.parse_sequence(rest)?;
-    let parameter = format!(" {}", directive);
+    // Store the directive token without presentation spacing; rendering should add spaces.
+    let parameter = directive.to_string();
 
     Ok((
         rest,
