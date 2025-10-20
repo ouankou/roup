@@ -66,9 +66,7 @@ impl Directive<'_> {
         output.push_str(prefix);
         output.push(' ');
         output.push_str(self.name.as_ref());
-        if let Some(param) = &self.parameter {
-            output.push_str(param.as_ref());
-        }
+        render_parameter_into(&mut output, self.parameter.as_deref());
         if !self.clauses.is_empty() {
             output.push(' ');
             for (idx, clause) in self.clauses.iter().enumerate() {
@@ -89,7 +87,10 @@ impl fmt::Display for Directive<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "#pragma omp {}", self.name.as_ref())?;
         if let Some(param) = &self.parameter {
-            write!(f, "{}", param.as_ref())?;
+            // Use the same rendering rules as the helper to avoid divergence
+            let mut tmp = String::new();
+            render_parameter_into(&mut tmp, Some(param.as_ref()));
+            write!(f, "{}", tmp)?;
         }
         if !self.clauses.is_empty() {
             write!(f, " ")?;
@@ -101,6 +102,21 @@ impl fmt::Display for Directive<'_> {
             }
         }
         Ok(())
+    }
+}
+
+// Helper to render a parameter into the provided output buffer.
+// Inserts a separating space before the parameter unless it already
+// starts with '(' or a leading space. Centralizing the rule avoids
+// duplication between different render paths.
+fn render_parameter_into(output: &mut String, param: Option<&str>) {
+    if let Some(p) = param {
+        if p.starts_with('(') || p.starts_with(' ') {
+            output.push_str(p);
+        } else {
+            output.push(' ');
+            output.push_str(p);
+        }
     }
 }
 

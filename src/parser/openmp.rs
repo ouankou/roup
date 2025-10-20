@@ -580,37 +580,83 @@ fn parse_scan_directive<'a>(
     use super::Directive;
     use nom::bytes::complete::tag;
 
+    // Trim leading whitespace for reliable token matching
     let input_trimmed = input.trim_start();
 
-    // Try exclusive first
-    if let Ok((rest, _)) = tag::<_, _, nom::error::Error<&str>>("exclusive")(input_trimmed) {
-        if let Ok((rest, list_content)) = parse_parenthesized_content(rest) {
+    // Try exclusive first: `exclusive(list)` optionally followed by clauses
+    if let Ok((rest_after_tag, _)) =
+        tag::<_, _, nom::error::Error<&str>>("exclusive")(input_trimmed)
+    {
+        if let Ok((rest_after_paren, list_content)) = parse_parenthesized_content(rest_after_tag) {
+            // After the parenthesized list we may have clauses. Parse them from the remaining input.
+            let (rest, clauses) = match clause_registry.parse_sequence(rest_after_paren) {
+                Ok((r, c)) => (r, c),
+                Err(e) => {
+                    // Distinguish between: (A) Truly no clauses (only whitespace/comments remaining)
+                    // and (B) a parse error. If the remainder contains only whitespace/comments,
+                    // treat as no clauses; otherwise propagate the parse error so malformed
+                    // clauses aren't silently accepted.
+                    if let Ok((remaining_after_skipping, _)) =
+                        crate::lexer::skip_space_and_comments(rest_after_paren)
+                    {
+                        if remaining_after_skipping.is_empty() {
+                            (rest_after_paren, vec![])
+                        } else {
+                            return Err(e);
+                        }
+                    } else {
+                        return Err(e);
+                    }
+                }
+            };
+
             return Ok((
                 rest,
                 Directive {
                     name: std::borrow::Cow::Borrowed("scan"),
+                    // Store the parameter without a leading space; the display/formatting layer
+                    // is responsible for spacing when rendering the directive.
                     parameter: Some(std::borrow::Cow::Owned(format!(
-                        " exclusive({})",
+                        "exclusive({})",
                         list_content
                     ))),
-                    clauses: vec![],
+                    clauses,
                 },
             ));
         }
     }
 
-    // Try inclusive
-    if let Ok((rest, _)) = tag::<_, _, nom::error::Error<&str>>("inclusive")(input_trimmed) {
-        if let Ok((rest, list_content)) = parse_parenthesized_content(rest) {
+    // Try inclusive: `inclusive(list)` optionally followed by clauses
+    if let Ok((rest_after_tag, _)) =
+        tag::<_, _, nom::error::Error<&str>>("inclusive")(input_trimmed)
+    {
+        if let Ok((rest_after_paren, list_content)) = parse_parenthesized_content(rest_after_tag) {
+            let (rest, clauses) = match clause_registry.parse_sequence(rest_after_paren) {
+                Ok((r, c)) => (r, c),
+                Err(e) => {
+                    if let Ok((remaining_after_skipping, _)) =
+                        crate::lexer::skip_space_and_comments(rest_after_paren)
+                    {
+                        if remaining_after_skipping.is_empty() {
+                            (rest_after_paren, vec![])
+                        } else {
+                            return Err(e);
+                        }
+                    } else {
+                        return Err(e);
+                    }
+                }
+            };
+
             return Ok((
                 rest,
                 Directive {
                     name: std::borrow::Cow::Borrowed("scan"),
                     parameter: Some(std::borrow::Cow::Owned(format!(
-                        " inclusive({})",
+                        "inclusive({})",
                         list_content
                     ))),
-                    clauses: vec![],
+                    clauses,
                 },
             ));
         }
@@ -648,7 +694,9 @@ fn parse_cancel_directive<'a>(
             rest,
             Directive {
                 name: std::borrow::Cow::Borrowed("cancel"),
-                parameter: Some(std::borrow::Cow::Owned(format!(" {}", construct_type))),
+                // Store the construct type without a leading space; presentation spacing
+                // should be handled by the renderer that prints directives.
+                parameter: Some(std::borrow::Cow::Owned(construct_type.to_string())),
                 clauses,
             },
         ))
