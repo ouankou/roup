@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main"]};
+window.SIDEBAR_ITEMS = {"enum":["Dialect","InputLanguage"],"fn":["detect_openacc_language","main"]};
