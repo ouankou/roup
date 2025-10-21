@@ -1,10 +1,17 @@
 [package]
 name = "roup"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Anjia Wang <anjia@ouankou.com>"]
 edition = "2021"
 rust-version = "1.85.0"  # MSRV: Required for mdBook dependencies (edition2024 support)
 license = "BSD-3-Clause"
+description = "Rust-first parser for OpenMP and OpenACC directives with C/C++ bindings"
+repository = "https://github.com/ouankou/roup"
+documentation = "https://roup.ouankou.com"
+homepage = "https://roup.ouankou.com"
+keywords = ["openmp", "openacc", "parser", "hpc", "parallel"]
+categories = ["parsing", "science", "development-tools::ffi"]
+readme = "README.md"
 
 [dependencies]
 # Learning Rust: External Dependencies

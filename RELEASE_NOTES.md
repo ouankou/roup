@@ -1,90 +1,100 @@
 # Release Notes
 
-## 0.5.0 (2025-10-18)
+## 0.6.0 (2025-10-23)
 
-### Major Features
+### OpenACC 3.4 support
 
-**Translation API** - C/C++ ↔ Fortran Directive Translation
-- Added comprehensive translation infrastructure for converting OpenMP directives between C/C++ and Fortran
-- Rust API: `translate::translate()` with automatic format detection
-- C API: `roup_translate_c_to_fortran()` and `roup_translate_fortran_to_c()` with explicit format control
-- Full support for both free-form and fixed-form Fortran (with proper column-based sentinel positioning)
-- Handles language-specific syntax differences (DO vs FOR, array section parentheses vs brackets)
-- See [Translation API documentation](https://roup.ouankou.com/api-reference.html#translation-api) for details
+- **Full OpenACC 3.4 coverage:** comprehensive directive and clause parsing with alias support documented in [`docs/OPENACC_SUPPORT.md`](docs/OPENACC_SUPPORT.md).
+- **accparser compatibility layer:** drop-in replacement for the original accparser library with zero ANTLR dependency, shipped in [`compat/accparser/`](compat/accparser/).
+- **OpenACCV-V validation:** 100% round-trip success on the [OpenACCV-V](https://github.com/OpenACCUserGroup/OpenACCV-V) suite with automated testing via `test_openacc_vv.sh`.
+- Supports both C/C++ `#pragma acc` and Fortran sentinels (`!$acc`, `c$acc`, `*$acc`) across free and fixed form.
 
-**OpenMP_VV Validation** - 100% Round-Trip Pass Rate
-- Achieved **100% success rate** (3767/3767 pragmas) on the official [OpenMP Validation & Verification](https://github.com/OpenMP-Validation-and-Verification/OpenMP_VV) test suite
-- Validates ROUP against real-world OpenMP code from the comprehensive OpenMP_VV repository
-- Automated round-trip testing: parse → unparse → compare with clang-format normalization
-- Added `test_openmp_vv.sh` script and `roup_roundtrip` binary for validation
-- Enhanced parser with 10 custom directive parsers for non-standard syntax patterns
-- Updated test infrastructure to require 100% pass rate in CI
+### Parser enhancements
 
-**Enhanced Fortran Support**
-- Short-form Fortran sentinels: `!$` (free-form) and `      !$` (fixed-form, must start in column 7)
-  - Note: In fixed-form Fortran, the sentinel must begin in column 7 (i.e., six leading spaces before `!$`)
-- Comprehensive sentinel variation tests covering all valid OpenMP Fortran comment formats
-- Full support for both traditional (`!$OMP`/`      !$OMP`) and short (`!$`/`      !$`) forms
+- **Parameter normalization:** directive parameters are now normalized consistently across OpenMP and OpenACC.
+- **Scan directive fixes:** proper parsing of `scan inclusive` and `scan exclusive` with argument lists.
+- **Improved error handling:** better diagnostics for malformed directives and clauses.
 
-### Parser Improvements
+### Testing and validation
 
-- **Custom directive parsers** for 10 directives with special syntax:
-  - `allocate(list)`, `threadprivate(list)`, `declare target(list)`
-  - `declare mapper(id)`, `declare variant(func)`, `depobj(obj)`
-  - `scan exclusive/inclusive(list)`, `cancel construct-type`
-  - `groupprivate(list)`, `target_data` (underscore variant)
-- **Flexible clause rules**: `nowait` and `safesync` now support optional arguments
-- **Comment handling**: Proper support for comments between directive names and parenthesized content
-- **Missing directives added**: `end assumes`, `master taskloop`, `master taskloop simd`
-
-### Testing & Validation
-
-- Test suite now at **620 automated tests** (up from 600+)
-- New test categories:
-  - OpenMP_VV round-trip validation (3767 real-world pragmas)
-  - Translation round-trip tests (C/C++ ↔ Fortran)
-  - Fortran sentinel variation tests
-  - Custom parser integration tests
-- Updated MSRV testing approach: 1.85 (MSRV) + stable only
-- Enhanced CI matrix: 6 jobs (2 Rust versions × 3 OSes)
+- **Parallel validation:** OpenMP_VV and OpenACCV-V tests now run with parallelized xargs for faster CI execution.
+- **Hardened scripts:** validation scripts use proper quoting and error handling to prevent shell injection.
+- Test suite expanded to cover OpenACC round-trips and cross-language compatibility.
 
 ### Documentation
 
-- Comprehensive translation API documentation with examples
-- Detailed OpenMP_VV validation documentation in `TESTING.md`
-- Updated architecture documentation
-- Consolidated and streamlined guides
-- All statistics and numbers verified for accuracy
+- Streamlined top-level guides (README, TESTING, RELEASE_NOTES).
+- Removed temporary analysis and design documents.
+- Updated submodules to latest upstream versions (accparser, ompparser).
+- Consolidated compatibility layer documentation.
 
-### Internal Improvements
+### Breaking changes
 
-- Constant `CUSTOM_PARSER_DIRECTIVES` for maintainability
-- Simplified `parse_parenthesized_content()` using lexer utilities
-- Platform-specific installation instructions in test scripts
-- Enhanced error messages and debugging support
+None. All Rust, C, and C++ APIs remain backward compatible.
 
-### Breaking Changes
+## 0.5.0 (2025-10-18)
 
-**None** - All changes are backward compatible for Rust, C, and C++ callers.
+### Translation API
+
+- Added a conversion layer between C/C++ and Fortran directives.
+- Rust entry point: `translate::translate()` detects the input format.
+- C API wrappers: `roup_translate_c_to_fortran()` and `roup_translate_fortran_to_c()`.
+- Handles both free-form and fixed-form Fortran, including column-7 sentinels.
+- See the [Translation API docs](https://roup.ouankou.com/api-reference.html#translation-api) for examples.
+
+### OpenMP_VV validation
+
+- Achieved a 3767/3767 success rate on the [OpenMP_VV](https://github.com/OpenMP-Validation-and-Verification/OpenMP_VV) suite.
+- Added `test_openmp_vv.sh` and the `roup_roundtrip` helper for automation.
+- Parser gained bespoke handlers for 10 directives that require special casing.
+- CI enforces 100% parity through the new validation stage.
+
+### Fortran support
+
+- Recognises both traditional (`!$OMP`) and short (`!$`) sentinels in free and fixed form.
+- Includes targeted tests for each sentinel combination.
+
+### Parser changes
+
+- Added directive-specific parsers for allocate, threadprivate, declare target, declare mapper, declare variant, depobj, scan (exclusive/inclusive), cancel, groupprivate, and target_data.
+- `nowait` and `safesync` clauses accept optional arguments.
+- Directives now tolerate comments between the keyword and arguments.
+- Added missing directives: `end assumes`, `master taskloop`, and `master taskloop simd`.
+
+### Testing and CI
+
+- Test count now exceeds 620.
+- New suites cover OpenMP_VV round-trips, translation round-trips, Fortran sentinel variations, and directive-specific parsing.
+- CI targets MSRV 1.85 and stable across Linux, macOS, and Windows.
+
+### Documentation and internal work
+
+- Expanded translation API and OpenMP_VV documentation.
+- Consolidated architecture material across the book and README.
+- Introduced the `CUSTOM_PARSER_DIRECTIVES` constant and simplified lexer helpers.
+- Improved test scripts with clearer platform requirements and error messages.
+
+### Breaking changes
+
+None. Rust, C, and C++ APIs remain backward compatible.
 
 ## 0.4.0 (2025-10-11)
 
-- Completed OpenMP 6.0 coverage, including 26 new combined and atomic directive variants.
-- Parser, IR, and display layers updated to understand every variant with matching helper utilities.
-- Test suite now exceeds 600 cases, covering round-trips, keyword coverage, and compatibility checks.
-- Documentation refreshed across the book and README to reflect the broader coverage and test counts.
-- No breaking API changes: all additions are backward compatible for Rust, C, and C++ callers.
+- Completed OpenMP 6.0 coverage, including 26 new combined and atomic directives.
+- Parser, IR, and display layers now understand every variant with supporting utilities.
+- The test suite surpassed 600 cases, covering round-trips, keyword coverage, and compatibility checks.
+- Documentation refresh aligned statistics and clarified the experimental status.
 
 ## 0.3.0 (2025-10-11)
 
-- Launched the mdBook documentation site with end-to-end tutorials, architecture notes, and contribution guidance.
-- Fixed a reduction-clause memory bug in the C API and tightened documentation around the pointer-based design.
-- Clarified the experimental status across the project and aligned statistics (directive counts, clause counts, test totals).
-- Continuous-integration jobs now compile and run the shipped C examples.
+- Published the mdBook documentation site with tutorials, architecture notes, and contribution guidance.
+- Fixed a reduction-clause memory bug in the C API and clarified the pointer model.
+- Synced directive, clause, and test totals across the docs.
+- CI now compiles and executes the bundled C examples.
 
 ## 0.2.0 (2025-10-11)
 
-- Replaced the legacy handle-based FFI with a direct pointer model implemented in Rust (`src/c_api.rs`).
-- Delivered a minimal unsafe boundary (~60 lines) while keeping the remainder of the crate safe.
-- Added lifecycle, iterator, clause-query, and variable-list helpers for C and C++ consumers (18 functions total).
-- Validated the new API with 342 automated tests and a dedicated C smoke test.
+- Replaced the handle-based FFI with a direct pointer model in `src/c_api.rs`.
+- Reduced the unsafe boundary to roughly 60 lines.
+- Added lifecycle, iterator, clause-query, and variable-list helpers for C and C++ consumers.
+- Validated the API with 342 automated tests and a dedicated C smoke test.
