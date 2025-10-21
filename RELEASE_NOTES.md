@@ -2,70 +2,34 @@
 
 ## 0.5.0 (2025-10-18)
 
-### Major Features
+### Highlights
 
-**Translation API** - C/C++ ↔ Fortran Directive Translation
-- Added comprehensive translation infrastructure for converting OpenMP directives between C/C++ and Fortran
-- Rust API: `translate::translate()` with automatic format detection
-- C API: `roup_translate_c_to_fortran()` and `roup_translate_fortran_to_c()` with explicit format control
-- Full support for both free-form and fixed-form Fortran (with proper column-based sentinel positioning)
-- Handles language-specific syntax differences (DO vs FOR, array section parentheses vs brackets)
-- See [Translation API documentation](https://roup.ouankou.com/api-reference.html#translation-api) for details
+- **Directive translation:** bidirectional C/C++ ↔ Fortran conversion is available through `translate::translate()` in Rust and
+  `roup_translate_c_to_fortran()` / `roup_translate_fortran_to_c()` in the C API. Fixed- and free-form Fortran sentinels are
+  handled automatically.
+- **OpenMP_VV parity:** round-trip validation now covers the entire OpenMP_VV corpus via `test_openmp_vv.sh` and the
+  `roup_roundtrip` helper binary, requiring a 100% match in CI.
+- **Fortran sentinels:** short (`!$`) and traditional (`!$OMP`) sentinels are accepted in both free- and fixed-form layouts with
+  column enforcement for fixed-form code.
 
-**OpenMP_VV Validation** - 100% Round-Trip Pass Rate
-- Achieved **100% success rate** (3767/3767 pragmas) on the official [OpenMP Validation & Verification](https://github.com/OpenMP-Validation-and-Verification/OpenMP_VV) test suite
-- Validates ROUP against real-world OpenMP code from the comprehensive OpenMP_VV repository
-- Automated round-trip testing: parse → unparse → compare with clang-format normalization
-- Added `test_openmp_vv.sh` script and `roup_roundtrip` binary for validation
-- Enhanced parser with 10 custom directive parsers for non-standard syntax patterns
-- Updated test infrastructure to require 100% pass rate in CI
+### Parser and testing updates
 
-**Enhanced Fortran Support**
-- Short-form Fortran sentinels: `!$` (free-form) and `      !$` (fixed-form, must start in column 7)
-  - Note: In fixed-form Fortran, the sentinel must begin in column 7 (i.e., six leading spaces before `!$`)
-- Comprehensive sentinel variation tests covering all valid OpenMP Fortran comment formats
-- Full support for both traditional (`!$OMP`/`      !$OMP`) and short (`!$`/`      !$`) forms
+- Added directive-specific parsers for constructs with bespoke syntax such as `declare mapper`, `scan inclusive`, and
+  `groupprivate`.
+- Clause parsing for `nowait` and `safesync` accepts optional arguments, and comments between directive names and content are
+  preserved.
+- Integration tests now include translation round-trips, Fortran sentinel variants, and the OpenMP_VV corpus, bringing the
+  automated suite beyond 600 checks.
+- CI focuses on MSRV (1.85) and stable toolchains across Linux, macOS, and Windows.
 
-### Parser Improvements
+### Documentation and tooling
 
-- **Custom directive parsers** for 10 directives with special syntax:
-  - `allocate(list)`, `threadprivate(list)`, `declare target(list)`
-  - `declare mapper(id)`, `declare variant(func)`, `depobj(obj)`
-  - `scan exclusive/inclusive(list)`, `cancel construct-type`
-  - `groupprivate(list)`, `target_data` (underscore variant)
-- **Flexible clause rules**: `nowait` and `safesync` now support optional arguments
-- **Comment handling**: Proper support for comments between directive names and parenthesized content
-- **Missing directives added**: `end assumes`, `master taskloop`, `master taskloop simd`
+- Added translation API coverage and OpenMP_VV guidance to the documentation set.
+- Consolidated build/test instructions and error-reporting improvements in the helper scripts.
 
-### Testing & Validation
+### Breaking changes
 
-- Test suite now at **620 automated tests** (up from 600+)
-- New test categories:
-  - OpenMP_VV round-trip validation (3767 real-world pragmas)
-  - Translation round-trip tests (C/C++ ↔ Fortran)
-  - Fortran sentinel variation tests
-  - Custom parser integration tests
-- Updated MSRV testing approach: 1.85 (MSRV) + stable only
-- Enhanced CI matrix: 6 jobs (2 Rust versions × 3 OSes)
-
-### Documentation
-
-- Comprehensive translation API documentation with examples
-- Detailed OpenMP_VV validation documentation in `TESTING.md`
-- Updated architecture documentation
-- Consolidated and streamlined guides
-- All statistics and numbers verified for accuracy
-
-### Internal Improvements
-
-- Constant `CUSTOM_PARSER_DIRECTIVES` for maintainability
-- Simplified `parse_parenthesized_content()` using lexer utilities
-- Platform-specific installation instructions in test scripts
-- Enhanced error messages and debugging support
-
-### Breaking Changes
-
-**None** - All changes are backward compatible for Rust, C, and C++ callers.
+None. Rust, C, and C++ interfaces remain source-compatible.
 
 ## 0.4.0 (2025-10-11)
 
