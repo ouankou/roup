@@ -37,6 +37,10 @@ static int tests_failed = 0;
 
 struct DirectiveDeleter {
     void operator()(OpenMPDirective* dir) const {
+        if (!dir) {
+            return;
+        }
+        releasePlainDirective(dir);
         delete dir;
     }
 };
@@ -189,10 +193,72 @@ TEST(multiple_clauses) {
         "omp parallel num_threads(4) private(x) shared(y)", nullptr
     ));
     ASSERT_NOT_NULL(dir.get());
-    
+
     auto* clauses = dir->getAllClauses();
     ASSERT_NOT_NULL(clauses);
     ASSERT(clauses->size() >= 2);  // At least num_threads and private
+}
+
+// ============================================================================
+// Plain Directive String Tests
+// ============================================================================
+
+TEST(plain_directive_c_redaction) {
+    setLang(Lang_C);
+    DirectivePtr dir(parseOpenMP(
+        "omp target data map(to: arr[0:N]) nowait", nullptr
+    ));
+    ASSERT_NOT_NULL(dir.get());
+
+    const char* plain = getPlainDirective(dir.get());
+    ASSERT_NOT_NULL(plain);
+    ASSERT_EQ(
+        std::string(plain),
+        "#pragma omp target data map(to: <variable>) nowait"
+    );
+}
+
+TEST(plain_directive_fortran_prefix) {
+    setLang(Lang_Fortran);
+    DirectivePtr dir(parseOpenMP("parallel private(i)", nullptr));
+    ASSERT_NOT_NULL(dir.get());
+
+    const char* plain = getPlainDirective(dir.get());
+    ASSERT_NOT_NULL(plain);
+    ASSERT_EQ(std::string(plain), "!$omp parallel private(<identifier>)");
+
+    setLang(Lang_C); // reset for other tests
+}
+
+TEST(plain_directive_mixed_clauses) {
+    setLang(Lang_C);
+    DirectivePtr dir(parseOpenMP(
+        "omp parallel for if(n > 10) schedule(dynamic, chunk) reduction(+: sum) collapse(2)",
+        nullptr
+    ));
+    ASSERT_NOT_NULL(dir.get());
+
+    const char* plain = getPlainDirective(dir.get());
+    ASSERT_NOT_NULL(plain);
+    ASSERT_EQ(
+        std::string(plain),
+        "#pragma omp parallel for if(<expr>) schedule(dynamic, <expr>) reduction(+: <identifier>) collapse(<expr>)"
+    );
+}
+
+TEST(plain_directive_fortran_uppercase_input) {
+    setLang(Lang_Fortran);
+    DirectivePtr dir(parseOpenMP("!$OMP target map(tofrom: A, B)", nullptr));
+    ASSERT_NOT_NULL(dir.get());
+
+    const char* plain = getPlainDirective(dir.get());
+    ASSERT_NOT_NULL(plain);
+    ASSERT_EQ(
+        std::string(plain),
+        "!$omp target map(tofrom: <identifier>, <identifier>)"
+    );
+
+    setLang(Lang_C); // reset for other tests
 }
 
 TEST(reduction_clause) {

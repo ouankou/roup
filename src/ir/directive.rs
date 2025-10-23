@@ -40,7 +40,7 @@
 //! }
 //! ```
 
-use std::fmt;
+use std::fmt::{self, Write as FmtWrite};
 
 use super::{ClauseData, Language, SourceLocation};
 
@@ -856,6 +856,24 @@ impl<'a> DirectiveIR {
     {
         self.clauses.iter().filter(|c| predicate(c)).collect()
     }
+
+    /// Write a plain directive string with user-provided identifiers redacted.
+    pub fn fmt_plain<W: FmtWrite>(&self, f: &mut W) -> fmt::Result {
+        write!(f, "{}{}", self.language.pragma_prefix(), self.kind)?;
+        for clause in self.clauses.iter() {
+            write!(f, " ")?;
+            clause.fmt_plain(f)?;
+        }
+        Ok(())
+    }
+
+    /// Convenience helper returning the plain directive string.
+    pub fn to_plain_string(&self) -> String {
+        let mut output = String::new();
+        self.fmt_plain(&mut output)
+            .expect("writing to String should not fail");
+        output
+    }
 }
 
 impl<'a> fmt::Display for DirectiveIR {
@@ -879,7 +897,9 @@ impl<'a> fmt::Display for DirectiveIR {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{ClauseItem, DefaultKind, Identifier, ReductionOperator};
+    use crate::ir::{
+        ClauseItem, DefaultKind, Expression, Identifier, MapType, ReductionOperator, Variable,
+    };
 
     // DirectiveKind tests
     #[test]
@@ -1208,5 +1228,47 @@ mod tests {
 
         assert_eq!(dir.clauses().len(), 0);
         assert!(!dir.has_clause(|_| true));
+    }
+
+    #[test]
+    fn test_directive_plain_string_redacts_items() {
+        let clauses = vec![
+            ClauseData::Map {
+                map_type: Some(MapType::To),
+                mapper: None,
+                items: vec![ClauseItem::Variable(Variable::new("arr"))],
+            },
+            ClauseData::Bare(Identifier::new("nowait")),
+        ];
+
+        let dir = DirectiveIR::new(
+            DirectiveKind::TargetData,
+            "target data",
+            clauses,
+            SourceLocation::start(),
+            Language::C,
+        );
+
+        assert_eq!(
+            dir.to_plain_string(),
+            "#pragma omp target data map(to: <variable>) nowait"
+        );
+    }
+
+    #[test]
+    fn test_directive_plain_string_fortran_prefix() {
+        let clauses = vec![ClauseData::NumThreads {
+            num: Expression::unparsed("4"),
+        }];
+
+        let dir = DirectiveIR::new(
+            DirectiveKind::Parallel,
+            "parallel",
+            clauses,
+            SourceLocation::start(),
+            Language::Fortran,
+        );
+
+        assert_eq!(dir.to_plain_string(), "!$omp parallel num_threads(<expr>)");
     }
 }

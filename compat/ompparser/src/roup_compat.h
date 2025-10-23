@@ -21,6 +21,9 @@ void setLang(OpenMPBaseLang lang);
 
 #ifdef __cplusplus
 }
+
+const char* getPlainDirective(const OpenMPDirective* dir);
+void releasePlainDirective(const OpenMPDirective* dir);
 #endif
 
 #endif /* ROUP_COMPAT_H */

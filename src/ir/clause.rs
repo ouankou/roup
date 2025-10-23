@@ -31,7 +31,7 @@
 //! - OpenMP version-specific features
 //! - User-defined reduction operators
 
-use std::fmt;
+use std::fmt::{self, Write as FmtWrite};
 
 use super::{Expression, Identifier, Variable};
 
@@ -1101,6 +1101,237 @@ impl fmt::Display for ClauseData {
     }
 }
 
+impl ClauseData {
+    /// Write a "plain" representation that retains structural keywords while
+    /// redacting user-provided identifiers, variables, and expressions.
+    pub fn fmt_plain<W: FmtWrite>(&self, f: &mut W) -> fmt::Result {
+        match self {
+            ClauseData::Bare(name) => write!(f, "{}", name),
+            ClauseData::Expression(_) => write!(f, "<expr>"),
+            ClauseData::ItemList(items) => write_plain_item_list(f, items),
+            ClauseData::Private { items } => {
+                write!(f, "private(")?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::Firstprivate { items } => {
+                write!(f, "firstprivate(")?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::Lastprivate { modifier, items } => {
+                write!(f, "lastprivate(")?;
+                if let Some(m) = modifier {
+                    write!(f, "{}: ", m)?;
+                }
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::Shared { items } => {
+                write!(f, "shared(")?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::Default(kind) => write!(f, "default({})", kind),
+            ClauseData::Reduction { operator, items } => {
+                write!(f, "reduction({}: ", operator)?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::Map {
+                map_type,
+                mapper,
+                items,
+            } => {
+                write!(f, "map(")?;
+                if mapper.is_some() {
+                    write!(f, "mapper(<identifier>)")?;
+                    if map_type.is_some() || !items.is_empty() {
+                        write!(f, ", ")?;
+                    }
+                }
+                if let Some(mt) = map_type {
+                    write!(f, "{}: ", mt)?;
+                }
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::UseDevicePtr { items } => {
+                write!(f, "use_device_ptr(")?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::UseDeviceAddr { items } => {
+                write!(f, "use_device_addr(")?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::IsDevicePtr { items } => {
+                write!(f, "is_device_ptr(")?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::HasDeviceAddr { items } => {
+                write!(f, "has_device_addr(")?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::Depend { depend_type, items } => {
+                write!(f, "depend({}: ", depend_type)?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::Priority { .. } => write!(f, "priority(<expr>)"),
+            ClauseData::Affinity { items } => {
+                write!(f, "affinity(")?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::Schedule {
+                kind,
+                modifiers,
+                chunk_size,
+            } => {
+                write!(f, "schedule(")?;
+                if !modifiers.is_empty() {
+                    for (idx, modifier) in modifiers.iter().enumerate() {
+                        if idx > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", modifier)?;
+                    }
+                    write!(f, ": ")?;
+                }
+                write!(f, "{}", kind)?;
+                if chunk_size.is_some() {
+                    write!(f, ", <expr>")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Collapse { .. } => write!(f, "collapse(<expr>)"),
+            ClauseData::Ordered { n } => {
+                write!(f, "ordered")?;
+                if n.is_some() {
+                    write!(f, "(<expr>)")?;
+                }
+                Ok(())
+            }
+            ClauseData::Linear {
+                modifier,
+                items,
+                step,
+            } => {
+                write!(f, "linear(")?;
+                if let Some(m) = modifier {
+                    write!(f, "{}: ", m)?;
+                }
+                write_plain_item_list(f, items)?;
+                if step.is_some() {
+                    write!(f, ": <expr>")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Aligned { items, alignment } => {
+                write!(f, "aligned(")?;
+                write_plain_item_list(f, items)?;
+                if alignment.is_some() {
+                    write!(f, ": <expr>")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Safelen { .. } => write!(f, "safelen(<expr>)"),
+            ClauseData::Simdlen { .. } => write!(f, "simdlen(<expr>)"),
+            ClauseData::If { directive_name, .. } => {
+                write!(f, "if(")?;
+                if let Some(name) = directive_name {
+                    write!(f, "{}: ", name)?;
+                }
+                write!(f, "<expr>)")
+            }
+            ClauseData::ProcBind(pb) => write!(f, "proc_bind({})", pb),
+            ClauseData::NumThreads { .. } => write!(f, "num_threads(<expr>)"),
+            ClauseData::Device { .. } => write!(f, "device(<expr>)"),
+            ClauseData::DeviceType(dt) => write!(f, "device_type({})", dt),
+            ClauseData::AtomicDefaultMemOrder(order) => {
+                write!(f, "atomic_default_mem_order({})", order)
+            }
+            ClauseData::AtomicOperation { op, memory_order } => {
+                write!(f, "atomic({}", op)?;
+                if let Some(order) = memory_order {
+                    write!(f, ": {}", order)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Order(kind) => write!(f, "order({})", kind),
+            ClauseData::NumTeams { .. } => write!(f, "num_teams(<expr>)"),
+            ClauseData::ThreadLimit { .. } => write!(f, "thread_limit(<expr>)"),
+            ClauseData::Allocate { allocator, items } => {
+                write!(f, "allocate(")?;
+                if allocator.is_some() {
+                    write!(f, "allocator(<identifier>): ")?;
+                }
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::Allocator { .. } => write!(f, "allocator(<identifier>)"),
+            ClauseData::Copyin { items } => {
+                write!(f, "copyin(")?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::Copyprivate { items } => {
+                write!(f, "copyprivate(")?;
+                write_plain_item_list(f, items)?;
+                write!(f, ")")
+            }
+            ClauseData::DistSchedule { kind, chunk_size } => {
+                write!(f, "dist_schedule({}", kind)?;
+                if chunk_size.is_some() {
+                    write!(f, ", <expr>")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Grainsize { .. } => write!(f, "grainsize(<expr>)"),
+            ClauseData::NumTasks { .. } => write!(f, "num_tasks(<expr>)"),
+            ClauseData::Filter { .. } => write!(f, "filter(<expr>)"),
+            ClauseData::Generic { name, data } => {
+                if data.is_some() {
+                    write!(f, "{}(<data>)", name)
+                } else {
+                    write!(f, "{}", name)
+                }
+            }
+        }
+    }
+
+    /// Convenience helper to retrieve the plain string representation.
+    pub fn to_plain_string(&self) -> String {
+        let mut output = String::new();
+        self.fmt_plain(&mut output)
+            .expect("writing to String should not fail");
+        output
+    }
+}
+
+fn write_plain_item_list<W: FmtWrite>(f: &mut W, items: &[ClauseItem]) -> fmt::Result {
+    if items.is_empty() {
+        return write!(f, "<item>");
+    }
+
+    for (idx, item) in items.iter().enumerate() {
+        if idx > 0 {
+            write!(f, ", ")?;
+        }
+        match item {
+            ClauseItem::Identifier(_) => write!(f, "<identifier>")?,
+            ClauseItem::Variable(_) => write!(f, "<variable>")?,
+            ClauseItem::Expression(_) => write!(f, "<expr>")?,
+        }
+    }
+
+    Ok(())
+}
+
 impl<'a> ClauseData {
     /// Check if this is a default clause
     pub fn is_default(&self) -> bool {
@@ -1933,5 +2164,115 @@ mod tests {
         let debug_str = format!("{:?}", clause);
         assert!(debug_str.contains("Default"));
         assert!(debug_str.contains("Shared"));
+    }
+
+    #[test]
+    fn plain_private_clause_redacts_identifiers() {
+        let clause = ClauseData::Private {
+            items: vec![
+                ClauseItem::Identifier(Identifier::new("a")),
+                ClauseItem::Identifier(Identifier::new("b")),
+            ],
+        };
+
+        assert_eq!(
+            clause.to_plain_string(),
+            "private(<identifier>, <identifier>)"
+        );
+    }
+
+    #[test]
+    fn plain_map_clause_keeps_map_type() {
+        let clause = ClauseData::Map {
+            map_type: Some(MapType::ToFrom),
+            mapper: Some(Identifier::new("custom_mapper")),
+            items: vec![ClauseItem::Variable(Variable::new("arr"))],
+        };
+
+        assert_eq!(
+            clause.to_plain_string(),
+            "map(mapper(<identifier>), tofrom: <variable>)"
+        );
+    }
+
+    #[test]
+    fn plain_depend_clause_shows_depend_type() {
+        let clause = ClauseData::Depend {
+            depend_type: DependType::Mutexinoutset,
+            items: vec![ClauseItem::Variable(Variable::new("arr"))],
+        };
+
+        assert_eq!(
+            clause.to_plain_string(),
+            "depend(mutexinoutset: <variable>)"
+        );
+    }
+
+    #[test]
+    fn plain_reduction_clause_redacts_items() {
+        let clause = ClauseData::Reduction {
+            operator: ReductionOperator::Add,
+            items: vec![
+                ClauseItem::Identifier(Identifier::new("sum")),
+                ClauseItem::Identifier(Identifier::new("value")),
+            ],
+        };
+
+        assert_eq!(
+            clause.to_plain_string(),
+            "reduction(+: <identifier>, <identifier>)"
+        );
+    }
+
+    #[test]
+    fn plain_schedule_clause_preserves_kind_and_chunk_placeholder() {
+        let clause = ClauseData::Schedule {
+            kind: ScheduleKind::Dynamic,
+            modifiers: vec![],
+            chunk_size: Some(Expression::unparsed("chunk")),
+        };
+
+        assert_eq!(clause.to_plain_string(), "schedule(dynamic, <expr>)");
+    }
+
+    #[test]
+    fn plain_schedule_clause_lists_modifiers() {
+        let clause = ClauseData::Schedule {
+            kind: ScheduleKind::Static,
+            modifiers: vec![ScheduleModifier::Monotonic, ScheduleModifier::Simd],
+            chunk_size: None,
+        };
+
+        assert_eq!(
+            clause.to_plain_string(),
+            "schedule(monotonic, simd: static)"
+        );
+    }
+
+    #[test]
+    fn plain_linear_clause_shows_modifier_and_step_placeholders() {
+        let clause = ClauseData::Linear {
+            modifier: Some(LinearModifier::Uval),
+            items: vec![ClauseItem::Identifier(Identifier::new("idx"))],
+            step: Some(Expression::unparsed("stride")),
+        };
+
+        assert_eq!(
+            clause.to_plain_string(),
+            "linear(uval: <identifier>: <expr>)"
+        );
+    }
+
+    #[test]
+    fn plain_allocate_clause_indicates_allocator_placeholder() {
+        let clause = ClauseData::Allocate {
+            allocator: Some(Identifier::new("omp_default_mem_alloc")),
+            items: vec![ClauseItem::Identifier(Identifier::new("buf"))],
+        };
+
+        assert_eq!(
+            clause.to_plain_string(),
+            "allocate(allocator(<identifier>): <identifier>)"
+        );
     }
 }

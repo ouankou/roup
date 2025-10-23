@@ -59,8 +59,9 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
+use crate::ir::{convert::convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
 use crate::lexer::Language;
-use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
+use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind, Directive};
 
 // ============================================================================
 // Language Constants for Fortran Support
@@ -117,6 +118,7 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 #[repr(C)]
 pub struct OmpDirective {
     name: *const c_char,     // Directive name (e.g., "parallel")
+    plain: *const c_char,    // Plain directive string with redacted symbols
     clauses: Vec<OmpClause>, // Associated clauses
 }
 
@@ -225,9 +227,15 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
         Err(_) => return ptr::null_mut(), // Parse error
     };
 
+    // Generate redacted/plain directive string before moving data
+    let plain = directive_plain_string(&directive, Language::C);
+    let name_ptr = allocate_c_string(directive.name.as_ref());
+    let plain_ptr = allocate_c_string(&plain);
+
     // Convert to C-compatible format
     let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name.as_ref()),
+        name: name_ptr,
+        plain: plain_ptr,
         clauses: directive
             .clauses
             .into_iter()
@@ -260,6 +268,10 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
         // Free the name string (was allocated with CString::into_raw)
         if !boxed.name.is_null() {
             drop(CString::from_raw(boxed.name as *mut c_char));
+        }
+
+        if !boxed.plain.is_null() {
+            drop(CString::from_raw(boxed.plain as *mut c_char));
         }
 
         // Free clause data
@@ -345,9 +357,14 @@ pub extern "C" fn roup_parse_with_language(
         Err(_) => return ptr::null_mut(),
     };
 
+    let plain = directive_plain_string(&directive, lang);
+    let name_ptr = allocate_c_string(directive.name.as_ref());
+    let plain_ptr = allocate_c_string(&plain);
+
     // Convert to C-compatible format
     let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name.as_ref()),
+        name: name_ptr,
+        plain: plain_ptr,
         clauses: directive
             .clauses
             .into_iter()
@@ -390,6 +407,18 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
         let dir = &*directive;
         directive_name_to_kind(dir.name)
     }
+}
+
+/// Get the plain (redacted) directive string.
+///
+/// Returns NULL if directive is NULL.
+#[no_mangle]
+pub extern "C" fn roup_directive_plain_string(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe { (*directive).plain }
 }
 
 /// Get number of clauses in a directive.
@@ -673,6 +702,40 @@ pub extern "C" fn roup_string_list_free(list: *mut OmpStringList) {
 fn allocate_c_string(s: &str) -> *const c_char {
     let c_string = std::ffi::CString::new(s).unwrap();
     c_string.into_raw() as *const c_char
+}
+
+fn parser_language_to_ir(lang: Language) -> IrLanguage {
+    match lang {
+        Language::C => IrLanguage::C,
+        Language::FortranFree | Language::FortranFixed => IrLanguage::Fortran,
+    }
+}
+
+fn directive_plain_string(directive: &Directive, parser_lang: Language) -> String {
+    let ir_lang = parser_language_to_ir(parser_lang);
+    let mut config = ParserConfig::default();
+    config.language = ir_lang;
+
+    match convert_directive(directive, SourceLocation::start(), ir_lang, &config) {
+        Ok(ir) => ir.to_plain_string(),
+        Err(_) => fallback_plain_string(directive, ir_lang),
+    }
+}
+
+fn fallback_plain_string(directive: &Directive, ir_lang: IrLanguage) -> String {
+    let mut output = String::from(ir_lang.pragma_prefix());
+    output.push_str(directive.name.as_ref());
+
+    for clause in &directive.clauses {
+        output.push(' ');
+        output.push_str(clause.name.as_ref());
+        if matches!(clause.kind, ClauseKind::Parenthesized(_)) {
+            output.push('(');
+            output.push(')');
+        }
+    }
+
+    output
 }
 
 /// Convert Rust Clause to C-compatible OmpClause.
