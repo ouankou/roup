@@ -33,6 +33,19 @@
 
 use std::fmt;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ClauseDisplayMode {
+    Full,
+    Plain,
+}
+
+impl ClauseDisplayMode {
+    #[inline]
+    const fn is_plain(self) -> bool {
+        matches!(self, ClauseDisplayMode::Plain)
+    }
+}
+
 use super::{Expression, Identifier, Variable};
 
 // ============================================================================
@@ -639,13 +652,23 @@ pub enum ClauseItem {
     Expression(Expression),
 }
 
-impl fmt::Display for ClauseItem {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl ClauseItem {
+    fn fmt_with_mode(&self, f: &mut fmt::Formatter<'_>, mode: ClauseDisplayMode) -> fmt::Result {
+        if mode.is_plain() {
+            return Ok(());
+        }
+
         match self {
             ClauseItem::Identifier(id) => write!(f, "{}", id),
             ClauseItem::Variable(var) => write!(f, "{}", var),
             ClauseItem::Expression(expr) => write!(f, "{}", expr),
         }
+    }
+}
+
+impl fmt::Display for ClauseItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_mode(f, ClauseDisplayMode::Full)
     }
 }
 
@@ -934,37 +957,53 @@ pub enum ClauseData {
     },
 }
 
-impl fmt::Display for ClauseData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl ClauseData {
+    pub(crate) fn fmt_with_mode(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        mode: ClauseDisplayMode,
+    ) -> fmt::Result {
         match self {
             ClauseData::Bare(name) => write!(f, "{}", name),
-            ClauseData::Expression(expr) => write!(f, "{}", expr),
+            ClauseData::Expression(expr) => {
+                if mode.is_plain() {
+                    Ok(())
+                } else {
+                    write!(f, "{}", expr)
+                }
+            }
             ClauseData::ItemList(items) => {
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if !mode.is_plain() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        item.fmt_with_mode(f, mode)?;
                     }
-                    write!(f, "{}", item)?;
                 }
                 Ok(())
             }
             ClauseData::Private { items } => {
                 write!(f, "private(")?;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if !mode.is_plain() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        item.fmt_with_mode(f, mode)?;
                     }
-                    write!(f, "{}", item)?;
                 }
                 write!(f, ")")
             }
             ClauseData::Firstprivate { items } => {
                 write!(f, "firstprivate(")?;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if !mode.is_plain() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        item.fmt_with_mode(f, mode)?;
                     }
-                    write!(f, "{}", item)?;
                 }
                 write!(f, ")")
             }
@@ -973,32 +1012,38 @@ impl fmt::Display for ClauseData {
                 if let Some(m) = modifier {
                     write!(f, "{}: ", m)?;
                 }
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if !mode.is_plain() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        item.fmt_with_mode(f, mode)?;
                     }
-                    write!(f, "{}", item)?;
                 }
                 write!(f, ")")
             }
             ClauseData::Shared { items } => {
                 write!(f, "shared(")?;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if !mode.is_plain() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        item.fmt_with_mode(f, mode)?;
                     }
-                    write!(f, "{}", item)?;
                 }
                 write!(f, ")")
             }
             ClauseData::Default(kind) => write!(f, "default({})", kind),
             ClauseData::Reduction { operator, items } => {
                 write!(f, "reduction({}: ", operator)?;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if !mode.is_plain() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        item.fmt_with_mode(f, mode)?;
                     }
-                    write!(f, "{}", item)?;
                 }
                 write!(f, ")")
             }
@@ -1009,16 +1054,22 @@ impl fmt::Display for ClauseData {
             } => {
                 write!(f, "map(")?;
                 if let Some(mapper_id) = mapper {
-                    write!(f, "mapper({}), ", mapper_id)?;
+                    if mode.is_plain() {
+                        write!(f, "mapper(), ")?;
+                    } else {
+                        write!(f, "mapper({}), ", mapper_id)?;
+                    }
                 }
                 if let Some(mt) = map_type {
                     write!(f, "{}: ", mt)?;
                 }
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if !mode.is_plain() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        item.fmt_with_mode(f, mode)?;
                     }
-                    write!(f, "{}", item)?;
                 }
                 write!(f, ")")
             }
@@ -1039,7 +1090,11 @@ impl fmt::Display for ClauseData {
                 }
                 write!(f, "{}", kind)?;
                 if let Some(chunk) = chunk_size {
-                    write!(f, ", {}", chunk)?;
+                    if mode.is_plain() {
+                        write!(f, ", ")?;
+                    } else {
+                        write!(f, ", {}", chunk)?;
+                    }
                 }
                 write!(f, ")")
             }
@@ -1052,14 +1107,20 @@ impl fmt::Display for ClauseData {
                 if let Some(m) = modifier {
                     write!(f, "{}: ", m)?;
                 }
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if !mode.is_plain() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        item.fmt_with_mode(f, mode)?;
                     }
-                    write!(f, "{}", item)?;
                 }
                 if let Some(s) = step {
-                    write!(f, ": {}", s)?;
+                    if mode.is_plain() {
+                        write!(f, ": ")?;
+                    } else {
+                        write!(f, ": {}", s)?;
+                    }
                 }
                 write!(f, ")")
             }
@@ -1071,33 +1132,88 @@ impl fmt::Display for ClauseData {
                 if let Some(name) = directive_name {
                     write!(f, "{}: ", name)?;
                 }
-                write!(f, "{})", condition)
+                if !mode.is_plain() {
+                    write!(f, "{}", condition)?;
+                }
+                write!(f, ")")
             }
-            ClauseData::NumThreads { num } => write!(f, "num_threads({})", num),
+            ClauseData::NumThreads { num } => {
+                if mode.is_plain() {
+                    write!(f, "num_threads()")
+                } else {
+                    write!(f, "num_threads({})", num)
+                }
+            }
             ClauseData::ProcBind(pb) => write!(f, "proc_bind({})", pb),
-            ClauseData::Device { device_num } => write!(f, "device({})", device_num),
+            ClauseData::Device { device_num } => {
+                if mode.is_plain() {
+                    write!(f, "device()")
+                } else {
+                    write!(f, "device({})", device_num)
+                }
+            }
             ClauseData::DeviceType(dt) => write!(f, "device_type({})", dt),
-            ClauseData::Collapse { n } => write!(f, "collapse({})", n),
+            ClauseData::Collapse { n } => {
+                if mode.is_plain() {
+                    write!(f, "collapse()")
+                } else {
+                    write!(f, "collapse({})", n)
+                }
+            }
             ClauseData::Ordered { n } => {
                 write!(f, "ordered")?;
                 if let Some(num) = n {
-                    write!(f, "({})", num)?;
+                    if mode.is_plain() {
+                        write!(f, "()")?;
+                    } else {
+                        write!(f, "({})", num)?;
+                    }
                 }
                 Ok(())
             }
             ClauseData::Depend { depend_type, items } => {
                 write!(f, "depend({}: ", depend_type)?;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if !mode.is_plain() {
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        item.fmt_with_mode(f, mode)?;
                     }
-                    write!(f, "{}", item)?;
                 }
                 write!(f, ")")
             }
             // Simplified Display for remaining variants (can be expanded as needed)
             _ => write!(f, "<clause>"),
         }
+    }
+}
+
+impl fmt::Display for ClauseData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_mode(f, ClauseDisplayMode::Full)
+    }
+}
+
+impl ClauseData {
+    pub fn to_plain_string(&self) -> String {
+        let mut buffer = String::new();
+        fmt::write(
+            &mut buffer,
+            format_args!("{}", ClausePlainDisplay { clause: self }),
+        )
+        .expect("writing to String should not fail");
+        buffer
+    }
+}
+
+struct ClausePlainDisplay<'a> {
+    clause: &'a ClauseData,
+}
+
+impl fmt::Display for ClausePlainDisplay<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.clause.fmt_with_mode(f, ClauseDisplayMode::Plain)
     }
 }
 

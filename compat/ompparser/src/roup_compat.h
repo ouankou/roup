@@ -19,6 +19,9 @@ extern "C" {
 /* Set the base language for parsing (C, C++, Fortran) */
 void setLang(OpenMPBaseLang lang);
 
+/* Retrieve the normalized plain directive string */
+const char* roup_get_plain_directive_string(const OpenMPDirective* dir);
+
 #ifdef __cplusplus
 }
 #endif

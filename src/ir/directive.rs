@@ -42,6 +42,8 @@
 
 use std::fmt;
 
+use super::clause::ClauseDisplayMode;
+
 use super::{ClauseData, Language, SourceLocation};
 
 // ============================================================================
@@ -858,17 +860,58 @@ impl<'a> DirectiveIR {
     }
 }
 
-impl<'a> fmt::Display for DirectiveIR {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Write pragma prefix (already includes "omp ")
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DirectiveDisplayMode {
+    Full,
+    Plain,
+}
+
+impl DirectiveDisplayMode {
+    #[inline]
+    const fn clause_mode(self) -> ClauseDisplayMode {
+        match self {
+            DirectiveDisplayMode::Full => ClauseDisplayMode::Full,
+            DirectiveDisplayMode::Plain => ClauseDisplayMode::Plain,
+        }
+    }
+}
+
+impl DirectiveIR {
+    fn fmt_with_mode(&self, f: &mut fmt::Formatter<'_>, mode: DirectiveDisplayMode) -> fmt::Result {
         write!(f, "{}{}", self.language.pragma_prefix(), self.kind)?;
 
-        // Write clauses
+        let clause_mode = mode.clause_mode();
         for clause in self.clauses.iter() {
-            write!(f, " {}", clause)?;
+            write!(f, " ")?;
+            clause.fmt_with_mode(f, clause_mode)?;
         }
 
         Ok(())
+    }
+
+    /// Generate a normalized directive string without user-provided symbols.
+    ///
+    /// This replaces identifiers, variables, and expressions in clause payloads
+    /// with empty slots while preserving the directive structure. Enumerated
+    /// modifiers (e.g., `tofrom`, `monotonic`) remain intact.
+    pub fn to_plain_string(&self) -> String {
+        format!("{}", DirectivePlainDisplay { directive: self })
+    }
+}
+
+impl<'a> fmt::Display for DirectiveIR {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_mode(f, DirectiveDisplayMode::Full)
+    }
+}
+
+struct DirectivePlainDisplay<'a> {
+    directive: &'a DirectiveIR,
+}
+
+impl fmt::Display for DirectivePlainDisplay<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.directive.fmt_with_mode(f, DirectiveDisplayMode::Plain)
     }
 }
 
@@ -879,7 +922,10 @@ impl<'a> fmt::Display for DirectiveIR {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{ClauseItem, DefaultKind, Identifier, ReductionOperator};
+    use crate::ir::{
+        ArraySection, ClauseItem, DefaultKind, Expression, Identifier, Language, MapType,
+        ReductionOperator, ScheduleKind, ScheduleModifier, SourceLocation, Variable,
+    };
 
     // DirectiveKind tests
     #[test]
@@ -1208,5 +1254,92 @@ mod tests {
 
         assert_eq!(dir.clauses().len(), 0);
         assert!(!dir.has_clause(|_| true));
+    }
+
+    #[test]
+    fn directive_plain_string_removes_user_symbols_from_map() {
+        let array_section = ArraySection::new(
+            Some(Expression::unparsed("0")),
+            Some(Expression::unparsed("ARRAY_SIZE")),
+            None,
+        );
+
+        let map_clause_1 = ClauseData::Map {
+            map_type: Some(MapType::ToFrom),
+            mapper: None,
+            items: vec![
+                ClauseItem::from(Variable::with_sections("a", vec![array_section.clone()])),
+                ClauseItem::from(Variable::new("num_teams")),
+            ],
+        };
+
+        let map_clause_2 = ClauseData::Map {
+            map_type: Some(MapType::To),
+            mapper: None,
+            items: vec![ClauseItem::from(Variable::with_sections(
+                "b",
+                vec![array_section],
+            ))],
+        };
+
+        let directive = DirectiveIR::new(
+            DirectiveKind::TargetData,
+            "target data",
+            vec![map_clause_1, map_clause_2],
+            SourceLocation::start(),
+            Language::C,
+        );
+
+        assert_eq!(
+            directive.to_plain_string(),
+            "#pragma omp target data map(tofrom: ) map(to: )"
+        );
+    }
+
+    #[test]
+    fn directive_plain_string_handles_mixed_clauses() {
+        let clauses = vec![
+            ClauseData::NumThreads {
+                num: Expression::unparsed("4"),
+            },
+            ClauseData::If {
+                directive_name: Some(Identifier::new("parallel")),
+                condition: Expression::unparsed("flag"),
+            },
+            ClauseData::Reduction {
+                operator: ReductionOperator::Add,
+                items: vec![ClauseItem::from(Identifier::new("sum"))],
+            },
+            ClauseData::Schedule {
+                kind: ScheduleKind::Static,
+                modifiers: vec![ScheduleModifier::Monotonic],
+                chunk_size: Some(Expression::unparsed("16")),
+            },
+        ];
+
+        let directive = DirectiveIR::new(
+            DirectiveKind::ParallelFor,
+            "parallel for",
+            clauses,
+            SourceLocation::start(),
+            Language::C,
+        );
+
+        assert_eq!(
+            directive.to_plain_string(),
+            "#pragma omp parallel for num_threads() if(parallel: ) reduction(+: ) schedule(monotonic: static, )"
+        );
+    }
+
+    #[test]
+    fn directive_plain_string_uses_language_prefix() {
+        let directive = DirectiveIR::simple(
+            DirectiveKind::Barrier,
+            "barrier",
+            SourceLocation::start(),
+            Language::Fortran,
+        );
+
+        assert_eq!(directive.to_plain_string(), "!$omp barrier");
     }
 }

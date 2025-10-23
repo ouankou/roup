@@ -59,6 +59,7 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
+use crate::ir::{convert::convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
 use crate::lexer::Language;
 use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
 
@@ -118,6 +119,7 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 pub struct OmpDirective {
     name: *const c_char,     // Directive name (e.g., "parallel")
     clauses: Vec<OmpClause>, // Associated clauses
+    plain: *const c_char,    // Plain directive string without user symbols
 }
 
 /// Opaque clause type (C-compatible)
@@ -225,15 +227,8 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
         Err(_) => return ptr::null_mut(), // Parse error
     };
 
-    // Convert to C-compatible format
-    let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name.as_ref()),
-        clauses: directive
-            .clauses
-            .into_iter()
-            .map(|c| convert_clause(&c))
-            .collect(),
-    };
+    let ir_language = IrLanguage::C;
+    let c_directive = build_c_directive(directive, ir_language);
 
     // UNSAFE BLOCK 2: Convert Box to raw pointer for C
     // Safety: Caller will call roup_directive_free() to deallocate
@@ -260,6 +255,10 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
         // Free the name string (was allocated with CString::into_raw)
         if !boxed.name.is_null() {
             drop(CString::from_raw(boxed.name as *mut c_char));
+        }
+
+        if !boxed.plain.is_null() {
+            drop(CString::from_raw(boxed.plain as *mut c_char));
         }
 
         // Free clause data
@@ -345,17 +344,19 @@ pub extern "C" fn roup_parse_with_language(
         Err(_) => return ptr::null_mut(),
     };
 
-    // Convert to C-compatible format
-    let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name.as_ref()),
-        clauses: directive
-            .clauses
-            .into_iter()
-            .map(|c| convert_clause(&c))
-            .collect(),
-    };
+    let ir_language = to_ir_language(lang);
+    let c_directive = build_c_directive(directive, ir_language);
 
     Box::into_raw(Box::new(c_directive))
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_plain_string(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe { (*directive).plain }
 }
 
 /// Free a clause.
@@ -673,6 +674,40 @@ pub extern "C" fn roup_string_list_free(list: *mut OmpStringList) {
 fn allocate_c_string(s: &str) -> *const c_char {
     let c_string = std::ffi::CString::new(s).unwrap();
     c_string.into_raw() as *const c_char
+}
+
+fn to_ir_language(lang: Language) -> IrLanguage {
+    match lang {
+        Language::C => IrLanguage::C,
+        Language::FortranFree | Language::FortranFixed => IrLanguage::Fortran,
+    }
+}
+
+fn directive_plain_string(
+    directive: &crate::parser::Directive<'_>,
+    ir_language: IrLanguage,
+) -> String {
+    let config = ParserConfig::with_parsing(ir_language);
+    convert_directive(directive, SourceLocation::start(), ir_language, &config)
+        .map(|ir| ir.to_plain_string())
+        .unwrap_or_else(|_| directive.to_pragma_string())
+}
+
+fn build_c_directive(
+    directive: crate::parser::Directive<'_>,
+    ir_language: IrLanguage,
+) -> OmpDirective {
+    let plain = directive_plain_string(&directive, ir_language);
+
+    OmpDirective {
+        name: allocate_c_string(directive.name.as_ref()),
+        clauses: directive
+            .clauses
+            .into_iter()
+            .map(|c| convert_clause(&c))
+            .collect(),
+        plain: allocate_c_string(&plain),
+    }
 }
 
 /// Convert Rust Clause to C-compatible OmpClause.

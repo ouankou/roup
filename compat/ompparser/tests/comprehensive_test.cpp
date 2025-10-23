@@ -195,6 +195,30 @@ TEST(multiple_clauses) {
     ASSERT(clauses->size() >= 2);  // At least num_threads and private
 }
 
+TEST(plain_directive_string_target_map) {
+    const char* source =
+        "#pragma omp target data map(tofrom: a[0:ARRAY_SIZE], num_teams) map(to: b[0:ARRAY_SIZE])";
+    DirectivePtr dir(parseOpenMP(source, nullptr));
+    ASSERT_NOT_NULL(dir.get());
+
+    const char* plain = roup_get_plain_directive_string(dir.get());
+    ASSERT_NOT_NULL(plain);
+    ASSERT_EQ(std::string(plain), "#pragma omp target data map(tofrom: ) map(to: )");
+}
+
+TEST(plain_directive_string_mixed_clauses) {
+    const char* source = "#pragma omp parallel for num_threads(4) if(parallel: flag) reduction(+: sum) schedule(monotonic: static, 16)";
+    DirectivePtr dir(parseOpenMP(source, nullptr));
+    ASSERT_NOT_NULL(dir.get());
+
+    const char* plain = roup_get_plain_directive_string(dir.get());
+    ASSERT_NOT_NULL(plain);
+    ASSERT_EQ(
+        std::string(plain),
+        "#pragma omp parallel for num_threads() if(parallel: ) reduction(+: ) schedule(monotonic: static, )"
+    );
+}
+
 TEST(reduction_clause) {
     DirectivePtr dir(parseOpenMP("omp parallel reduction(+:sum)", nullptr));
     ASSERT_NOT_NULL(dir.get());

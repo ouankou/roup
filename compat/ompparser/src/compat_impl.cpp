@@ -41,6 +41,9 @@ extern "C" {
 
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
+
+    // Plain directive string
+    const char* roup_directive_plain_string(const OmpDirective* directive);
 }
 
 // ============================================================================
@@ -56,6 +59,14 @@ static constexpr const char C_PRAGMA_PREFIX[] = "#pragma";    // C/C++ pragma pr
 // Compile-time string lengths: sizeof() includes null terminator, subtract 1 for actual length
 static constexpr size_t FORTRAN_PREFIX_LEN = sizeof(FORTRAN_PREFIX) - 1;
 static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
+
+class RoupDirective : public OpenMPDirective {
+public:
+    RoupDirective(OpenMPDirectiveKind kind, OpenMPBaseLang lang, int line = 0, int col = 0)
+        : OpenMPDirective(kind, lang, line, col) {}
+
+    std::string plain;
+};
 
 extern "C" void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
@@ -161,7 +172,14 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
     // Create ompparser-compatible directive
     // Use ompparser's actual constructor: OpenMPDirective(kind, lang, line, col)
-    OpenMPDirective* dir = new OpenMPDirective(kind, current_lang, 0, 0);
+    RoupDirective* derived_dir = new RoupDirective(kind, current_lang, 0, 0);
+    OpenMPDirective* dir = derived_dir;
+
+    if (const char* plain = roup_directive_plain_string(roup_dir)) {
+        derived_dir->plain = plain;
+    } else {
+        derived_dir->plain = dir->generatePragmaString();
+    }
 
     // Convert clauses using ompparser's addOpenMPClause method
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);
@@ -182,6 +200,19 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     roup_directive_free(roup_dir);
 
     return dir;
+}
+
+extern "C" const char* roup_get_plain_directive_string(const OpenMPDirective* dir) {
+    if (!dir) {
+        return nullptr;
+    }
+
+    const auto* derived = dynamic_cast<const RoupDirective*>(dir);
+    if (!derived) {
+        return nullptr;
+    }
+
+    return derived->plain.c_str();
 }
 
 } // extern "C"
