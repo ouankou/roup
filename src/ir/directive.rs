@@ -856,6 +856,16 @@ impl<'a> DirectiveIR {
     {
         self.clauses.iter().filter(|c| predicate(c)).collect()
     }
+
+    /// Render a template representation of the directive without user symbols.
+    pub fn template(&self) -> DirectiveTemplate<'_> {
+        DirectiveTemplate::new(self)
+    }
+
+    /// Convenience wrapper returning the template as a [`String`].
+    pub fn to_template_string(&self) -> String {
+        self.template().to_string()
+    }
 }
 
 impl<'a> fmt::Display for DirectiveIR {
@@ -868,6 +878,25 @@ impl<'a> fmt::Display for DirectiveIR {
             write!(f, " {}", clause)?;
         }
 
+        Ok(())
+    }
+}
+
+/// Template (symbol-free) formatter for [`DirectiveIR`]
+pub struct DirectiveTemplate<'a>(&'a DirectiveIR);
+
+impl<'a> DirectiveTemplate<'a> {
+    fn new(ir: &'a DirectiveIR) -> Self {
+        DirectiveTemplate(ir)
+    }
+}
+
+impl<'a> fmt::Display for DirectiveTemplate<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self.0.language.pragma_prefix(), self.0.kind)?;
+        for clause in self.0.clauses.iter() {
+            write!(f, " {}", clause.template())?;
+        }
         Ok(())
     }
 }

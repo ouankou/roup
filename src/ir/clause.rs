@@ -1101,6 +1101,177 @@ impl fmt::Display for ClauseData {
     }
 }
 
+/// Template (symbol-free) formatter for [`ClauseData`]
+///
+/// This helper renders a clause without any user provided identifiers or
+/// expressions. Only structural keywords (e.g. `tofrom`, `static`) remain,
+/// making it possible to reason about which clause shapes are present without
+/// leaking source level symbols.
+pub struct ClauseTemplate<'a>(&'a ClauseData);
+
+impl<'a> ClauseTemplate<'a> {
+    fn new(data: &'a ClauseData) -> Self {
+        ClauseTemplate(data)
+    }
+}
+
+impl<'a> fmt::Display for ClauseTemplate<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            ClauseData::Bare(name) => write!(f, "{}", name),
+            ClauseData::Expression(_) => write!(f, "<expression>"),
+            ClauseData::ItemList(_) => write!(f, "<items>"),
+            ClauseData::Private { .. } => write!(f, "private()"),
+            ClauseData::Firstprivate { .. } => write!(f, "firstprivate()"),
+            ClauseData::Lastprivate { modifier, .. } => {
+                write!(f, "lastprivate(")?;
+                if let Some(m) = modifier {
+                    write!(f, "{}: ", m)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Shared { .. } => write!(f, "shared()"),
+            ClauseData::Default(kind) => write!(f, "default({})", kind),
+            ClauseData::Reduction { operator, .. } => write!(f, "reduction({}: )", operator),
+            ClauseData::Map {
+                map_type, mapper, ..
+            } => {
+                write!(f, "map(")?;
+                if mapper.is_some() {
+                    write!(f, "mapper()")?;
+                    if map_type.is_some() {
+                        write!(f, ", ")?;
+                    }
+                }
+                if let Some(mt) = map_type {
+                    write!(f, "{}: ", mt)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::UseDevicePtr { .. } => write!(f, "use_device_ptr()"),
+            ClauseData::UseDeviceAddr { .. } => write!(f, "use_device_addr()"),
+            ClauseData::IsDevicePtr { .. } => write!(f, "is_device_ptr()"),
+            ClauseData::HasDeviceAddr { .. } => write!(f, "has_device_addr()"),
+            ClauseData::Depend { depend_type, .. } => write!(f, "depend({}: )", depend_type),
+            ClauseData::Priority { .. } => write!(f, "priority()"),
+            ClauseData::Affinity { .. } => write!(f, "affinity()"),
+            ClauseData::Schedule {
+                kind,
+                modifiers,
+                chunk_size,
+            } => {
+                write!(f, "schedule(")?;
+                if !modifiers.is_empty() {
+                    for (i, modifier) in modifiers.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", modifier)?;
+                    }
+                    write!(f, ": ")?;
+                }
+                write!(f, "{}", kind)?;
+                if chunk_size.is_some() {
+                    write!(f, ", ")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Collapse { .. } => write!(f, "collapse()"),
+            ClauseData::Ordered { n } => {
+                if n.is_some() {
+                    write!(f, "ordered()")
+                } else {
+                    write!(f, "ordered")
+                }
+            }
+            ClauseData::Linear { modifier, step, .. } => {
+                write!(f, "linear(")?;
+                if let Some(m) = modifier {
+                    write!(f, "{}: ", m)?;
+                }
+                if step.is_some() {
+                    write!(f, ": ")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Aligned { alignment, .. } => {
+                write!(f, "aligned(")?;
+                if alignment.is_some() {
+                    write!(f, ": ")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Safelen { .. } => write!(f, "safelen()"),
+            ClauseData::Simdlen { .. } => write!(f, "simdlen()"),
+            ClauseData::If { directive_name, .. } => {
+                write!(f, "if(")?;
+                if let Some(name) = directive_name {
+                    write!(f, "{}: ", name)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::ProcBind(pb) => write!(f, "proc_bind({})", pb),
+            ClauseData::NumThreads { .. } => write!(f, "num_threads()"),
+            ClauseData::Device { .. } => write!(f, "device()"),
+            ClauseData::DeviceType(dt) => write!(f, "device_type({})", dt),
+            ClauseData::AtomicDefaultMemOrder(order) => {
+                write!(f, "atomic_default_mem_order({})", order)
+            }
+            ClauseData::AtomicOperation { op, memory_order } => {
+                write!(f, "atomic({}", op)?;
+                if let Some(order) = memory_order {
+                    write!(f, ", {}", order)?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Order(kind) => write!(f, "order({})", kind),
+            ClauseData::NumTeams { .. } => write!(f, "num_teams()"),
+            ClauseData::ThreadLimit { .. } => write!(f, "thread_limit()"),
+            ClauseData::Allocate { allocator, .. } => {
+                write!(f, "allocate(")?;
+                if allocator.is_some() {
+                    write!(f, "allocator: ")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Allocator { .. } => write!(f, "allocator()"),
+            ClauseData::Copyin { .. } => write!(f, "copyin()"),
+            ClauseData::Copyprivate { .. } => write!(f, "copyprivate()"),
+            ClauseData::DistSchedule { kind, chunk_size } => {
+                write!(f, "dist_schedule({}", kind)?;
+                if chunk_size.is_some() {
+                    write!(f, ", ")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Grainsize { .. } => write!(f, "grainsize()"),
+            ClauseData::NumTasks { .. } => write!(f, "num_tasks()"),
+            ClauseData::Filter { .. } => write!(f, "filter()"),
+            ClauseData::Generic { name, data } => {
+                if data.is_some() {
+                    write!(f, "{}()", name)
+                } else {
+                    write!(f, "{}", name)
+                }
+            }
+        }
+    }
+}
+
+impl ClauseData {
+    /// Render a symbol-free template representation of this clause.
+    ///
+    /// This is useful for analyses that only care about clause structure.
+    pub fn template(&self) -> ClauseTemplate<'_> {
+        ClauseTemplate::new(self)
+    }
+
+    /// Convenience wrapper returning the template as a [`String`].
+    pub fn to_template_string(&self) -> String {
+        self.template().to_string()
+    }
+}
+
 impl<'a> ClauseData {
     /// Check if this is a default clause
     pub fn is_default(&self) -> bool {

@@ -19,6 +19,9 @@ extern "C" {
 /* Set the base language for parsing (C, C++, Fortran) */
 void setLang(OpenMPBaseLang lang);
 
+/* Retrieve the symbol-free directive template */
+const char* getPlainDirective(const OpenMPDirective* dir);
+
 #ifdef __cplusplus
 }
 #endif

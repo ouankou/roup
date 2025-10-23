@@ -23,9 +23,19 @@
 #include "../src/roup_compat.h"
 #include <iostream>
 #include <cassert>
-#include <string>
 #include <cstring>
 #include <memory>
+#include <stdexcept>
+#include <string>
+
+#include "../../../src/roup_constants.h"
+
+extern "C" {
+    struct OmpDirective;
+    OmpDirective* roup_parse_with_language(const char* input, int32_t language);
+    const char* roup_directive_template(const OmpDirective* directive);
+    void roup_directive_free(OmpDirective* directive);
+}
 
 // Test counter
 static int tests_passed = 0;
@@ -43,6 +53,16 @@ struct DirectiveDeleter {
 
 // Unique pointer type for automatic cleanup
 using DirectivePtr = std::unique_ptr<OpenMPDirective, DirectiveDeleter>;
+
+struct RoupDirectiveDeleter {
+    void operator()(OmpDirective* dir) const {
+        if (dir) {
+            roup_directive_free(dir);
+        }
+    }
+};
+
+using RoupDirectivePtr = std::unique_ptr<OmpDirective, RoupDirectiveDeleter>;
 
 // Macros for testing
 #define TEST(name) \
@@ -254,9 +274,54 @@ TEST(if_clause) {
 TEST(nowait_clause) {
     DirectivePtr dir(parseOpenMP("omp for nowait", nullptr));
     ASSERT_NOT_NULL(dir.get());
-    
+
     auto* clauses = dir->getAllClauses();
     ASSERT_NOT_NULL(clauses);
+}
+
+// ============================================================================
+// Template (Plain Directive) Tests
+// ============================================================================
+
+TEST(plain_template_drops_user_symbols) {
+    DirectivePtr dir(parseOpenMP(
+        "omp target map(tofrom: arr[0:N], num_teams) map(to: b[0:N])",
+        nullptr
+    ));
+    ASSERT_NOT_NULL(dir.get());
+
+    const char* plain = getPlainDirective(dir.get());
+    ASSERT_NOT_NULL(plain);
+    std::string plain_str(plain);
+    ASSERT_EQ(plain_str, "#pragma omp target map(tofrom: ) map(to: )");
+}
+
+TEST(fortran_template_uses_fortran_prefix) {
+    const char* input = "!$OMP TARGET PRIVATE(I)";
+    RoupDirectivePtr dir(
+        roup_parse_with_language(input, ROUP_LANG_FORTRAN_FREE)
+    );
+    ASSERT_NOT_NULL(dir.get());
+
+    const char* plain = roup_directive_template(dir.get());
+    ASSERT_NOT_NULL(plain);
+    ASSERT_EQ(std::string(plain).rfind("!$omp ", 0), 0UL);
+}
+
+TEST(get_plain_directive_returns_cached_value) {
+    DirectivePtr dir(parseOpenMP(
+        "omp parallel for private(i) schedule(dynamic, 4)",
+        nullptr
+    ));
+    ASSERT_NOT_NULL(dir.get());
+
+    const char* first = getPlainDirective(dir.get());
+    ASSERT_NOT_NULL(first);
+
+    const char* second = getPlainDirective(dir.get());
+    ASSERT_NOT_NULL(second);
+
+    ASSERT_EQ(std::string(first), std::string(second));
 }
 
 // ============================================================================
@@ -447,7 +512,12 @@ int main() {
     run_if_clause();
     run_nowait_clause();
     std::cout << std::endl;
-    
+
+    std::cout << "--- Template Tests ---" << std::endl;
+    run_plain_template_drops_user_symbols();
+    run_fortran_template_uses_fortran_prefix();
+    std::cout << std::endl;
+
     std::cout << "--- String Generation Tests ---" << std::endl;
     run_toString_basic();
     run_toString_with_clause();

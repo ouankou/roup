@@ -19,11 +19,13 @@ The complete Rust API documentation is auto-generated from the source code using
 - **`roup::ir::directive`** - Directive types and structures
   - `DirectiveIR` - Main directive structure
   - `DirectiveKind` - Enum of directive types
-  
+  - `DirectiveIR::to_template_string()` - Generate symbol-free directive templates
+
 - **`roup::ir::clause`** - Clause types and data
   - `Clause` - Clause structure
   - `ClauseKind` - Enum of clause types
   - `ScheduleKind`, `ReductionOperator`, etc.
+  - `ClauseData::to_template_string()` - Render clause templates without user symbols
 
 - **`roup::ir::types`** - Common types
   - `Language` - Source language (C, C++, Fortran)
@@ -61,6 +63,9 @@ void roup_clause_free(OmpClause* clause);
 ```c
 // Get directive kind (0=parallel, 1=for, etc.)
 int32_t roup_directive_kind(const OmpDirective* directive);
+
+// Get symbol-free directive template
+const char* roup_directive_template(const OmpDirective* directive);
 
 // Get number of clauses
 int32_t roup_directive_clause_count(const OmpDirective* directive);

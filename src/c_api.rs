@@ -59,8 +59,9 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
-use crate::lexer::Language;
-use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
+use crate::ir::{convert::convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
+use crate::lexer::Language as LexerLanguage;
+use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind, Directive};
 
 // ============================================================================
 // Language Constants for Fortran Support
@@ -117,6 +118,7 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 #[repr(C)]
 pub struct OmpDirective {
     name: *const c_char,     // Directive name (e.g., "parallel")
+    template: *const c_char, // Template string without user symbols
     clauses: Vec<OmpClause>, // Associated clauses
 }
 
@@ -225,14 +227,22 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
         Err(_) => return ptr::null_mut(), // Parse error
     };
 
+    // Compute symbol-free template using semantic IR representation
+    let template_string = directive_template_string(&directive, IrLanguage::C);
+
+    let name_ptr = allocate_c_string(directive.name.as_ref());
+    let template_ptr = allocate_c_string(&template_string);
+    let clauses = directive
+        .clauses
+        .into_iter()
+        .map(|c| convert_clause(&c))
+        .collect();
+
     // Convert to C-compatible format
     let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name.as_ref()),
-        clauses: directive
-            .clauses
-            .into_iter()
-            .map(|c| convert_clause(&c))
-            .collect(),
+        name: name_ptr,
+        template: template_ptr,
+        clauses,
     };
 
     // UNSAFE BLOCK 2: Convert Box to raw pointer for C
@@ -260,6 +270,10 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
         // Free the name string (was allocated with CString::into_raw)
         if !boxed.name.is_null() {
             drop(CString::from_raw(boxed.name as *mut c_char));
+        }
+
+        if !boxed.template.is_null() {
+            drop(CString::from_raw(boxed.template as *mut c_char));
         }
 
         // Free clause data
@@ -322,9 +336,9 @@ pub extern "C" fn roup_parse_with_language(
     // Convert language code to Language enum using explicit constants
     // Return NULL for invalid language values
     let lang = match language {
-        ROUP_LANG_C => Language::C,
-        ROUP_LANG_FORTRAN_FREE => Language::FortranFree,
-        ROUP_LANG_FORTRAN_FIXED => Language::FortranFixed,
+        ROUP_LANG_C => LexerLanguage::C,
+        ROUP_LANG_FORTRAN_FREE => LexerLanguage::FortranFree,
+        ROUP_LANG_FORTRAN_FIXED => LexerLanguage::FortranFixed,
         _ => return ptr::null_mut(), // Invalid language value
     };
 
@@ -345,14 +359,22 @@ pub extern "C" fn roup_parse_with_language(
         Err(_) => return ptr::null_mut(),
     };
 
+    let ir_language = map_ir_language(lang);
+    let template_string = directive_template_string(&directive, ir_language);
+
+    let name_ptr = allocate_c_string(directive.name.as_ref());
+    let template_ptr = allocate_c_string(&template_string);
+    let clauses = directive
+        .clauses
+        .into_iter()
+        .map(|c| convert_clause(&c))
+        .collect();
+
     // Convert to C-compatible format
     let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name.as_ref()),
-        clauses: directive
-            .clauses
-            .into_iter()
-            .map(|c| convert_clause(&c))
-            .collect(),
+        name: name_ptr,
+        template: template_ptr,
+        clauses,
     };
 
     Box::into_raw(Box::new(c_directive))
@@ -390,6 +412,18 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
         let dir = &*directive;
         directive_name_to_kind(dir.name)
     }
+}
+
+/// Get the symbol-free directive template string.
+///
+/// Returns NULL if directive is NULL.
+#[no_mangle]
+pub extern "C" fn roup_directive_template(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe { (*directive).template }
 }
 
 /// Get number of clauses in a directive.
@@ -759,6 +793,20 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     };
 
     OmpClause { kind, data }
+}
+
+fn map_ir_language(lang: LexerLanguage) -> IrLanguage {
+    match lang {
+        LexerLanguage::C => IrLanguage::C,
+        LexerLanguage::FortranFree | LexerLanguage::FortranFixed => IrLanguage::Fortran,
+    }
+}
+
+fn directive_template_string(directive: &Directive<'_>, language: IrLanguage) -> String {
+    let config = ParserConfig::default();
+    convert_directive(directive, SourceLocation::start(), language, &config)
+        .map(|ir| ir.to_template_string())
+        .unwrap_or_else(|_| directive.to_pragma_string())
 }
 
 /// Parse reduction operator from clause arguments.

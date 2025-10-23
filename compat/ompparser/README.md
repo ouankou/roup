@@ -1,7 +1,7 @@
 # ROUP ompparser Compatibility Layer
 
-⚠️ **Experimental Feature** - Under active development  
-**Tests**: 46/46 passing (100%) 🎯
+⚠️ **Experimental Feature** - Under active development
+**Tests**: 47/47 passing (100%) 🎯
 
 Drop-in replacement for [ompparser](https://github.com/ouankou/ompparser) using ROUP as the backend parser.
 
@@ -16,12 +16,13 @@ The script will:
 - ✅ Initialize ompparser submodule
 - ✅ Build ROUP core library
 - ✅ Build `libompparser.so` (~5.5MB with static ROUP embedding)
-- ✅ Run all 46 tests
+- ✅ Run all 47 tests
 
 ## What You Get
 
 - **libompparser.so** - Drop-in replacement with ROUP parser + ompparser methods
 - **libroup-ompparser-compat.a** - Static library for ROUP-specific builds
+- **Symbol-free directive templates** via `getPlainDirective()` (cached for reuse)
 
 ## Manual Build
 
@@ -52,7 +53,7 @@ ctest --output-on-failure
 - `src/compat_impl.cpp` - Compatibility wrapper (~190 lines)
 - `ompparser/` - Submodule (provides headers and implementation sources)
 - `examples/` - Example code showing usage
-- `tests/` - Test suite (46 tests)
+- `tests/` - Test suite (47 tests)
 
 ## Architecture
 

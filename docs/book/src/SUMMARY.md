@@ -18,6 +18,7 @@
 # Reference
 
 - [API Reference](./api-reference.md)
+- [Plain Directive Templates](./plain-directives.md)
 - [OpenMP Support Matrix](./openmp-support.md)
 - [Line Continuations](./line-continuations.md)
 

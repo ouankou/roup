@@ -92,6 +92,22 @@ int main() {
 }
 ```
 
+### Plain Directive Templates
+
+The compatibility layer preserves ROUP's symbol-free directive templates. After
+parsing, call `getPlainDirective(dir)` to obtain a string without project
+identifiers:
+
+```cpp
+DirectivePtr dir(parseOpenMP("omp target map(tofrom: arr[0:N])", nullptr));
+const char* plain = getPlainDirective(dir.get());
+// -> "#pragma omp target map(tofrom: )"
+
+// Subsequent calls reuse a cached copy (no additional parsing):
+const char* cached = getPlainDirective(dir.get());
+assert(std::string(cached) == plain);
+```
+
 ### CMake Integration
 
 **Option 1: pkg-config**
