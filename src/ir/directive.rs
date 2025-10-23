@@ -856,6 +856,16 @@ impl<'a> DirectiveIR {
     {
         self.clauses.iter().filter(|c| predicate(c)).collect()
     }
+
+    /// Return a [`DirectiveTemplate`] that formats the directive without user-provided symbols.
+    pub fn plain(&self) -> DirectiveTemplate<'_> {
+        DirectiveTemplate::new(self)
+    }
+
+    /// Convenience method to render the directive's plain representation into a [`String`].
+    pub fn to_plain_string(&self) -> String {
+        self.plain().to_string()
+    }
 }
 
 impl<'a> fmt::Display for DirectiveIR {
@@ -872,6 +882,39 @@ impl<'a> fmt::Display for DirectiveIR {
     }
 }
 
+/// Display helper that omits user-provided identifiers and expressions from a directive.
+///
+/// The resulting string preserves the directive kind and clause structure while replacing
+/// all variable lists and expressions with `...`. This is helpful for semantic comparisons
+/// and matches the feature request for "plain directives" without leaking symbol names.
+#[derive(Clone, Copy, Debug)]
+pub struct DirectiveTemplate<'a> {
+    directive: &'a DirectiveIR,
+}
+
+impl<'a> DirectiveTemplate<'a> {
+    const fn new(directive: &'a DirectiveIR) -> Self {
+        Self { directive }
+    }
+}
+
+impl<'a> fmt::Display for DirectiveTemplate<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}{}",
+            self.directive.language.pragma_prefix(),
+            self.directive.kind
+        )?;
+
+        for clause in self.directive.clauses.iter() {
+            write!(f, " {}", clause.plain())?;
+        }
+
+        Ok(())
+    }
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -879,7 +922,10 @@ impl<'a> fmt::Display for DirectiveIR {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{ClauseItem, DefaultKind, Identifier, ReductionOperator};
+    use crate::ir::{
+        ClauseItem, DefaultKind, Expression, Identifier, Language, MapType, ParserConfig,
+        ReductionOperator, ScheduleKind, ScheduleModifier, SourceLocation,
+    };
 
     // DirectiveKind tests
     #[test]
@@ -1208,5 +1254,105 @@ mod tests {
 
         assert_eq!(dir.clauses().len(), 0);
         assert!(!dir.has_clause(|_| true));
+    }
+
+    #[test]
+    fn directive_plain_string_removes_identifiers() {
+        let clauses = vec![
+            ClauseData::Map {
+                map_type: Some(MapType::ToFrom),
+                mapper: None,
+                items: vec![Identifier::new("a[0:N]").into()],
+            },
+            ClauseData::Map {
+                map_type: Some(MapType::To),
+                mapper: Some(Identifier::new("mapper_fn")),
+                items: vec![Identifier::new("b[0:N]").into()],
+            },
+        ];
+
+        let directive = DirectiveIR::new(
+            DirectiveKind::TargetData,
+            "target data",
+            clauses,
+            SourceLocation::start(),
+            Language::C,
+        );
+
+        let plain = directive.to_plain_string();
+        assert_eq!(
+            plain,
+            "#pragma omp target data map(tofrom: ...) map(mapper(...), to: ...)"
+        );
+        assert!(!plain.contains("a[0:N]"));
+        assert!(!plain.contains("b[0:N]"));
+    }
+
+    #[test]
+    fn directive_plain_string_preserves_clause_structure() {
+        let config = ParserConfig::with_parsing(Language::C);
+        let clauses = vec![
+            ClauseData::If {
+                directive_name: Some(Identifier::new("parallel")),
+                condition: Expression::new("n > 0", &config),
+            },
+            ClauseData::Reduction {
+                operator: ReductionOperator::Add,
+                items: vec![Identifier::new("sum").into()],
+            },
+            ClauseData::Schedule {
+                kind: ScheduleKind::Dynamic,
+                modifiers: vec![ScheduleModifier::Monotonic],
+                chunk_size: Some(Expression::new("8", &config)),
+            },
+        ];
+
+        let directive = DirectiveIR::new(
+            DirectiveKind::ParallelFor,
+            "parallel for",
+            clauses,
+            SourceLocation::start(),
+            Language::C,
+        );
+
+        let plain = directive.to_plain_string();
+        assert_eq!(
+            plain,
+            "#pragma omp parallel for if(parallel: ...) reduction(+: ...) schedule(monotonic: dynamic, ...)"
+        );
+    }
+
+    #[test]
+    fn directive_plain_string_uses_fortran_prefix() {
+        let directive = DirectiveIR::new(
+            DirectiveKind::Parallel,
+            "parallel",
+            vec![],
+            SourceLocation::start(),
+            Language::Fortran,
+        );
+
+        assert_eq!(directive.to_plain_string(), "!$omp parallel");
+    }
+
+    #[test]
+    fn directive_plain_string_formats_generic_clauses() {
+        let clauses = vec![ClauseData::Generic {
+            name: Identifier::new("vendor"),
+            data: Some("mode(foo)".to_string()),
+        }];
+
+        let directive = DirectiveIR::new(
+            DirectiveKind::Parallel,
+            "parallel",
+            clauses,
+            SourceLocation::start(),
+            Language::C,
+        );
+
+        assert_eq!(
+            directive.to_plain_string(),
+            "#pragma omp parallel vendor(...)"
+        );
     }
 }

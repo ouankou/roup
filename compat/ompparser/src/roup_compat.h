@@ -11,6 +11,7 @@
 #define ROUP_COMPAT_H
 
 #include <OpenMPIR.h>
+#include <string>
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,6 +22,8 @@ void setLang(OpenMPBaseLang lang);
 
 #ifdef __cplusplus
 }
+
+std::string getPlainDirectiveString(const char* input);
 #endif
 
 #endif /* ROUP_COMPAT_H */

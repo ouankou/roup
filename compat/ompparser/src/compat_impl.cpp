@@ -28,6 +28,7 @@ extern "C" {
 
     // Core parsing
     OmpDirective* roup_parse(const char* input);
+    OmpDirective* roup_parse_with_language(const char* input, int32_t language);
     void roup_directive_free(OmpDirective* directive);
 
     // Directive queries
@@ -41,6 +42,7 @@ extern "C" {
 
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
+    const char* roup_directive_plain(const OmpDirective* directive);
 }
 
 // ============================================================================
@@ -56,6 +58,36 @@ static constexpr const char C_PRAGMA_PREFIX[] = "#pragma";    // C/C++ pragma pr
 // Compile-time string lengths: sizeof() includes null terminator, subtract 1 for actual length
 static constexpr size_t FORTRAN_PREFIX_LEN = sizeof(FORTRAN_PREFIX) - 1;
 static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
+
+static bool normalize_input_string(std::string& output, const char* input) {
+    if (!input || input[0] == '\0') {
+        return false;
+    }
+
+    const size_t input_len = strnlen(input, ROUP_MAX_PRAGMA_LENGTH);
+    if (input_len == ROUP_MAX_PRAGMA_LENGTH) {
+        return false;
+    }
+
+    std::string normalized(input, input_len);
+
+    if (current_lang == Lang_Fortran) {
+        const bool has_prefix =
+            normalized.length() >= FORTRAN_PREFIX_LEN &&
+            (normalized.compare(0, FORTRAN_PREFIX_LEN, FORTRAN_PREFIX) == 0 ||
+             normalized.compare(0, FORTRAN_PREFIX_LEN, FORTRAN_PREFIX_UPPER) == 0);
+        if (!has_prefix) {
+            normalized = std::string(FORTRAN_PREFIX) + " " + normalized;
+        }
+    } else {
+        if (normalized.compare(0, C_PRAGMA_PREFIX_LEN, C_PRAGMA_PREFIX) != 0) {
+            normalized = std::string(C_PRAGMA_PREFIX) + " " + normalized;
+        }
+    }
+
+    output = std::move(normalized);
+    return true;
+}
 
 extern "C" void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
@@ -121,36 +153,18 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         return nullptr;
     }
 
-    // Validate input length using constant from ROUP C API
-    // Use strnlen to safely handle potentially untrusted/non-null-terminated input
-    const size_t input_len = strnlen(input, ROUP_MAX_PRAGMA_LENGTH);
-    if (input_len == ROUP_MAX_PRAGMA_LENGTH) {
-        return nullptr;  // Input too long or not null-terminated within limit
-    }
-
-    // Determine input format based on current language mode
-    std::string input_str(input, input_len);
-
-    // Handle different language pragmas
-    if (current_lang == Lang_Fortran) {
-        // Fortran uses !$omp prefix - add if missing (case-insensitive check)
-        const bool has_prefix =
-            input_str.length() >= FORTRAN_PREFIX_LEN &&
-            (input_str.compare(0, FORTRAN_PREFIX_LEN, FORTRAN_PREFIX) == 0 ||
-             input_str.compare(0, FORTRAN_PREFIX_LEN, FORTRAN_PREFIX_UPPER) == 0);
-        if (!has_prefix) {
-            input_str = std::string(FORTRAN_PREFIX) + " " + input_str;
-        }
-    } else {
-        // C/C++ use #pragma omp prefix - add if missing
-        // compare() returns 0 if strings match, non-zero otherwise
-        if (input_str.compare(0, C_PRAGMA_PREFIX_LEN, C_PRAGMA_PREFIX) != 0) {
-            input_str = std::string(C_PRAGMA_PREFIX) + " " + input_str;
-        }
+    std::string normalized;
+    if (!normalize_input_string(normalized, input)) {
+        return nullptr;
     }
 
     // Call ROUP parser
-    OmpDirective* roup_dir = roup_parse(input_str.c_str());
+    OmpDirective* roup_dir = nullptr;
+    if (current_lang == Lang_Fortran) {
+        roup_dir = roup_parse_with_language(normalized.c_str(), ROUP_LANG_FORTRAN_FREE);
+    } else {
+        roup_dir = roup_parse(normalized.c_str());
+    }
     if (!roup_dir) {
         return nullptr;
     }
@@ -185,3 +199,26 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 }
 
 } // extern "C"
+
+std::string getPlainDirectiveString(const char* input) {
+    std::string normalized;
+    if (!normalize_input_string(normalized, input)) {
+        return {};
+    }
+
+    OmpDirective* dir = nullptr;
+    if (current_lang == Lang_Fortran) {
+        dir = roup_parse_with_language(normalized.c_str(), ROUP_LANG_FORTRAN_FREE);
+    } else {
+        dir = roup_parse(normalized.c_str());
+    }
+
+    if (!dir) {
+        return {};
+    }
+
+    const char* plain = roup_directive_plain(dir);
+    std::string result = plain ? plain : "";
+    roup_directive_free(dir);
+    return result;
+}

@@ -59,8 +59,11 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
-use crate::lexer::Language;
-use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
+use crate::ir::{convert::convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
+use crate::lexer::Language as LexerLanguage;
+use crate::parser::{
+    openmp, parse_omp_directive, Clause, ClauseKind, Directive as ParsedDirective,
+};
 
 // ============================================================================
 // Language Constants for Fortran Support
@@ -117,6 +120,7 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 #[repr(C)]
 pub struct OmpDirective {
     name: *const c_char,     // Directive name (e.g., "parallel")
+    plain: *const c_char,    // Plain directive string without identifiers
     clauses: Vec<OmpClause>, // Associated clauses
 }
 
@@ -226,14 +230,7 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
     };
 
     // Convert to C-compatible format
-    let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name.as_ref()),
-        clauses: directive
-            .clauses
-            .into_iter()
-            .map(|c| convert_clause(&c))
-            .collect(),
-    };
+    let c_directive = build_c_directive(directive, IrLanguage::C);
 
     // UNSAFE BLOCK 2: Convert Box to raw pointer for C
     // Safety: Caller will call roup_directive_free() to deallocate
@@ -260,6 +257,9 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
         // Free the name string (was allocated with CString::into_raw)
         if !boxed.name.is_null() {
             drop(CString::from_raw(boxed.name as *mut c_char));
+        }
+        if !boxed.plain.is_null() {
+            drop(CString::from_raw(boxed.plain as *mut c_char));
         }
 
         // Free clause data
@@ -321,10 +321,10 @@ pub extern "C" fn roup_parse_with_language(
 
     // Convert language code to Language enum using explicit constants
     // Return NULL for invalid language values
-    let lang = match language {
-        ROUP_LANG_C => Language::C,
-        ROUP_LANG_FORTRAN_FREE => Language::FortranFree,
-        ROUP_LANG_FORTRAN_FIXED => Language::FortranFixed,
+    let (lang, ir_language) = match language {
+        ROUP_LANG_C => (LexerLanguage::C, IrLanguage::C),
+        ROUP_LANG_FORTRAN_FREE => (LexerLanguage::FortranFree, IrLanguage::Fortran),
+        ROUP_LANG_FORTRAN_FIXED => (LexerLanguage::FortranFixed, IrLanguage::Fortran),
         _ => return ptr::null_mut(), // Invalid language value
     };
 
@@ -346,14 +346,7 @@ pub extern "C" fn roup_parse_with_language(
     };
 
     // Convert to C-compatible format
-    let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name.as_ref()),
-        clauses: directive
-            .clauses
-            .into_iter()
-            .map(|c| convert_clause(&c))
-            .collect(),
-    };
+    let c_directive = build_c_directive(directive, ir_language);
 
     Box::into_raw(Box::new(c_directive))
 }
@@ -390,6 +383,18 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
         let dir = &*directive;
         directive_name_to_kind(dir.name)
     }
+}
+
+/// Get the plain directive string without user-provided identifiers.
+///
+/// Returns NULL if the directive pointer is NULL.
+#[no_mangle]
+pub extern "C" fn roup_directive_plain(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe { (*directive).plain }
 }
 
 /// Get number of clauses in a directive.
@@ -673,6 +678,48 @@ pub extern "C" fn roup_string_list_free(list: *mut OmpStringList) {
 fn allocate_c_string(s: &str) -> *const c_char {
     let c_string = std::ffi::CString::new(s).unwrap();
     c_string.into_raw() as *const c_char
+}
+
+fn fallback_plain_string(directive: &ParsedDirective<'_>, language: IrLanguage) -> String {
+    let mut result = String::from(language.pragma_prefix());
+    result.push_str(directive.name.as_ref());
+    for clause in &directive.clauses {
+        result.push(' ');
+        match clause.kind {
+            ClauseKind::Bare => result.push_str(clause.name.as_ref()),
+            ClauseKind::Parenthesized(_) => {
+                result.push_str(clause.name.as_ref());
+                result.push('(');
+                result.push_str("...");
+                result.push(')');
+            }
+        }
+    }
+    result
+}
+
+fn directive_plain_string(directive: &ParsedDirective<'_>, language: IrLanguage) -> String {
+    let config = ParserConfig::with_parsing(language);
+    match convert_directive(directive, SourceLocation::start(), language, &config) {
+        Ok(ir) => ir.to_plain_string(),
+        Err(_) => fallback_plain_string(directive, language),
+    }
+}
+
+fn build_c_directive(directive: ParsedDirective<'_>, language: IrLanguage) -> OmpDirective {
+    let plain = directive_plain_string(&directive, language);
+    let name_ptr = allocate_c_string(directive.name.as_ref());
+    let clauses = directive
+        .clauses
+        .into_iter()
+        .map(|c| convert_clause(&c))
+        .collect();
+
+    OmpDirective {
+        name: name_ptr,
+        plain: allocate_c_string(&plain),
+        clauses,
+    }
 }
 
 /// Convert Rust Clause to C-compatible OmpClause.
@@ -1030,6 +1077,50 @@ fn free_clause_data(clause: &OmpClause) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_plain_directive_string() {
+        let input = CString::new("#pragma omp parallel private(x) num_threads(4)").unwrap();
+        let directive = roup_parse(input.as_ptr());
+        assert!(!directive.is_null());
+
+        let plain_ptr = roup_directive_plain(directive);
+        assert!(!plain_ptr.is_null());
+        let plain = unsafe { CStr::from_ptr(plain_ptr) }.to_str().unwrap();
+        assert_eq!(plain, "#pragma omp parallel private(...) num_threads(...)");
+        assert!(!plain.contains("private(x)"));
+
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn test_plain_directive_string_fortran_prefix() {
+        let input = CString::new("!$OMP PARALLEL DO REDUCTION(+:SUM)").unwrap();
+        let directive = roup_parse_with_language(input.as_ptr(), ROUP_LANG_FORTRAN_FREE);
+        assert!(!directive.is_null());
+
+        let plain_ptr = roup_directive_plain(directive);
+        assert!(!plain_ptr.is_null());
+        let plain = unsafe { CStr::from_ptr(plain_ptr) }.to_str().unwrap();
+        assert!(plain.starts_with("!$omp parallel"));
+        assert!(plain.contains("reduction"));
+
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn test_plain_directive_string_fallback_for_invalid_clause() {
+        let input = CString::new("#pragma omp parallel proc_bind(foo)").unwrap();
+        let directive = roup_parse(input.as_ptr());
+        assert!(!directive.is_null());
+
+        let plain_ptr = roup_directive_plain(directive);
+        assert!(!plain_ptr.is_null());
+        let plain = unsafe { CStr::from_ptr(plain_ptr) }.to_str().unwrap();
+        assert_eq!(plain, "#pragma omp parallel proc_bind(...)");
+
+        roup_directive_free(directive);
+    }
 
     #[test]
     fn test_fortran_directive_name_normalization() {

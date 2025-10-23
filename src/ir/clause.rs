@@ -1101,6 +1101,179 @@ impl fmt::Display for ClauseData {
     }
 }
 
+/// Display helper that renders a clause without user-provided identifiers or expressions.
+///
+/// This is primarily used for generating **plain directive strings** that keep the
+/// structural information (clause names, modifiers, operators) while removing any
+/// user symbols. It is useful when comparing directives semantically without
+/// exposing private variable names.
+#[derive(Clone, Copy, Debug)]
+pub struct ClauseTemplate<'a> {
+    clause: &'a ClauseData,
+}
+
+impl<'a> ClauseTemplate<'a> {
+    /// Internal constructor.
+    const fn new(clause: &'a ClauseData) -> Self {
+        Self { clause }
+    }
+}
+
+impl<'a> fmt::Display for ClauseTemplate<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ClauseData::*;
+
+        const PLACEHOLDER: &str = "...";
+
+        match self.clause {
+            Bare(name) => write!(f, "{}", name),
+            Expression(_) => write!(f, "{}", PLACEHOLDER),
+            ItemList(_) => write!(f, "{}", PLACEHOLDER),
+            Private { .. } => write!(f, "private({})", PLACEHOLDER),
+            Firstprivate { .. } => write!(f, "firstprivate({})", PLACEHOLDER),
+            Lastprivate { modifier, .. } => {
+                write!(f, "lastprivate(")?;
+                if let Some(m) = modifier {
+                    write!(f, "{}: ", m)?;
+                }
+                write!(f, "{})", PLACEHOLDER)
+            }
+            Shared { .. } => write!(f, "shared({})", PLACEHOLDER),
+            Default(kind) => write!(f, "default({})", kind),
+            Reduction { operator, .. } => write!(f, "reduction({}: {})", operator, PLACEHOLDER),
+            Map {
+                map_type, mapper, ..
+            } => {
+                write!(f, "map(")?;
+                if mapper.is_some() {
+                    write!(f, "mapper({}), ", PLACEHOLDER)?;
+                }
+                if let Some(mt) = map_type {
+                    write!(f, "{}: ", mt)?;
+                }
+                write!(f, "{})", PLACEHOLDER)
+            }
+            UseDevicePtr { .. } => write!(f, "use_device_ptr({})", PLACEHOLDER),
+            UseDeviceAddr { .. } => write!(f, "use_device_addr({})", PLACEHOLDER),
+            IsDevicePtr { .. } => write!(f, "is_device_ptr({})", PLACEHOLDER),
+            HasDeviceAddr { .. } => write!(f, "has_device_addr({})", PLACEHOLDER),
+            Depend { depend_type, .. } => write!(f, "depend({}: {})", depend_type, PLACEHOLDER),
+            Priority { .. } => write!(f, "priority({})", PLACEHOLDER),
+            Affinity { .. } => write!(f, "affinity({})", PLACEHOLDER),
+            Schedule {
+                kind,
+                modifiers,
+                chunk_size,
+            } => {
+                write!(f, "schedule(")?;
+                if !modifiers.is_empty() {
+                    for (idx, modifier) in modifiers.iter().enumerate() {
+                        if idx > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", modifier)?;
+                    }
+                    write!(f, ": ")?;
+                }
+                write!(f, "{}", kind)?;
+                if chunk_size.is_some() {
+                    write!(f, ", {}", PLACEHOLDER)?;
+                }
+                write!(f, ")")
+            }
+            Collapse { .. } => write!(f, "collapse({})", PLACEHOLDER),
+            Ordered { n } => {
+                if n.is_some() {
+                    write!(f, "ordered({})", PLACEHOLDER)
+                } else {
+                    write!(f, "ordered")
+                }
+            }
+            Linear { modifier, step, .. } => {
+                write!(f, "linear(")?;
+                if let Some(m) = modifier {
+                    write!(f, "{}: ", m)?;
+                }
+                write!(f, "{}", PLACEHOLDER)?;
+                if step.is_some() {
+                    write!(f, ": {}", PLACEHOLDER)?;
+                }
+                write!(f, ")")
+            }
+            Aligned { alignment, .. } => {
+                write!(f, "aligned({}", PLACEHOLDER)?;
+                if alignment.is_some() {
+                    write!(f, ": {}", PLACEHOLDER)?;
+                }
+                write!(f, ")")
+            }
+            Safelen { .. } => write!(f, "safelen({})", PLACEHOLDER),
+            Simdlen { .. } => write!(f, "simdlen({})", PLACEHOLDER),
+            If { directive_name, .. } => {
+                write!(f, "if(")?;
+                if let Some(name) = directive_name {
+                    write!(f, "{}: ", name)?;
+                }
+                write!(f, "{})", PLACEHOLDER)
+            }
+            ProcBind(pb) => write!(f, "proc_bind({})", pb),
+            NumThreads { .. } => write!(f, "num_threads({})", PLACEHOLDER),
+            Device { .. } => write!(f, "device({})", PLACEHOLDER),
+            DeviceType(dt) => write!(f, "device_type({})", dt),
+            AtomicDefaultMemOrder(order) => write!(f, "atomic_default_mem_order({})", order),
+            AtomicOperation { op, memory_order } => {
+                write!(f, "atomic({}", op)?;
+                if let Some(order) = memory_order {
+                    write!(f, ", {}", order)?;
+                }
+                write!(f, ")")
+            }
+            Order(kind) => write!(f, "order({})", kind),
+            NumTeams { .. } => write!(f, "num_teams({})", PLACEHOLDER),
+            ThreadLimit { .. } => write!(f, "thread_limit({})", PLACEHOLDER),
+            Allocate { allocator, .. } => {
+                write!(f, "allocate(")?;
+                if allocator.is_some() {
+                    write!(f, "{}: ", PLACEHOLDER)?;
+                }
+                write!(f, "{})", PLACEHOLDER)
+            }
+            Allocator { .. } => write!(f, "allocator({})", PLACEHOLDER),
+            Copyin { .. } => write!(f, "copyin({})", PLACEHOLDER),
+            Copyprivate { .. } => write!(f, "copyprivate({})", PLACEHOLDER),
+            DistSchedule { kind, chunk_size } => {
+                write!(f, "dist_schedule({}", kind)?;
+                if chunk_size.is_some() {
+                    write!(f, ", {}", PLACEHOLDER)?;
+                }
+                write!(f, ")")
+            }
+            Grainsize { .. } => write!(f, "grainsize({})", PLACEHOLDER),
+            NumTasks { .. } => write!(f, "num_tasks({})", PLACEHOLDER),
+            Filter { .. } => write!(f, "filter({})", PLACEHOLDER),
+            Generic { name, data } => {
+                if data.is_some() {
+                    write!(f, "{}({})", name, PLACEHOLDER)
+                } else {
+                    write!(f, "{}", name)
+                }
+            }
+        }
+    }
+}
+
+impl ClauseData {
+    /// Return a [`ClauseTemplate`] that formats the clause without user-provided symbols.
+    pub fn plain(&self) -> ClauseTemplate<'_> {
+        ClauseTemplate::new(self)
+    }
+
+    /// Convenience method that renders the plain clause directly to a [`String`].
+    pub fn to_plain_string(&self) -> String {
+        self.plain().to_string()
+    }
+}
+
 impl<'a> ClauseData {
     /// Check if this is a default clause
     pub fn is_default(&self) -> bool {
@@ -1186,6 +1359,7 @@ impl<'a> ClauseData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ir::Expression;
 
     // Test ReductionOperator
     #[test]
@@ -1352,6 +1526,75 @@ mod tests {
         // But we still support both for backwards compatibility
         assert_eq!(ProcBind::Master.to_string(), "master");
         assert_eq!(ProcBind::Primary.to_string(), "primary");
+    }
+
+    #[test]
+    fn clause_plain_private_replaces_items() {
+        let clause = ClauseData::Private {
+            items: vec![Identifier::new("a").into(), Identifier::new("b").into()],
+        };
+
+        assert_eq!(clause.to_plain_string(), "private(...)");
+    }
+
+    #[test]
+    fn clause_plain_map_keeps_structure() {
+        let clause = ClauseData::Map {
+            map_type: Some(MapType::To),
+            mapper: Some(Identifier::new("mapper")),
+            items: vec![Identifier::new("arr[0:n]").into()],
+        };
+
+        assert_eq!(clause.to_plain_string(), "map(mapper(...), to: ...)");
+    }
+
+    #[test]
+    fn clause_plain_if_preserves_modifier() {
+        let clause = ClauseData::If {
+            directive_name: Some(Identifier::new("parallel")),
+            condition: Expression::unparsed("n > 0"),
+        };
+
+        assert_eq!(clause.to_plain_string(), "if(parallel: ...)");
+    }
+
+    #[test]
+    fn clause_plain_schedule_with_modifiers_and_chunk() {
+        let clause = ClauseData::Schedule {
+            kind: ScheduleKind::Guided,
+            modifiers: vec![ScheduleModifier::Monotonic, ScheduleModifier::Simd],
+            chunk_size: Some(Expression::unparsed("chunk")),
+        };
+
+        assert_eq!(
+            clause.to_plain_string(),
+            "schedule(monotonic, simd: guided, ...)"
+        );
+    }
+
+    #[test]
+    fn clause_plain_aligned_with_alignment_expression() {
+        let clause = ClauseData::Aligned {
+            items: vec![Identifier::new("array").into()],
+            alignment: Some(Expression::unparsed("32")),
+        };
+
+        assert_eq!(clause.to_plain_string(), "aligned(...: ...)");
+    }
+
+    #[test]
+    fn clause_plain_generic_handles_unknown_clause() {
+        let clause_with_data = ClauseData::Generic {
+            name: Identifier::new("vendor"),
+            data: Some("mode(x)".to_string()),
+        };
+        assert_eq!(clause_with_data.to_plain_string(), "vendor(...)");
+
+        let clause_without_data = ClauseData::Generic {
+            name: Identifier::new("vendor"),
+            data: None,
+        };
+        assert_eq!(clause_without_data.to_plain_string(), "vendor");
     }
 
     // Test MemoryOrder

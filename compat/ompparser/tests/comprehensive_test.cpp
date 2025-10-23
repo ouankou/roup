@@ -139,6 +139,30 @@ TEST(critical_directive) {
     ASSERT_EQ(dir->getKind(), OMPD_critical);
 }
 
+TEST(plain_directive_helper) {
+    setLang(Lang_C);
+    std::string plain = getPlainDirectiveString("omp target data map(to: a) map(from: b)");
+    ASSERT_EQ(plain, "#pragma omp target data map(to: ...) map(from: ...)");
+
+    std::string fallback = getPlainDirectiveString("omp parallel proc_bind(foo)");
+    ASSERT_EQ(fallback, "#pragma omp parallel proc_bind(...)");
+
+    setLang(Lang_Fortran);
+    std::string fortran_plain =
+        getPlainDirectiveString("!$OMP PARALLEL DO REDUCTION(+:SUM)");
+    ASSERT(fortran_plain.find("!$omp parallel") == 0);
+    ASSERT(fortran_plain.find("reduction") != std::string::npos);
+    ASSERT(fortran_plain.find("...") != std::string::npos);
+
+    std::string fortran_fallback =
+        getPlainDirectiveString("!$OMP PARALLEL PROC_BIND(FOO)");
+    ASSERT(fortran_fallback.find("!$omp parallel") == 0);
+    ASSERT(fortran_fallback.find("proc_bind") != std::string::npos);
+    ASSERT(fortran_fallback.find("...") != std::string::npos);
+
+    setLang(Lang_C);
+}
+
 TEST(master_directive) {
     DirectivePtr dir(parseOpenMP("omp master", nullptr));
     ASSERT_NOT_NULL(dir.get());
