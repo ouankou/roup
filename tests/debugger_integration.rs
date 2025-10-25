@@ -366,35 +366,89 @@ fn test_openacc_kernels_directive() {
 // ===========================================================================
 // Tests for Fortran Syntax (ensure language detection works)
 // ===========================================================================
-// Note: Fortran syntax currently requires manual language configuration
-// The debugger's parse_pragma_prefix expects C-style #pragma
 
 #[test]
 fn test_fortran_free_form() {
-    let _input = "!$omp parallel shared(x)";
-    let config = DebugConfig::openmp();
-    // Note: Fortran requires parser.with_language() which happens internally
-    // but the pragma prefix parser currently only handles C-style #pragma
-    // This is a known limitation - Fortran support works in the main parser
-    // but the debugger's step-by-step instrumentation needs enhancement for Fortran
+    use roup::lexer::Language;
 
-    // For now, test that C-style works correctly
-    let c_input = "#pragma omp parallel shared(x)";
-    let session = DebugSession::new(c_input, config).expect("Failed to parse");
+    let input = "!$omp parallel shared(x)";
+    let config = DebugConfig::new(roup::parser::Dialect::OpenMp, Language::FortranFree);
+
+    let session = DebugSession::new(input, config).expect("Failed to parse Fortran free-form");
     let directive = session.final_directive.as_ref().unwrap();
     assert_eq!(directive.name, "parallel");
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "shared");
+
+    // Verify we captured Fortran sentinel parsing step
+    assert!(session
+        .steps
+        .iter()
+        .any(|s| s.description.contains("Fortran free-form sentinel")));
+
+    // Verify the sentinel step consumed !$omp
+    let sentinel_step = session
+        .steps
+        .iter()
+        .find(|s| matches!(s.kind, roup::debugger::StepKind::PragmaPrefix))
+        .unwrap();
+    assert_eq!(sentinel_step.consumed, "!$omp");
+}
+
+#[test]
+fn test_fortran_fixed_form() {
+    use roup::lexer::Language;
+
+    let input = "c$omp parallel private(y)";
+    let config = DebugConfig::new(roup::parser::Dialect::OpenMp, Language::FortranFixed);
+
+    let session = DebugSession::new(input, config).expect("Failed to parse Fortran fixed-form");
+    let directive = session.final_directive.as_ref().unwrap();
+    assert_eq!(directive.name, "parallel");
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "private");
+
+    // Verify we captured Fortran sentinel parsing step
+    assert!(session
+        .steps
+        .iter()
+        .any(|s| s.description.contains("Fortran fixed-form sentinel")));
+
+    // Verify the sentinel step consumed c$omp
+    let sentinel_step = session
+        .steps
+        .iter()
+        .find(|s| matches!(s.kind, roup::debugger::StepKind::PragmaPrefix))
+        .unwrap();
+    assert_eq!(sentinel_step.consumed, "c$omp");
 }
 
 #[test]
 fn test_openacc_fortran() {
-    // Similar to above - debugger currently focuses on C-style pragmas
-    // Fortran support exists in the parser but debugger needs enhancement
+    use roup::lexer::Language;
 
-    let c_input = "#pragma acc parallel async(1)";
-    let config = DebugConfig::openacc();
-    let session = DebugSession::new(c_input, config).expect("Failed to parse");
+    let input = "!$acc parallel async(1)";
+    let config = DebugConfig::new(roup::parser::Dialect::OpenAcc, Language::FortranFree);
+
+    let session = DebugSession::new(input, config).expect("Failed to parse OpenACC Fortran");
     let directive = session.final_directive.as_ref().unwrap();
     assert_eq!(directive.name, "parallel");
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "async");
+
+    // Verify we captured Fortran sentinel parsing step
+    assert!(session
+        .steps
+        .iter()
+        .any(|s| s.description.contains("Fortran free-form sentinel")));
+
+    // Verify the sentinel step consumed !$acc
+    let sentinel_step = session
+        .steps
+        .iter()
+        .find(|s| matches!(s.kind, roup::debugger::StepKind::PragmaPrefix))
+        .unwrap();
+    assert_eq!(sentinel_step.consumed, "!$acc");
 }
 
 // ===========================================================================

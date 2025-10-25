@@ -94,7 +94,21 @@ else
 fi
 
 # ===================================================================
-# 5. Rust Doc Tests
+# 5. Debugger Integration Tests
+# ===================================================================
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Debugger Integration Tests ==="
+echo -n "Running debugger tests... "
+if cargo test --locked --test debugger_integration > /tmp/test_debugger.log 2>&1; then
+    passed=$(grep "test result:" /tmp/test_debugger.log | grep -o "[0-9]* passed" | grep -o "[0-9]*")
+    echo -e "${GREEN}✓ PASS ($passed tests)${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/test_debugger.log
+    exit 1
+fi
+
+# ===================================================================
+# 6. Rust Doc Tests
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Rust Doc Tests ==="
 echo -n "Running cargo test --doc... "
@@ -108,7 +122,7 @@ else
 fi
 
 # ===================================================================
-# 6. All Rust Tests Together
+# 7. All Rust Tests Together
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. All Rust Tests Together ==="
 echo -n "Running cargo test --all-targets... "
@@ -465,7 +479,7 @@ fi
 # ===================================================================
 echo ""
 echo "========================================"
-total_categories=22
+total_categories=23
 passed_categories=$total_categories
 if [ "$openmp_vv_status" != "passed" ]; then
     passed_categories=$((passed_categories - 1))
@@ -483,7 +497,7 @@ echo ""
 echo "Summary:"
 echo "  ✓ Code formatting (cargo fmt)"
 echo "  ✓ Rust builds (debug + release)"
-echo "  ✓ All Rust tests (unit + integration + doc)"
+echo "  ✓ All Rust tests (unit + integration + debugger + doc)"
 echo "  ✓ All examples (Rust + C + C++ + Fortran)"
 echo "  ✓ C examples execution (run-all)"
 echo "  ✓ Documentation (rustdoc + mdBook with --all-features)"
