@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["c_api","ir","lexer","parser"]};
+window.SIDEBAR_ITEMS = {"mod":["c_api","debugger","ir","lexer","parser"]};

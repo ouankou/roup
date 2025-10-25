@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["InputLanguage"],"fn":["detect_language","detect_openacc_language","main","print_usage"]};
