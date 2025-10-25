@@ -3,7 +3,7 @@
 //! This module implements the core stepping logic that breaks down the parsing process
 //! into discrete, observable steps.
 
-use crate::lexer;
+use crate::lexer::{self, Language};
 use crate::parser::{openacc, openmp, Clause, Dialect, Directive};
 use std::borrow::Cow;
 
@@ -161,14 +161,16 @@ impl DebugSession {
             }
         }
 
-        // Step 3: Parse pragma prefix
+        // Step 3: Parse pragma prefix / Fortran sentinel
         context_stack.push("lex_pragma".to_string());
-        let (_prefix, remaining_after_prefix) = Self::parse_pragma_prefix_static(
+        let (prefix, remaining_after_prefix) = Self::parse_pragma_prefix_static(
             current_input,
             step_number,
             position,
             &context_stack,
             &mut self.steps,
+            dialect,
+            language,
         )?;
 
         step_number += 1;
@@ -176,46 +178,53 @@ impl DebugSession {
         current_input = remaining_after_prefix;
         context_stack.pop();
 
-        // Step 4: Skip whitespace and consume dialect keyword (omp/acc)
-        if let Ok((remaining, _)) = lexer::skip_space_and_comments(current_input) {
-            let consumed_len = current_input.len() - remaining.len();
-            if consumed_len > 0 {
-                self.steps.push(DebugStep {
-                    step_number,
-                    kind: StepKind::SkipWhitespace,
-                    description: "Skip whitespace after pragma".to_string(),
-                    consumed: format!("{:?}", &current_input[..consumed_len]),
-                    remaining: remaining.to_string(),
-                    position,
-                    context_stack: context_stack.clone(),
-                    token_info: None,
-                });
-                step_number += 1;
-                position += consumed_len;
-                current_input = remaining;
-            }
-        }
-
-        // Consume dialect keyword (omp or acc)
+        // Check if dialect keyword was already consumed in the prefix/sentinel
+        // For Fortran full forms (!$omp, c$acc, etc.), the dialect is included
+        // For C and Fortran short forms (#pragma, !$, c$), we need to consume it separately
         let dialect_keyword = match dialect {
             Dialect::OpenMp => "omp",
             Dialect::OpenAcc => "acc",
         };
+        let dialect_already_consumed = prefix.to_lowercase().contains(dialect_keyword);
 
-        if current_input.starts_with(dialect_keyword) {
-            self.steps.push(DebugStep {
-                step_number,
-                kind: StepKind::PragmaPrefix, // Treat dialect as part of pragma
-                description: format!("Parse dialect keyword '{}'", dialect_keyword),
-                consumed: dialect_keyword.to_string(),
-                remaining: current_input[dialect_keyword.len()..].to_string(),
-                position,
-                context_stack: context_stack.clone(),
-                token_info: Some(format!("Dialect: \"{}\"", dialect_keyword)),
-            });
-            step_number += 1;
-            position += dialect_keyword.len();
-            current_input = &current_input[dialect_keyword.len()..];
+        // Step 4: Skip whitespace and consume dialect keyword (omp/acc)
+        // Only do this if the dialect wasn't already consumed in the sentinel
+        if !dialect_already_consumed {
+            if let Ok((remaining, _)) = lexer::skip_space_and_comments(current_input) {
+                let consumed_len = current_input.len() - remaining.len();
+                if consumed_len > 0 {
+                    self.steps.push(DebugStep {
+                        step_number,
+                        kind: StepKind::SkipWhitespace,
+                        description: "Skip whitespace after pragma".to_string(),
+                        consumed: format!("{:?}", &current_input[..consumed_len]),
+                        remaining: remaining.to_string(),
+                        position,
+                        context_stack: context_stack.clone(),
+                        token_info: None,
+                    });
+                    step_number += 1;
+                    position += consumed_len;
+                    current_input = remaining;
+                }
+            }
+
+            // Consume dialect keyword (omp or acc)
+            if current_input.starts_with(dialect_keyword) {
+                self.steps.push(DebugStep {
+                    step_number,
+                    kind: StepKind::PragmaPrefix, // Treat dialect as part of pragma
+                    description: format!("Parse dialect keyword '{}'", dialect_keyword),
+                    consumed: dialect_keyword.to_string(),
+                    remaining: current_input[dialect_keyword.len()..].to_string(),
+                    position,
+                    context_stack: context_stack.clone(),
+                    token_info: Some(format!("Dialect: \"{}\"", dialect_keyword)),
+                });
+                step_number += 1;
+                position += dialect_keyword.len();
+                current_input = &current_input[dialect_keyword.len()..];
+            }
         }
 
         // Step 5: Use the full parser to get the directive and collect more detailed steps
@@ -303,25 +312,55 @@ impl DebugSession {
         position: usize,
         context_stack: &[String],
         steps: &mut Vec<DebugStep>,
+        dialect: Dialect,
+        language: Language,
     ) -> DebugResult<(String, &'a str)> {
-        match lexer::lex_pragma(input) {
+        let dialect_keyword = match dialect {
+            Dialect::OpenMp => "omp",
+            Dialect::OpenAcc => "acc",
+        };
+
+        let result = match language {
+            Language::C => lexer::lex_pragma(input),
+            Language::FortranFree => {
+                lexer::lex_fortran_free_sentinel_with_prefix(input, dialect_keyword)
+            }
+            Language::FortranFixed => {
+                lexer::lex_fortran_fixed_sentinel_with_prefix(input, dialect_keyword)
+            }
+        };
+
+        match result {
             Ok((remaining, prefix)) => {
+                let description = match language {
+                    Language::C => "Parse pragma prefix".to_string(),
+                    Language::FortranFree => "Parse Fortran free-form sentinel".to_string(),
+                    Language::FortranFixed => "Parse Fortran fixed-form sentinel".to_string(),
+                };
+
                 steps.push(DebugStep {
                     step_number,
                     kind: StepKind::PragmaPrefix,
-                    description: "Parse pragma prefix".to_string(),
+                    description,
                     consumed: prefix.to_string(),
                     remaining: remaining.to_string(),
                     position,
                     context_stack: context_stack.to_vec(),
-                    token_info: Some(format!("Prefix: \"{}\"", prefix)),
+                    token_info: Some(format!("Sentinel: \"{}\"", prefix)),
                 });
                 Ok((prefix.to_string(), remaining))
             }
-            Err(e) => Err(DebugError::ParseError(format!(
-                "Failed to parse pragma prefix: {:?}",
-                e
-            ))),
+            Err(e) => {
+                let lang_str = match language {
+                    Language::C => "C pragma prefix",
+                    Language::FortranFree => "Fortran free-form sentinel",
+                    Language::FortranFixed => "Fortran fixed-form sentinel",
+                };
+                Err(DebugError::ParseError(format!(
+                    "Failed to parse {}: {:?}",
+                    lang_str, e
+                )))
+            }
         }
     }
 
