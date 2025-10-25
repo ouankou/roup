@@ -176,7 +176,49 @@ impl DebugSession {
         current_input = remaining_after_prefix;
         context_stack.pop();
 
-        // Step 4: Use the full parser to get the directive and collect more detailed steps
+        // Step 4: Skip whitespace and consume dialect keyword (omp/acc)
+        if let Ok((remaining, _)) = lexer::skip_space_and_comments(current_input) {
+            let consumed_len = current_input.len() - remaining.len();
+            if consumed_len > 0 {
+                self.steps.push(DebugStep {
+                    step_number,
+                    kind: StepKind::SkipWhitespace,
+                    description: "Skip whitespace after pragma".to_string(),
+                    consumed: format!("{:?}", &current_input[..consumed_len]),
+                    remaining: remaining.to_string(),
+                    position,
+                    context_stack: context_stack.clone(),
+                    token_info: None,
+                });
+                step_number += 1;
+                position += consumed_len;
+                current_input = remaining;
+            }
+        }
+
+        // Consume dialect keyword (omp or acc)
+        let dialect_keyword = match dialect {
+            Dialect::OpenMp => "omp",
+            Dialect::OpenAcc => "acc",
+        };
+
+        if current_input.starts_with(dialect_keyword) {
+            self.steps.push(DebugStep {
+                step_number,
+                kind: StepKind::PragmaPrefix, // Treat dialect as part of pragma
+                description: format!("Parse dialect keyword '{}'", dialect_keyword),
+                consumed: dialect_keyword.to_string(),
+                remaining: current_input[dialect_keyword.len()..].to_string(),
+                position,
+                context_stack: context_stack.clone(),
+                token_info: Some(format!("Dialect: \"{}\"", dialect_keyword)),
+            });
+            step_number += 1;
+            position += dialect_keyword.len();
+            current_input = &current_input[dialect_keyword.len()..];
+        }
+
+        // Step 5: Use the full parser to get the directive and collect more detailed steps
         context_stack.push("DirectiveRegistry::parse".to_string());
         let parser = match dialect {
             Dialect::OpenMp => openmp::parser().with_language(language),
@@ -339,21 +381,43 @@ impl DebugSession {
                 }
             }
 
-            // The parameter includes parentheses, so we need to account for that
-            let param_with_parens = format!("({})", param);
+            // The parameter may or may not have parentheses already
+            // For scan: parameter is "exclusive(x, y)" which needs wrapping: "(exclusive(x, y))"
+            // For allocate: parameter might be "(x, y)" already with parens
+            let param_str = param.as_ref();
+            let param_with_parens = if param_str.starts_with('(') {
+                // Already has parentheses
+                param_str.to_string()
+            } else {
+                // Needs parentheses wrapped
+                format!("({})", param_str)
+            };
+
+            // Safely compute remaining based on actual consumed length
+            let consumed_len = param_with_parens.len().min(current_input.len());
+            let remaining_text = if consumed_len < current_input.len() {
+                current_input[consumed_len..].to_string()
+            } else {
+                String::new()
+            };
+
             self.steps.push(DebugStep {
                 step_number: *step_number,
                 kind: StepKind::DirectiveParameter,
                 description: format!("Parse directive parameter '{}'", param),
                 consumed: param_with_parens.clone(),
-                remaining: current_input[param_with_parens.len()..].to_string(),
+                remaining: remaining_text,
                 position: *position,
                 context_stack: context_stack.to_vec(),
                 token_info: Some(format!("Parameter: \"{}\"", param)),
             });
             *step_number += 1;
-            *position += param_with_parens.len();
-            current_input = &current_input[param_with_parens.len()..];
+            *position += consumed_len;
+            if consumed_len < current_input.len() {
+                current_input = &current_input[consumed_len..];
+            } else {
+                current_input = "";
+            }
         }
 
         // Parse clauses
