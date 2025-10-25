@@ -28,6 +28,7 @@
 // Each module teaches different Rust concepts while building a working parser.
 
 pub mod c_api; // Minimal unsafe C FFI (production API)
+pub mod debugger; // Interactive step-by-step parser debugger
 pub mod ir;
 pub mod lexer;
 pub mod parser;

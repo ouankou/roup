@@ -1,0 +1,460 @@
+//! Step-by-step parsing instrumentation
+//!
+//! This module implements the core stepping logic that breaks down the parsing process
+//! into discrete, observable steps.
+
+use crate::lexer;
+use crate::parser::{openacc, openmp, Clause, Dialect, Directive};
+use std::borrow::Cow;
+
+use super::{DebugConfig, DebugError, DebugResult};
+
+/// Represents a single step in the parsing process
+#[derive(Debug, Clone)]
+pub struct DebugStep {
+    /// Sequential step number (0-indexed)
+    pub step_number: usize,
+    /// Type/category of this step
+    pub kind: StepKind,
+    /// Description of what's happening in this step
+    pub description: String,
+    /// The portion of input consumed in this step
+    pub consumed: String,
+    /// The remaining unparsed text after this step
+    pub remaining: String,
+    /// Current position in the original input
+    pub position: usize,
+    /// Parser context stack (e.g., ["DirectiveRegistry::parse", "ClauseRegistry::parse_sequence"])
+    pub context_stack: Vec<String>,
+    /// Token or structure created in this step (if any)
+    pub token_info: Option<String>,
+}
+
+/// Categories of parsing steps
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StepKind {
+    /// Skipping whitespace or comments
+    SkipWhitespace,
+    /// Parsing the pragma prefix (#pragma omp, !$omp, etc.)
+    PragmaPrefix,
+    /// Parsing a directive name (parallel, for, etc.)
+    DirectiveName,
+    /// Parsing directive parameter (e.g., "parallel(n)" -> parameter is "n")
+    DirectiveParameter,
+    /// Parsing a clause name (shared, private, etc.)
+    ClauseName,
+    /// Parsing clause arguments (the content inside parentheses)
+    ClauseArguments,
+    /// Completed parsing entire directive
+    Complete,
+    /// Error occurred
+    Error,
+}
+
+impl StepKind {
+    pub fn as_str(&self) -> &str {
+        match self {
+            StepKind::SkipWhitespace => "Skip Whitespace",
+            StepKind::PragmaPrefix => "Pragma Prefix",
+            StepKind::DirectiveName => "Directive Name",
+            StepKind::DirectiveParameter => "Directive Parameter",
+            StepKind::ClauseName => "Clause Name",
+            StepKind::ClauseArguments => "Clause Arguments",
+            StepKind::Complete => "Complete",
+            StepKind::Error => "Error",
+        }
+    }
+}
+
+/// A complete debugging session that tracks all steps
+#[derive(Debug)]
+pub struct DebugSession {
+    /// Original input string
+    pub original_input: String,
+    /// Configuration for this session
+    pub config: DebugConfig,
+    /// All steps collected during parsing
+    pub steps: Vec<DebugStep>,
+    /// Final parsed directive (if successful)
+    pub final_directive: Option<Directive<'static>>,
+    /// Parse error (if failed)
+    pub error: Option<String>,
+    /// Current step index for interactive navigation
+    pub current_step_index: usize,
+}
+
+impl DebugSession {
+    /// Create a new debug session and parse the input step-by-step
+    pub fn new(input: &str, config: DebugConfig) -> DebugResult<Self> {
+        let mut session = Self {
+            original_input: input.to_string(),
+            config: config.clone(),
+            steps: Vec::new(),
+            final_directive: None,
+            error: None,
+            current_step_index: 0,
+        };
+
+        session.parse_step_by_step()?;
+        Ok(session)
+    }
+
+    /// Parse the input and collect all steps
+    fn parse_step_by_step(&mut self) -> DebugResult<()> {
+        // Clone the input to avoid lifetime issues with the borrow checker
+        let input_copy = self.original_input.clone();
+        let dialect = self.config.dialect;
+        let language = self.config.language;
+
+        let mut current_input = input_copy.as_str();
+        let mut position = 0;
+        let mut step_number = 0;
+        let mut context_stack = vec!["Parser::parse".to_string()];
+
+        // Step 1: Handle line continuations (preprocessing step)
+        let normalized = lexer::collapse_line_continuations(current_input);
+        if normalized != current_input {
+            let consumed = format!(
+                "Normalized {} line continuation(s)",
+                current_input.matches('\\').count()
+            );
+            self.steps.push(DebugStep {
+                step_number,
+                kind: StepKind::SkipWhitespace,
+                description: "Collapse line continuations".to_string(),
+                consumed,
+                remaining: normalized.to_string(),
+                position,
+                context_stack: context_stack.clone(),
+                token_info: Some(format!("Normalized input: {}", normalized)),
+            });
+            step_number += 1;
+            current_input = normalized.as_ref();
+        }
+
+        // Step 2: Skip leading whitespace
+        match lexer::skip_space_and_comments(current_input) {
+            Ok((remaining, _)) => {
+                let consumed_len = current_input.len() - remaining.len();
+                if consumed_len > 0 {
+                    let consumed = &current_input[..consumed_len];
+                    self.steps.push(DebugStep {
+                        step_number,
+                        kind: StepKind::SkipWhitespace,
+                        description: "Skip leading whitespace/comments".to_string(),
+                        consumed: format!("{:?}", consumed),
+                        remaining: remaining.to_string(),
+                        position,
+                        context_stack: context_stack.clone(),
+                        token_info: None,
+                    });
+                    step_number += 1;
+                    position += consumed_len;
+                    current_input = remaining;
+                }
+            }
+            Err(e) => {
+                return Err(DebugError::ParseError(format!(
+                    "Failed to skip whitespace: {:?}",
+                    e
+                )));
+            }
+        }
+
+        // Step 3: Parse pragma prefix
+        context_stack.push("lex_pragma".to_string());
+        let (_prefix, remaining_after_prefix) = Self::parse_pragma_prefix_static(
+            current_input,
+            step_number,
+            position,
+            &context_stack,
+            &mut self.steps,
+        )?;
+
+        step_number += 1;
+        position += current_input.len() - remaining_after_prefix.len();
+        current_input = remaining_after_prefix;
+        context_stack.pop();
+
+        // Step 4: Use the full parser to get the directive and collect more detailed steps
+        context_stack.push("DirectiveRegistry::parse".to_string());
+        let parser = match dialect {
+            Dialect::OpenMp => openmp::parser().with_language(language),
+            Dialect::OpenAcc => openacc::parser().with_language(language),
+        };
+
+        // Parse the directive (using the copy)
+        match parser.parse(&input_copy) {
+            Ok((remaining, directive)) => {
+                // Now we need to decompose the directive into steps
+                self.decompose_directive(
+                    &directive,
+                    current_input,
+                    &mut step_number,
+                    &mut position,
+                    &context_stack,
+                )?;
+
+                // Convert Directive<'_> to Directive<'static> by cloning all Cow fields
+                // We need to explicitly collect into a Vec first to avoid lifetime issues
+                let owned_clauses: Vec<Clause<'static>> = directive
+                    .clauses
+                    .iter()
+                    .map(|c| Clause {
+                        name: Cow::Owned(c.name.to_string()),
+                        kind: match &c.kind {
+                            crate::parser::ClauseKind::Bare => crate::parser::ClauseKind::Bare,
+                            crate::parser::ClauseKind::Parenthesized(s) => {
+                                crate::parser::ClauseKind::Parenthesized(Cow::Owned(s.to_string()))
+                            }
+                        },
+                    })
+                    .collect();
+
+                let static_directive = Directive {
+                    name: Cow::Owned(directive.name.to_string()),
+                    parameter: directive.parameter.as_ref().map(|p| Cow::Owned(p.to_string())),
+                    clauses: owned_clauses,
+                };
+
+                self.final_directive = Some(static_directive);
+
+                // Final step: Complete
+                self.steps.push(DebugStep {
+                    step_number,
+                    kind: StepKind::Complete,
+                    description: "Parsing complete".to_string(),
+                    consumed: String::new(),
+                    remaining: remaining.to_string(),
+                    position,
+                    context_stack: vec!["Parser::parse".to_string()],
+                    token_info: Some("Successfully parsed directive".to_string()),
+                });
+            }
+            Err(e) => {
+                let error_msg = format!("{:?}", e);
+                self.error = Some(error_msg.clone());
+                self.steps.push(DebugStep {
+                    step_number,
+                    kind: StepKind::Error,
+                    description: "Parse error".to_string(),
+                    consumed: String::new(),
+                    remaining: current_input.to_string(),
+                    position,
+                    context_stack,
+                    token_info: Some(error_msg.clone()),
+                });
+                return Err(DebugError::ParseError(error_msg));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Parse the pragma prefix and add step (static version to avoid borrow checker issues)
+    fn parse_pragma_prefix_static<'a>(
+        input: &'a str,
+        step_number: usize,
+        position: usize,
+        context_stack: &[String],
+        steps: &mut Vec<DebugStep>,
+    ) -> DebugResult<(String, &'a str)> {
+        match lexer::lex_pragma(input) {
+            Ok((remaining, prefix)) => {
+                steps.push(DebugStep {
+                    step_number,
+                    kind: StepKind::PragmaPrefix,
+                    description: "Parse pragma prefix".to_string(),
+                    consumed: prefix.to_string(),
+                    remaining: remaining.to_string(),
+                    position,
+                    context_stack: context_stack.to_vec(),
+                    token_info: Some(format!("Prefix: \"{}\"", prefix)),
+                });
+                Ok((prefix.to_string(), remaining))
+            }
+            Err(e) => Err(DebugError::ParseError(format!(
+                "Failed to parse pragma prefix: {:?}",
+                e
+            ))),
+        }
+    }
+
+    /// Decompose a parsed directive into individual steps
+    fn decompose_directive(
+        &mut self,
+        directive: &Directive,
+        mut current_input: &str,
+        step_number: &mut usize,
+        position: &mut usize,
+        context_stack: &[String],
+    ) -> DebugResult<()> {
+        // Skip whitespace before directive name
+        if let Ok((remaining, _)) = lexer::skip_space_and_comments(current_input) {
+            let consumed_len = current_input.len() - remaining.len();
+            if consumed_len > 0 {
+                let consumed = &current_input[..consumed_len];
+                self.steps.push(DebugStep {
+                    step_number: *step_number,
+                    kind: StepKind::SkipWhitespace,
+                    description: "Skip whitespace before directive".to_string(),
+                    consumed: format!("{:?}", consumed),
+                    remaining: remaining.to_string(),
+                    position: *position,
+                    context_stack: context_stack.to_vec(),
+                    token_info: None,
+                });
+                *step_number += 1;
+                *position += consumed_len;
+                current_input = remaining;
+            }
+        }
+
+        // Directive name
+        self.steps.push(DebugStep {
+            step_number: *step_number,
+            kind: StepKind::DirectiveName,
+            description: format!("Parse directive name '{}'", directive.name),
+            consumed: directive.name.to_string(),
+            remaining: current_input[directive.name.len()..].to_string(),
+            position: *position,
+            context_stack: context_stack.to_vec(),
+            token_info: Some(format!("Directive: \"{}\"", directive.name)),
+        });
+        *step_number += 1;
+        *position += directive.name.len();
+        current_input = &current_input[directive.name.len()..];
+
+        // Directive parameter (if present)
+        if let Some(ref param) = directive.parameter {
+            // Skip whitespace before parameter
+            if let Ok((remaining, _)) = lexer::skip_space_and_comments(current_input) {
+                let consumed_len = current_input.len() - remaining.len();
+                if consumed_len > 0 {
+                    *position += consumed_len;
+                    current_input = remaining;
+                }
+            }
+
+            // The parameter includes parentheses, so we need to account for that
+            let param_with_parens = format!("({})", param);
+            self.steps.push(DebugStep {
+                step_number: *step_number,
+                kind: StepKind::DirectiveParameter,
+                description: format!("Parse directive parameter '{}'", param),
+                consumed: param_with_parens.clone(),
+                remaining: current_input[param_with_parens.len()..].to_string(),
+                position: *position,
+                context_stack: context_stack.to_vec(),
+                token_info: Some(format!("Parameter: \"{}\"", param)),
+            });
+            *step_number += 1;
+            *position += param_with_parens.len();
+            current_input = &current_input[param_with_parens.len()..];
+        }
+
+        // Parse clauses
+        let mut clause_context = context_stack.to_vec();
+        clause_context.push("ClauseRegistry::parse_sequence".to_string());
+
+        for clause in &directive.clauses {
+            // Skip whitespace before clause
+            if let Ok((remaining, _)) = lexer::skip_space_and_comments(current_input) {
+                let consumed_len = current_input.len() - remaining.len();
+                if consumed_len > 0 {
+                    let consumed = &current_input[..consumed_len];
+                    self.steps.push(DebugStep {
+                        step_number: *step_number,
+                        kind: StepKind::SkipWhitespace,
+                        description: "Skip whitespace before clause".to_string(),
+                        consumed: format!("{:?}", consumed),
+                        remaining: remaining.to_string(),
+                        position: *position,
+                        context_stack: clause_context.clone(),
+                        token_info: None,
+                    });
+                    *step_number += 1;
+                    *position += consumed_len;
+                    current_input = remaining;
+                }
+            }
+
+            // Clause name
+            self.steps.push(DebugStep {
+                step_number: *step_number,
+                kind: StepKind::ClauseName,
+                description: format!("Parse clause name '{}'", clause.name),
+                consumed: clause.name.to_string(),
+                remaining: current_input[clause.name.len()..].to_string(),
+                position: *position,
+                context_stack: clause_context.clone(),
+                token_info: Some(format!("Clause: \"{}\"", clause.name)),
+            });
+            *step_number += 1;
+            *position += clause.name.len();
+            current_input = &current_input[clause.name.len()..];
+
+            // Clause arguments (if parenthesized)
+            if let crate::parser::ClauseKind::Parenthesized(ref args) = clause.kind {
+                let args_with_parens = format!("({})", args);
+                self.steps.push(DebugStep {
+                    step_number: *step_number,
+                    kind: StepKind::ClauseArguments,
+                    description: format!("Parse clause arguments '{}'", args),
+                    consumed: args_with_parens.clone(),
+                    remaining: if current_input.len() >= args_with_parens.len() {
+                        current_input[args_with_parens.len()..].to_string()
+                    } else {
+                        String::new()
+                    },
+                    position: *position,
+                    context_stack: clause_context.clone(),
+                    token_info: Some(format!("Arguments: \"{}\"", args)),
+                });
+                *step_number += 1;
+                *position += args_with_parens.len();
+                if current_input.len() >= args_with_parens.len() {
+                    current_input = &current_input[args_with_parens.len()..];
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get the current step
+    pub fn current_step(&self) -> Option<&DebugStep> {
+        self.steps.get(self.current_step_index)
+    }
+
+    /// Move to the next step
+    pub fn next_step(&mut self) -> bool {
+        if self.current_step_index < self.steps.len() - 1 {
+            self.current_step_index += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Move to the previous step
+    pub fn prev_step(&mut self) -> bool {
+        if self.current_step_index > 0 {
+            self.current_step_index -= 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Get total number of steps
+    pub fn total_steps(&self) -> usize {
+        self.steps.len()
+    }
+
+    /// Get all steps up to and including the current step
+    pub fn steps_so_far(&self) -> &[DebugStep] {
+        &self.steps[..=self.current_step_index.min(self.steps.len().saturating_sub(1))]
+    }
+}
+
