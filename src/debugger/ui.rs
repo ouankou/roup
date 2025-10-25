@@ -87,7 +87,13 @@ pub fn run_interactive_session(mut session: DebugSession) -> DebugResult<()> {
         stdout.flush()?;
 
         let mut input = String::new();
-        stdin.read_line(&mut input)?;
+        let bytes_read = stdin.read_line(&mut input)?;
+
+        // Handle EOF (Ctrl-D or piped input exhausted)
+        if bytes_read == 0 {
+            println!("\nEOF detected. Exiting debugger.");
+            break;
+        }
 
         let command = UserCommand::from_input(&input);
 
