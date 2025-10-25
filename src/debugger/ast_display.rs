@@ -36,7 +36,10 @@ pub fn display_ast_tree(directive: &Directive) -> String {
                     output.push_str(&format!("{}└─ kind: Bare\n", continuation));
                 }
                 ClauseKind::Parenthesized(args) => {
-                    output.push_str(&format!("{}└─ kind: Parenthesized(\"{}\")\n", continuation, args));
+                    output.push_str(&format!(
+                        "{}└─ kind: Parenthesized(\"{}\")\n",
+                        continuation, args
+                    ));
                 }
             }
         }
@@ -104,7 +107,7 @@ pub fn display_step_info(
     // Position indicator (show where we are in the input)
     output.push_str("       ");
     output.push_str(&" ".repeat(step.position));
-    output.push_str("^");
+    output.push('^');
     output.push('\n');
     output.push('\n');
 
@@ -152,24 +155,24 @@ pub fn display_help() -> String {
     output.push_str("═════════════════════════════════════════════════════════════\n");
     output.push_str("                    ROUP Debugger Help\n");
     output.push_str("═════════════════════════════════════════════════════════════\n");
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("Navigation Commands:\n");
     output.push_str("  n / →     Next step\n");
     output.push_str("  p / ←     Previous step\n");
     output.push_str("  g <num>   Go to specific step number\n");
     output.push_str("  0         Go to first step\n");
     output.push_str("  $         Go to last step\n");
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("Display Commands:\n");
     output.push_str("  a         Show complete AST tree\n");
     output.push_str("  s         Show current step details\n");
     output.push_str("  h         Show all steps history\n");
     output.push_str("  i         Show input again\n");
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("Other Commands:\n");
     output.push_str("  ?         Show this help\n");
     output.push_str("  q         Quit\n");
-    output.push_str("\n");
+    output.push('\n');
     output.push_str("═════════════════════════════════════════════════════════════\n");
     output
 }

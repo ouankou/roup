@@ -40,14 +40,17 @@ fn detect_language(input: &str) -> Result<(Dialect, InputLanguage), String> {
         let rest = trimmed[first.len_utf8()..].trim_start();
         let rest_lower = rest.to_ascii_lowercase();
 
-        if rest_lower.starts_with("$omp") || rest_lower.starts_with('$') {
-            if matches!(first, 'c' | 'C' | '*') {
-                return Ok((Dialect::OpenMp, InputLanguage::FortranFixed));
-            }
+        if (rest_lower.starts_with("$omp") || rest_lower.starts_with('$'))
+            && matches!(first, 'c' | 'C' | '*')
+        {
+            return Ok((Dialect::OpenMp, InputLanguage::FortranFixed));
         }
     }
 
-    Err("Unable to detect directive dialect and language. Expected OpenMP or OpenACC directive.".to_string())
+    Err(
+        "Unable to detect directive dialect and language. Expected OpenMP or OpenACC directive."
+            .to_string(),
+    )
 }
 
 fn detect_openacc_language(input: &str) -> Result<(InputLanguage, String), String> {
@@ -59,12 +62,19 @@ fn detect_openacc_language(input: &str) -> Result<(InputLanguage, String), Strin
         return Ok((InputLanguage::C, "#pragma acc".to_string()));
     }
 
-    // Fortran free-form: !$acc (full form) or !$ (short form)
+    // Fortran free-form: !$acc (full form only - !$ alone could be OpenMP)
     if lower.starts_with("!$acc") {
         return Ok((InputLanguage::FortranFree, "!$acc".to_string()));
     }
-    if lower.starts_with("!$") {
-        return Ok((InputLanguage::FortranFree, "!$".to_string()));
+    // Check for !$ short form ONLY if followed by acc-specific keyword
+    if let Some(after_sentinel) = lower.strip_prefix("!$") {
+        // Extract the word after !$ to check if it's an OpenACC keyword
+        let after_sentinel = after_sentinel.trim_start();
+        // Only accept short form if it's clearly OpenACC (starts with OpenACC directive names)
+        // For safety, require the full !$acc form to avoid confusion with !$omp
+        if after_sentinel.starts_with("acc") {
+            return Ok((InputLanguage::FortranFree, "!$".to_string()));
+        }
     }
 
     // Fortran fixed-form: c$acc, *$acc, C$acc or short forms c$, *$, C$
@@ -82,14 +92,17 @@ fn detect_openacc_language(input: &str) -> Result<(InputLanguage, String), Strin
             return Ok((InputLanguage::FortranFixed, prefix));
         }
 
-        // Check for short sentinel ($)
-        if rest_lower.starts_with('$') {
-            let prefix = match first {
-                'c' | 'C' => format!("{}$", first),
-                '*' => "*$".to_string(),
-                _ => return Err("Unable to detect OpenACC directive prefix".to_string()),
-            };
-            return Ok((InputLanguage::FortranFixed, prefix));
+        // Check for short sentinel ($) ONLY if followed by "acc"
+        if let Some(after_dollar) = rest_lower.strip_prefix('$') {
+            let after_dollar = after_dollar.trim_start();
+            if after_dollar.starts_with("acc") {
+                let prefix = match first {
+                    'c' | 'C' => format!("{}$", first),
+                    '*' => "*$".to_string(),
+                    _ => return Err("Unable to detect OpenACC directive prefix".to_string()),
+                };
+                return Ok((InputLanguage::FortranFixed, prefix));
+            }
         }
     }
 

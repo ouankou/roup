@@ -213,7 +213,10 @@ impl DebugSession {
 
                 let static_directive = Directive {
                     name: Cow::Owned(directive.name.to_string()),
-                    parameter: directive.parameter.as_ref().map(|p| Cow::Owned(p.to_string())),
+                    parameter: directive
+                        .parameter
+                        .as_ref()
+                        .map(|p| Cow::Owned(p.to_string())),
                     clauses: owned_clauses,
                 };
 
@@ -454,7 +457,8 @@ impl DebugSession {
 
     /// Get all steps up to and including the current step
     pub fn steps_so_far(&self) -> &[DebugStep] {
-        &self.steps[..=self.current_step_index.min(self.steps.len().saturating_sub(1))]
+        &self.steps[..=self
+            .current_step_index
+            .min(self.steps.len().saturating_sub(1))]
     }
 }
-
