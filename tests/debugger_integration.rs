@@ -128,7 +128,10 @@ fn test_debug_steps_accumulate_correctly() {
 
     // Steps should show progression through the input
     let first_step = &session.steps[0];
-    assert!(first_step.position == 0, "First step should start at position 0");
+    assert!(
+        first_step.position == 0,
+        "First step should start at position 0"
+    );
 }
 
 #[test]
@@ -167,10 +170,10 @@ fn test_custom_parser_scan_directive() {
     assert_eq!(directive.parameter.as_ref().unwrap(), "exclusive(x, y)");
 
     // Verify we captured a DirectiveParameter step
-    assert!(session.steps.iter().any(|s| matches!(
-        s.kind,
-        roup::debugger::StepKind::DirectiveParameter
-    )));
+    assert!(session
+        .steps
+        .iter()
+        .any(|s| matches!(s.kind, roup::debugger::StepKind::DirectiveParameter)));
 }
 
 #[test]
@@ -257,7 +260,7 @@ fn test_bare_clauses() {
 fn test_directive_parameter_vs_clause() {
     // Test that we distinguish directive parameters from clauses correctly
     let inputs = vec![
-        ("#pragma omp scan exclusive(x)", true, 0),  // parameter, no clauses
+        ("#pragma omp scan exclusive(x)", true, 0), // parameter, no clauses
         ("#pragma omp parallel private(x)", false, 1), // no parameter, has clauses
         ("#pragma omp allocate(x) align(16)", true, 1), // both parameter and clauses
     ];
@@ -321,7 +324,7 @@ fn test_multiple_whitespace_steps() {
 
     // Just verify we have at least one whitespace step
     assert!(
-        whitespace_steps.len() >= 1,
+        !whitespace_steps.is_empty(),
         "Expected at least 1 whitespace step, got {}",
         whitespace_steps.len()
     );
@@ -434,7 +437,11 @@ fn test_reduction_with_operators() {
         assert_eq!(directive.name, "parallel");
 
         let reduction_clause = directive.clauses.iter().find(|c| c.name == "reduction");
-        assert!(reduction_clause.is_some(), "Missing reduction clause in: {}", input);
+        assert!(
+            reduction_clause.is_some(),
+            "Missing reduction clause in: {}",
+            input
+        );
     }
 }
 
@@ -451,13 +458,17 @@ fn test_steps_match_final_directive() {
     let directive = session.final_directive.as_ref().unwrap();
 
     // Count directive name steps
-    let directive_name_steps = session.steps.iter()
+    let directive_name_steps = session
+        .steps
+        .iter()
         .filter(|s| matches!(s.kind, roup::debugger::StepKind::DirectiveName))
         .count();
     assert_eq!(directive_name_steps, 1);
 
     // Count clause name steps - should match number of clauses in final directive
-    let clause_name_steps = session.steps.iter()
+    let clause_name_steps = session
+        .steps
+        .iter()
         .filter(|s| matches!(s.kind, roup::debugger::StepKind::ClauseName))
         .count();
     assert_eq!(
@@ -505,9 +516,6 @@ fn test_no_hardcoded_directive_names() {
 
         // Verify final step is Complete
         let last_step = session.steps.last().unwrap();
-        assert!(matches!(
-            last_step.kind,
-            roup::debugger::StepKind::Complete
-        ));
+        assert!(matches!(last_step.kind, roup::debugger::StepKind::Complete));
     }
 }
