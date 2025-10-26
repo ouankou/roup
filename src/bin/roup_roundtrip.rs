@@ -53,9 +53,8 @@ fn detect_language(input: &str, dialect_prefix: &str) -> Result<(InputLanguage, 
         if rest.len() >= full_fixed_sentinel.len()
             && rest[..full_fixed_sentinel.len()].eq_ignore_ascii_case(&full_fixed_sentinel)
         {
-            let sentinel_len = first.len_utf8() + full_fixed_sentinel.len();
             let prefix = match first {
-                'c' | 'C' | '*' => trimmed[..sentinel_len].to_string(),
+                'c' | 'C' | '*' => format!("{}{}", first, &rest[..full_fixed_sentinel.len()]),
                 _ => {
                     return Err(format!(
                         "Unable to detect {} directive prefix",
@@ -68,9 +67,8 @@ fn detect_language(input: &str, dialect_prefix: &str) -> Result<(InputLanguage, 
 
         // Check for short sentinel ($) - only if not already matched $<dialect> above
         if !rest.is_empty() && rest[..1].eq_ignore_ascii_case("$") {
-            let sentinel_len = first.len_utf8() + 1;
             let prefix = match first {
-                'c' | 'C' | '*' => trimmed[..sentinel_len].to_string(),
+                'c' | 'C' | '*' => format!("{}{}", first, &rest[..1]),
                 _ => {
                     return Err(format!(
                         "Unable to detect {} directive prefix",
