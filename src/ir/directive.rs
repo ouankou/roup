@@ -198,6 +198,8 @@ pub enum DirectiveKind {
     TargetTeamsLoop = 55,
     /// `#pragma omp target teams loop simd`
     TargetTeamsLoopSimd = 85,
+    /// `#pragma omp end target`
+    EndTarget = 147,
 
     // ========================================================================
     // Teams constructs
@@ -459,6 +461,7 @@ impl fmt::Display for DirectiveKind {
             }
             DirectiveKind::TargetTeamsLoop => write!(f, "target teams loop"),
             DirectiveKind::TargetTeamsLoopSimd => write!(f, "target teams loop simd"),
+            DirectiveKind::EndTarget => write!(f, "end target"),
 
             // Teams constructs
             DirectiveKind::Teams => write!(f, "teams"),
@@ -744,6 +747,7 @@ impl DirectiveKind {
             }
             DirectiveKind::TargetTeamsLoop => "target teams loop",
             DirectiveKind::TargetTeamsLoopSimd => "target teams loop simd",
+            DirectiveKind::EndTarget => "end target",
 
             // Teams constructs
             DirectiveKind::Teams => "teams",

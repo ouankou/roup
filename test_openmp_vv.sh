@@ -4,16 +4,17 @@
 #
 # This script validates ROUP by:
 # 1. Cloning the OpenMP Validation & Verification test suite (on-demand)
-# 2. Preprocessing all C/C++ test files with clang
-# 3. Extracting OpenMP pragmas
+# 2. Preprocessing all C/C++/Fortran test files with appropriate compilers
+# 3. Extracting OpenMP pragmas/directives
 # 4. Round-tripping each pragma through ROUP's parser
-# 5. Comparing normalized input vs output with clang-format
+# 5. Comparing normalized input vs output
 # 6. Reporting pass/fail statistics
 #
 # Usage:
 #   ./test_openmp_vv.sh                        # Auto-clone to target/openmp_vv
 #   OPENMP_VV_PATH=/path ./test_openmp_vv.sh   # Use existing clone
 #   CLANG=clang-15 ./test_openmp_vv.sh         # Use specific clang version
+#   FC=gfortran ./test_openmp_vv.sh            # Use specific Fortran compiler
 #   PARALLEL_JOBS=8 ./test_openmp_vv.sh        # Control parallel execution
 #
 
@@ -25,6 +26,7 @@ REPO_PATH="${OPENMP_VV_PATH:-target/openmp_vv}"
 TESTS_DIR="tests"
 CLANG="${CLANG:-clang}"
 CLANG_FORMAT="${CLANG_FORMAT:-clang-format}"
+FC="${FC:-}"  # Auto-detect if not specified
 MAX_DISPLAY_FAILURES=10
 # Fallback for systems without nproc (e.g., macOS)
 if command -v nproc >/dev/null 2>&1; then
@@ -35,6 +37,34 @@ else
     DEFAULT_JOBS=1
 fi
 PARALLEL_JOBS="${PARALLEL_JOBS:-$DEFAULT_JOBS}"
+
+# Detect Fortran compiler if not specified (prefer flang, then gfortran)
+detect_fortran_compiler() {
+    if [ -n "$FC" ]; then
+        if command -v "$FC" &>/dev/null; then
+            echo "$FC"
+            return 0
+        else
+            echo ""
+            return 1
+        fi
+    fi
+
+    # Try flang first (LLVM Fortran)
+    if command -v flang &>/dev/null; then
+        echo "flang"
+        return 0
+    fi
+
+    # Fall back to gfortran
+    if command -v gfortran &>/dev/null; then
+        echo "gfortran"
+        return 0
+    fi
+
+    echo ""
+    return 1
+}
 
 # Colors for output
 RED='\033[0;31m'
@@ -68,7 +98,16 @@ for tool in "$CLANG" "$CLANG_FORMAT" cargo; do
         exit 1
     fi
 done
-echo -e "${GREEN}✓${NC} All required tools found"
+
+# Detect Fortran compiler (optional, but will skip Fortran files if not found)
+FORTRAN_COMPILER=$(detect_fortran_compiler || echo "")
+if [ -n "$FORTRAN_COMPILER" ]; then
+    echo -e "${GREEN}✓${NC} All required tools found (C/C++: $CLANG, Fortran: $FORTRAN_COMPILER)"
+else
+    echo -e "${GREEN}✓${NC} All required tools found (C/C++: $CLANG)"
+    echo -e "${YELLOW}Warning: No Fortran compiler found (tried flang, gfortran)${NC}"
+    echo -e "${YELLOW}         Fortran test files will be skipped${NC}"
+fi
 echo ""
 
 # Ensure OpenMP_VV repository exists
@@ -100,11 +139,24 @@ echo ""
 
 ROUNDTRIP_BIN="./target/debug/roup_roundtrip"
 
-# Find all C/C++ source files
-echo "Finding C/C++ test files in $REPO_PATH/$TESTS_DIR..."
-mapfile -t source_files < <(find "$REPO_PATH/$TESTS_DIR" -type f \( -name "*.c" -o -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" \) | sort)
+# Find all C/C++/Fortran source files
+echo "Finding test files in $REPO_PATH/$TESTS_DIR..."
+if [ -n "$FORTRAN_COMPILER" ]; then
+    # Include Fortran files
+    mapfile -t source_files < <(find "$REPO_PATH/$TESTS_DIR" -type f \( \
+        -name "*.c" -o -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" -o \
+        -name "*.f" -o -name "*.for" -o -name "*.f90" -o -name "*.f95" -o -name "*.f03" -o \
+        -name "*.F" -o -name "*.F90" -o -name "*.F95" -o -name "*.F03" \
+        \) | sort)
+    echo "Found ${#source_files[@]} files (C/C++/Fortran)"
+else
+    # C/C++ only
+    mapfile -t source_files < <(find "$REPO_PATH/$TESTS_DIR" -type f \( \
+        -name "*.c" -o -name "*.cpp" -o -name "*.cc" -o -name "*.cxx" \
+        \) | sort)
+    echo "Found ${#source_files[@]} files (C/C++ only)"
+fi
 total_files=${#source_files[@]}
-echo "Found $total_files C/C++ files"
 echo ""
 
 # Function to process a single file
@@ -126,19 +178,52 @@ process_file() {
     local file_id="$file_hash"
     local result_file="$temp_dir/result_$file_id"
 
-    # Preprocess with clang
-    local preprocessed=$("$CLANG" -E -P -CC -fopenmp -I"$(dirname "$file")" "$file" 2>/dev/null || true)
+    # Detect file type
+    local ext="${file##*.}"
+    local is_fortran=0
+    case "$ext" in
+        f|for|f90|f95|f03|F|F90|F95|F03)
+            is_fortran=1
+            ;;
+    esac
 
-    if [ -z "$preprocessed" ]; then
-        echo "0 0 0 0" > "$result_file"
-        return
+    local preprocessed=""
+    local pragmas=()
+
+    if [ $is_fortran -eq 1 ]; then
+        # Fortran file - use Fortran compiler
+        if [ -z "$FORTRAN_COMPILER" ]; then
+            # No Fortran compiler available, skip this file
+            echo "0 0 0 0 0" > "$result_file"
+            return
+        fi
+
+        # Preprocess with Fortran compiler
+        preprocessed=$("$FORTRAN_COMPILER" -E -P -fopenmp -I"$(dirname "$file")" "$file" 2>/dev/null || true)
+
+        if [ -z "$preprocessed" ]; then
+            echo "0 0 0 0 0" > "$result_file"
+            return
+        fi
+
+        # Extract Fortran directives (!$omp, c$omp, *$omp - case insensitive)
+        # Normalize to lowercase for consistent processing
+        mapfile -t pragmas < <(echo "$preprocessed" | grep -iE '^[[:space:]]*[!cC*]\$omp' | tr '[:upper:]' '[:lower:]' || true)
+    else
+        # C/C++ file - use clang
+        preprocessed=$("$CLANG" -E -P -CC -fopenmp -I"$(dirname "$file")" "$file" 2>/dev/null || true)
+
+        if [ -z "$preprocessed" ]; then
+            echo "0 0 0 0 0" > "$result_file"
+            return
+        fi
+
+        # Extract pragmas (lines starting with #pragma omp, with optional leading whitespace)
+        mapfile -t pragmas < <(echo "$preprocessed" | grep -E '^[[:space:]]*#pragma[[:space:]]+omp' || true)
     fi
 
-    # Extract pragmas (lines starting with #pragma omp, with optional leading whitespace)
-    mapfile -t pragmas < <(echo "$preprocessed" | grep -E '^[[:space:]]*#pragma[[:space:]]+omp' || true)
-
     if [ ${#pragmas[@]} -eq 0 ]; then
-        echo "0 0 0 0" > "$result_file"
+        echo "0 0 0 0 0" > "$result_file"
         return
     fi
 
@@ -149,26 +234,50 @@ process_file() {
 
     # Process each pragma
     for pragma in "${pragmas[@]}"; do
-        # Normalize original pragma with clang-format
-        local original_formatted=$(echo "$pragma" | "$CLANG_FORMAT" 2>/dev/null || echo "$pragma")
+        if [ $is_fortran -eq 1 ]; then
+            # Fortran: normalize by converting to lowercase and removing extra spaces
+            local original_normalized=$(echo "$pragma" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
-        # Round-trip through ROUP
-        if ! roundtrip=$(echo "$pragma" | "$ROUNDTRIP_BIN" 2>/dev/null); then
-            file_parse_errors=$((file_parse_errors + 1))
-            file_failed=$((file_failed + 1))
-            echo "$file|$pragma|Parse error" >> "$temp_dir/failures_$file_id"
-            continue
-        fi
+            # Round-trip through ROUP (auto-detects Fortran from sentinel)
+            if ! roundtrip=$(echo "$pragma" | "$ROUNDTRIP_BIN" 2>/dev/null); then
+                file_parse_errors=$((file_parse_errors + 1))
+                file_failed=$((file_failed + 1))
+                echo "$file|$pragma|Parse error" >> "$temp_dir/failures_$file_id"
+                continue
+            fi
 
-        # Normalize round-tripped pragma with clang-format
-        local roundtrip_formatted=$(echo "$roundtrip" | "$CLANG_FORMAT" 2>/dev/null || echo "$roundtrip")
+            # Normalize round-tripped output
+            local roundtrip_normalized=$(echo "$roundtrip" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
-        # Compare
-        if [ "$original_formatted" = "$roundtrip_formatted" ]; then
-            file_passed=$((file_passed + 1))
+            # Compare
+            if [ "$original_normalized" = "$roundtrip_normalized" ]; then
+                file_passed=$((file_passed + 1))
+            else
+                file_failed=$((file_failed + 1))
+                echo "$file|$pragma|Mismatch: got '$roundtrip'" >> "$temp_dir/failures_$file_id"
+            fi
         else
-            file_failed=$((file_failed + 1))
-            echo "$file|$pragma|Mismatch: got '$roundtrip'" >> "$temp_dir/failures_$file_id"
+            # C/C++: normalize with clang-format
+            local original_formatted=$(echo "$pragma" | "$CLANG_FORMAT" 2>/dev/null || echo "$pragma")
+
+            # Round-trip through ROUP
+            if ! roundtrip=$(echo "$pragma" | "$ROUNDTRIP_BIN" 2>/dev/null); then
+                file_parse_errors=$((file_parse_errors + 1))
+                file_failed=$((file_failed + 1))
+                echo "$file|$pragma|Parse error" >> "$temp_dir/failures_$file_id"
+                continue
+            fi
+
+            # Normalize round-tripped pragma with clang-format
+            local roundtrip_formatted=$(echo "$roundtrip" | "$CLANG_FORMAT" 2>/dev/null || echo "$roundtrip")
+
+            # Compare
+            if [ "$original_formatted" = "$roundtrip_formatted" ]; then
+                file_passed=$((file_passed + 1))
+            else
+                file_failed=$((file_failed + 1))
+                echo "$file|$pragma|Mismatch: got '$roundtrip'" >> "$temp_dir/failures_$file_id"
+            fi
         fi
     done
 
@@ -177,7 +286,7 @@ process_file() {
 }
 
 export -f process_file
-export CLANG CLANG_FORMAT ROUNDTRIP_BIN
+export CLANG CLANG_FORMAT ROUNDTRIP_BIN FORTRAN_COMPILER
 
 echo "Processing files in parallel (using $PARALLEL_JOBS jobs)..."
 echo ""

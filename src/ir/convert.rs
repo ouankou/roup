@@ -116,6 +116,7 @@ pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError
         "target enter data" => Ok(DirectiveKind::TargetEnterData),
         "target exit data" => Ok(DirectiveKind::TargetExitData),
         "target update" => Ok(DirectiveKind::TargetUpdate),
+        "end target" => Ok(DirectiveKind::EndTarget),
         "target parallel" => Ok(DirectiveKind::TargetParallel),
         "target parallel for" => Ok(DirectiveKind::TargetParallelFor),
         "target parallel do" => Ok(DirectiveKind::TargetParallelDo), // Fortran equivalent
