@@ -270,7 +270,7 @@ process_file() {
     for pragma in "${pragmas[@]}"; do
         if [ $is_fortran -eq 1 ]; then
             # Fortran: normalize by converting to lowercase and removing extra spaces
-            local original_normalized=$(echo "$pragma" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            local original_normalized=$(echo "$pragma" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
             # Round-trip through ROUP (auto-detects Fortran from sentinel)
             if ! roundtrip=$(echo "$pragma" | "$ROUNDTRIP_BIN" --acc 2>/dev/null); then
@@ -281,7 +281,7 @@ process_file() {
             fi
 
             # Normalize round-tripped output
-            local roundtrip_normalized=$(echo "$roundtrip" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            local roundtrip_normalized=$(echo "$roundtrip" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
             # Compare
             if [ "$original_normalized" = "$roundtrip_normalized" ]; then
@@ -294,10 +294,10 @@ process_file() {
             # C/C++: normalize with clang-format if available, otherwise basic normalization
             if [ -n "$CLANG_FORMAT" ]; then
                 # Remove commas between clauses, then format
-                local original_formatted=$(echo "$pragma" | sed 's/),[[:space:]]\+/) /g' | "$CLANG_FORMAT" 2>/dev/null || echo "$pragma")
+                local original_formatted=$(echo "$pragma" | sed 's/),[[:space:]][[:space:]]*/) /g' | "$CLANG_FORMAT" 2>/dev/null || echo "$pragma")
             else
                 # Basic normalization: remove commas between clauses, collapse spaces, trim, lowercase
-                local original_formatted=$(echo "$pragma" | sed 's/),[[:space:]]\+/) /g' | sed 's/ (/(/g' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+                local original_formatted=$(echo "$pragma" | sed 's/),[[:space:]][[:space:]]*/) /g' | sed 's/ (/(/g' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
             fi
 
             # Round-trip through ROUP
@@ -311,10 +311,10 @@ process_file() {
             # Normalize round-tripped pragma
             if [ -n "$CLANG_FORMAT" ]; then
                 # Remove commas between clauses, then format
-                local roundtrip_formatted=$(echo "$roundtrip" | sed 's/),[[:space:]]\+/) /g' | "$CLANG_FORMAT" 2>/dev/null || echo "$roundtrip")
+                local roundtrip_formatted=$(echo "$roundtrip" | sed 's/),[[:space:]][[:space:]]*/) /g' | "$CLANG_FORMAT" 2>/dev/null || echo "$roundtrip")
             else
                 # Basic normalization: remove commas between clauses, collapse spaces, trim, lowercase
-                local roundtrip_formatted=$(echo "$roundtrip" | sed 's/),[[:space:]]\+/) /g' | sed 's/ (/(/g' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+                local roundtrip_formatted=$(echo "$roundtrip" | sed 's/),[[:space:]][[:space:]]*/) /g' | sed 's/ (/(/g' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
             fi
 
             # Compare
