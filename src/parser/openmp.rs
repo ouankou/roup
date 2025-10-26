@@ -271,6 +271,7 @@ openmp_directives! {
     TargetData => "target data",
     TargetEnterData => "target enter data",
     TargetExitData => "target exit data",
+    EndTarget => "end target",
     TargetLoop => "target loop",
     TargetLoopSimd => "target loop simd",
     TargetParallel => "target parallel",
