@@ -194,7 +194,7 @@ process_file() {
         # Fortran file - use Fortran compiler
         if [ -z "$FORTRAN_COMPILER" ]; then
             # No Fortran compiler available, skip this file
-            echo "0 0 0 0" > "$result_file"
+            echo "0 0 0 0 0" > "$result_file"
             return
         fi
 
@@ -202,7 +202,7 @@ process_file() {
         preprocessed=$("$FORTRAN_COMPILER" -E -P -fopenmp -I"$(dirname "$file")" "$file" 2>/dev/null || true)
 
         if [ -z "$preprocessed" ]; then
-            echo "0 0 0 0" > "$result_file"
+            echo "0 0 0 0 0" > "$result_file"
             return
         fi
 
@@ -214,7 +214,7 @@ process_file() {
         preprocessed=$("$CLANG" -E -P -CC -fopenmp -I"$(dirname "$file")" "$file" 2>/dev/null || true)
 
         if [ -z "$preprocessed" ]; then
-            echo "0 0 0 0" > "$result_file"
+            echo "0 0 0 0 0" > "$result_file"
             return
         fi
 
@@ -223,7 +223,7 @@ process_file() {
     fi
 
     if [ ${#pragmas[@]} -eq 0 ]; then
-        echo "0 0 0 0" > "$result_file"
+        echo "0 0 0 0 0" > "$result_file"
         return
     fi
 
