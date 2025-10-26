@@ -100,7 +100,7 @@ for tool in "$CLANG" "$CLANG_FORMAT" cargo; do
 done
 
 # Detect Fortran compiler (optional, but will skip Fortran files if not found)
-FORTRAN_COMPILER=$(detect_fortran_compiler)
+FORTRAN_COMPILER=$(detect_fortran_compiler || echo "")
 if [ -n "$FORTRAN_COMPILER" ]; then
     echo -e "${GREEN}✓${NC} All required tools found (C/C++: $CLANG, Fortran: $FORTRAN_COMPILER)"
 else

@@ -128,7 +128,7 @@ fi
 
 # Detect compilers
 C_COMPILER=$(detect_c_compiler)
-FORTRAN_COMPILER=$(detect_fortran_compiler)
+FORTRAN_COMPILER=$(detect_fortran_compiler || echo "")
 
 if [ -z "$C_COMPILER" ]; then
     echo -e "${RED}Error: No C/C++ compiler found (tried clang, gcc)${NC}"
@@ -294,10 +294,10 @@ process_file() {
             # C/C++: normalize with clang-format if available, otherwise basic normalization
             if [ -n "$CLANG_FORMAT" ]; then
                 # Remove commas between clauses, then format
-                local original_formatted=$(echo "$pragma" | sed 's/),\s\+/) /g' | "$CLANG_FORMAT" 2>/dev/null || echo "$pragma")
+                local original_formatted=$(echo "$pragma" | sed 's/),[[:space:]]\+/) /g' | "$CLANG_FORMAT" 2>/dev/null || echo "$pragma")
             else
                 # Basic normalization: remove commas between clauses, collapse spaces, trim, lowercase
-                local original_formatted=$(echo "$pragma" | sed 's/),\s\+/) /g' | sed 's/ (/(/g' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+                local original_formatted=$(echo "$pragma" | sed 's/),[[:space:]]\+/) /g' | sed 's/ (/(/g' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
             fi
 
             # Round-trip through ROUP
@@ -311,10 +311,10 @@ process_file() {
             # Normalize round-tripped pragma
             if [ -n "$CLANG_FORMAT" ]; then
                 # Remove commas between clauses, then format
-                local roundtrip_formatted=$(echo "$roundtrip" | sed 's/),\s\+/) /g' | "$CLANG_FORMAT" 2>/dev/null || echo "$roundtrip")
+                local roundtrip_formatted=$(echo "$roundtrip" | sed 's/),[[:space:]]\+/) /g' | "$CLANG_FORMAT" 2>/dev/null || echo "$roundtrip")
             else
                 # Basic normalization: remove commas between clauses, collapse spaces, trim, lowercase
-                local roundtrip_formatted=$(echo "$roundtrip" | sed 's/),\s\+/) /g' | sed 's/ (/(/g' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+                local roundtrip_formatted=$(echo "$roundtrip" | sed 's/),[[:space:]]\+/) /g' | sed 's/ (/(/g' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
             fi
 
             # Compare
