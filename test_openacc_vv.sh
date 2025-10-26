@@ -269,8 +269,8 @@ process_file() {
     # Process each pragma
     for pragma in "${pragmas[@]}"; do
         if [ $is_fortran -eq 1 ]; then
-            # Fortran: normalize by converting to lowercase and removing extra spaces
-            local original_normalized=$(echo "$pragma" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            # Fortran: normalize by removing commas between clauses, converting to lowercase, and removing extra spaces
+            local original_normalized=$(echo "$pragma" | sed 's/),[[:space:]][[:space:]]*/) /g' | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
             # Round-trip through ROUP (auto-detects Fortran from sentinel)
             if ! roundtrip=$(echo "$pragma" | "$ROUNDTRIP_BIN" --acc 2>/dev/null); then
@@ -281,7 +281,7 @@ process_file() {
             fi
 
             # Normalize round-tripped output
-            local roundtrip_normalized=$(echo "$roundtrip" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            local roundtrip_normalized=$(echo "$roundtrip" | sed 's/),[[:space:]][[:space:]]*/) /g' | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
             # Compare
             if [ "$original_normalized" = "$roundtrip_normalized" ]; then
