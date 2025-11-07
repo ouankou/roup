@@ -41,6 +41,64 @@ pub fn display_ast_tree(directive: &Directive) -> String {
                         continuation, args
                     ));
                 }
+                ClauseKind::VariableList(variables) => {
+                    output.push_str(&format!(
+                        "{}└─ kind: VariableList [{}]\n",
+                        continuation, variables.join(", ")
+                    ));
+                }
+                ClauseKind::CopyinClause { modifier, variables } => {
+                    let mod_str = if let Some(_) = modifier { " readonly" } else { "" };
+                    output.push_str(&format!(
+                        "{}└─ kind: CopyinClause{} [{}]\n",
+                        continuation, mod_str, variables.join(", ")
+                    ));
+                }
+                ClauseKind::CopyoutClause { modifier, variables } => {
+                    let mod_str = if let Some(_) = modifier { " zero" } else { "" };
+                    output.push_str(&format!(
+                        "{}└─ kind: CopyoutClause{} [{}]\n",
+                        continuation, mod_str, variables.join(", ")
+                    ));
+                }
+                ClauseKind::CreateClause { modifier, variables } => {
+                    let mod_str = if let Some(_) = modifier { " zero" } else { "" };
+                    output.push_str(&format!(
+                        "{}└─ kind: CreateClause{} [{}]\n",
+                        continuation, mod_str, variables.join(", ")
+                    ));
+                }
+                ClauseKind::ReductionClause { operator, variables } => {
+                    output.push_str(&format!(
+                        "{}└─ kind: ReductionClause {:?} [{}]\n",
+                        continuation, operator, variables.join(", ")
+                    ));
+                }
+                ClauseKind::GangClause { modifier, variables } => {
+                    let mod_str = match modifier {
+                        Some(crate::parser::GangModifier::Num) => " num",
+                        Some(crate::parser::GangModifier::Static) => " static",
+                        None => "",
+                    };
+                    output.push_str(&format!(
+                        "{}└─ kind: GangClause{} [{}]\n",
+                        continuation, mod_str, variables.join(", ")
+                    ));
+                }
+                ClauseKind::WorkerClause { modifier, variables } => {
+                    let mod_str = if modifier.is_some() { " num" } else { "" };
+                    output.push_str(&format!(
+                        "{}└─ kind: WorkerClause{} [{}]\n",
+                        continuation, mod_str, variables.join(", ")
+                    ));
+                }
+                ClauseKind::VectorClause { modifier, variables } => {
+                    let mod_str = if modifier.is_some() { " length" } else { "" };
+                    output.push_str(&format!(
+                        "{}└─ kind: VectorClause{} [{}]\n",
+                        continuation, mod_str, variables.join(", ")
+                    ));
+                }
             }
         }
     }

@@ -876,6 +876,7 @@ fn allocate_c_string(s: &str) -> *const c_char {
     c_string.into_raw() as *const c_char
 }
 
+
 /// Convert Rust Clause to C-compatible OmpClause.
 ///
 /// Maps clause names to integer kind codes (C doesn't have Rust enums).
@@ -1244,14 +1245,20 @@ fn free_clause_data(clause: &OmpClause) {
 #[repr(C)]
 pub struct AccDirective {
     name: *const c_char,
+    parameter: *const c_char, // Optional directive parameter (e.g., routine name, wait args)
     clauses: Vec<AccClause>,
+    wait_data: Option<crate::parser::WaitDirectiveData<'static>>,
+    cache_data: Option<crate::parser::CacheDirectiveData<'static>>,
 }
 
 /// Opaque OpenACC clause type (C-compatible)
 #[repr(C)]
 pub struct AccClause {
     kind: i32,
+    name: *const c_char,             // Original clause name (preserves aliases like "pcreate")
     expressions: *mut AccStringList, // For variable lists, arguments, etc.
+    modifier: i32,                   // For copyin/copyout/create modifiers (0=none, 1=readonly, 2=zero)
+    operator: i32,                   // For reduction operators (0=none, 1=+, 2=-, 3=*, etc.)
 }
 
 /// Iterator over OpenACC clauses
@@ -1314,11 +1321,25 @@ pub extern "C" fn acc_parse(input: *const c_char) -> *mut AccDirective {
 
         let c_directive = AccDirective {
             name: allocate_c_string(directive.name.as_ref()),
+            parameter: directive
+                .parameter
+                .as_ref()
+                .map(|p| allocate_c_string(p.as_ref()))
+                .unwrap_or(ptr::null()),
             clauses: directive
                 .clauses
                 .into_iter()
                 .map(|c| convert_acc_clause(&c))
                 .collect(),
+            wait_data: directive.wait_data.map(|wd| crate::parser::WaitDirectiveData {
+                devnum: wd.devnum.map(|d| std::borrow::Cow::Owned(d.into_owned())),
+                has_queues: wd.has_queues,
+                queue_exprs: wd.queue_exprs.into_iter().map(|e| std::borrow::Cow::Owned(e.into_owned())).collect(),
+            }),
+            cache_data: directive.cache_data.map(|cd| crate::parser::CacheDirectiveData {
+                readonly: cd.readonly,
+                variables: cd.variables.into_iter().map(|v| std::borrow::Cow::Owned(v.into_owned())).collect(),
+            }),
         };
 
         Box::into_raw(Box::new(c_directive))
@@ -1358,18 +1379,35 @@ pub extern "C" fn acc_parse_with_language(
         };
 
         let parser = openacc::parser().with_language(lang);
-        let directive = match parser.parse(rust_str) {
+        let mut directive = match parser.parse(rust_str) {
             Ok((_, dir)) => dir,
             Err(_) => return ptr::null_mut(),
         };
 
+        // Merge duplicate clauses and deduplicate variables (accparser compatibility)
+        directive.merge_clauses();
+
         let c_directive = AccDirective {
             name: allocate_c_string(directive.name.as_ref()),
+            parameter: directive
+                .parameter
+                .as_ref()
+                .map(|p| allocate_c_string(p.as_ref()))
+                .unwrap_or(ptr::null()),
             clauses: directive
                 .clauses
                 .into_iter()
                 .map(|c| convert_acc_clause(&c))
                 .collect(),
+            wait_data: directive.wait_data.map(|wd| crate::parser::WaitDirectiveData {
+                devnum: wd.devnum.map(|d| std::borrow::Cow::Owned(d.into_owned())),
+                has_queues: wd.has_queues,
+                queue_exprs: wd.queue_exprs.into_iter().map(|e| std::borrow::Cow::Owned(e.into_owned())).collect(),
+            }),
+            cache_data: directive.cache_data.map(|cd| crate::parser::CacheDirectiveData {
+                readonly: cd.readonly,
+                variables: cd.variables.into_iter().map(|v| std::borrow::Cow::Owned(v.into_owned())).collect(),
+            }),
         };
 
         Box::into_raw(Box::new(c_directive))
@@ -1386,11 +1424,23 @@ pub extern "C" fn acc_directive_free(directive: *mut AccDirective) {
     unsafe {
         let boxed = Box::from_raw(directive);
 
+        // Free directive name string
         if !boxed.name.is_null() {
             drop(CString::from_raw(boxed.name as *mut c_char));
         }
 
+        // Free directive parameter string
+        if !boxed.parameter.is_null() {
+            drop(CString::from_raw(boxed.parameter as *mut c_char));
+        }
+
+        // Free all clause data (including clause name strings)
         for clause in &boxed.clauses {
+            // Free clause name string
+            if !clause.name.is_null() {
+                drop(CString::from_raw(clause.name as *mut c_char));
+            }
+            // Free clause expressions (safe function call)
             free_acc_clause_data(clause);
         }
     }
@@ -1427,6 +1477,132 @@ pub extern "C" fn acc_directive_name(directive: *const AccDirective) -> *const c
     unsafe {
         let dir = &*directive;
         dir.name
+    }
+}
+
+/// Get the directive parameter (e.g., routine name, wait arguments).
+///
+/// Returns NULL if no parameter is present.
+#[no_mangle]
+pub extern "C" fn acc_directive_parameter(directive: *const AccDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let dir = &*directive;
+        dir.parameter
+    }
+}
+
+/// Get wait directive devnum value (NULL if not present)
+#[no_mangle]
+pub extern "C" fn acc_wait_directive_devnum(directive: *const AccDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+    unsafe {
+        let dir = &*directive;
+        if let Some(wait_data) = dir.wait_data.as_ref() {
+            if let Some(devnum) = wait_data.devnum.as_ref() {
+                return allocate_c_string(devnum.as_ref());
+            }
+        }
+        ptr::null()
+    }
+}
+
+/// Check if wait directive has queues keyword
+#[no_mangle]
+pub extern "C" fn acc_wait_directive_has_queues(directive: *const AccDirective) -> bool {
+    if directive.is_null() {
+        return false;
+    }
+    unsafe {
+        let dir = &*directive;
+        if let Some(wait_data) = dir.wait_data.as_ref() {
+            return wait_data.has_queues;
+        }
+        false
+    }
+}
+
+/// Get wait directive queue expressions count
+#[no_mangle]
+pub extern "C" fn acc_wait_directive_queue_count(directive: *const AccDirective) -> i32 {
+    if directive.is_null() {
+        return 0;
+    }
+    unsafe {
+        let dir = &*directive;
+        if let Some(wait_data) = dir.wait_data.as_ref() {
+            return wait_data.queue_exprs.len() as i32;
+        }
+        0
+    }
+}
+
+/// Get wait directive queue expression at index
+#[no_mangle]
+pub extern "C" fn acc_wait_directive_queue_at(directive: *const AccDirective, index: i32) -> *const c_char {
+    if directive.is_null() || index < 0 {
+        return ptr::null();
+    }
+    unsafe {
+        let dir = &*directive;
+        if let Some(wait_data) = dir.wait_data.as_ref() {
+            if let Some(expr) = wait_data.queue_exprs.get(index as usize) {
+                return allocate_c_string(expr.as_ref());
+            }
+        }
+        ptr::null()
+    }
+}
+
+/// Get cache directive modifier (0=none, 1=readonly)
+#[no_mangle]
+pub extern "C" fn acc_cache_directive_modifier(directive: *const AccDirective) -> i32 {
+    if directive.is_null() {
+        return 0;
+    }
+    unsafe {
+        let dir = &*directive;
+        if let Some(cache_data) = dir.cache_data.as_ref() {
+            return if cache_data.readonly { 1 } else { 0 };
+        }
+        0
+    }
+}
+
+/// Get cache directive variable count
+#[no_mangle]
+pub extern "C" fn acc_cache_directive_var_count(directive: *const AccDirective) -> i32 {
+    if directive.is_null() {
+        return 0;
+    }
+    unsafe {
+        let dir = &*directive;
+        if let Some(cache_data) = dir.cache_data.as_ref() {
+            return cache_data.variables.len() as i32;
+        }
+        0
+    }
+}
+
+/// Get cache directive variable at index
+#[no_mangle]
+pub extern "C" fn acc_cache_directive_var_at(directive: *const AccDirective, index: i32) -> *const c_char {
+    if directive.is_null() || index < 0 {
+        return ptr::null();
+    }
+    unsafe {
+        let dir = &*directive;
+        if let Some(cache_data) = dir.cache_data.as_ref() {
+            if let Some(var) = cache_data.variables.get(index as usize) {
+                return allocate_c_string(var.as_ref());
+            }
+        }
+        ptr::null()
     }
 }
 
@@ -1531,6 +1707,21 @@ pub extern "C" fn acc_clause_kind(clause: *const AccClause) -> i32 {
     }
 }
 
+/// Get the original clause name (preserves aliases like "pcreate", "present_or_create").
+///
+/// Returns NULL if clause is NULL.
+#[no_mangle]
+pub extern "C" fn acc_clause_name(clause: *const AccClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        c.name
+    }
+}
+
 /// Get number of expressions in an OpenACC clause.
 ///
 /// Returns 0 if clause is NULL or has no expressions.
@@ -1573,6 +1764,61 @@ pub extern "C" fn acc_clause_expression_at(clause: *const AccClause, index: i32)
         }
 
         list.items[idx]
+    }
+}
+
+/// Get the modifier value for a clause.
+///
+/// Returns:
+/// - 0: No modifier
+/// - 1: readonly (for copyin)
+/// - 2: zero (for copyout/create)
+///
+/// Returns 0 if clause is NULL or has no modifier.
+#[no_mangle]
+pub extern "C" fn acc_clause_modifier(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let c = &*clause;
+        c.modifier
+    }
+}
+
+/// Get the reduction operator value for a clause.
+///
+/// Returns:
+/// - 0: No operator (not a reduction clause)
+/// - 1: + (add)
+/// - 2: - (sub)
+/// - 3: * (mul)
+/// - 4: max
+/// - 5: min
+/// - 6: & (bitand)
+/// - 7: | (bitor)
+/// - 8: ^ (bitxor)
+/// - 9: && (logand)
+/// - 10: || (logor)
+/// - 11: .and. (Fortran)
+/// - 12: .or. (Fortran)
+/// - 13: .eqv. (Fortran)
+/// - 14: .neqv. (Fortran)
+/// - 15: iand (Fortran)
+/// - 16: ior (Fortran)
+/// - 17: ieor (Fortran)
+///
+/// Returns 0 if clause is NULL or is not a reduction clause.
+#[no_mangle]
+pub extern "C" fn acc_clause_operator(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let c = &*clause;
+        c.operator
     }
 }
 
@@ -1656,7 +1902,8 @@ fn acc_directive_name_to_kind(name: *const c_char) -> i32 {
             "shutdown" => 21,
             "enter_data" => 24,
             "exit_data" => 25,
-            // Special directives that may have embedded content
+            "cache" => 23,  // Cache directive (content in parameter field)
+            // Special directives that may have embedded content (legacy support)
             name if name.starts_with("cache(") => 23,
             name if name.starts_with("wait(") => 26,
             name if name.starts_with("end ") => 10,
@@ -1684,7 +1931,45 @@ fn acc_directive_name_to_kind(name: *const c_char) -> i32 {
 /// - 13 = bind              - 28 = attach           - 43 = device_resident
 /// - 14 = if                - 29 = detach           - 44 = host
 /// - 999 = unknown
+/// Normalize whitespace in clause content - format as "keyword: value"
+/// E.g., "length : a" -> "length: a", "num :5" -> "num: 5"
+fn normalize_clause_content(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() + 2);
+    let mut prev_char = ' ';
+    let mut after_colon = false;
+
+    for ch in s.chars() {
+        if ch == ':' {
+            // Remove trailing spaces before colon
+            while result.ends_with(' ') {
+                result.pop();
+            }
+            result.push(':');
+            result.push(' ');  // Always add one space after colon
+            after_colon = true;
+            prev_char = ':';
+        } else if ch == ' ' || ch == '\t' {
+            if after_colon {
+                // Skip leading spaces after colon (we already added one)
+                continue;
+            }
+            if prev_char != ' ' {
+                result.push(' ');
+                prev_char = ' ';
+            }
+        } else {
+            after_colon = false;
+            result.push(ch);
+            prev_char = ch;
+        }
+    }
+
+    result.trim().to_string()
+}
+
 fn convert_acc_clause(clause: &Clause) -> AccClause {
+    // Store original clause name to preserve aliases (pcreate, present_or_create, etc.)
+    let original_name = allocate_c_string(clause.name.as_ref());
     let normalized_name = clause.name.to_ascii_lowercase();
 
     // Use tuple pattern for AST parser compatibility (constants_gen.rs)
@@ -1748,27 +2033,166 @@ fn convert_acc_clause(clause: &Clause) -> AccClause {
         _ => (999, ()),
     };
 
-    // Extract expressions from clause content
-    let expressions = match &clause.kind {
-        ClauseKind::Parenthesized(content) => {
-            let content_str = content.as_ref();
-            if !content_str.is_empty() {
-                // For now, store the entire content as a single expression
-                // More sophisticated parsing could split by commas, etc.
-                let items = vec![allocate_c_string(content_str)];
-
+    // Extract expressions, modifiers, and operators from clause content
+    let (expressions, modifier, operator) = match &clause.kind {
+        ClauseKind::VariableList(variables) => {
+            let items: Vec<_> = variables.iter()
+                .map(|v| allocate_c_string(v.as_ref()))
+                .collect();
+            let expressions = if !items.is_empty() {
                 Box::into_raw(Box::new(AccStringList { items }))
             } else {
                 ptr::null_mut()
-            }
+            };
+            (expressions, 0, 0)
         }
-        ClauseKind::Bare => ptr::null_mut(),
+        ClauseKind::CopyinClause { modifier: mod_opt, variables } => {
+            let mod_val = match mod_opt {
+                Some(crate::parser::CopyinModifier::Readonly) => 1,
+                None => 0,
+            };
+            let items: Vec<_> = variables.iter()
+                .map(|v| allocate_c_string(v.as_ref()))
+                .collect();
+            let expressions = if !items.is_empty() {
+                Box::into_raw(Box::new(AccStringList { items }))
+            } else {
+                ptr::null_mut()
+            };
+            (expressions, mod_val, 0)
+        }
+        ClauseKind::CopyoutClause { modifier: mod_opt, variables } => {
+            let mod_val = match mod_opt {
+                Some(crate::parser::CopyoutModifier::Zero) => 2,
+                None => 0,
+            };
+            let items: Vec<_> = variables.iter()
+                .map(|v| allocate_c_string(v.as_ref()))
+                .collect();
+            let expressions = if !items.is_empty() {
+                Box::into_raw(Box::new(AccStringList { items }))
+            } else {
+                ptr::null_mut()
+            };
+            (expressions, mod_val, 0)
+        }
+        ClauseKind::CreateClause { modifier: mod_opt, variables } => {
+            let mod_val = match mod_opt {
+                Some(crate::parser::CreateModifier::Zero) => 2,
+                None => 0,
+            };
+            let items: Vec<_> = variables.iter()
+                .map(|v| allocate_c_string(v.as_ref()))
+                .collect();
+            let expressions = if !items.is_empty() {
+                Box::into_raw(Box::new(AccStringList { items }))
+            } else {
+                ptr::null_mut()
+            };
+            (expressions, mod_val, 0)
+        }
+        ClauseKind::ReductionClause { operator: op, variables } => {
+            let op_val = match op {
+                crate::parser::ReductionOperator::Add => 1,
+                crate::parser::ReductionOperator::Sub => 2,
+                crate::parser::ReductionOperator::Mul => 3,
+                crate::parser::ReductionOperator::Max => 4,
+                crate::parser::ReductionOperator::Min => 5,
+                crate::parser::ReductionOperator::BitAnd => 6,
+                crate::parser::ReductionOperator::BitOr => 7,
+                crate::parser::ReductionOperator::BitXor => 8,
+                crate::parser::ReductionOperator::LogAnd => 9,
+                crate::parser::ReductionOperator::LogOr => 10,
+                crate::parser::ReductionOperator::FortAnd => 11,
+                crate::parser::ReductionOperator::FortOr => 12,
+                crate::parser::ReductionOperator::FortEqv => 13,
+                crate::parser::ReductionOperator::FortNeqv => 14,
+                crate::parser::ReductionOperator::FortIand => 15,
+                crate::parser::ReductionOperator::FortIor => 16,
+                crate::parser::ReductionOperator::FortIeor => 17,
+            };
+            let items: Vec<_> = variables.iter()
+                .map(|v| allocate_c_string(v.as_ref()))
+                .collect();
+            let expressions = if !items.is_empty() {
+                Box::into_raw(Box::new(AccStringList { items }))
+            } else {
+                ptr::null_mut()
+            };
+            (expressions, 0, op_val)
+        }
+        ClauseKind::Parenthesized(content) => {
+            let content_str = content.as_ref();
+            let expressions = if !content_str.is_empty() {
+                // Normalize whitespace around colons for proper accparser output
+                // E.g., "length : a" -> "length: a", "num : 5" -> "num: 5"
+                let normalized = normalize_clause_content(content_str);
+                let items = vec![allocate_c_string(&normalized)];
+                Box::into_raw(Box::new(AccStringList { items }))
+            } else {
+                ptr::null_mut()
+            };
+            (expressions, 0, 0)
+        }
+        ClauseKind::GangClause { modifier: _mod_opt, variables } => {
+            // Gang clause doesn't have formal modifiers in accparser
+            // Just treat as variable list for now
+            let items: Vec<_> = variables.iter()
+                .map(|v| allocate_c_string(v.as_ref()))
+                .collect();
+            let expressions = if !items.is_empty() {
+                Box::into_raw(Box::new(AccStringList { items }))
+            } else {
+                ptr::null_mut()
+            };
+            (expressions, 0, 0)
+        }
+        ClauseKind::WorkerClause { modifier: mod_opt, variables } => {
+            let mod_val = match mod_opt {
+                Some(crate::parser::WorkerModifier::Num) => 1,  // ACCC_WORKER_num = 1
+                None => 0,  // ACCC_WORKER_unspecified = 0
+            };
+            let items: Vec<_> = variables.iter()
+                .map(|v| allocate_c_string(v.as_ref()))
+                .collect();
+            let expressions = if !items.is_empty() {
+                Box::into_raw(Box::new(AccStringList { items }))
+            } else {
+                ptr::null_mut()
+            };
+            (expressions, mod_val, 0)
+        }
+        ClauseKind::VectorClause { modifier: mod_opt, variables } => {
+            let mod_val = match mod_opt {
+                Some(crate::parser::VectorModifier::Length) => 1,  // ACCC_VECTOR_length = 1
+                None => 0,  // ACCC_VECTOR_unspecified = 0
+            };
+            let items: Vec<_> = variables.iter()
+                .map(|v| allocate_c_string(v.as_ref()))
+                .collect();
+            let expressions = if !items.is_empty() {
+                Box::into_raw(Box::new(AccStringList { items }))
+            } else {
+                ptr::null_mut()
+            };
+            (expressions, mod_val, 0)
+        }
+        ClauseKind::Bare => (ptr::null_mut(), 0, 0),
     };
 
-    AccClause { kind, expressions }
+    AccClause {
+        kind,
+        name: original_name,
+        expressions,
+        modifier,
+        operator,
+    }
 }
 
-/// Free OpenACC clause-specific data.
+/// Free OpenACC clause expression data.
+///
+/// Note: Does NOT free the clause name - that's handled by the caller
+/// in acc_directive_free() to keep all unsafe code in FFI boundaries.
 fn free_acc_clause_data(clause: &AccClause) {
     if !clause.expressions.is_null() {
         acc_string_list_free(clause.expressions);

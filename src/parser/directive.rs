@@ -12,13 +12,230 @@ type DirectiveParserFn =
     for<'a> fn(Cow<'a, str>, &'a str, &ClauseRegistry) -> IResult<&'a str, Directive<'a>>;
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct WaitDirectiveData<'a> {
+    pub devnum: Option<Cow<'a, str>>,
+    pub has_queues: bool,
+    pub queue_exprs: Vec<Cow<'a, str>>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CacheDirectiveData<'a> {
+    pub readonly: bool,
+    pub variables: Vec<Cow<'a, str>>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct Directive<'a> {
     pub name: Cow<'a, str>,
     pub parameter: Option<Cow<'a, str>>,
     pub clauses: Vec<Clause<'a>>,
+    // Structured data for specific directive types
+    pub wait_data: Option<WaitDirectiveData<'a>>,
+    pub cache_data: Option<CacheDirectiveData<'a>>,
 }
 
-impl Directive<'_> {
+impl<'a> Directive<'a> {
+    pub fn new(name: Cow<'a, str>, parameter: Option<Cow<'a, str>>, clauses: Vec<Clause<'a>>) -> Self {
+        Self {
+            name,
+            parameter,
+            clauses,
+            wait_data: None,
+            cache_data: None,
+        }
+    }
+
+    /// Merge duplicate clauses and deduplicate variables (accparser compatibility)
+    ///
+    /// For clauses that can appear multiple times (gang, worker, vector, reduction, etc.),
+    /// this merges them into a single clause with deduplicated variables/expressions.
+    ///
+    /// Example: `gang(a,b) gang(b,c)` becomes `gang(a,b,c)`
+    pub fn merge_clauses(&mut self) {
+        use std::collections::{HashMap, HashSet};
+        use super::clause::{ClauseKind, Clause};
+
+        // Group clauses by name AND modifier/kind for merging
+        // Key: (name, kind_discriminant, modifier_value)
+        type MergeKey = (String, u8, u32);
+        let mut merged: HashMap<MergeKey, Vec<Clause<'a>>> = HashMap::new();
+
+        for clause in self.clauses.drain(..) {
+            // Create key based on clause name, kind, and modifier/content
+            // For Parenthesized clauses, we hash the content to distinguish collapse(1) from collapse(2)
+            let kind_disc = match &clause.kind {
+                ClauseKind::Bare => 0,
+                ClauseKind::Parenthesized(content) => {
+                    // Use hash of content to distinguish different parameter values
+                    use std::collections::hash_map::DefaultHasher;
+                    use std::hash::{Hash, Hasher};
+                    let mut hasher = DefaultHasher::new();
+                    content.as_ref().hash(&mut hasher);
+                    1_000_000 + (hasher.finish() % 1_000_000) as u32
+                },
+                ClauseKind::VariableList(_) => 2,
+                ClauseKind::GangClause { modifier, variables } => {
+                    if variables.is_empty() {
+                        0  // Bare gang - same as Bare
+                    } else {
+                        3 + modifier.map_or(0, |m| m as u32)
+                    }
+                }
+                ClauseKind::WorkerClause { modifier, variables } => {
+                    if variables.is_empty() {
+                        0  // Bare worker
+                    } else {
+                        10 + modifier.map_or(0, |m| m as u32)
+                    }
+                }
+                ClauseKind::VectorClause { modifier, variables } => {
+                    if variables.is_empty() {
+                        0  // Bare vector
+                    } else {
+                        20 + modifier.map_or(0, |m| m as u32)
+                    }
+                }
+                ClauseKind::ReductionClause { operator, .. } => {
+                    30 + *operator as u32
+                }
+                ClauseKind::CopyinClause { modifier, .. } => {
+                    40 + modifier.map_or(0, |m| m as u32)
+                }
+                ClauseKind::CopyoutClause { modifier, .. } => {
+                    50 + modifier.map_or(0, |m| m as u32)
+                }
+                ClauseKind::CreateClause { modifier, .. } => {
+                    60 + modifier.map_or(0, |m| m as u32)
+                }
+            };
+
+            let key = (clause.name.to_string(), kind_disc as u8, kind_disc);
+            merged.entry(key).or_insert_with(Vec::new).push(clause);
+        }
+
+        // Rebuild clauses list with merging
+        let mut new_clauses = Vec::new();
+        for (_, mut group) in merged {
+            if group.len() == 1 {
+                // Single occurrence - keep as is
+                new_clauses.push(group.into_iter().next().unwrap());
+            } else {
+                // Multiple occurrences - merge based on clause kind
+                let first = group[0].clone();
+                match &first.kind {
+                    ClauseKind::GangClause { .. } |
+                    ClauseKind::WorkerClause { .. } |
+                    ClauseKind::VectorClause { .. } |
+                    ClauseKind::VariableList(_) => {
+                        // Merge variable lists with deduplication
+                        let mut vars = Vec::new();
+                        let mut seen = HashSet::new();
+                        for clause in &group {
+                            let clause_vars = match &clause.kind {
+                                ClauseKind::VariableList(v) => v.as_slice(),
+                                ClauseKind::GangClause { variables, .. } => variables.as_slice(),
+                                ClauseKind::WorkerClause { variables, .. } => variables.as_slice(),
+                                ClauseKind::VectorClause { variables, .. } => variables.as_slice(),
+                                _ => &[],
+                            };
+                            for var in clause_vars {
+                                let var_str = var.as_ref();
+                                if seen.insert(var_str.to_string()) {
+                                    vars.push(Cow::Owned(var_str.to_string()));
+                                }
+                            }
+                        }
+                        // Create merged clause with same structure as first
+                        let merged_clause = match &first.kind {
+                            ClauseKind::VariableList(_) => Clause {
+                                name: first.name.clone(),
+                                kind: ClauseKind::VariableList(vars),
+                            },
+                            ClauseKind::GangClause { modifier, .. } => Clause {
+                                name: first.name.clone(),
+                                kind: ClauseKind::GangClause { modifier: *modifier, variables: vars },
+                            },
+                            ClauseKind::WorkerClause { modifier, .. } => Clause {
+                                name: first.name.clone(),
+                                kind: ClauseKind::WorkerClause { modifier: *modifier, variables: vars },
+                            },
+                            ClauseKind::VectorClause { modifier, .. } => Clause {
+                                name: first.name.clone(),
+                                kind: ClauseKind::VectorClause { modifier: *modifier, variables: vars },
+                            },
+                            _ => unreachable!(),
+                        };
+                        new_clauses.push(merged_clause);
+                    }
+                    ClauseKind::ReductionClause { operator, .. } => {
+                        // Merge reduction clauses with same operator
+                        let mut vars = Vec::new();
+                        let mut seen = HashSet::new();
+                        for clause in &group {
+                            if let ClauseKind::ReductionClause { operator: op, variables } = &clause.kind {
+                                if op == operator {
+                                    for var in variables {
+                                        let var_str = var.as_ref();
+                                        if seen.insert(var_str.to_string()) {
+                                            vars.push(Cow::Owned(var_str.to_string()));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        new_clauses.push(Clause {
+                            name: first.name.clone(),
+                            kind: ClauseKind::ReductionClause { operator: *operator, variables: vars },
+                        });
+                    }
+                    ClauseKind::CopyinClause { .. } |
+                    ClauseKind::CopyoutClause { .. } |
+                    ClauseKind::CreateClause { .. } => {
+                        // Merge data clauses with same modifier
+                        let mut vars = Vec::new();
+                        let mut seen = HashSet::new();
+                        for clause in &group {
+                            let clause_vars = match &clause.kind {
+                                ClauseKind::CopyinClause { variables, .. } => variables.as_slice(),
+                                ClauseKind::CopyoutClause { variables, .. } => variables.as_slice(),
+                                ClauseKind::CreateClause { variables, .. } => variables.as_slice(),
+                                _ => &[],
+                            };
+                            for var in clause_vars {
+                                let var_str = var.as_ref();
+                                if seen.insert(var_str.to_string()) {
+                                    vars.push(Cow::Owned(var_str.to_string()));
+                                }
+                            }
+                        }
+                        let merged_clause = match &first.kind {
+                            ClauseKind::CopyinClause { modifier, .. } => Clause {
+                                name: first.name.clone(),
+                                kind: ClauseKind::CopyinClause { modifier: *modifier, variables: vars },
+                            },
+                            ClauseKind::CopyoutClause { modifier, .. } => Clause {
+                                name: first.name.clone(),
+                                kind: ClauseKind::CopyoutClause { modifier: *modifier, variables: vars },
+                            },
+                            ClauseKind::CreateClause { modifier, .. } => Clause {
+                                name: first.name.clone(),
+                                kind: ClauseKind::CreateClause { modifier: *modifier, variables: vars },
+                            },
+                            _ => unreachable!(),
+                        };
+                        new_clauses.push(merged_clause);
+                    }
+                    _ => {
+                        // For other clause types, keep only the first occurrence
+                        new_clauses.push(first.clone());
+                    }
+                }
+            }
+        }
+
+        self.clauses = new_clauses;
+    }
+
     pub fn to_pragma_string(&self) -> String {
         self.to_string()
     }
@@ -138,11 +355,7 @@ impl DirectiveRule {
                 let (input, clauses) = clause_registry.parse_sequence(input)?;
                 Ok((
                     input,
-                    Directive {
-                        name,
-                        parameter: None,
-                        clauses,
-                    },
+                    Directive::new(name, None, clauses),
                 ))
             }
             DirectiveRule::Custom(parser) => parser(name, input, clause_registry),

@@ -388,6 +388,8 @@ fn parse_allocate_directive<'a>(
                 name: std::borrow::Cow::Borrowed("allocate"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
                 clauses,
+                wait_data: None,
+                cache_data: None,
             },
         ))
     } else {
@@ -395,11 +397,7 @@ fn parse_allocate_directive<'a>(
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
         Ok((
             rest,
-            Directive {
-                name,
-                parameter: None,
-                clauses,
-            },
+            Directive::new(name, None, clauses),
         ))
     }
 }
@@ -416,22 +414,18 @@ fn parse_threadprivate_directive<'a>(
     if let Ok((rest, list_content)) = parse_parenthesized_content(input) {
         Ok((
             rest,
-            Directive {
-                name: std::borrow::Cow::Borrowed("threadprivate"),
-                parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
-                clauses: vec![],
-            },
+            Directive::new(
+                std::borrow::Cow::Borrowed("threadprivate"),
+                Some(std::borrow::Cow::Owned(format!("({})", list_content))),
+                vec![],
+            ),
         ))
     } else {
         // Fall back to standard clause parsing (bare form)
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
         Ok((
             rest,
-            Directive {
-                name,
-                parameter: None,
-                clauses,
-            },
+            Directive::new(name, None, clauses),
         ))
     }
 }
@@ -454,6 +448,8 @@ fn parse_declare_target_extended<'a>(
                 name: std::borrow::Cow::Borrowed("declare target"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
                 clauses,
+                wait_data: None,
+                cache_data: None,
             },
         ))
     } else {
@@ -461,11 +457,7 @@ fn parse_declare_target_extended<'a>(
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
         Ok((
             rest,
-            Directive {
-                name,
-                parameter: None,
-                clauses,
-            },
+            Directive::new(name, None, clauses),
         ))
     }
 }
@@ -488,6 +480,8 @@ fn parse_declare_mapper_directive<'a>(
                 name: std::borrow::Cow::Borrowed("declare mapper"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", mapper_id))),
                 clauses,
+                wait_data: None,
+                cache_data: None,
             },
         ))
     } else {
@@ -495,11 +489,7 @@ fn parse_declare_mapper_directive<'a>(
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
         Ok((
             rest,
-            Directive {
-                name,
-                parameter: None,
-                clauses,
-            },
+            Directive::new(name, None, clauses),
         ))
     }
 }
@@ -522,6 +512,8 @@ fn parse_declare_variant_directive<'a>(
                 name: std::borrow::Cow::Borrowed("declare variant"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", variant_func))),
                 clauses,
+                wait_data: None,
+                cache_data: None,
             },
         ))
     } else {
@@ -529,11 +521,7 @@ fn parse_declare_variant_directive<'a>(
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
         Ok((
             rest,
-            Directive {
-                name,
-                parameter: None,
-                clauses,
-            },
+            Directive::new(name, None, clauses),
         ))
     }
 }
@@ -556,6 +544,8 @@ fn parse_depobj_directive<'a>(
                 name: std::borrow::Cow::Borrowed("depobj"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", depobj_id))),
                 clauses,
+                wait_data: None,
+                cache_data: None,
             },
         ))
     } else {
@@ -563,11 +553,7 @@ fn parse_depobj_directive<'a>(
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
         Ok((
             rest,
-            Directive {
-                name,
-                parameter: None,
-                clauses,
-            },
+            Directive::new(name, None, clauses),
         ))
     }
 }
@@ -622,6 +608,8 @@ fn parse_scan_directive<'a>(
                         list_content
                     ))),
                     clauses,
+                wait_data: None,
+                cache_data: None,
                 },
             ));
         }
@@ -658,6 +646,8 @@ fn parse_scan_directive<'a>(
                         list_content
                     ))),
                     clauses,
+                wait_data: None,
+                cache_data: None,
                 },
             ));
         }
@@ -667,11 +657,7 @@ fn parse_scan_directive<'a>(
     let (rest, clauses) = clause_registry.parse_sequence(input)?;
     Ok((
         rest,
-        Directive {
-            name,
-            parameter: None,
-            clauses,
-        },
+        Directive::new(name, None, clauses),
     ))
 }
 
@@ -699,6 +685,8 @@ fn parse_cancel_directive<'a>(
                 // should be handled by the renderer that prints directives.
                 parameter: Some(std::borrow::Cow::Owned(construct_type.to_string())),
                 clauses,
+                wait_data: None,
+                cache_data: None,
             },
         ))
     } else {
@@ -706,11 +694,7 @@ fn parse_cancel_directive<'a>(
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
         Ok((
             rest,
-            Directive {
-                name,
-                parameter: None,
-                clauses,
-            },
+            Directive::new(name, None, clauses),
         ))
     }
 }
@@ -733,6 +717,8 @@ fn parse_groupprivate_directive<'a>(
                 name: std::borrow::Cow::Borrowed("groupprivate"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
                 clauses,
+                wait_data: None,
+                cache_data: None,
             },
         ))
     } else {
@@ -740,11 +726,7 @@ fn parse_groupprivate_directive<'a>(
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
         Ok((
             rest,
-            Directive {
-                name,
-                parameter: None,
-                clauses,
-            },
+            Directive::new(name, None, clauses),
         ))
     }
 }
@@ -762,11 +744,7 @@ fn parse_target_data_directive<'a>(
 
     Ok((
         rest,
-        Directive {
-            name: std::borrow::Cow::Borrowed("target_data"),
-            parameter: None,
-            clauses,
-        },
+        Directive::new(std::borrow::Cow::Borrowed("target_data"), None, clauses),
     ))
 }
 
