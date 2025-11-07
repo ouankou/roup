@@ -42,16 +42,24 @@ extern "C" {
 
     // Clause queries
     int32_t acc_clause_kind(const AccClause* clause);
-    const char* acc_clause_name(const AccClause* clause);
+    const char* acc_clause_original_keyword(const AccClause* clause);
     int32_t acc_clause_expressions_count(const AccClause* clause);
     const char* acc_clause_expression_at(const AccClause* clause, int32_t index);
     int32_t acc_clause_modifier(const AccClause* clause);
     int32_t acc_clause_operator(const AccClause* clause);
+    const char* acc_clause_wait_devnum(const AccClause* clause);
+    int32_t acc_clause_wait_has_queues(const AccClause* clause);
 
     // Cache directive queries
     int32_t acc_cache_directive_modifier(const AccDirective* directive);
     int32_t acc_cache_directive_var_count(const AccDirective* directive);
     const char* acc_cache_directive_var_at(const AccDirective* directive, int32_t index);
+
+    // Wait directive queries
+    int32_t acc_directive_wait_expression_count(const AccDirective* directive);
+    const char* acc_directive_wait_expression_at(const AccDirective* directive, int32_t index);
+    const char* acc_directive_wait_devnum(const AccDirective* directive);
+    int32_t acc_directive_wait_has_queues(const AccDirective* directive);
 }
 
 // ============================================================================
@@ -69,6 +77,64 @@ static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
 
 extern "C" void setLang(OpenACCBaseLang lang) {
     current_lang = lang;
+}
+
+static void maybeMergeClause(OpenACCDirective* directive, OpenACCClauseKind kind, OpenACCClause* clause) {
+    switch (kind) {
+        case ACCC_async:
+            static_cast<OpenACCAsyncClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_bind:
+            static_cast<OpenACCBindClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_collapse:
+            static_cast<OpenACCCollapseClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_copyin:
+            static_cast<OpenACCCopyinClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_copyout:
+            static_cast<OpenACCCopyoutClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_create:
+            static_cast<OpenACCCreateClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_default_async:
+            static_cast<OpenACCDefaultAsyncClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_device_num:
+            static_cast<OpenACCDeviceNumClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_gang:
+            static_cast<OpenACCGangClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_num_gangs:
+            static_cast<OpenACCNumGangsClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_num_workers:
+            static_cast<OpenACCNumWorkersClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_reduction:
+            static_cast<OpenACCReductionClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_self:
+            static_cast<OpenACCSelfClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_vector:
+            static_cast<OpenACCVectorClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_vector_length:
+            static_cast<OpenACCVectorLengthClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_wait:
+            static_cast<OpenACCWaitClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_worker:
+            static_cast<OpenACCWorkerClause*>(clause)->mergeClause(directive, clause);
+            break;
+        default:
+            break;
+    }
 }
 
 // ============================================================================
@@ -192,11 +258,26 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
         return nullptr;  // Input too long or not null-terminated within limit
     }
 
-    // Determine input format based on current language mode
+    // Determine input format based on current language mode (auto-detect Fortran)
     std::string input_str(input, input_len);
+    auto has_prefix_icase = [](const std::string& value, const char* prefix) {
+        const size_t len = std::strlen(prefix);
+        return value.size() >= len &&
+               strncasecmp(value.c_str(), prefix, len) == 0;
+    };
+
+    OpenACCBaseLang effective_lang = current_lang;
+    // Auto-detect Fortran sentinels when lang is not explicitly set
+    if (effective_lang == ACC_Lang_C) {
+        const std::string trimmed = input_str;
+        if (has_prefix_icase(trimmed, "!$acc") || has_prefix_icase(trimmed, "c$acc") ||
+            has_prefix_icase(trimmed, "*$acc")) {
+            effective_lang = ACC_Lang_Fortran;
+        }
+    }
 
     // Handle different language pragmas
-    if (current_lang == ACC_Lang_Fortran) {
+    if (effective_lang == ACC_Lang_Fortran) {
         // Fortran uses !$acc prefix - add if missing (case-insensitive check)
         const bool has_prefix =
             input_str.length() >= FORTRAN_PREFIX_LEN &&
@@ -215,7 +296,7 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
     // Call ROUP parser with language setting to honor setLang()
     // Map accparser language to ROUP language constants (roup_constants.h)
     // ROUP_LANG_C = 0, ROUP_LANG_FORTRAN_FREE = 1, ROUP_LANG_FORTRAN_FIXED = 2
-    int32_t roup_lang = (current_lang == ACC_Lang_Fortran) ? 1 : 0; // 0=C, 1=Fortran free-form
+    int32_t roup_lang = (effective_lang == ACC_Lang_Fortran) ? 1 : 0; // 0=C, 1=Fortran free-form
     AccDirective* roup_dir = acc_parse_with_language(input_str.c_str(), roup_lang);
     if (!roup_dir) {
         return nullptr;
@@ -237,7 +318,7 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
     if (kind == ACCD_cache) {
         // Create OpenACCCacheDirective
         OpenACCCacheDirective* cache_dir = new OpenACCCacheDirective();
-        cache_dir->setBaseLang(current_lang);
+        cache_dir->setBaseLang(effective_lang);
 
         // Get cache modifier (0=none, 1=readonly)
         int32_t cache_modifier = acc_cache_directive_modifier(roup_dir);
@@ -258,14 +339,30 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
     } else if (kind == ACCD_wait) {
         // Create OpenACCWaitDirective
         OpenACCWaitDirective* wait_dir = new OpenACCWaitDirective();
-        wait_dir->setBaseLang(current_lang);
+        wait_dir->setBaseLang(effective_lang);
 
-        // TODO: Handle wait directive arguments if needed
+        int32_t expr_count = acc_directive_wait_expression_count(roup_dir);
+        for (int32_t i = 0; i < expr_count; ++i) {
+            const char* expr = acc_directive_wait_expression_at(roup_dir, i);
+            if (expr) {
+                wait_dir->addVar(std::string(expr));
+            }
+        }
+
+        if (const char* devnum = acc_directive_wait_devnum(roup_dir)) {
+            if (devnum[0] != '\0') {
+                wait_dir->setDevnum(std::string(devnum));
+            }
+        }
+
+        if (acc_directive_wait_has_queues(roup_dir)) {
+            wait_dir->setQueues(true);
+        }
 
         dir = wait_dir;
     } else {
         // Regular directive
-        dir = new OpenACCDirective(kind, current_lang, 0, 0);
+        dir = new OpenACCDirective(kind, effective_lang, 0, 0);
     }
 
     // Convert clauses - get ALL data from ROUP's C API
@@ -279,7 +376,19 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
             // Create clause using accparser's API
             OpenACCClause* clause = dir->addOpenACCClause(static_cast<int>(clause_kind));
 
-            if (clause) {
+            if (!clause) {
+                fprintf(stderr,
+                        "WARNING: addOpenACCClause returned null (directive=%d, clause=%d)\n",
+                        static_cast<int>(kind),
+                        static_cast<int>(clause_kind));
+                continue;
+            }
+
+            if (const char* original_keyword = acc_clause_original_keyword(roup_clause)) {
+                clause->setOriginalKeyword(std::string(original_keyword));
+            }
+
+            {
                 // Get expressions from ROUP and add to accparser clause
                 int32_t expr_count = acc_clause_expressions_count(roup_clause);
                 for (int32_t i = 0; i < expr_count; i++) {
@@ -289,48 +398,59 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                     }
                 }
 
-                // Handle modifiers for clauses that have them (copyin, copyout, create, vector, worker)
+                // Handle modifiers for clauses that have them
                 int32_t modifier = acc_clause_modifier(roup_clause);
                 if (modifier != 0) {
-                    if (clause_kind == ACCC_copyin && modifier == 1) {
-                        ((OpenACCCopyinClause*)clause)->setModifier(ACCC_COPYIN_readonly);
-                    } else if (clause_kind == ACCC_copyout && modifier == 2) {
-                        ((OpenACCCopyoutClause*)clause)->setModifier(ACCC_COPYOUT_zero);
-                    } else if (clause_kind == ACCC_create && modifier == 2) {
-                        ((OpenACCCreateClause*)clause)->setModifier(ACCC_CREATE_zero);
-                    } else if (clause_kind == ACCC_vector && modifier == 1) {
-                        ((OpenACCVectorClause*)clause)->setModifier(ACCC_VECTOR_length);
-                    } else if (clause_kind == ACCC_worker && modifier == 1) {
-                        ((OpenACCWorkerClause*)clause)->setModifier(ACCC_WORKER_num);
+                    switch (clause_kind) {
+                        case ACCC_copyin:
+                            if (modifier == 1) {
+                                static_cast<OpenACCCopyinClause*>(clause)->setModifier(ACCC_COPYIN_readonly);
+                            }
+                            break;
+                        case ACCC_copyout:
+                            if (modifier == 1) {
+                                static_cast<OpenACCCopyoutClause*>(clause)->setModifier(ACCC_COPYOUT_zero);
+                            }
+                            break;
+                        case ACCC_create:
+                            if (modifier == 1) {
+                                static_cast<OpenACCCreateClause*>(clause)->setModifier(ACCC_CREATE_zero);
+                            }
+                            break;
+                        case ACCC_vector:
+                            if (modifier == 1) {
+                                static_cast<OpenACCVectorClause*>(clause)->setModifier(ACCC_VECTOR_length);
+                            }
+                            break;
+                        case ACCC_worker:
+                            if (modifier == 1) {
+                                static_cast<OpenACCWorkerClause*>(clause)->setModifier(ACCC_WORKER_num);
+                            }
+                            break;
+                        case ACCC_reduction: {
+                            OpenACCReductionClauseOperator acc_op = static_cast<OpenACCReductionClauseOperator>(modifier);
+                            static_cast<OpenACCReductionClause*>(clause)->setOperator(acc_op);
+                            break;
+                        }
+                        case ACCC_default:
+                            static_cast<OpenACCDefaultClause*>(clause)->setKind(static_cast<OpenACCDefaultClauseKind>(modifier));
+                            break;
+                        default:
+                            break;
                     }
-                }
-
-                // Handle operators for reduction clause
-                int32_t op = acc_clause_operator(roup_clause);
-                if (op != 0 && clause_kind == ACCC_reduction) {
-                    OpenACCReductionClauseOperator acc_op = ACCC_REDUCTION_unspecified;
-                    switch (op) {
-                        case 1: acc_op = ACCC_REDUCTION_add; break;
-                        case 2: acc_op = ACCC_REDUCTION_sub; break;
-                        case 3: acc_op = ACCC_REDUCTION_mul; break;
-                        case 4: acc_op = ACCC_REDUCTION_max; break;
-                        case 5: acc_op = ACCC_REDUCTION_min; break;
-                        case 6: acc_op = ACCC_REDUCTION_bitand; break;
-                        case 7: acc_op = ACCC_REDUCTION_bitor; break;
-                        case 8: acc_op = ACCC_REDUCTION_bitxor; break;
-                        case 9: acc_op = ACCC_REDUCTION_logand; break;
-                        case 10: acc_op = ACCC_REDUCTION_logor; break;
-                        case 11: acc_op = ACCC_REDUCTION_fort_and; break;
-                        case 12: acc_op = ACCC_REDUCTION_fort_or; break;
-                        case 13: acc_op = ACCC_REDUCTION_fort_eqv; break;
-                        case 14: acc_op = ACCC_REDUCTION_fort_neqv; break;
-                        case 15: acc_op = ACCC_REDUCTION_fort_iand; break;
-                        case 16: acc_op = ACCC_REDUCTION_fort_ior; break;
-                        case 17: acc_op = ACCC_REDUCTION_fort_ieor; break;
-                    }
-                    ((OpenACCReductionClause*)clause)->setOperator(acc_op);
                 }
             }
+
+            if (clause_kind == ACCC_wait) {
+                if (const char* devnum_value = acc_clause_wait_devnum(roup_clause)) {
+                    static_cast<OpenACCWaitClause*>(clause)->setDevnum(std::string(devnum_value));
+                }
+                if (acc_clause_wait_has_queues(roup_clause)) {
+                    static_cast<OpenACCWaitClause*>(clause)->setQueues(true);
+                }
+            }
+
+            maybeMergeClause(dir, clause_kind, clause);
         }
         acc_clause_iterator_free(iter);
     }
@@ -342,3 +462,7 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
 }
 
 } // extern "C"
+
+OpenACCDirective* parseOpenACC(std::string input) {
+    return parseOpenACC(input.c_str(), nullptr);
+}

@@ -395,10 +395,7 @@ fn parse_allocate_directive<'a>(
     } else {
         // Fall back to standard clause parsing (bare form)
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
-        Ok((
-            rest,
-            Directive::new(name, None, clauses),
-        ))
+        Ok((rest, Directive::new(name, None, clauses)))
     }
 }
 
@@ -423,10 +420,7 @@ fn parse_threadprivate_directive<'a>(
     } else {
         // Fall back to standard clause parsing (bare form)
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
-        Ok((
-            rest,
-            Directive::new(name, None, clauses),
-        ))
+        Ok((rest, Directive::new(name, None, clauses)))
     }
 }
 
@@ -455,10 +449,7 @@ fn parse_declare_target_extended<'a>(
     } else {
         // Fall back to standard clause parsing (basic form)
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
-        Ok((
-            rest,
-            Directive::new(name, None, clauses),
-        ))
+        Ok((rest, Directive::new(name, None, clauses)))
     }
 }
 
@@ -487,10 +478,7 @@ fn parse_declare_mapper_directive<'a>(
     } else {
         // Fall back to standard clause parsing (bare form)
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
-        Ok((
-            rest,
-            Directive::new(name, None, clauses),
-        ))
+        Ok((rest, Directive::new(name, None, clauses)))
     }
 }
 
@@ -519,10 +507,7 @@ fn parse_declare_variant_directive<'a>(
     } else {
         // Fall back to standard clause parsing (bare form)
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
-        Ok((
-            rest,
-            Directive::new(name, None, clauses),
-        ))
+        Ok((rest, Directive::new(name, None, clauses)))
     }
 }
 
@@ -551,10 +536,7 @@ fn parse_depobj_directive<'a>(
     } else {
         // Fall back to standard clause parsing (bare form)
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
-        Ok((
-            rest,
-            Directive::new(name, None, clauses),
-        ))
+        Ok((rest, Directive::new(name, None, clauses)))
     }
 }
 
@@ -608,8 +590,8 @@ fn parse_scan_directive<'a>(
                         list_content
                     ))),
                     clauses,
-                wait_data: None,
-                cache_data: None,
+                    wait_data: None,
+                    cache_data: None,
                 },
             ));
         }
@@ -646,8 +628,8 @@ fn parse_scan_directive<'a>(
                         list_content
                     ))),
                     clauses,
-                wait_data: None,
-                cache_data: None,
+                    wait_data: None,
+                    cache_data: None,
                 },
             ));
         }
@@ -655,10 +637,7 @@ fn parse_scan_directive<'a>(
 
     // Fall back to standard clause parsing (bare form)
     let (rest, clauses) = clause_registry.parse_sequence(input)?;
-    Ok((
-        rest,
-        Directive::new(name, None, clauses),
-    ))
+    Ok((rest, Directive::new(name, None, clauses)))
 }
 
 // Custom parser for cancel directive: cancel construct-type-clause or bare cancel
@@ -692,10 +671,7 @@ fn parse_cancel_directive<'a>(
     } else {
         // Fall back to standard clause parsing (bare form)
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
-        Ok((
-            rest,
-            Directive::new(name, None, clauses),
-        ))
+        Ok((rest, Directive::new(name, None, clauses)))
     }
 }
 
@@ -724,10 +700,7 @@ fn parse_groupprivate_directive<'a>(
     } else {
         // Fall back to standard clause parsing (bare form)
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
-        Ok((
-            rest,
-            Directive::new(name, None, clauses),
-        ))
+        Ok((rest, Directive::new(name, None, clauses)))
     }
 }
 

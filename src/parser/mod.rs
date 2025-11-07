@@ -4,11 +4,14 @@ pub mod openacc;
 pub mod openmp;
 
 pub use clause::{
-    Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, ClauseRule,
-    CopyinModifier, CopyoutModifier, CreateModifier, ReductionOperator,
-    GangModifier, WorkerModifier, VectorModifier,
+    Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, ClauseRule, CopyinModifier,
+    CopyoutModifier, CreateModifier, GangModifier, ReductionOperator, VectorModifier,
+    WorkerModifier,
 };
-pub use directive::{Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule, WaitDirectiveData, CacheDirectiveData};
+pub use directive::{
+    CacheDirectiveData, Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule,
+    WaitDirectiveData,
+};
 
 use super::lexer::{self, Language};
 use nom::{IResult, Parser as _};

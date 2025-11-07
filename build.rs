@@ -211,6 +211,7 @@ fn main() {
     }
 
     println!("cargo:rerun-if-changed=src/c_api.rs");
+    println!("cargo:rerun-if-changed=src/c_api/openacc.rs");
     println!("cargo:rerun-if-changed=src/constants_gen.rs");
     println!("cargo:rerun-if-changed=build.rs");
 }

@@ -24,6 +24,7 @@ fn parses_reduction_clause_with_modifiers_and_operators() {
         match &clause.kind {
             ClauseKind::Parenthesized(body) => assert_eq!(body.as_ref(), expected_body),
             ClauseKind::Bare => panic!("reduction clauses should be parenthesized"),
+            _ => panic!("unexpected clause kind for reduction"),
         }
     }
 }
@@ -46,6 +47,7 @@ fn parses_reduction_clause_with_user_defined_identifier() {
             assert_eq!(body.as_ref(), "user_addition:accumulator");
         }
         ClauseKind::Bare => panic!("reduction clause should be parenthesized"),
+        _ => panic!("unexpected clause kind for reduction"),
     }
 
     assert_eq!(directive.clauses[1].name, "reduction");
@@ -54,5 +56,6 @@ fn parses_reduction_clause_with_user_defined_identifier() {
             assert_eq!(body.as_ref(), "task, custom_reducer:list");
         }
         ClauseKind::Bare => panic!("reduction clause should be parenthesized"),
+        _ => panic!("unexpected clause kind for reduction"),
     }
 }

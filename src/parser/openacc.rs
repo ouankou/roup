@@ -166,7 +166,10 @@ pub fn clause_registry() -> ClauseRegistry {
 
     builder.register_with_rule_mut("copyout", ClauseRule::Custom(parse_copyout_clause));
     builder.register_with_rule_mut("pcopyout", ClauseRule::Custom(parse_copyout_clause));
-    builder.register_with_rule_mut("present_or_copyout", ClauseRule::Custom(parse_copyout_clause));
+    builder.register_with_rule_mut(
+        "present_or_copyout",
+        ClauseRule::Custom(parse_copyout_clause),
+    );
 
     builder.register_with_rule_mut("create", ClauseRule::Custom(parse_create_clause));
     builder.register_with_rule_mut("pcreate", ClauseRule::Custom(parse_create_clause));
@@ -184,11 +187,24 @@ pub fn clause_registry() -> ClauseRegistry {
     // NOTE: tile, collapse, num_gangs, and async are NOT included here because they take
     // parameter lists (literal values), not variable lists, and should not be merged
     let var_list_clauses = [
-        "wait", "private", "firstprivate",
-        "device_type", "dtype",
-        "copy", "pcopy", "present_or_copy", "present", "attach", "detach",
-        "use_device", "link", "device_resident", "host", "device",
-        "deviceptr", "delete"
+        "wait",
+        "private",
+        "firstprivate",
+        "device_type",
+        "dtype",
+        "copy",
+        "pcopy",
+        "present_or_copy",
+        "present",
+        "attach",
+        "detach",
+        "use_device",
+        "link",
+        "device_resident",
+        "host",
+        "device",
+        "deviceptr",
+        "delete",
     ];
     for clause_name in &var_list_clauses {
         builder.register_with_rule_mut(clause_name, ClauseRule::Custom(parse_variable_list_clause));
@@ -202,7 +218,7 @@ fn parse_cache_directive<'a>(
     input: &'a str,
     clause_registry: &ClauseRegistry,
 ) -> nom::IResult<&'a str, super::Directive<'a>> {
-    use super::{Directive, CacheDirectiveData};
+    use super::{CacheDirectiveData, Directive};
     use crate::lexer;
 
     let (input, _) = lexer::skip_space_and_comments(input)?;
@@ -220,7 +236,8 @@ fn parse_cache_directive<'a>(
     };
 
     // Parse variable list (parse_variable_list returns owned Cow values)
-    let variables: Vec<Cow<'a, str>> = parse_variable_list(var_part).into_iter()
+    let variables: Vec<Cow<'a, str>> = parse_variable_list(var_part)
+        .into_iter()
         .map(|v| Cow::Owned(v.into_owned()))
         .collect();
 
@@ -257,7 +274,7 @@ fn normalize_directive_parameter(s: &str) -> String {
                 result.pop();
             }
             result.push(':');
-            result.push(' ');  // Always add one space after colon
+            result.push(' '); // Always add one space after colon
             after_colon = true;
             prev_char = ':';
         } else if ch == ' ' || ch == '\t' {
@@ -304,7 +321,8 @@ fn parse_wait_directive<'a>(
                 &content_str[7..]
             } else {
                 &content_str[8..]
-            }.trim();
+            }
+            .trim();
 
             if let Some(colon_pos) = after_devnum.find(':') {
                 devnum = Some(Cow::Owned(after_devnum[..colon_pos].trim().to_string()));
@@ -316,7 +334,8 @@ fn parse_wait_directive<'a>(
                         &rest[7..]
                     } else {
                         &rest[8..]
-                    }.trim();
+                    }
+                    .trim();
                     queue_exprs = parse_variable_list(after_queues);
                 } else {
                     queue_exprs = parse_variable_list(rest);
@@ -329,7 +348,8 @@ fn parse_wait_directive<'a>(
                 &content_str[7..]
             } else {
                 &content_str[8..]
-            }.trim();
+            }
+            .trim();
             queue_exprs = parse_variable_list(after_queues);
         } else if !content_str.is_empty() {
             // Parse: "1, 2, 3"
@@ -337,7 +357,8 @@ fn parse_wait_directive<'a>(
         }
 
         // Ensure all queue_exprs are owned (not borrowed from content)
-        let queue_exprs_owned: Vec<Cow<'a, str>> = queue_exprs.into_iter()
+        let queue_exprs_owned: Vec<Cow<'a, str>> = queue_exprs
+            .into_iter()
             .map(|v| Cow::Owned(v.into_owned()))
             .collect();
 
@@ -517,7 +538,7 @@ fn parse_parenthesized_content_inner(input: &str) -> nom::IResult<&str, String> 
 /// Handles: m, n, p
 ///          x[0:N], y[1:10]
 ///          max::x, readonly::y (C++ scope resolution)
-fn parse_variable_list(input: &str) -> Vec<Cow<str>> {
+fn parse_variable_list(input: &str) -> Vec<Cow<'_, str>> {
     let mut variables = Vec::new();
     let mut current = String::new();
     let mut depth = 0; // Track parenthesis/bracket depth for array sections
@@ -568,8 +589,9 @@ fn parse_copyin_clause<'a>(
     let (input, _) = lexer::skip_space_and_comments(input)?;
 
     // Try to parse "readonly:" modifier
-    let (input, modifier) = if input.trim_start().starts_with("readonly:") ||
-                                input.trim_start().starts_with("readonly :") {
+    let (input, modifier) = if input.trim_start().starts_with("readonly:")
+        || input.trim_start().starts_with("readonly :")
+    {
         // Find the colon
         let colon_idx = input.find(':').unwrap();
         let after_colon = &input[colon_idx + 1..];
@@ -607,7 +629,10 @@ fn parse_copyin_clause<'a>(
         rest,
         super::Clause {
             name,
-            kind: ClauseKind::CopyinClause { modifier, variables },
+            kind: ClauseKind::CopyinClause {
+                modifier,
+                variables,
+            },
         },
     ))
 }
@@ -626,14 +651,14 @@ fn parse_copyout_clause<'a>(
     let (input, _) = lexer::skip_space_and_comments(input)?;
 
     // Try to parse "zero:" modifier
-    let (input, modifier) = if input.trim_start().starts_with("zero:") ||
-                                input.trim_start().starts_with("zero :") {
-        let colon_idx = input.find(':').unwrap();
-        let after_colon = &input[colon_idx + 1..];
-        (after_colon, Some(CopyoutModifier::Zero))
-    } else {
-        (input, None)
-    };
+    let (input, modifier) =
+        if input.trim_start().starts_with("zero:") || input.trim_start().starts_with("zero :") {
+            let colon_idx = input.find(':').unwrap();
+            let after_colon = &input[colon_idx + 1..];
+            (after_colon, Some(CopyoutModifier::Zero))
+        } else {
+            (input, None)
+        };
 
     // Parse until closing paren
     let (input, _) = lexer::skip_space_and_comments(input)?;
@@ -664,7 +689,10 @@ fn parse_copyout_clause<'a>(
         rest,
         super::Clause {
             name,
-            kind: ClauseKind::CopyoutClause { modifier, variables },
+            kind: ClauseKind::CopyoutClause {
+                modifier,
+                variables,
+            },
         },
     ))
 }
@@ -683,14 +711,14 @@ fn parse_create_clause<'a>(
     let (input, _) = lexer::skip_space_and_comments(input)?;
 
     // Try to parse "zero:" modifier
-    let (input, modifier) = if input.trim_start().starts_with("zero:") ||
-                                input.trim_start().starts_with("zero :") {
-        let colon_idx = input.find(':').unwrap();
-        let after_colon = &input[colon_idx + 1..];
-        (after_colon, Some(CreateModifier::Zero))
-    } else {
-        (input, None)
-    };
+    let (input, modifier) =
+        if input.trim_start().starts_with("zero:") || input.trim_start().starts_with("zero :") {
+            let colon_idx = input.find(':').unwrap();
+            let after_colon = &input[colon_idx + 1..];
+            (after_colon, Some(CreateModifier::Zero))
+        } else {
+            (input, None)
+        };
 
     // Parse until closing paren
     let (input, _) = lexer::skip_space_and_comments(input)?;
@@ -721,7 +749,10 @@ fn parse_create_clause<'a>(
         rest,
         super::Clause {
             name,
-            kind: ClauseKind::CreateClause { modifier, variables },
+            kind: ClauseKind::CreateClause {
+                modifier,
+                variables,
+            },
         },
     ))
 }
@@ -802,7 +833,10 @@ fn parse_reduction_clause<'a>(
         rest,
         super::Clause {
             name,
-            kind: ClauseKind::ReductionClause { operator, variables },
+            kind: ClauseKind::ReductionClause {
+                operator,
+                variables,
+            },
         },
     ))
 }
@@ -887,19 +921,20 @@ fn parse_gang_clause<'a>(
         let (input, _) = lexer::skip_space_and_comments(input)?;
 
         // Try to parse "num:" or "static:" modifier
-        let (input, modifier) = if input.trim_start().starts_with("num:") ||
-                                    input.trim_start().starts_with("num :") {
-            let colon_idx = input.find(':').unwrap();
-            let after_colon = &input[colon_idx + 1..];
-            (after_colon, Some(GangModifier::Num))
-        } else if input.trim_start().starts_with("static:") ||
-                   input.trim_start().starts_with("static :") {
-            let colon_idx = input.find(':').unwrap();
-            let after_colon = &input[colon_idx + 1..];
-            (after_colon, Some(GangModifier::Static))
-        } else {
-            (input, None)
-        };
+        let (input, modifier) =
+            if input.trim_start().starts_with("num:") || input.trim_start().starts_with("num :") {
+                let colon_idx = input.find(':').unwrap();
+                let after_colon = &input[colon_idx + 1..];
+                (after_colon, Some(GangModifier::Num))
+            } else if input.trim_start().starts_with("static:")
+                || input.trim_start().starts_with("static :")
+            {
+                let colon_idx = input.find(':').unwrap();
+                let after_colon = &input[colon_idx + 1..];
+                (after_colon, Some(GangModifier::Static))
+            } else {
+                (input, None)
+            };
 
         let (input, _) = lexer::skip_space_and_comments(input)?;
 
@@ -931,7 +966,10 @@ fn parse_gang_clause<'a>(
             rest,
             super::Clause {
                 name,
-                kind: ClauseKind::GangClause { modifier, variables },
+                kind: ClauseKind::GangClause {
+                    modifier,
+                    variables,
+                },
             },
         ))
     } else {
@@ -940,7 +978,10 @@ fn parse_gang_clause<'a>(
             input,
             super::Clause {
                 name,
-                kind: ClauseKind::GangClause { modifier: None, variables: vec![] },
+                kind: ClauseKind::GangClause {
+                    modifier: None,
+                    variables: vec![],
+                },
             },
         ))
     }
@@ -963,14 +1004,14 @@ fn parse_worker_clause<'a>(
         let (input, _) = lexer::skip_space_and_comments(input)?;
 
         // Try to parse "num:" modifier
-        let (input, modifier) = if input.trim_start().starts_with("num:") ||
-                                    input.trim_start().starts_with("num :") {
-            let colon_idx = input.find(':').unwrap();
-            let after_colon = &input[colon_idx + 1..];
-            (after_colon, Some(WorkerModifier::Num))
-        } else {
-            (input, None)
-        };
+        let (input, modifier) =
+            if input.trim_start().starts_with("num:") || input.trim_start().starts_with("num :") {
+                let colon_idx = input.find(':').unwrap();
+                let after_colon = &input[colon_idx + 1..];
+                (after_colon, Some(WorkerModifier::Num))
+            } else {
+                (input, None)
+            };
 
         let (input, _) = lexer::skip_space_and_comments(input)?;
 
@@ -1002,7 +1043,10 @@ fn parse_worker_clause<'a>(
             rest,
             super::Clause {
                 name,
-                kind: ClauseKind::WorkerClause { modifier, variables },
+                kind: ClauseKind::WorkerClause {
+                    modifier,
+                    variables,
+                },
             },
         ))
     } else {
@@ -1011,7 +1055,10 @@ fn parse_worker_clause<'a>(
             input,
             super::Clause {
                 name,
-                kind: ClauseKind::WorkerClause { modifier: None, variables: vec![] },
+                kind: ClauseKind::WorkerClause {
+                    modifier: None,
+                    variables: vec![],
+                },
             },
         ))
     }
@@ -1034,8 +1081,9 @@ fn parse_vector_clause<'a>(
         let (input, _) = lexer::skip_space_and_comments(input)?;
 
         // Try to parse "length:" modifier
-        let (input, modifier) = if input.trim_start().starts_with("length:") ||
-                                    input.trim_start().starts_with("length :") {
+        let (input, modifier) = if input.trim_start().starts_with("length:")
+            || input.trim_start().starts_with("length :")
+        {
             let colon_idx = input.find(':').unwrap();
             let after_colon = &input[colon_idx + 1..];
             (after_colon, Some(VectorModifier::Length))
@@ -1073,7 +1121,10 @@ fn parse_vector_clause<'a>(
             rest,
             super::Clause {
                 name,
-                kind: ClauseKind::VectorClause { modifier, variables },
+                kind: ClauseKind::VectorClause {
+                    modifier,
+                    variables,
+                },
             },
         ))
     } else {
@@ -1082,7 +1133,10 @@ fn parse_vector_clause<'a>(
             input,
             super::Clause {
                 name,
-                kind: ClauseKind::VectorClause { modifier: None, variables: vec![] },
+                kind: ClauseKind::VectorClause {
+                    modifier: None,
+                    variables: vec![],
+                },
             },
         ))
     }

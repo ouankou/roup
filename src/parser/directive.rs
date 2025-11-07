@@ -35,7 +35,11 @@ pub struct Directive<'a> {
 }
 
 impl<'a> Directive<'a> {
-    pub fn new(name: Cow<'a, str>, parameter: Option<Cow<'a, str>>, clauses: Vec<Clause<'a>>) -> Self {
+    pub fn new(
+        name: Cow<'a, str>,
+        parameter: Option<Cow<'a, str>>,
+        clauses: Vec<Clause<'a>>,
+    ) -> Self {
         Self {
             name,
             parameter,
@@ -52,8 +56,8 @@ impl<'a> Directive<'a> {
     ///
     /// Example: `gang(a,b) gang(b,c)` becomes `gang(a,b,c)`
     pub fn merge_clauses(&mut self) {
+        use super::clause::{Clause, ClauseKind};
         use std::collections::{HashMap, HashSet};
-        use super::clause::{ClauseKind, Clause};
 
         // Group clauses by name AND modifier/kind for merging
         // Key: (name, kind_discriminant, modifier_value)
@@ -72,41 +76,42 @@ impl<'a> Directive<'a> {
                     let mut hasher = DefaultHasher::new();
                     content.as_ref().hash(&mut hasher);
                     1_000_000 + (hasher.finish() % 1_000_000) as u32
-                },
+                }
                 ClauseKind::VariableList(_) => 2,
-                ClauseKind::GangClause { modifier, variables } => {
+                ClauseKind::GangClause {
+                    modifier,
+                    variables,
+                } => {
                     if variables.is_empty() {
-                        0  // Bare gang - same as Bare
+                        0 // Bare gang - same as Bare
                     } else {
                         3 + modifier.map_or(0, |m| m as u32)
                     }
                 }
-                ClauseKind::WorkerClause { modifier, variables } => {
+                ClauseKind::WorkerClause {
+                    modifier,
+                    variables,
+                } => {
                     if variables.is_empty() {
-                        0  // Bare worker
+                        0 // Bare worker
                     } else {
                         10 + modifier.map_or(0, |m| m as u32)
                     }
                 }
-                ClauseKind::VectorClause { modifier, variables } => {
+                ClauseKind::VectorClause {
+                    modifier,
+                    variables,
+                } => {
                     if variables.is_empty() {
-                        0  // Bare vector
+                        0 // Bare vector
                     } else {
                         20 + modifier.map_or(0, |m| m as u32)
                     }
                 }
-                ClauseKind::ReductionClause { operator, .. } => {
-                    30 + *operator as u32
-                }
-                ClauseKind::CopyinClause { modifier, .. } => {
-                    40 + modifier.map_or(0, |m| m as u32)
-                }
-                ClauseKind::CopyoutClause { modifier, .. } => {
-                    50 + modifier.map_or(0, |m| m as u32)
-                }
-                ClauseKind::CreateClause { modifier, .. } => {
-                    60 + modifier.map_or(0, |m| m as u32)
-                }
+                ClauseKind::ReductionClause { operator, .. } => 30 + *operator as u32,
+                ClauseKind::CopyinClause { modifier, .. } => 40 + modifier.map_or(0, |m| m as u32),
+                ClauseKind::CopyoutClause { modifier, .. } => 50 + modifier.map_or(0, |m| m as u32),
+                ClauseKind::CreateClause { modifier, .. } => 60 + modifier.map_or(0, |m| m as u32),
             };
 
             let key = (clause.name.to_string(), kind_disc as u8, kind_disc);
@@ -115,7 +120,7 @@ impl<'a> Directive<'a> {
 
         // Rebuild clauses list with merging
         let mut new_clauses = Vec::new();
-        for (_, mut group) in merged {
+        for (_, group) in merged {
             if group.len() == 1 {
                 // Single occurrence - keep as is
                 new_clauses.push(group.into_iter().next().unwrap());
@@ -123,10 +128,10 @@ impl<'a> Directive<'a> {
                 // Multiple occurrences - merge based on clause kind
                 let first = group[0].clone();
                 match &first.kind {
-                    ClauseKind::GangClause { .. } |
-                    ClauseKind::WorkerClause { .. } |
-                    ClauseKind::VectorClause { .. } |
-                    ClauseKind::VariableList(_) => {
+                    ClauseKind::GangClause { .. }
+                    | ClauseKind::WorkerClause { .. }
+                    | ClauseKind::VectorClause { .. }
+                    | ClauseKind::VariableList(_) => {
                         // Merge variable lists with deduplication
                         let mut vars = Vec::new();
                         let mut seen = HashSet::new();
@@ -153,15 +158,24 @@ impl<'a> Directive<'a> {
                             },
                             ClauseKind::GangClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
-                                kind: ClauseKind::GangClause { modifier: *modifier, variables: vars },
+                                kind: ClauseKind::GangClause {
+                                    modifier: *modifier,
+                                    variables: vars,
+                                },
                             },
                             ClauseKind::WorkerClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
-                                kind: ClauseKind::WorkerClause { modifier: *modifier, variables: vars },
+                                kind: ClauseKind::WorkerClause {
+                                    modifier: *modifier,
+                                    variables: vars,
+                                },
                             },
                             ClauseKind::VectorClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
-                                kind: ClauseKind::VectorClause { modifier: *modifier, variables: vars },
+                                kind: ClauseKind::VectorClause {
+                                    modifier: *modifier,
+                                    variables: vars,
+                                },
                             },
                             _ => unreachable!(),
                         };
@@ -172,7 +186,11 @@ impl<'a> Directive<'a> {
                         let mut vars = Vec::new();
                         let mut seen = HashSet::new();
                         for clause in &group {
-                            if let ClauseKind::ReductionClause { operator: op, variables } = &clause.kind {
+                            if let ClauseKind::ReductionClause {
+                                operator: op,
+                                variables,
+                            } = &clause.kind
+                            {
                                 if op == operator {
                                     for var in variables {
                                         let var_str = var.as_ref();
@@ -185,12 +203,15 @@ impl<'a> Directive<'a> {
                         }
                         new_clauses.push(Clause {
                             name: first.name.clone(),
-                            kind: ClauseKind::ReductionClause { operator: *operator, variables: vars },
+                            kind: ClauseKind::ReductionClause {
+                                operator: *operator,
+                                variables: vars,
+                            },
                         });
                     }
-                    ClauseKind::CopyinClause { .. } |
-                    ClauseKind::CopyoutClause { .. } |
-                    ClauseKind::CreateClause { .. } => {
+                    ClauseKind::CopyinClause { .. }
+                    | ClauseKind::CopyoutClause { .. }
+                    | ClauseKind::CreateClause { .. } => {
                         // Merge data clauses with same modifier
                         let mut vars = Vec::new();
                         let mut seen = HashSet::new();
@@ -211,15 +232,24 @@ impl<'a> Directive<'a> {
                         let merged_clause = match &first.kind {
                             ClauseKind::CopyinClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
-                                kind: ClauseKind::CopyinClause { modifier: *modifier, variables: vars },
+                                kind: ClauseKind::CopyinClause {
+                                    modifier: *modifier,
+                                    variables: vars,
+                                },
                             },
                             ClauseKind::CopyoutClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
-                                kind: ClauseKind::CopyoutClause { modifier: *modifier, variables: vars },
+                                kind: ClauseKind::CopyoutClause {
+                                    modifier: *modifier,
+                                    variables: vars,
+                                },
                             },
                             ClauseKind::CreateClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
-                                kind: ClauseKind::CreateClause { modifier: *modifier, variables: vars },
+                                kind: ClauseKind::CreateClause {
+                                    modifier: *modifier,
+                                    variables: vars,
+                                },
                             },
                             _ => unreachable!(),
                         };
@@ -353,10 +383,7 @@ impl DirectiveRule {
         match self {
             DirectiveRule::Generic => {
                 let (input, clauses) = clause_registry.parse_sequence(input)?;
-                Ok((
-                    input,
-                    Directive::new(name, None, clauses),
-                ))
+                Ok((input, Directive::new(name, None, clauses)))
             }
             DirectiveRule::Custom(parser) => parser(name, input, clause_registry),
         }
@@ -676,6 +703,8 @@ mod tests {
                 name,
                 parameter: None,
                 clauses,
+                wait_data: None,
+                cache_data: None,
             },
         ))
     }
@@ -716,6 +745,8 @@ mod tests {
                     kind: ClauseKind::Bare,
                 },
             ],
+            wait_data: None,
+            cache_data: None,
         };
 
         assert_eq!(
@@ -734,6 +765,8 @@ mod tests {
             name: "barrier".into(),
             parameter: None,
             clauses: vec![],
+            wait_data: None,
+            cache_data: None,
         };
 
         assert_eq!(directive.to_string(), "#pragma omp barrier");

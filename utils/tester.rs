@@ -15,26 +15,68 @@ fn main() {
                     ClauseKind::VariableList(ref variables) => {
                         println!("Clause: {}(vars: {:?})", clause.name, variables);
                     }
-                    ClauseKind::CopyinClause { ref modifier, ref variables } => {
-                        println!("Clause: {}(modifier: {:?}, vars: {:?})", clause.name, modifier, variables);
+                    ClauseKind::CopyinClause {
+                        ref modifier,
+                        ref variables,
+                    } => {
+                        println!(
+                            "Clause: {}(modifier: {:?}, vars: {:?})",
+                            clause.name, modifier, variables
+                        );
                     }
-                    ClauseKind::CopyoutClause { ref modifier, ref variables } => {
-                        println!("Clause: {}(modifier: {:?}, vars: {:?})", clause.name, modifier, variables);
+                    ClauseKind::CopyoutClause {
+                        ref modifier,
+                        ref variables,
+                    } => {
+                        println!(
+                            "Clause: {}(modifier: {:?}, vars: {:?})",
+                            clause.name, modifier, variables
+                        );
                     }
-                    ClauseKind::CreateClause { ref modifier, ref variables } => {
-                        println!("Clause: {}(modifier: {:?}, vars: {:?})", clause.name, modifier, variables);
+                    ClauseKind::CreateClause {
+                        ref modifier,
+                        ref variables,
+                    } => {
+                        println!(
+                            "Clause: {}(modifier: {:?}, vars: {:?})",
+                            clause.name, modifier, variables
+                        );
                     }
-                    ClauseKind::ReductionClause { ref operator, ref variables } => {
-                        println!("Clause: {}(operator: {:?}, vars: {:?})", clause.name, operator, variables);
+                    ClauseKind::ReductionClause {
+                        ref operator,
+                        ref variables,
+                    } => {
+                        println!(
+                            "Clause: {}(operator: {:?}, vars: {:?})",
+                            clause.name, operator, variables
+                        );
                     }
-                    ClauseKind::GangClause { ref modifier, ref variables } => {
-                        println!("Clause: {}(modifier: {:?}, vars: {:?})", clause.name, modifier, variables);
+                    ClauseKind::GangClause {
+                        ref modifier,
+                        ref variables,
+                    } => {
+                        println!(
+                            "Clause: {}(modifier: {:?}, vars: {:?})",
+                            clause.name, modifier, variables
+                        );
                     }
-                    ClauseKind::WorkerClause { ref modifier, ref variables } => {
-                        println!("Clause: {}(modifier: {:?}, vars: {:?})", clause.name, modifier, variables);
+                    ClauseKind::WorkerClause {
+                        ref modifier,
+                        ref variables,
+                    } => {
+                        println!(
+                            "Clause: {}(modifier: {:?}, vars: {:?})",
+                            clause.name, modifier, variables
+                        );
                     }
-                    ClauseKind::VectorClause { ref modifier, ref variables } => {
-                        println!("Clause: {}(modifier: {:?}, vars: {:?})", clause.name, modifier, variables);
+                    ClauseKind::VectorClause {
+                        ref modifier,
+                        ref variables,
+                    } => {
+                        println!(
+                            "Clause: {}(modifier: {:?}, vars: {:?})",
+                            clause.name, modifier, variables
+                        );
                     }
                 }
             }

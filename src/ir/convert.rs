@@ -634,7 +634,7 @@ pub fn parse_clause_data<'a>(
             }),
             // OpenACC-specific structured clauses should not appear in OpenMP context
             _ => Err(ConversionError::InvalidClauseSyntax(
-                "Unexpected structured clause for 'ordered'".to_string()
+                "Unexpected structured clause for 'ordered'".to_string(),
             )),
         },
 
@@ -983,6 +983,8 @@ mod tests {
             name: "parallel".into(),
             parameter: None,
             clauses: vec![],
+            wait_data: None,
+            cache_data: None,
         };
         let config = ParserConfig::default();
         let ir =
@@ -1006,6 +1008,8 @@ mod tests {
                     kind: ClauseKind::Parenthesized("x".into()),
                 },
             ],
+            wait_data: None,
+            cache_data: None,
         };
         let config = ParserConfig::default();
         let ir =

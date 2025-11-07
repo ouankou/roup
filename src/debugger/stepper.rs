@@ -260,51 +260,82 @@ impl DebugSession {
                             }
                             crate::parser::ClauseKind::VariableList(variables) => {
                                 crate::parser::ClauseKind::VariableList(
-                                    variables.iter().map(|v| Cow::Owned(v.to_string())).collect()
+                                    variables
+                                        .iter()
+                                        .map(|v| Cow::Owned(v.to_string()))
+                                        .collect(),
                                 )
                             }
-                            crate::parser::ClauseKind::CopyinClause { modifier, variables } => {
-                                crate::parser::ClauseKind::CopyinClause {
-                                    modifier: *modifier,
-                                    variables: variables.iter().map(|v| Cow::Owned(v.to_string())).collect(),
-                                }
-                            }
-                            crate::parser::ClauseKind::CopyoutClause { modifier, variables } => {
-                                crate::parser::ClauseKind::CopyoutClause {
-                                    modifier: *modifier,
-                                    variables: variables.iter().map(|v| Cow::Owned(v.to_string())).collect(),
-                                }
-                            }
-                            crate::parser::ClauseKind::CreateClause { modifier, variables } => {
-                                crate::parser::ClauseKind::CreateClause {
-                                    modifier: *modifier,
-                                    variables: variables.iter().map(|v| Cow::Owned(v.to_string())).collect(),
-                                }
-                            }
-                            crate::parser::ClauseKind::ReductionClause { operator, variables } => {
-                                crate::parser::ClauseKind::ReductionClause {
-                                    operator: *operator,
-                                    variables: variables.iter().map(|v| Cow::Owned(v.to_string())).collect(),
-                                }
-                            }
-                            crate::parser::ClauseKind::GangClause { modifier, variables } => {
-                                crate::parser::ClauseKind::GangClause {
-                                    modifier: *modifier,
-                                    variables: variables.iter().map(|v| Cow::Owned(v.to_string())).collect(),
-                                }
-                            }
-                            crate::parser::ClauseKind::WorkerClause { modifier, variables } => {
-                                crate::parser::ClauseKind::WorkerClause {
-                                    modifier: *modifier,
-                                    variables: variables.iter().map(|v| Cow::Owned(v.to_string())).collect(),
-                                }
-                            }
-                            crate::parser::ClauseKind::VectorClause { modifier, variables } => {
-                                crate::parser::ClauseKind::VectorClause {
-                                    modifier: *modifier,
-                                    variables: variables.iter().map(|v| Cow::Owned(v.to_string())).collect(),
-                                }
-                            }
+                            crate::parser::ClauseKind::CopyinClause {
+                                modifier,
+                                variables,
+                            } => crate::parser::ClauseKind::CopyinClause {
+                                modifier: *modifier,
+                                variables: variables
+                                    .iter()
+                                    .map(|v| Cow::Owned(v.to_string()))
+                                    .collect(),
+                            },
+                            crate::parser::ClauseKind::CopyoutClause {
+                                modifier,
+                                variables,
+                            } => crate::parser::ClauseKind::CopyoutClause {
+                                modifier: *modifier,
+                                variables: variables
+                                    .iter()
+                                    .map(|v| Cow::Owned(v.to_string()))
+                                    .collect(),
+                            },
+                            crate::parser::ClauseKind::CreateClause {
+                                modifier,
+                                variables,
+                            } => crate::parser::ClauseKind::CreateClause {
+                                modifier: *modifier,
+                                variables: variables
+                                    .iter()
+                                    .map(|v| Cow::Owned(v.to_string()))
+                                    .collect(),
+                            },
+                            crate::parser::ClauseKind::ReductionClause {
+                                operator,
+                                variables,
+                            } => crate::parser::ClauseKind::ReductionClause {
+                                operator: *operator,
+                                variables: variables
+                                    .iter()
+                                    .map(|v| Cow::Owned(v.to_string()))
+                                    .collect(),
+                            },
+                            crate::parser::ClauseKind::GangClause {
+                                modifier,
+                                variables,
+                            } => crate::parser::ClauseKind::GangClause {
+                                modifier: *modifier,
+                                variables: variables
+                                    .iter()
+                                    .map(|v| Cow::Owned(v.to_string()))
+                                    .collect(),
+                            },
+                            crate::parser::ClauseKind::WorkerClause {
+                                modifier,
+                                variables,
+                            } => crate::parser::ClauseKind::WorkerClause {
+                                modifier: *modifier,
+                                variables: variables
+                                    .iter()
+                                    .map(|v| Cow::Owned(v.to_string()))
+                                    .collect(),
+                            },
+                            crate::parser::ClauseKind::VectorClause {
+                                modifier,
+                                variables,
+                            } => crate::parser::ClauseKind::VectorClause {
+                                modifier: *modifier,
+                                variables: variables
+                                    .iter()
+                                    .map(|v| Cow::Owned(v.to_string()))
+                                    .collect(),
+                            },
                         },
                     })
                     .collect();
@@ -316,14 +347,26 @@ impl DebugSession {
                         .as_ref()
                         .map(|p| Cow::Owned(p.to_string())),
                     clauses: owned_clauses,
-                    wait_data: directive.wait_data.as_ref().map(|wd| crate::parser::WaitDirectiveData {
-                        devnum: wd.devnum.as_ref().map(|d| Cow::Owned(d.to_string())),
-                        has_queues: wd.has_queues,
-                        queue_exprs: wd.queue_exprs.iter().map(|e| Cow::Owned(e.to_string())).collect(),
+                    wait_data: directive.wait_data.as_ref().map(|wd| {
+                        crate::parser::WaitDirectiveData {
+                            devnum: wd.devnum.as_ref().map(|d| Cow::Owned(d.to_string())),
+                            has_queues: wd.has_queues,
+                            queue_exprs: wd
+                                .queue_exprs
+                                .iter()
+                                .map(|e| Cow::Owned(e.to_string()))
+                                .collect(),
+                        }
                     }),
-                    cache_data: directive.cache_data.as_ref().map(|cd| crate::parser::CacheDirectiveData {
-                        readonly: cd.readonly,
-                        variables: cd.variables.iter().map(|v| Cow::Owned(v.to_string())).collect(),
+                    cache_data: directive.cache_data.as_ref().map(|cd| {
+                        crate::parser::CacheDirectiveData {
+                            readonly: cd.readonly,
+                            variables: cd
+                                .variables
+                                .iter()
+                                .map(|v| Cow::Owned(v.to_string()))
+                                .collect(),
+                        }
                     }),
                 };
 

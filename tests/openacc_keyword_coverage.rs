@@ -63,6 +63,7 @@ fn assert_clause_case(pragma: &str, expected_name: &str, expected_kind: ClauseEx
         (ClauseExpectation::Parenthesized, ClauseKind::Bare) => {
             panic!("{} expected parenthesized clause", pragma)
         }
+        _ => panic!("{} returned unexpected clause kind", pragma),
     }
 }
 

@@ -27,40 +27,40 @@ pub enum CreateModifier {
 /// OpenACC reduction clause operator
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ReductionOperator {
-    Add,        // +
-    Sub,        // -
-    Mul,        // *
-    Max,        // max
-    Min,        // min
-    BitAnd,     // &
-    BitOr,      // |
-    BitXor,     // ^
-    LogAnd,     // &&
-    LogOr,      // ||
+    Add,    // +
+    Sub,    // -
+    Mul,    // *
+    Max,    // max
+    Min,    // min
+    BitAnd, // &
+    BitOr,  // |
+    BitXor, // ^
+    LogAnd, // &&
+    LogOr,  // ||
     // Fortran operators
-    FortAnd,    // .and.
-    FortOr,     // .or.
-    FortEqv,    // .eqv.
-    FortNeqv,   // .neqv.
-    FortIand,   // iand
-    FortIor,    // ior
-    FortIeor,   // ieor
+    FortAnd,  // .and.
+    FortOr,   // .or.
+    FortEqv,  // .eqv.
+    FortNeqv, // .neqv.
+    FortIand, // iand
+    FortIor,  // ior
+    FortIeor, // ieor
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum GangModifier {
-    Num,        // num
-    Static,     // static
+    Num,    // num
+    Static, // static
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WorkerModifier {
-    Num,        // num
+    Num, // num
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum VectorModifier {
-    Length,     // length
+    Length, // length
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -126,7 +126,10 @@ impl fmt::Display for Clause<'_> {
             ClauseKind::VariableList(variables) => {
                 write!(f, "{}({})", self.name, variables.join(", "))
             }
-            ClauseKind::GangClause { modifier, variables } => {
+            ClauseKind::GangClause {
+                modifier,
+                variables,
+            } => {
                 write!(f, "{}(", self.name)?;
                 if let Some(mod_val) = modifier {
                     let mod_str = match mod_val {
@@ -137,42 +140,60 @@ impl fmt::Display for Clause<'_> {
                 }
                 write!(f, "{})", variables.join(", "))
             }
-            ClauseKind::WorkerClause { modifier, variables } => {
+            ClauseKind::WorkerClause {
+                modifier,
+                variables,
+            } => {
                 write!(f, "{}(", self.name)?;
                 if let Some(WorkerModifier::Num) = modifier {
                     write!(f, "num: ")?;
                 }
                 write!(f, "{})", variables.join(", "))
             }
-            ClauseKind::VectorClause { modifier, variables } => {
+            ClauseKind::VectorClause {
+                modifier,
+                variables,
+            } => {
                 write!(f, "{}(", self.name)?;
                 if let Some(VectorModifier::Length) = modifier {
                     write!(f, "length: ")?;
                 }
                 write!(f, "{})", variables.join(", "))
             }
-            ClauseKind::CopyinClause { modifier, variables } => {
+            ClauseKind::CopyinClause {
+                modifier,
+                variables,
+            } => {
                 write!(f, "{}(", self.name)?;
                 if let Some(CopyinModifier::Readonly) = modifier {
                     write!(f, "readonly: ")?;
                 }
                 write!(f, "{})", variables.join(", "))
             }
-            ClauseKind::CopyoutClause { modifier, variables } => {
+            ClauseKind::CopyoutClause {
+                modifier,
+                variables,
+            } => {
                 write!(f, "{}(", self.name)?;
                 if let Some(CopyoutModifier::Zero) = modifier {
                     write!(f, "zero: ")?;
                 }
                 write!(f, "{})", variables.join(", "))
             }
-            ClauseKind::CreateClause { modifier, variables } => {
+            ClauseKind::CreateClause {
+                modifier,
+                variables,
+            } => {
                 write!(f, "{}(", self.name)?;
                 if let Some(CreateModifier::Zero) = modifier {
                     write!(f, "zero: ")?;
                 }
                 write!(f, "{})", variables.join(", "))
             }
-            ClauseKind::ReductionClause { operator, variables } => {
+            ClauseKind::ReductionClause {
+                operator,
+                variables,
+            } => {
                 let op_str = match operator {
                     ReductionOperator::Add => "+",
                     ReductionOperator::Sub => "-",

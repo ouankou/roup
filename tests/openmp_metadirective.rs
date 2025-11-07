@@ -79,6 +79,7 @@ fn parses_metadirective_with_nested_directives_and_qualifiers() {
         .map(|clause| match &clause.kind {
             ClauseKind::Parenthesized(body) => body.as_ref(),
             ClauseKind::Bare => panic!("expected parenthesized clause"),
+            _ => panic!("unexpected clause kind"),
         })
         .collect();
 
