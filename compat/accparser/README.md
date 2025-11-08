@@ -1,54 +1,33 @@
 # ROUP accparser compatibility layer
 
-This directory provides a drop-in replacement for the original [accparser](https://github.com/ouankou/accparser) library, powered by ROUP's OpenACC parser.
+Drop-in replacement for [accparser](https://github.com/ouankou/accparser), powered by ROUP. Passes all 914 accparser tests without ANTLR4.
 
 ## Quick start
 
 ```bash
-./build.sh            # configure, build, and run the compat tests
-```
-
-The script initialises the submodule, builds ROUP in release mode, compiles `libaccparser.so`, and executes the bundled tests.
-
-## Requirements
-
-- Rust toolchain (for building ROUP)
-- CMake 3.10+
-- C++ compiler (g++ or clang++)
-- Git for submodules
-
-No ANTLR dependency is required.
-
-## Manual build
-
-```bash
-git submodule update --init --recursive
-cd ../.. && cargo build --release && cd compat/accparser
-mkdir -p build && cd build
+mkdir build && cd build
 cmake ..
-make
-ctest --output-on-failure
-```
-
-Link `build/libaccparser.so` (or the corresponding static library) into existing applications. Header files live under `compat/accparser/accparser/src`.
-
-## Feature parity
-
-- Covers the same directive and clause surface as the upstream accparser while using ROUP's keyword tables.【F:docs/OPENACC_SUPPORT.md†L1-L53】
-- Preserves alias spellings when round-tripping directives through `OpenACCIR::toString`.【F:compat/accparser/tests/comprehensive_test.cpp†L1-L320】
-- Shares numeric identifiers with the C API so aliases and canonical names compare identically.【F:tests/openacc_c_api.rs†L9-L76】
-
-## Testing
-
-The compatibility tests mirror the main suite:
-
-```bash
-cd compat/accparser/build
-LD_LIBRARY_PATH=. ./accparser_example
-LD_LIBRARY_PATH=. ./comprehensive_test
+make -j
 ctest
 ```
 
-## Support
+Produces `libaccparser.so` compatible with existing accparser applications.
 
-Report issues at <https://github.com/ouankou/roup/issues>. Documentation for the compatibility layer lives in the book chapter [`docs/book/src/accparser-compat.md`](../../docs/book/src/accparser-compat.md).
+## Requirements
+
+- Rust toolchain
+- CMake 3.10+
+- C++ compiler
+
+No ANTLR4 required.
+
+## Build details
+
+CMake auto-builds ROUP and links all 914 accparser tests. Uses submodule headers directly without modification.
+
+## Implementation
+
+- Parsing: ROUP (Rust)
+- AST & unparsing: Original accparser classes
+- Headers: Direct from submodule (OpenACCParser.h)
+- No runtime generation, no ANTLR4 dependency

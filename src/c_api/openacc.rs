@@ -164,12 +164,16 @@ fn build_acc_directive(parsed: Directive<'_>, language: Language) -> AccDirectiv
         result.wait_data = Some(convert_wait_directive_data(wait_data));
     }
 
-    if let Some(routine_name) = parse_routine_name(name) {
-        result.routine_name = Some(make_c_string(&routine_name));
-    }
-
-    if let Some(kind) = parse_end_paired_kind(name) {
-        result.end_paired_kind = Some(kind);
+    // Use parameter field directly for routine name (set by parse_routine_directive)
+    // and for end directive paired kind (set by parse_end_directive)
+    if let Some(param) = parsed.parameter.as_ref() {
+        if name.eq_ignore_ascii_case("routine") {
+            result.routine_name = Some(make_c_string(param.as_ref()));
+        } else if name.eq_ignore_ascii_case("end") {
+            // For "end" directives, parameter contains the directive being ended (e.g., "atomic")
+            let kind = acc_directive_name_to_kind(param.as_ref());
+            result.end_paired_kind = Some(kind);
+        }
     }
 
     result

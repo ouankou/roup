@@ -1,14 +1,14 @@
 /*
- * OpenACCIR.cpp - Minimal accparser compatibility implementation using ROUP
+ * compat_impl.cpp - accparser compatibility implementation using ROUP
  *
- * This provides ONLY the implementation (.cpp), using accparser's headers
- * from the git submodule at compat/accparser/accparser/src/
+ * Provides parseOpenACC() implementation using ROUP parser + accparser AST.
+ * Uses OpenACCParser.h from submodule (no ANTLR dependency).
  *
  * Copyright (c) 2025 ROUP Project
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <OpenACCIR.h>
+#include <OpenACCParser.h>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -60,6 +60,12 @@ extern "C" {
     const char* acc_directive_wait_expression_at(const AccDirective* directive, int32_t index);
     const char* acc_directive_wait_devnum(const AccDirective* directive);
     int32_t acc_directive_wait_has_queues(const AccDirective* directive);
+
+    // Routine directive queries
+    const char* acc_directive_routine_name(const AccDirective* directive);
+
+    // End directive queries
+    int32_t acc_directive_end_paired_kind(const AccDirective* directive);
 }
 
 // ============================================================================
@@ -360,6 +366,35 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
         }
 
         dir = wait_dir;
+    } else if (kind == ACCD_routine) {
+        // Create OpenACCRoutineDirective
+        OpenACCRoutineDirective* routine_dir = new OpenACCRoutineDirective();
+        routine_dir->setBaseLang(effective_lang);
+
+        // Get routine name if present
+        const char* routine_name = acc_directive_routine_name(roup_dir);
+        if (routine_name && routine_name[0] != '\0') {
+            routine_dir->setName(std::string(routine_name));
+        }
+
+        dir = routine_dir;
+    } else if (kind == ACCD_end) {
+        // Create OpenACCEndDirective
+        OpenACCEndDirective* end_dir = new OpenACCEndDirective();
+        end_dir->setBaseLang(effective_lang);
+
+        // Get paired directive kind from ROUP
+        int32_t paired_kind = acc_directive_end_paired_kind(roup_dir);
+        if (paired_kind >= 0) {
+            OpenACCDirectiveKind paired_acc_kind = mapRoupToAccparserDirective(paired_kind);
+            // Create a minimal paired directive (just for toString generation)
+            OpenACCDirective* paired = new OpenACCDirective(paired_acc_kind, effective_lang, 0, 0);
+            end_dir->setPairedDirective(paired);
+        } else {
+            end_dir->setPairedDirective(nullptr);
+        }
+
+        dir = end_dir;
     } else {
         // Regular directive
         dir = new OpenACCDirective(kind, effective_lang, 0, 0);

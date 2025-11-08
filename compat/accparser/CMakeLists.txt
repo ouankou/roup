@@ -3,7 +3,6 @@ project(roup-accparser-compat)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/include_shims)
 
 # ============================================================================
 # Build ROUP Library
@@ -41,8 +40,8 @@ add_library(accparser SHARED
 )
 
 target_include_directories(accparser PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/accparser/src
-    ${ROUP_ROOT}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/accparser/src  # Use headers directly from submodule
+    ${ROUP_ROOT}/src  # roup_constants.h
 )
 
 # Link ROUP statically into libaccparser.so
@@ -60,8 +59,18 @@ set_target_properties(accparser PROPERTIES
 )
 
 # ============================================================================
-# Use accparser's builtin test infrastructure
+# Test infrastructure
 # ============================================================================
 
 enable_testing()
+
+# Create tests/ directory with symlink to acc_tester.out (builtin tests expect this)
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
+add_custom_command(
+    TARGET accparser POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+        ${CMAKE_BINARY_DIR}/accparser/tests/acc_tester.out
+        ${CMAKE_BINARY_DIR}/tests/acc_tester.out
+)
+
 add_subdirectory(accparser/tests)
