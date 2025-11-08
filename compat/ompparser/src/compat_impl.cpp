@@ -49,6 +49,16 @@ extern "C" {
 
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
+    struct OmpStringList* roup_clause_variables(const OmpClause* clause);
+    const char* roup_clause_expression(const OmpClause* clause);
+    int32_t roup_clause_schedule_kind(const OmpClause* clause);
+    int32_t roup_clause_reduction_operator(const OmpClause* clause);
+    int32_t roup_clause_default_data_sharing(const OmpClause* clause);
+
+    // String list operations
+    int32_t roup_string_list_len(const OmpStringList* list);
+    const char* roup_string_list_get(const OmpStringList* list, int32_t index);
+    void roup_string_list_free(OmpStringList* list);
 }
 
 // ============================================================================
@@ -245,22 +255,23 @@ static OpenMPDirectiveKind mapDirectiveNameToOmpparser(const char* name) {
 }
 
 static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
-    // ROUP clause kind mapping using named constants from roup_constants.h
-    // Single source of truth: src/c_api.rs:convert_clause()
+    // ROUP clause kind mapping (numeric codes from src/c_api.rs:convert_clause())
+    // 0=num_threads, 1=if, 2=private, 3=shared, 4=firstprivate, 5=lastprivate
+    // 6=reduction, 7=schedule, 8=collapse, 9=ordered, 10=nowait, 11=default, 999=unknown
     switch (roup_kind) {
-        case ROUP_CLAUSE_NUM_THREADS:   return OMPC_num_threads;
-        case ROUP_CLAUSE_IF:            return OMPC_if;
-        case ROUP_CLAUSE_PRIVATE:       return OMPC_private;
-        case ROUP_CLAUSE_SHARED:        return OMPC_shared;
-        case ROUP_CLAUSE_FIRSTPRIVATE:  return OMPC_firstprivate;
-        case ROUP_CLAUSE_LASTPRIVATE:   return OMPC_lastprivate;
-        case ROUP_CLAUSE_REDUCTION:     return OMPC_reduction;
-        case ROUP_CLAUSE_SCHEDULE:      return OMPC_schedule;
-        case ROUP_CLAUSE_COLLAPSE:      return OMPC_collapse;
-        case ROUP_CLAUSE_ORDERED:       return OMPC_ordered;
-        case ROUP_CLAUSE_NOWAIT:        return OMPC_nowait;
-        case ROUP_CLAUSE_DEFAULT:       return OMPC_default;
-        default:                        return OMPC_unknown;
+        case 0:  return OMPC_num_threads;
+        case 1:  return OMPC_if;
+        case 2:  return OMPC_private;
+        case 3:  return OMPC_shared;
+        case 4:  return OMPC_firstprivate;
+        case 5:  return OMPC_lastprivate;
+        case 6:  return OMPC_reduction;
+        case 7:  return OMPC_schedule;
+        case 8:  return OMPC_collapse;
+        case 9:  return OMPC_ordered;
+        case 10: return OMPC_nowait;
+        case 11: return OMPC_default;
+        default: return OMPC_unknown;
     }
 }
 
@@ -325,9 +336,28 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             int32_t roup_kind_clause = roup_clause_kind(roup_clause);
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
-            // Use public variadic version: addOpenMPClause(int kind, ...)
-            // Cast to int and pass just the kind for basic clause support
-            dir->addOpenMPClause(static_cast<int>(clause_kind));
+            // Create the clause
+            OpenMPClause* omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+            if (!omp_clause) continue;
+
+            // Add variables for variable-list clauses (private, shared, etc.)
+            OmpStringList* vars = roup_clause_variables(roup_clause);
+            if (vars) {
+                int32_t var_count = roup_string_list_len(vars);
+                for (int32_t i = 0; i < var_count; ++i) {
+                    const char* var = roup_string_list_get(vars, i);
+                    if (var) {
+                        omp_clause->addLangExpr(var);
+                    }
+                }
+                // Note: Don't free vars - it's owned by the clause data
+            }
+
+            // Add expression for expression clauses (num_threads, if, collapse, etc.)
+            const char* expr = roup_clause_expression(roup_clause);
+            if (expr) {
+                omp_clause->addLangExpr(expr);
+            }
         }
         roup_clause_iterator_free(iter);
     }

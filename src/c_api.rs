@@ -152,6 +152,7 @@ union ClauseData {
     reduction: ManuallyDrop<ReductionData>,
     default: i32,
     variables: *mut OmpStringList,
+    expression: *const c_char, // For num_threads, if, collapse, etc.
 }
 
 /// Schedule clause data (static, dynamic, guided, etc.)
@@ -163,9 +164,9 @@ struct ScheduleData {
 
 /// Reduction clause data (operator and variables)
 #[repr(C)]
-#[derive(Copy, Clone)]
 struct ReductionData {
-    operator: i32, // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+    operator: i32,                // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+    variables: *mut OmpStringList, // Variable list
 }
 
 /// Iterator over clauses
@@ -750,7 +751,7 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
 /// Get variable list from clause (private, shared, reduction, etc.).
 ///
 /// Returns NULL if clause is NULL or has no variables.
-/// Caller must call `roup_string_list_free()`.
+/// Returned pointer is valid until clause is freed.
 #[no_mangle]
 pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStringList {
     if clause.is_null() {
@@ -762,15 +763,17 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
     unsafe {
         let c = &*clause;
 
-        // Check if this clause type has variables
-        // Kinds 2-5 are private/shared/firstprivate/lastprivate
-        if c.kind < 2 || c.kind > 6 {
-            return ptr::null_mut();
+        // Variable list clauses: private(2), shared(3), firstprivate(4), lastprivate(5)
+        if c.kind >= 2 && c.kind <= 5 {
+            return c.data.variables;
         }
 
-        // For now, return empty list (would need clause parsing enhancement)
-        let list = OmpStringList { items: Vec::new() };
-        Box::into_raw(Box::new(list))
+        // Reduction clause (6) has variables in reduction struct
+        if c.kind == 6 {
+            return c.data.reduction.variables;
+        }
+
+        ptr::null_mut()
     }
 }
 
@@ -836,6 +839,28 @@ pub extern "C" fn roup_string_list_free(list: *mut OmpStringList) {
     }
 }
 
+/// Get expression from clause (num_threads, if, collapse, etc.).
+///
+/// Returns NULL if clause is NULL or has no expression.
+/// Returned pointer is valid until clause is freed.
+#[no_mangle]
+pub extern "C" fn roup_clause_expression(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+
+        // Expression clauses: num_threads(0), if(1), collapse(8), ordered(9)
+        if c.kind == 0 || c.kind == 1 || c.kind == 8 || c.kind == 9 {
+            return c.data.expression;
+        }
+
+        ptr::null()
+    }
+}
+
 // ============================================================================
 // Helper Functions (Internal - Not Exported to C)
 // ============================================================================
@@ -892,6 +917,33 @@ fn allocate_c_string(s: &str) -> *const c_char {
 /// - 4 = firstprivate   - 10 = nowait
 /// - 5 = lastprivate    - 11 = default
 /// - 999 = unknown
+/// Helper: Convert Rust variable list to C string list
+fn variables_to_c_list(variables: &[std::borrow::Cow<str>]) -> *mut OmpStringList {
+    if variables.is_empty() {
+        return ptr::null_mut();
+    }
+
+    let c_strings: Vec<*const c_char> = variables
+        .iter()
+        .map(|v| {
+            let c_str = CString::new(v.as_ref()).unwrap();
+            c_str.into_raw() as *const c_char
+        })
+        .collect();
+
+    let list = OmpStringList { items: c_strings };
+    Box::into_raw(Box::new(list))
+}
+
+/// Helper: Convert expression to C string
+fn expression_to_c_string(expr: &str) -> *const c_char {
+    if expr.is_empty() {
+        return ptr::null();
+    }
+    let c_str = CString::new(expr).unwrap();
+    c_str.into_raw() as *const c_char
+}
+
 fn convert_clause(clause: &Clause) -> OmpClause {
     // Normalize clause name to lowercase for case-insensitive matching
     // (Fortran clauses are uppercase, C clauses are lowercase)
@@ -901,38 +953,91 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     let normalized_name = clause.name.to_ascii_lowercase();
 
     let (kind, data) = match normalized_name.as_str() {
-        "num_threads" => (0, ClauseData { default: 0 }),
-        "if" => (1, ClauseData { default: 0 }),
-        "private" => (
-            2,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "shared" => (
-            3,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "firstprivate" => (
-            4,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "lastprivate" => (
-            5,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
+        "num_threads" | "if" => {
+            let expr = if let ClauseKind::Parenthesized(ref val) = clause.kind {
+                expression_to_c_string(val.as_ref())
+            } else {
+                ptr::null()
+            };
+            let kind_code = if normalized_name == "num_threads" { 0 } else { 1 };
+            (kind_code, ClauseData { expression: expr })
+        }
+        "private" => {
+            let vars = if let ClauseKind::Parenthesized(ref val) = clause.kind {
+                // Parse comma-separated variable list
+                let var_list: Vec<std::borrow::Cow<str>> = val
+                    .split(',')
+                    .map(|v| std::borrow::Cow::Borrowed(v.trim()))
+                    .collect();
+                variables_to_c_list(&var_list)
+            } else {
+                ptr::null_mut()
+            };
+            (2, ClauseData { variables: vars })
+        }
+        "shared" => {
+            let vars = if let ClauseKind::Parenthesized(ref val) = clause.kind {
+                let var_list: Vec<std::borrow::Cow<str>> = val
+                    .split(',')
+                    .map(|v| std::borrow::Cow::Borrowed(v.trim()))
+                    .collect();
+                variables_to_c_list(&var_list)
+            } else {
+                ptr::null_mut()
+            };
+            (3, ClauseData { variables: vars })
+        }
+        "firstprivate" => {
+            let vars = if let ClauseKind::Parenthesized(ref val) = clause.kind {
+                let var_list: Vec<std::borrow::Cow<str>> = val
+                    .split(',')
+                    .map(|v| std::borrow::Cow::Borrowed(v.trim()))
+                    .collect();
+                variables_to_c_list(&var_list)
+            } else {
+                ptr::null_mut()
+            };
+            (4, ClauseData { variables: vars })
+        }
+        "lastprivate" => {
+            let vars = if let ClauseKind::Parenthesized(ref val) = clause.kind {
+                // Handle lastprivate which might have modifiers like "conditional:vars"
+                let vars_part = if let Some(colon_idx) = val.find(':') {
+                    &val[colon_idx + 1..]
+                } else {
+                    val.as_ref()
+                };
+                let var_list: Vec<std::borrow::Cow<str>> = vars_part
+                    .split(',')
+                    .map(|v| std::borrow::Cow::Borrowed(v.trim()))
+                    .collect();
+                variables_to_c_list(&var_list)
+            } else {
+                ptr::null_mut()
+            };
+            (5, ClauseData { variables: vars })
+        }
         "reduction" => {
             let operator = parse_reduction_operator(clause);
+            let vars = if let ClauseKind::Parenthesized(ref args) = clause.kind {
+                // Extract variables after colon in "reduction(+: var1, var2)"
+                if let Some(colon_idx) = args.find(':') {
+                    let vars_part = &args[colon_idx + 1..];
+                    let var_list: Vec<std::borrow::Cow<str>> = vars_part
+                        .split(',')
+                        .map(|v| std::borrow::Cow::Borrowed(v.trim()))
+                        .collect();
+                    variables_to_c_list(&var_list)
+                } else {
+                    ptr::null_mut()
+                }
+            } else {
+                ptr::null_mut()
+            };
             (
                 6,
                 ClauseData {
-                    reduction: ManuallyDrop::new(ReductionData { operator }),
+                    reduction: ManuallyDrop::new(ReductionData { operator, variables: vars }),
                 },
             )
         }
@@ -947,8 +1052,15 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 },
             )
         }
-        "collapse" => (8, ClauseData { default: 0 }),
-        "ordered" => (9, ClauseData { default: 0 }),
+        "collapse" | "ordered" => {
+            let expr = if let ClauseKind::Parenthesized(ref val) = clause.kind {
+                expression_to_c_string(val.as_ref())
+            } else {
+                ptr::null()
+            };
+            let kind_code = if normalized_name == "collapse" { 8 } else { 9 };
+            (kind_code, ClauseData { expression: expr })
+        }
         "nowait" => (10, ClauseData { default: 0 }),
         "default" => {
             let default_kind = parse_default_kind(clause);
