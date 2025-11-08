@@ -56,13 +56,47 @@ fn assert_clause_case(pragma: &str, expected_name: &str, expected_kind: ClauseEx
     assert_eq!(clause.name, expected_name, "{}", pragma);
     match (expected_kind, &clause.kind) {
         (ClauseExpectation::Bare, ClauseKind::Bare) => {}
+        // Structured clauses with no content are also bare
+        (
+            ClauseExpectation::Bare,
+            ClauseKind::GangClause {
+                modifier: None,
+                variables,
+            },
+        ) if variables.is_empty() => {}
+        (
+            ClauseExpectation::Bare,
+            ClauseKind::WorkerClause {
+                modifier: None,
+                variables,
+            },
+        ) if variables.is_empty() => {}
+        (
+            ClauseExpectation::Bare,
+            ClauseKind::VectorClause {
+                modifier: None,
+                variables,
+            },
+        ) if variables.is_empty() => {}
         (ClauseExpectation::Parenthesized, ClauseKind::Parenthesized(_)) => {}
-        (ClauseExpectation::Bare, ClauseKind::Parenthesized(_)) => {
+        (ClauseExpectation::Parenthesized, ClauseKind::VariableList(_)) => {}
+        (ClauseExpectation::Parenthesized, ClauseKind::GangClause { .. }) => {}
+        (ClauseExpectation::Parenthesized, ClauseKind::WorkerClause { .. }) => {}
+        (ClauseExpectation::Parenthesized, ClauseKind::VectorClause { .. }) => {}
+        (ClauseExpectation::Parenthesized, ClauseKind::CopyinClause { .. }) => {}
+        (ClauseExpectation::Parenthesized, ClauseKind::CopyoutClause { .. }) => {}
+        (ClauseExpectation::Parenthesized, ClauseKind::CreateClause { .. }) => {}
+        (ClauseExpectation::Parenthesized, ClauseKind::ReductionClause { .. }) => {}
+        (ClauseExpectation::Bare, ClauseKind::Parenthesized(_) | ClauseKind::VariableList(_)) => {
             panic!("{} expected bare clause", pragma)
         }
         (ClauseExpectation::Parenthesized, ClauseKind::Bare) => {
             panic!("{} expected parenthesized clause", pragma)
         }
+        _ => panic!(
+            "{} returned unexpected clause kind: {:?}",
+            pragma, clause.kind
+        ),
     }
 }
 

@@ -632,6 +632,10 @@ pub fn parse_clause_data<'a>(
             ClauseKind::Parenthesized(ref content) => Ok(ClauseData::Ordered {
                 n: Some(Expression::new(content.as_ref().trim(), config)),
             }),
+            // OpenACC-specific structured clauses should not appear in OpenMP context
+            _ => Err(ConversionError::InvalidClauseSyntax(
+                "Unexpected structured clause for 'ordered'".to_string(),
+            )),
         },
 
         // reduction(operator: list)
@@ -747,9 +751,11 @@ pub fn parse_clause_data<'a>(
         // For unsupported clauses, return a generic representation
         _ => Ok(ClauseData::Generic {
             name: Identifier::new(clause_name),
-            data: match clause.kind {
+            data: match &clause.kind {
                 ClauseKind::Bare => None,
                 ClauseKind::Parenthesized(ref content) => Some(content.as_ref().to_string()),
+                // For structured OpenACC clauses, use Display trait to convert to string
+                _ => Some(clause.to_string()),
             },
         }),
     }
@@ -771,6 +777,8 @@ pub fn parse_clause_data<'a>(
 ///             kind: ClauseKind::Parenthesized("shared".into()),
 ///         },
 ///     ],
+///     cache_data: None,
+///     wait_data: None,
 /// };
 ///
 /// let config = ParserConfig::default();
@@ -977,6 +985,8 @@ mod tests {
             name: "parallel".into(),
             parameter: None,
             clauses: vec![],
+            wait_data: None,
+            cache_data: None,
         };
         let config = ParserConfig::default();
         let ir =
@@ -1000,6 +1010,8 @@ mod tests {
                     kind: ClauseKind::Parenthesized("x".into()),
                 },
             ],
+            wait_data: None,
+            cache_data: None,
         };
         let config = ParserConfig::default();
         let ir =

@@ -3,8 +3,15 @@ mod directive;
 pub mod openacc;
 pub mod openmp;
 
-pub use clause::{Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, ClauseRule};
-pub use directive::{Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule};
+pub use clause::{
+    Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, ClauseRule, CopyinModifier,
+    CopyoutModifier, CreateModifier, GangModifier, ReductionOperator, VectorModifier,
+    WorkerModifier,
+};
+pub use directive::{
+    CacheDirectiveData, Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule,
+    WaitDirectiveData,
+};
 
 use super::lexer::{self, Language};
 use nom::{IResult, Parser as _};
@@ -180,6 +187,8 @@ mod tests {
                     name,
                     parameter: None,
                     clauses,
+                    wait_data: None,
+                    cache_data: None,
                 },
             ))
         }

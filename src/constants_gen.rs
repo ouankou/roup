@@ -114,7 +114,8 @@ pub fn parse_clause_mappings() -> Vec<(String, i32)> {
 
 /// Parse OpenACC directive mappings from c_api.rs acc_directive_name_to_kind() using AST
 pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
-    let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
+    let c_api =
+        fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read src/c_api/openacc.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
 
     let mut mappings = Vec::new();
@@ -149,27 +150,47 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
 
 /// Parse OpenACC clause mappings from c_api.rs convert_acc_clause() using AST
 pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
-    let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
-    let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
+    let source =
+        fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read src/c_api/openacc.rs");
+
+    // Extract the body of clause_name_to_kind()
+    let fn_pos = source
+        .find("fn clause_name_to_kind")
+        .expect("clause_name_to_kind() not found in openacc module");
+    let body_start = source[fn_pos..]
+        .find('{')
+        .map(|idx| fn_pos + idx + 1)
+        .expect("Failed to locate clause_name_to_kind body");
+
+    let mut depth = 1usize;
+    let mut idx = body_start;
+    let bytes = source.as_bytes();
+    while idx < bytes.len() && depth > 0 {
+        match bytes[idx] as char {
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            _ => {}
+        }
+        idx += 1;
+    }
+    let body = &source[body_start..idx.saturating_sub(1)];
 
     let mut mappings = Vec::new();
-    let mut seen_numbers = HashSet::new();
+    for line in body.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('"') {
+            continue;
+        }
 
-    // Find the convert_acc_clause function
-    for item in &ast.items {
-        if let Item::Fn(ItemFn { sig, block, .. }) = item {
-            if sig.ident == "convert_acc_clause" {
-                // Recursively find match expressions in the function body
-                find_matches_in_stmts(&block.stmts, &mut |arms| {
-                    for arm in arms {
-                        if let Some((name, num)) = parse_clause_arm(arm) {
-                            // Skip unknown and duplicates
-                            if num != UNKNOWN_KIND && seen_numbers.insert(num) {
-                                mappings.push((normalize_constant_name(&name), num));
-                            }
+        if let Some((name_part, rest)) = trimmed[1..].split_once('"') {
+            if let Some((_, value_part)) = rest.split_once("=>") {
+                if let Some(num_str) = value_part.split(',').next() {
+                    if let Ok(value) = num_str.trim().parse::<i32>() {
+                        if value != UNKNOWN_KIND {
+                            mappings.push((normalize_constant_name(name_part), value));
                         }
                     }
-                });
+                }
             }
         }
     }

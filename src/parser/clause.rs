@@ -6,13 +6,108 @@ use crate::lexer;
 
 type ClauseParserFn = for<'a> fn(Cow<'a, str>, &'a str) -> IResult<&'a str, Clause<'a>>;
 
-#[derive(Debug, PartialEq, Eq)]
+/// OpenACC copyin clause modifier
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum CopyinModifier {
+    Readonly,
+}
+
+/// OpenACC copyout clause modifier
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum CopyoutModifier {
+    Zero,
+}
+
+/// OpenACC create clause modifier
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum CreateModifier {
+    Zero,
+}
+
+/// OpenACC reduction clause operator
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ReductionOperator {
+    Add,    // +
+    Sub,    // -
+    Mul,    // *
+    Max,    // max
+    Min,    // min
+    BitAnd, // &
+    BitOr,  // |
+    BitXor, // ^
+    LogAnd, // &&
+    LogOr,  // ||
+    // Fortran operators
+    FortAnd,  // .and.
+    FortOr,   // .or.
+    FortEqv,  // .eqv.
+    FortNeqv, // .neqv.
+    FortIand, // iand
+    FortIor,  // ior
+    FortIeor, // ieor
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum GangModifier {
+    Num,    // num
+    Static, // static
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum WorkerModifier {
+    Num, // num
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum VectorModifier {
+    Length, // length
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ClauseKind<'a> {
     Bare,
     Parenthesized(Cow<'a, str>),
+    /// Simple variable list clause (e.g., wait(x, y), private(i, j))
+    VariableList(Vec<Cow<'a, str>>),
+    /// Structured gang clause with optional modifier and variables
+    GangClause {
+        modifier: Option<GangModifier>,
+        variables: Vec<Cow<'a, str>>,
+    },
+    /// Structured worker clause with optional modifier and variables
+    WorkerClause {
+        modifier: Option<WorkerModifier>,
+        variables: Vec<Cow<'a, str>>,
+    },
+    /// Structured vector clause with optional modifier and variables
+    VectorClause {
+        modifier: Option<VectorModifier>,
+        variables: Vec<Cow<'a, str>>,
+    },
+    /// Structured copyin clause with optional modifier
+    CopyinClause {
+        modifier: Option<CopyinModifier>,
+        variables: Vec<Cow<'a, str>>,
+    },
+    /// Structured copyout clause with optional modifier
+    CopyoutClause {
+        modifier: Option<CopyoutModifier>,
+        variables: Vec<Cow<'a, str>>,
+    },
+    /// Structured create clause with optional modifier
+    CreateClause {
+        modifier: Option<CreateModifier>,
+        variables: Vec<Cow<'a, str>>,
+    },
+    /// Structured reduction clause with operator
+    ReductionClause {
+        operator: ReductionOperator,
+        variables: Vec<Cow<'a, str>>,
+        space_after_colon: bool,
+    },
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Clause<'a> {
     pub name: Cow<'a, str>,
     pub kind: ClauseKind<'a>,
@@ -26,9 +121,118 @@ impl Clause<'_> {
 
 impl fmt::Display for Clause<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
+        match &self.kind {
             ClauseKind::Bare => write!(f, "{}", self.name),
             ClauseKind::Parenthesized(ref value) => write!(f, "{}({})", self.name, value),
+            ClauseKind::VariableList(variables) => {
+                write!(f, "{}({})", self.name, variables.join(", "))
+            }
+            ClauseKind::GangClause {
+                modifier,
+                variables,
+            } => {
+                if modifier.is_none() && variables.is_empty() {
+                    write!(f, "{}", self.name)
+                } else {
+                    write!(f, "{}(", self.name)?;
+                    if let Some(mod_val) = modifier {
+                        let mod_str = match mod_val {
+                            GangModifier::Num => "num",
+                            GangModifier::Static => "static",
+                        };
+                        write!(f, "{}: ", mod_str)?;
+                    }
+                    write!(f, "{})", variables.join(", "))
+                }
+            }
+            ClauseKind::WorkerClause {
+                modifier,
+                variables,
+            } => {
+                if modifier.is_none() && variables.is_empty() {
+                    write!(f, "{}", self.name)
+                } else {
+                    write!(f, "{}(", self.name)?;
+                    if let Some(WorkerModifier::Num) = modifier {
+                        write!(f, "num: ")?;
+                    }
+                    write!(f, "{})", variables.join(", "))
+                }
+            }
+            ClauseKind::VectorClause {
+                modifier,
+                variables,
+            } => {
+                if modifier.is_none() && variables.is_empty() {
+                    write!(f, "{}", self.name)
+                } else {
+                    write!(f, "{}(", self.name)?;
+                    if let Some(VectorModifier::Length) = modifier {
+                        write!(f, "length: ")?;
+                    }
+                    write!(f, "{})", variables.join(", "))
+                }
+            }
+            ClauseKind::CopyinClause {
+                modifier,
+                variables,
+            } => {
+                write!(f, "{}(", self.name)?;
+                if let Some(CopyinModifier::Readonly) = modifier {
+                    write!(f, "readonly: ")?;
+                }
+                write!(f, "{})", variables.join(", "))
+            }
+            ClauseKind::CopyoutClause {
+                modifier,
+                variables,
+            } => {
+                write!(f, "{}(", self.name)?;
+                if let Some(CopyoutModifier::Zero) = modifier {
+                    write!(f, "zero: ")?;
+                }
+                write!(f, "{})", variables.join(", "))
+            }
+            ClauseKind::CreateClause {
+                modifier,
+                variables,
+            } => {
+                write!(f, "{}(", self.name)?;
+                if let Some(CreateModifier::Zero) = modifier {
+                    write!(f, "zero: ")?;
+                }
+                write!(f, "{})", variables.join(", "))
+            }
+            ClauseKind::ReductionClause {
+                operator,
+                variables,
+                space_after_colon,
+            } => {
+                let op_str = match operator {
+                    ReductionOperator::Add => "+",
+                    ReductionOperator::Sub => "-",
+                    ReductionOperator::Mul => "*",
+                    ReductionOperator::Max => "max",
+                    ReductionOperator::Min => "min",
+                    ReductionOperator::BitAnd => "&",
+                    ReductionOperator::BitOr => "|",
+                    ReductionOperator::BitXor => "^",
+                    ReductionOperator::LogAnd => "&&",
+                    ReductionOperator::LogOr => "||",
+                    ReductionOperator::FortAnd => ".and.",
+                    ReductionOperator::FortOr => ".or.",
+                    ReductionOperator::FortEqv => ".eqv.",
+                    ReductionOperator::FortNeqv => ".neqv.",
+                    ReductionOperator::FortIand => "iand",
+                    ReductionOperator::FortIor => "ior",
+                    ReductionOperator::FortIeor => "ieor",
+                };
+                if *space_after_colon {
+                    write!(f, "{}({}: {})", self.name, op_str, variables.join(", "))
+                } else {
+                    write!(f, "{}({}:{})", self.name, op_str, variables.join(", "))
+                }
+            }
         }
     }
 }

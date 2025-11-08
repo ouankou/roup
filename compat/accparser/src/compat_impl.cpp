@@ -1,14 +1,14 @@
 /*
- * OpenACCIR.cpp - Minimal accparser compatibility implementation using ROUP
+ * compat_impl.cpp - accparser compatibility implementation using ROUP
  *
- * This provides ONLY the implementation (.cpp), using accparser's headers
- * from the git submodule at compat/accparser/accparser/src/
+ * Provides parseOpenACC() implementation using ROUP parser + accparser AST.
+ * Uses OpenACCParser.h from submodule (no ANTLR dependency).
  *
  * Copyright (c) 2025 ROUP Project
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <OpenACCIR.h>
+#include <OpenACCParser.h>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -42,6 +42,30 @@ extern "C" {
 
     // Clause queries
     int32_t acc_clause_kind(const AccClause* clause);
+    const char* acc_clause_original_keyword(const AccClause* clause);
+    int32_t acc_clause_expressions_count(const AccClause* clause);
+    const char* acc_clause_expression_at(const AccClause* clause, int32_t index);
+    int32_t acc_clause_modifier(const AccClause* clause);
+    int32_t acc_clause_operator(const AccClause* clause);
+    const char* acc_clause_wait_devnum(const AccClause* clause);
+    int32_t acc_clause_wait_has_queues(const AccClause* clause);
+
+    // Cache directive queries
+    int32_t acc_cache_directive_modifier(const AccDirective* directive);
+    int32_t acc_cache_directive_var_count(const AccDirective* directive);
+    const char* acc_cache_directive_var_at(const AccDirective* directive, int32_t index);
+
+    // Wait directive queries
+    int32_t acc_directive_wait_expression_count(const AccDirective* directive);
+    const char* acc_directive_wait_expression_at(const AccDirective* directive, int32_t index);
+    const char* acc_directive_wait_devnum(const AccDirective* directive);
+    int32_t acc_directive_wait_has_queues(const AccDirective* directive);
+
+    // Routine directive queries
+    const char* acc_directive_routine_name(const AccDirective* directive);
+
+    // End directive queries
+    int32_t acc_directive_end_paired_kind(const AccDirective* directive);
 }
 
 // ============================================================================
@@ -59,6 +83,64 @@ static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
 
 extern "C" void setLang(OpenACCBaseLang lang) {
     current_lang = lang;
+}
+
+static void maybeMergeClause(OpenACCDirective* directive, OpenACCClauseKind kind, OpenACCClause* clause) {
+    switch (kind) {
+        case ACCC_async:
+            static_cast<OpenACCAsyncClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_bind:
+            static_cast<OpenACCBindClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_collapse:
+            static_cast<OpenACCCollapseClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_copyin:
+            static_cast<OpenACCCopyinClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_copyout:
+            static_cast<OpenACCCopyoutClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_create:
+            static_cast<OpenACCCreateClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_default_async:
+            static_cast<OpenACCDefaultAsyncClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_device_num:
+            static_cast<OpenACCDeviceNumClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_gang:
+            static_cast<OpenACCGangClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_num_gangs:
+            static_cast<OpenACCNumGangsClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_num_workers:
+            static_cast<OpenACCNumWorkersClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_reduction:
+            static_cast<OpenACCReductionClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_self:
+            static_cast<OpenACCSelfClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_vector:
+            static_cast<OpenACCVectorClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_vector_length:
+            static_cast<OpenACCVectorLengthClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_wait:
+            static_cast<OpenACCWaitClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_worker:
+            static_cast<OpenACCWorkerClause*>(clause)->mergeClause(directive, clause);
+            break;
+        default:
+            break;
+    }
 }
 
 // ============================================================================
@@ -97,7 +179,7 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
         case ACC_DIRECTIVE_SET:         return ACCD_set;          // 19 = "set"
         case ACC_DIRECTIVE_INIT:        return ACCD_init;         // 20 = "init"
         case ACC_DIRECTIVE_SHUTDOWN:    return ACCD_shutdown;     // 21 = "shutdown"
-        case 23:                        return ACCD_cache;        // 23 = "cache(...)" with content
+        case ACC_DIRECTIVE_CACHE:       return ACCD_cache;        // 23 = "cache(...)" with content
         case ACC_DIRECTIVE_ENTER_DATA:  return ACCD_enter_data;   // 24 = "enter_data" (underscore)
         case ACC_DIRECTIVE_EXIT_DATA:   return ACCD_exit_data;    // 25 = "exit_data" (underscore)
         case 26:                        return ACCD_wait;         // 26 = "wait(...)" with arguments
@@ -182,11 +264,26 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
         return nullptr;  // Input too long or not null-terminated within limit
     }
 
-    // Determine input format based on current language mode
+    // Determine input format based on current language mode (auto-detect Fortran)
     std::string input_str(input, input_len);
+    auto has_prefix_icase = [](const std::string& value, const char* prefix) {
+        const size_t len = std::strlen(prefix);
+        return value.size() >= len &&
+               strncasecmp(value.c_str(), prefix, len) == 0;
+    };
+
+    OpenACCBaseLang effective_lang = current_lang;
+    // Auto-detect Fortran sentinels when lang is not explicitly set
+    if (effective_lang == ACC_Lang_C) {
+        const std::string trimmed = input_str;
+        if (has_prefix_icase(trimmed, "!$acc") || has_prefix_icase(trimmed, "c$acc") ||
+            has_prefix_icase(trimmed, "*$acc")) {
+            effective_lang = ACC_Lang_Fortran;
+        }
+    }
 
     // Handle different language pragmas
-    if (current_lang == ACC_Lang_Fortran) {
+    if (effective_lang == ACC_Lang_Fortran) {
         // Fortran uses !$acc prefix - add if missing (case-insensitive check)
         const bool has_prefix =
             input_str.length() >= FORTRAN_PREFIX_LEN &&
@@ -205,7 +302,7 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
     // Call ROUP parser with language setting to honor setLang()
     // Map accparser language to ROUP language constants (roup_constants.h)
     // ROUP_LANG_C = 0, ROUP_LANG_FORTRAN_FREE = 1, ROUP_LANG_FORTRAN_FIXED = 2
-    int32_t roup_lang = (current_lang == ACC_Lang_Fortran) ? 1 : 0; // 0=C, 1=Fortran free-form
+    int32_t roup_lang = (effective_lang == ACC_Lang_Fortran) ? 1 : 0; // 0=C, 1=Fortran free-form
     AccDirective* roup_dir = acc_parse_with_language(input_str.c_str(), roup_lang);
     if (!roup_dir) {
         return nullptr;
@@ -215,11 +312,95 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
     int32_t roup_kind = acc_directive_kind(roup_dir);
     OpenACCDirectiveKind kind = mapRoupToAccparserDirective(roup_kind);
 
-    // Create accparser-compatible directive
-    // Use accparser's actual constructor: OpenACCDirective(kind, lang, line, col)
-    OpenACCDirective* dir = new OpenACCDirective(kind, current_lang, 0, 0);
+    // Debug: print directive kind if unknown
+    if (kind == ACCD_unknown) {
+        fprintf(stderr, "WARNING: Unknown directive kind from ROUP: %d\n", roup_kind);
+    }
 
-    // Convert clauses using accparser's addOpenACCClause method
+    // Create accparser-compatible directive
+    // Cache and Wait directives need special handling
+    OpenACCDirective* dir = nullptr;
+
+    if (kind == ACCD_cache) {
+        // Create OpenACCCacheDirective
+        OpenACCCacheDirective* cache_dir = new OpenACCCacheDirective();
+        cache_dir->setBaseLang(effective_lang);
+
+        // Get cache modifier (0=none, 1=readonly)
+        int32_t cache_modifier = acc_cache_directive_modifier(roup_dir);
+        if (cache_modifier == 1) {
+            cache_dir->setModifier(ACCC_CACHE_readonly);
+        }
+
+        // Get cache variables
+        int32_t var_count = acc_cache_directive_var_count(roup_dir);
+        for (int32_t i = 0; i < var_count; i++) {
+            const char* var = acc_cache_directive_var_at(roup_dir, i);
+            if (var) {
+                cache_dir->addVar(std::string(var));
+            }
+        }
+
+        dir = cache_dir;
+    } else if (kind == ACCD_wait) {
+        // Create OpenACCWaitDirective
+        OpenACCWaitDirective* wait_dir = new OpenACCWaitDirective();
+        wait_dir->setBaseLang(effective_lang);
+
+        int32_t expr_count = acc_directive_wait_expression_count(roup_dir);
+        for (int32_t i = 0; i < expr_count; ++i) {
+            const char* expr = acc_directive_wait_expression_at(roup_dir, i);
+            if (expr) {
+                wait_dir->addVar(std::string(expr));
+            }
+        }
+
+        if (const char* devnum = acc_directive_wait_devnum(roup_dir)) {
+            if (devnum[0] != '\0') {
+                wait_dir->setDevnum(std::string(devnum));
+            }
+        }
+
+        if (acc_directive_wait_has_queues(roup_dir)) {
+            wait_dir->setQueues(true);
+        }
+
+        dir = wait_dir;
+    } else if (kind == ACCD_routine) {
+        // Create OpenACCRoutineDirective
+        OpenACCRoutineDirective* routine_dir = new OpenACCRoutineDirective();
+        routine_dir->setBaseLang(effective_lang);
+
+        // Get routine name if present
+        const char* routine_name = acc_directive_routine_name(roup_dir);
+        if (routine_name && routine_name[0] != '\0') {
+            routine_dir->setName(std::string(routine_name));
+        }
+
+        dir = routine_dir;
+    } else if (kind == ACCD_end) {
+        // Create OpenACCEndDirective
+        OpenACCEndDirective* end_dir = new OpenACCEndDirective();
+        end_dir->setBaseLang(effective_lang);
+
+        // Get paired directive kind from ROUP
+        int32_t paired_kind = acc_directive_end_paired_kind(roup_dir);
+        if (paired_kind >= 0) {
+            OpenACCDirectiveKind paired_acc_kind = mapRoupToAccparserDirective(paired_kind);
+            // Create a minimal paired directive (just for toString generation)
+            OpenACCDirective* paired = new OpenACCDirective(paired_acc_kind, effective_lang, 0, 0);
+            end_dir->setPairedDirective(paired);
+        } else {
+            end_dir->setPairedDirective(nullptr);
+        }
+
+        dir = end_dir;
+    } else {
+        // Regular directive
+        dir = new OpenACCDirective(kind, effective_lang, 0, 0);
+    }
+
+    // Convert clauses - get ALL data from ROUP's C API
     AccClauseIterator* iter = acc_directive_clauses_iter(roup_dir);
     if (iter) {
         const AccClause* roup_clause;
@@ -227,9 +408,84 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
             int32_t roup_kind_clause = acc_clause_kind(roup_clause);
             OpenACCClauseKind clause_kind = mapRoupToAccparserClause(roup_kind_clause);
 
-            // Use public variadic version: addOpenACCClause(int kind, ...)
-            // Cast to int and pass just the kind for basic clause support
-            dir->addOpenACCClause(static_cast<int>(clause_kind));
+            // Create clause using accparser's API
+            OpenACCClause* clause = dir->addOpenACCClause(static_cast<int>(clause_kind));
+
+            if (!clause) {
+                fprintf(stderr,
+                        "WARNING: addOpenACCClause returned null (directive=%d, clause=%d)\n",
+                        static_cast<int>(kind),
+                        static_cast<int>(clause_kind));
+                continue;
+            }
+
+            if (const char* original_keyword = acc_clause_original_keyword(roup_clause)) {
+                clause->setOriginalKeyword(std::string(original_keyword));
+            }
+
+            {
+                // Get expressions from ROUP and add to accparser clause
+                int32_t expr_count = acc_clause_expressions_count(roup_clause);
+                for (int32_t i = 0; i < expr_count; i++) {
+                    const char* expr = acc_clause_expression_at(roup_clause, i);
+                    if (expr) {
+                        clause->addLangExpr(std::string(expr));
+                    }
+                }
+
+                // Handle modifiers for clauses that have them
+                int32_t modifier = acc_clause_modifier(roup_clause);
+                if (modifier != 0) {
+                    switch (clause_kind) {
+                        case ACCC_copyin:
+                            if (modifier == 1) {
+                                static_cast<OpenACCCopyinClause*>(clause)->setModifier(ACCC_COPYIN_readonly);
+                            }
+                            break;
+                        case ACCC_copyout:
+                            if (modifier == 1) {
+                                static_cast<OpenACCCopyoutClause*>(clause)->setModifier(ACCC_COPYOUT_zero);
+                            }
+                            break;
+                        case ACCC_create:
+                            if (modifier == 1) {
+                                static_cast<OpenACCCreateClause*>(clause)->setModifier(ACCC_CREATE_zero);
+                            }
+                            break;
+                        case ACCC_vector:
+                            if (modifier == 1) {
+                                static_cast<OpenACCVectorClause*>(clause)->setModifier(ACCC_VECTOR_length);
+                            }
+                            break;
+                        case ACCC_worker:
+                            if (modifier == 1) {
+                                static_cast<OpenACCWorkerClause*>(clause)->setModifier(ACCC_WORKER_num);
+                            }
+                            break;
+                        case ACCC_reduction: {
+                            OpenACCReductionClauseOperator acc_op = static_cast<OpenACCReductionClauseOperator>(modifier);
+                            static_cast<OpenACCReductionClause*>(clause)->setOperator(acc_op);
+                            break;
+                        }
+                        case ACCC_default:
+                            static_cast<OpenACCDefaultClause*>(clause)->setKind(static_cast<OpenACCDefaultClauseKind>(modifier));
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+
+            if (clause_kind == ACCC_wait) {
+                if (const char* devnum_value = acc_clause_wait_devnum(roup_clause)) {
+                    static_cast<OpenACCWaitClause*>(clause)->setDevnum(std::string(devnum_value));
+                }
+                if (acc_clause_wait_has_queues(roup_clause)) {
+                    static_cast<OpenACCWaitClause*>(clause)->setQueues(true);
+                }
+            }
+
+            maybeMergeClause(dir, clause_kind, clause);
         }
         acc_clause_iterator_free(iter);
     }
@@ -241,3 +497,7 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
 }
 
 } // extern "C"
+
+OpenACCDirective* parseOpenACC(std::string input) {
+    return parseOpenACC(input.c_str(), nullptr);
+}
