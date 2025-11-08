@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/debugger/stepper.rs`."><title>stepper.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-aa0817cf.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="roup" data-themes="" data-resource-suffix="" data-rustdoc-version="1.90.0 (1159e78c4 2025-09-14)" data-channel="1.90.0" data-search-js="search-fa3e91e5.js" data-settings-js="settings-5514c975.js" ><script src="../../../static.files/storage-68b7e25d.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-eebb9057.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">roup/debugger/</div>stepper.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Step-by-step parsing instrumentation
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/debugger/stepper.rs`."><title>stepper.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-e56847b5.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="roup" data-themes="" data-resource-suffix="" data-rustdoc-version="1.91.0 (f8297e351 2025-10-28)" data-channel="1.91.0" data-search-js="search-e256b49e.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-6dc2a7f3.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">roup/debugger/</div>stepper.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Step-by-step parsing instrumentation
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! This module implements the core stepping logic that breaks down the parsing process
 <a href=#4 id=4 data-nosnippet>4</a>//! into discrete, observable steps.
@@ -258,310 +258,411 @@
 <a href=#258 id=258 data-nosnippet>258</a>                            <span class="kw">crate</span>::parser::ClauseKind::Parenthesized(s) =&gt; {
 <a href=#259 id=259 data-nosnippet>259</a>                                <span class="kw">crate</span>::parser::ClauseKind::Parenthesized(Cow::Owned(s.to_string()))
 <a href=#260 id=260 data-nosnippet>260</a>                            }
-<a href=#261 id=261 data-nosnippet>261</a>                        },
-<a href=#262 id=262 data-nosnippet>262</a>                    })
-<a href=#263 id=263 data-nosnippet>263</a>                    .collect();
-<a href=#264 id=264 data-nosnippet>264</a>
-<a href=#265 id=265 data-nosnippet>265</a>                <span class="kw">let </span>static_directive = Directive {
-<a href=#266 id=266 data-nosnippet>266</a>                    name: Cow::Owned(directive.name.to_string()),
-<a href=#267 id=267 data-nosnippet>267</a>                    parameter: directive
-<a href=#268 id=268 data-nosnippet>268</a>                        .parameter
-<a href=#269 id=269 data-nosnippet>269</a>                        .as_ref()
-<a href=#270 id=270 data-nosnippet>270</a>                        .map(|p| Cow::Owned(p.to_string())),
-<a href=#271 id=271 data-nosnippet>271</a>                    clauses: owned_clauses,
-<a href=#272 id=272 data-nosnippet>272</a>                };
-<a href=#273 id=273 data-nosnippet>273</a>
-<a href=#274 id=274 data-nosnippet>274</a>                <span class="self">self</span>.final_directive = <span class="prelude-val">Some</span>(static_directive);
-<a href=#275 id=275 data-nosnippet>275</a>
-<a href=#276 id=276 data-nosnippet>276</a>                <span class="comment">// Final step: Complete
-<a href=#277 id=277 data-nosnippet>277</a>                </span><span class="self">self</span>.steps.push(DebugStep {
-<a href=#278 id=278 data-nosnippet>278</a>                    step_number,
-<a href=#279 id=279 data-nosnippet>279</a>                    kind: StepKind::Complete,
-<a href=#280 id=280 data-nosnippet>280</a>                    description: <span class="string">"Parsing complete"</span>.to_string(),
-<a href=#281 id=281 data-nosnippet>281</a>                    consumed: String::new(),
-<a href=#282 id=282 data-nosnippet>282</a>                    remaining: remaining.to_string(),
-<a href=#283 id=283 data-nosnippet>283</a>                    position,
-<a href=#284 id=284 data-nosnippet>284</a>                    context_stack: <span class="macro">vec!</span>[<span class="string">"Parser::parse"</span>.to_string()],
-<a href=#285 id=285 data-nosnippet>285</a>                    token_info: <span class="prelude-val">Some</span>(<span class="string">"Successfully parsed directive"</span>.to_string()),
-<a href=#286 id=286 data-nosnippet>286</a>                });
-<a href=#287 id=287 data-nosnippet>287</a>            }
-<a href=#288 id=288 data-nosnippet>288</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#289 id=289 data-nosnippet>289</a>                <span class="kw">let </span>error_msg = <span class="macro">format!</span>(<span class="string">"{:?}"</span>, e);
-<a href=#290 id=290 data-nosnippet>290</a>                <span class="self">self</span>.error = <span class="prelude-val">Some</span>(error_msg.clone());
-<a href=#291 id=291 data-nosnippet>291</a>                <span class="self">self</span>.steps.push(DebugStep {
-<a href=#292 id=292 data-nosnippet>292</a>                    step_number,
-<a href=#293 id=293 data-nosnippet>293</a>                    kind: StepKind::Error,
-<a href=#294 id=294 data-nosnippet>294</a>                    description: <span class="string">"Parse error"</span>.to_string(),
-<a href=#295 id=295 data-nosnippet>295</a>                    consumed: String::new(),
-<a href=#296 id=296 data-nosnippet>296</a>                    remaining: current_input.to_string(),
-<a href=#297 id=297 data-nosnippet>297</a>                    position,
-<a href=#298 id=298 data-nosnippet>298</a>                    context_stack,
-<a href=#299 id=299 data-nosnippet>299</a>                    token_info: <span class="prelude-val">Some</span>(error_msg.clone()),
-<a href=#300 id=300 data-nosnippet>300</a>                });
-<a href=#301 id=301 data-nosnippet>301</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(DebugError::ParseError(error_msg));
-<a href=#302 id=302 data-nosnippet>302</a>            }
-<a href=#303 id=303 data-nosnippet>303</a>        }
-<a href=#304 id=304 data-nosnippet>304</a>
-<a href=#305 id=305 data-nosnippet>305</a>        <span class="prelude-val">Ok</span>(())
-<a href=#306 id=306 data-nosnippet>306</a>    }
-<a href=#307 id=307 data-nosnippet>307</a>
-<a href=#308 id=308 data-nosnippet>308</a>    <span class="doccomment">/// Parse the pragma prefix and add step (static version to avoid borrow checker issues)
-<a href=#309 id=309 data-nosnippet>309</a>    </span><span class="kw">fn </span>parse_pragma_prefix_static&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#310 id=310 data-nosnippet>310</a>        input: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
-<a href=#311 id=311 data-nosnippet>311</a>        step_number: usize,
-<a href=#312 id=312 data-nosnippet>312</a>        position: usize,
-<a href=#313 id=313 data-nosnippet>313</a>        context_stack: <span class="kw-2">&amp;</span>[String],
-<a href=#314 id=314 data-nosnippet>314</a>        steps: <span class="kw-2">&amp;mut </span>Vec&lt;DebugStep&gt;,
-<a href=#315 id=315 data-nosnippet>315</a>        dialect: Dialect,
-<a href=#316 id=316 data-nosnippet>316</a>        language: Language,
-<a href=#317 id=317 data-nosnippet>317</a>    ) -&gt; DebugResult&lt;(String, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)&gt; {
-<a href=#318 id=318 data-nosnippet>318</a>        <span class="kw">let </span>dialect_keyword = <span class="kw">match </span>dialect {
-<a href=#319 id=319 data-nosnippet>319</a>            Dialect::OpenMp =&gt; <span class="string">"omp"</span>,
-<a href=#320 id=320 data-nosnippet>320</a>            Dialect::OpenAcc =&gt; <span class="string">"acc"</span>,
-<a href=#321 id=321 data-nosnippet>321</a>        };
-<a href=#322 id=322 data-nosnippet>322</a>
-<a href=#323 id=323 data-nosnippet>323</a>        <span class="kw">let </span>result = <span class="kw">match </span>language {
-<a href=#324 id=324 data-nosnippet>324</a>            Language::C =&gt; lexer::lex_pragma(input),
-<a href=#325 id=325 data-nosnippet>325</a>            Language::FortranFree =&gt; {
-<a href=#326 id=326 data-nosnippet>326</a>                lexer::lex_fortran_free_sentinel_with_prefix(input, dialect_keyword)
-<a href=#327 id=327 data-nosnippet>327</a>            }
-<a href=#328 id=328 data-nosnippet>328</a>            Language::FortranFixed =&gt; {
-<a href=#329 id=329 data-nosnippet>329</a>                lexer::lex_fortran_fixed_sentinel_with_prefix(input, dialect_keyword)
-<a href=#330 id=330 data-nosnippet>330</a>            }
-<a href=#331 id=331 data-nosnippet>331</a>        };
-<a href=#332 id=332 data-nosnippet>332</a>
-<a href=#333 id=333 data-nosnippet>333</a>        <span class="kw">match </span>result {
-<a href=#334 id=334 data-nosnippet>334</a>            <span class="prelude-val">Ok</span>((remaining, prefix)) =&gt; {
-<a href=#335 id=335 data-nosnippet>335</a>                <span class="kw">let </span>description = <span class="kw">match </span>language {
-<a href=#336 id=336 data-nosnippet>336</a>                    Language::C =&gt; <span class="string">"Parse pragma prefix"</span>.to_string(),
-<a href=#337 id=337 data-nosnippet>337</a>                    Language::FortranFree =&gt; <span class="string">"Parse Fortran free-form sentinel"</span>.to_string(),
-<a href=#338 id=338 data-nosnippet>338</a>                    Language::FortranFixed =&gt; <span class="string">"Parse Fortran fixed-form sentinel"</span>.to_string(),
-<a href=#339 id=339 data-nosnippet>339</a>                };
-<a href=#340 id=340 data-nosnippet>340</a>
-<a href=#341 id=341 data-nosnippet>341</a>                steps.push(DebugStep {
-<a href=#342 id=342 data-nosnippet>342</a>                    step_number,
-<a href=#343 id=343 data-nosnippet>343</a>                    kind: StepKind::PragmaPrefix,
-<a href=#344 id=344 data-nosnippet>344</a>                    description,
-<a href=#345 id=345 data-nosnippet>345</a>                    consumed: prefix.to_string(),
-<a href=#346 id=346 data-nosnippet>346</a>                    remaining: remaining.to_string(),
-<a href=#347 id=347 data-nosnippet>347</a>                    position,
-<a href=#348 id=348 data-nosnippet>348</a>                    context_stack: context_stack.to_vec(),
-<a href=#349 id=349 data-nosnippet>349</a>                    token_info: <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"Sentinel: \"{}\""</span>, prefix)),
-<a href=#350 id=350 data-nosnippet>350</a>                });
-<a href=#351 id=351 data-nosnippet>351</a>                <span class="prelude-val">Ok</span>((prefix.to_string(), remaining))
-<a href=#352 id=352 data-nosnippet>352</a>            }
-<a href=#353 id=353 data-nosnippet>353</a>            <span class="prelude-val">Err</span>(e) =&gt; {
-<a href=#354 id=354 data-nosnippet>354</a>                <span class="kw">let </span>lang_str = <span class="kw">match </span>language {
-<a href=#355 id=355 data-nosnippet>355</a>                    Language::C =&gt; <span class="string">"C pragma prefix"</span>,
-<a href=#356 id=356 data-nosnippet>356</a>                    Language::FortranFree =&gt; <span class="string">"Fortran free-form sentinel"</span>,
-<a href=#357 id=357 data-nosnippet>357</a>                    Language::FortranFixed =&gt; <span class="string">"Fortran fixed-form sentinel"</span>,
-<a href=#358 id=358 data-nosnippet>358</a>                };
-<a href=#359 id=359 data-nosnippet>359</a>                <span class="prelude-val">Err</span>(DebugError::ParseError(<span class="macro">format!</span>(
-<a href=#360 id=360 data-nosnippet>360</a>                    <span class="string">"Failed to parse {}: {:?}"</span>,
-<a href=#361 id=361 data-nosnippet>361</a>                    lang_str, e
-<a href=#362 id=362 data-nosnippet>362</a>                )))
-<a href=#363 id=363 data-nosnippet>363</a>            }
-<a href=#364 id=364 data-nosnippet>364</a>        }
-<a href=#365 id=365 data-nosnippet>365</a>    }
-<a href=#366 id=366 data-nosnippet>366</a>
-<a href=#367 id=367 data-nosnippet>367</a>    <span class="doccomment">/// Decompose a parsed directive into individual steps
-<a href=#368 id=368 data-nosnippet>368</a>    </span><span class="kw">fn </span>decompose_directive(
-<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#370 id=370 data-nosnippet>370</a>        directive: <span class="kw-2">&amp;</span>Directive,
-<a href=#371 id=371 data-nosnippet>371</a>        <span class="kw-2">mut </span>current_input: <span class="kw-2">&amp;</span>str,
-<a href=#372 id=372 data-nosnippet>372</a>        step_number: <span class="kw-2">&amp;mut </span>usize,
-<a href=#373 id=373 data-nosnippet>373</a>        position: <span class="kw-2">&amp;mut </span>usize,
-<a href=#374 id=374 data-nosnippet>374</a>        context_stack: <span class="kw-2">&amp;</span>[String],
-<a href=#375 id=375 data-nosnippet>375</a>    ) -&gt; DebugResult&lt;()&gt; {
-<a href=#376 id=376 data-nosnippet>376</a>        <span class="comment">// Skip whitespace before directive name
-<a href=#377 id=377 data-nosnippet>377</a>        </span><span class="kw">if let </span><span class="prelude-val">Ok</span>((remaining, <span class="kw">_</span>)) = lexer::skip_space_and_comments(current_input) {
-<a href=#378 id=378 data-nosnippet>378</a>            <span class="kw">let </span>consumed_len = current_input.len() - remaining.len();
-<a href=#379 id=379 data-nosnippet>379</a>            <span class="kw">if </span>consumed_len &gt; <span class="number">0 </span>{
-<a href=#380 id=380 data-nosnippet>380</a>                <span class="kw">let </span>consumed = <span class="kw-2">&amp;</span>current_input[..consumed_len];
-<a href=#381 id=381 data-nosnippet>381</a>                <span class="self">self</span>.steps.push(DebugStep {
-<a href=#382 id=382 data-nosnippet>382</a>                    step_number: <span class="kw-2">*</span>step_number,
-<a href=#383 id=383 data-nosnippet>383</a>                    kind: StepKind::SkipWhitespace,
-<a href=#384 id=384 data-nosnippet>384</a>                    description: <span class="string">"Skip whitespace before directive"</span>.to_string(),
-<a href=#385 id=385 data-nosnippet>385</a>                    consumed: <span class="macro">format!</span>(<span class="string">"{:?}"</span>, consumed),
-<a href=#386 id=386 data-nosnippet>386</a>                    remaining: remaining.to_string(),
-<a href=#387 id=387 data-nosnippet>387</a>                    position: <span class="kw-2">*</span>position,
-<a href=#388 id=388 data-nosnippet>388</a>                    context_stack: context_stack.to_vec(),
-<a href=#389 id=389 data-nosnippet>389</a>                    token_info: <span class="prelude-val">None</span>,
-<a href=#390 id=390 data-nosnippet>390</a>                });
-<a href=#391 id=391 data-nosnippet>391</a>                <span class="kw-2">*</span>step_number += <span class="number">1</span>;
-<a href=#392 id=392 data-nosnippet>392</a>                <span class="kw-2">*</span>position += consumed_len;
-<a href=#393 id=393 data-nosnippet>393</a>                current_input = remaining;
-<a href=#394 id=394 data-nosnippet>394</a>            }
-<a href=#395 id=395 data-nosnippet>395</a>        }
-<a href=#396 id=396 data-nosnippet>396</a>
-<a href=#397 id=397 data-nosnippet>397</a>        <span class="comment">// Directive name
-<a href=#398 id=398 data-nosnippet>398</a>        </span><span class="self">self</span>.steps.push(DebugStep {
-<a href=#399 id=399 data-nosnippet>399</a>            step_number: <span class="kw-2">*</span>step_number,
-<a href=#400 id=400 data-nosnippet>400</a>            kind: StepKind::DirectiveName,
-<a href=#401 id=401 data-nosnippet>401</a>            description: <span class="macro">format!</span>(<span class="string">"Parse directive name '{}'"</span>, directive.name),
-<a href=#402 id=402 data-nosnippet>402</a>            consumed: directive.name.to_string(),
-<a href=#403 id=403 data-nosnippet>403</a>            remaining: current_input[directive.name.len()..].to_string(),
-<a href=#404 id=404 data-nosnippet>404</a>            position: <span class="kw-2">*</span>position,
-<a href=#405 id=405 data-nosnippet>405</a>            context_stack: context_stack.to_vec(),
-<a href=#406 id=406 data-nosnippet>406</a>            token_info: <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"Directive: \"{}\""</span>, directive.name)),
-<a href=#407 id=407 data-nosnippet>407</a>        });
-<a href=#408 id=408 data-nosnippet>408</a>        <span class="kw-2">*</span>step_number += <span class="number">1</span>;
-<a href=#409 id=409 data-nosnippet>409</a>        <span class="kw-2">*</span>position += directive.name.len();
-<a href=#410 id=410 data-nosnippet>410</a>        current_input = <span class="kw-2">&amp;</span>current_input[directive.name.len()..];
-<a href=#411 id=411 data-nosnippet>411</a>
-<a href=#412 id=412 data-nosnippet>412</a>        <span class="comment">// Directive parameter (if present)
-<a href=#413 id=413 data-nosnippet>413</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>param) = directive.parameter {
-<a href=#414 id=414 data-nosnippet>414</a>            <span class="comment">// Skip whitespace before parameter
-<a href=#415 id=415 data-nosnippet>415</a>            </span><span class="kw">if let </span><span class="prelude-val">Ok</span>((remaining, <span class="kw">_</span>)) = lexer::skip_space_and_comments(current_input) {
-<a href=#416 id=416 data-nosnippet>416</a>                <span class="kw">let </span>consumed_len = current_input.len() - remaining.len();
-<a href=#417 id=417 data-nosnippet>417</a>                <span class="kw">if </span>consumed_len &gt; <span class="number">0 </span>{
-<a href=#418 id=418 data-nosnippet>418</a>                    <span class="kw-2">*</span>position += consumed_len;
-<a href=#419 id=419 data-nosnippet>419</a>                    current_input = remaining;
-<a href=#420 id=420 data-nosnippet>420</a>                }
-<a href=#421 id=421 data-nosnippet>421</a>            }
-<a href=#422 id=422 data-nosnippet>422</a>
-<a href=#423 id=423 data-nosnippet>423</a>            <span class="comment">// The parameter may or may not have parentheses already
-<a href=#424 id=424 data-nosnippet>424</a>            // For scan: parameter is "exclusive(x, y)" which needs wrapping: "(exclusive(x, y))"
-<a href=#425 id=425 data-nosnippet>425</a>            // For allocate: parameter might be "(x, y)" already with parens
-<a href=#426 id=426 data-nosnippet>426</a>            </span><span class="kw">let </span>param_str = param.as_ref();
-<a href=#427 id=427 data-nosnippet>427</a>            <span class="kw">let </span>param_with_parens = <span class="kw">if </span>param_str.starts_with(<span class="string">'('</span>) {
-<a href=#428 id=428 data-nosnippet>428</a>                <span class="comment">// Already has parentheses
-<a href=#429 id=429 data-nosnippet>429</a>                </span>param_str.to_string()
-<a href=#430 id=430 data-nosnippet>430</a>            } <span class="kw">else </span>{
-<a href=#431 id=431 data-nosnippet>431</a>                <span class="comment">// Needs parentheses wrapped
-<a href=#432 id=432 data-nosnippet>432</a>                </span><span class="macro">format!</span>(<span class="string">"({})"</span>, param_str)
-<a href=#433 id=433 data-nosnippet>433</a>            };
-<a href=#434 id=434 data-nosnippet>434</a>
-<a href=#435 id=435 data-nosnippet>435</a>            <span class="comment">// Safely compute remaining based on actual consumed length
-<a href=#436 id=436 data-nosnippet>436</a>            </span><span class="kw">let </span>consumed_len = param_with_parens.len().min(current_input.len());
-<a href=#437 id=437 data-nosnippet>437</a>            <span class="kw">let </span>remaining_text = <span class="kw">if </span>consumed_len &lt; current_input.len() {
-<a href=#438 id=438 data-nosnippet>438</a>                current_input[consumed_len..].to_string()
-<a href=#439 id=439 data-nosnippet>439</a>            } <span class="kw">else </span>{
-<a href=#440 id=440 data-nosnippet>440</a>                String::new()
-<a href=#441 id=441 data-nosnippet>441</a>            };
-<a href=#442 id=442 data-nosnippet>442</a>
-<a href=#443 id=443 data-nosnippet>443</a>            <span class="self">self</span>.steps.push(DebugStep {
-<a href=#444 id=444 data-nosnippet>444</a>                step_number: <span class="kw-2">*</span>step_number,
-<a href=#445 id=445 data-nosnippet>445</a>                kind: StepKind::DirectiveParameter,
-<a href=#446 id=446 data-nosnippet>446</a>                description: <span class="macro">format!</span>(<span class="string">"Parse directive parameter '{}'"</span>, param),
-<a href=#447 id=447 data-nosnippet>447</a>                consumed: param_with_parens.clone(),
-<a href=#448 id=448 data-nosnippet>448</a>                remaining: remaining_text,
-<a href=#449 id=449 data-nosnippet>449</a>                position: <span class="kw-2">*</span>position,
-<a href=#450 id=450 data-nosnippet>450</a>                context_stack: context_stack.to_vec(),
-<a href=#451 id=451 data-nosnippet>451</a>                token_info: <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"Parameter: \"{}\""</span>, param)),
-<a href=#452 id=452 data-nosnippet>452</a>            });
-<a href=#453 id=453 data-nosnippet>453</a>            <span class="kw-2">*</span>step_number += <span class="number">1</span>;
-<a href=#454 id=454 data-nosnippet>454</a>            <span class="kw-2">*</span>position += consumed_len;
-<a href=#455 id=455 data-nosnippet>455</a>            <span class="kw">if </span>consumed_len &lt; current_input.len() {
-<a href=#456 id=456 data-nosnippet>456</a>                current_input = <span class="kw-2">&amp;</span>current_input[consumed_len..];
-<a href=#457 id=457 data-nosnippet>457</a>            } <span class="kw">else </span>{
-<a href=#458 id=458 data-nosnippet>458</a>                current_input = <span class="string">""</span>;
-<a href=#459 id=459 data-nosnippet>459</a>            }
-<a href=#460 id=460 data-nosnippet>460</a>        }
-<a href=#461 id=461 data-nosnippet>461</a>
-<a href=#462 id=462 data-nosnippet>462</a>        <span class="comment">// Parse clauses
-<a href=#463 id=463 data-nosnippet>463</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>clause_context = context_stack.to_vec();
-<a href=#464 id=464 data-nosnippet>464</a>        clause_context.push(<span class="string">"ClauseRegistry::parse_sequence"</span>.to_string());
-<a href=#465 id=465 data-nosnippet>465</a>
-<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">for </span>clause <span class="kw">in </span><span class="kw-2">&amp;</span>directive.clauses {
-<a href=#467 id=467 data-nosnippet>467</a>            <span class="comment">// Skip whitespace before clause
-<a href=#468 id=468 data-nosnippet>468</a>            </span><span class="kw">if let </span><span class="prelude-val">Ok</span>((remaining, <span class="kw">_</span>)) = lexer::skip_space_and_comments(current_input) {
-<a href=#469 id=469 data-nosnippet>469</a>                <span class="kw">let </span>consumed_len = current_input.len() - remaining.len();
-<a href=#470 id=470 data-nosnippet>470</a>                <span class="kw">if </span>consumed_len &gt; <span class="number">0 </span>{
-<a href=#471 id=471 data-nosnippet>471</a>                    <span class="kw">let </span>consumed = <span class="kw-2">&amp;</span>current_input[..consumed_len];
-<a href=#472 id=472 data-nosnippet>472</a>                    <span class="self">self</span>.steps.push(DebugStep {
-<a href=#473 id=473 data-nosnippet>473</a>                        step_number: <span class="kw-2">*</span>step_number,
-<a href=#474 id=474 data-nosnippet>474</a>                        kind: StepKind::SkipWhitespace,
-<a href=#475 id=475 data-nosnippet>475</a>                        description: <span class="string">"Skip whitespace before clause"</span>.to_string(),
-<a href=#476 id=476 data-nosnippet>476</a>                        consumed: <span class="macro">format!</span>(<span class="string">"{:?}"</span>, consumed),
-<a href=#477 id=477 data-nosnippet>477</a>                        remaining: remaining.to_string(),
-<a href=#478 id=478 data-nosnippet>478</a>                        position: <span class="kw-2">*</span>position,
-<a href=#479 id=479 data-nosnippet>479</a>                        context_stack: clause_context.clone(),
-<a href=#480 id=480 data-nosnippet>480</a>                        token_info: <span class="prelude-val">None</span>,
-<a href=#481 id=481 data-nosnippet>481</a>                    });
-<a href=#482 id=482 data-nosnippet>482</a>                    <span class="kw-2">*</span>step_number += <span class="number">1</span>;
-<a href=#483 id=483 data-nosnippet>483</a>                    <span class="kw-2">*</span>position += consumed_len;
-<a href=#484 id=484 data-nosnippet>484</a>                    current_input = remaining;
-<a href=#485 id=485 data-nosnippet>485</a>                }
-<a href=#486 id=486 data-nosnippet>486</a>            }
-<a href=#487 id=487 data-nosnippet>487</a>
-<a href=#488 id=488 data-nosnippet>488</a>            <span class="comment">// Clause name
-<a href=#489 id=489 data-nosnippet>489</a>            </span><span class="self">self</span>.steps.push(DebugStep {
-<a href=#490 id=490 data-nosnippet>490</a>                step_number: <span class="kw-2">*</span>step_number,
-<a href=#491 id=491 data-nosnippet>491</a>                kind: StepKind::ClauseName,
-<a href=#492 id=492 data-nosnippet>492</a>                description: <span class="macro">format!</span>(<span class="string">"Parse clause name '{}'"</span>, clause.name),
-<a href=#493 id=493 data-nosnippet>493</a>                consumed: clause.name.to_string(),
-<a href=#494 id=494 data-nosnippet>494</a>                remaining: current_input[clause.name.len()..].to_string(),
-<a href=#495 id=495 data-nosnippet>495</a>                position: <span class="kw-2">*</span>position,
-<a href=#496 id=496 data-nosnippet>496</a>                context_stack: clause_context.clone(),
-<a href=#497 id=497 data-nosnippet>497</a>                token_info: <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"Clause: \"{}\""</span>, clause.name)),
-<a href=#498 id=498 data-nosnippet>498</a>            });
-<a href=#499 id=499 data-nosnippet>499</a>            <span class="kw-2">*</span>step_number += <span class="number">1</span>;
-<a href=#500 id=500 data-nosnippet>500</a>            <span class="kw-2">*</span>position += clause.name.len();
-<a href=#501 id=501 data-nosnippet>501</a>            current_input = <span class="kw-2">&amp;</span>current_input[clause.name.len()..];
-<a href=#502 id=502 data-nosnippet>502</a>
-<a href=#503 id=503 data-nosnippet>503</a>            <span class="comment">// Clause arguments (if parenthesized)
-<a href=#504 id=504 data-nosnippet>504</a>            </span><span class="kw">if let </span><span class="kw">crate</span>::parser::ClauseKind::Parenthesized(<span class="kw-2">ref </span>args) = clause.kind {
-<a href=#505 id=505 data-nosnippet>505</a>                <span class="kw">let </span>args_with_parens = <span class="macro">format!</span>(<span class="string">"({})"</span>, args);
-<a href=#506 id=506 data-nosnippet>506</a>                <span class="self">self</span>.steps.push(DebugStep {
-<a href=#507 id=507 data-nosnippet>507</a>                    step_number: <span class="kw-2">*</span>step_number,
-<a href=#508 id=508 data-nosnippet>508</a>                    kind: StepKind::ClauseArguments,
-<a href=#509 id=509 data-nosnippet>509</a>                    description: <span class="macro">format!</span>(<span class="string">"Parse clause arguments '{}'"</span>, args),
-<a href=#510 id=510 data-nosnippet>510</a>                    consumed: args_with_parens.clone(),
-<a href=#511 id=511 data-nosnippet>511</a>                    remaining: <span class="kw">if </span>current_input.len() &gt;= args_with_parens.len() {
-<a href=#512 id=512 data-nosnippet>512</a>                        current_input[args_with_parens.len()..].to_string()
-<a href=#513 id=513 data-nosnippet>513</a>                    } <span class="kw">else </span>{
-<a href=#514 id=514 data-nosnippet>514</a>                        String::new()
-<a href=#515 id=515 data-nosnippet>515</a>                    },
-<a href=#516 id=516 data-nosnippet>516</a>                    position: <span class="kw-2">*</span>position,
-<a href=#517 id=517 data-nosnippet>517</a>                    context_stack: clause_context.clone(),
-<a href=#518 id=518 data-nosnippet>518</a>                    token_info: <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"Arguments: \"{}\""</span>, args)),
-<a href=#519 id=519 data-nosnippet>519</a>                });
-<a href=#520 id=520 data-nosnippet>520</a>                <span class="kw-2">*</span>step_number += <span class="number">1</span>;
-<a href=#521 id=521 data-nosnippet>521</a>                <span class="kw-2">*</span>position += args_with_parens.len();
-<a href=#522 id=522 data-nosnippet>522</a>                <span class="kw">if </span>current_input.len() &gt;= args_with_parens.len() {
-<a href=#523 id=523 data-nosnippet>523</a>                    current_input = <span class="kw-2">&amp;</span>current_input[args_with_parens.len()..];
-<a href=#524 id=524 data-nosnippet>524</a>                }
-<a href=#525 id=525 data-nosnippet>525</a>            }
-<a href=#526 id=526 data-nosnippet>526</a>        }
-<a href=#527 id=527 data-nosnippet>527</a>
-<a href=#528 id=528 data-nosnippet>528</a>        <span class="prelude-val">Ok</span>(())
-<a href=#529 id=529 data-nosnippet>529</a>    }
-<a href=#530 id=530 data-nosnippet>530</a>
-<a href=#531 id=531 data-nosnippet>531</a>    <span class="doccomment">/// Get the current step
-<a href=#532 id=532 data-nosnippet>532</a>    </span><span class="kw">pub fn </span>current_step(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>DebugStep&gt; {
-<a href=#533 id=533 data-nosnippet>533</a>        <span class="self">self</span>.steps.get(<span class="self">self</span>.current_step_index)
-<a href=#534 id=534 data-nosnippet>534</a>    }
+<a href=#261 id=261 data-nosnippet>261</a>                            <span class="kw">crate</span>::parser::ClauseKind::VariableList(variables) =&gt; {
+<a href=#262 id=262 data-nosnippet>262</a>                                <span class="kw">crate</span>::parser::ClauseKind::VariableList(
+<a href=#263 id=263 data-nosnippet>263</a>                                    variables
+<a href=#264 id=264 data-nosnippet>264</a>                                        .iter()
+<a href=#265 id=265 data-nosnippet>265</a>                                        .map(|v| Cow::Owned(v.to_string()))
+<a href=#266 id=266 data-nosnippet>266</a>                                        .collect(),
+<a href=#267 id=267 data-nosnippet>267</a>                                )
+<a href=#268 id=268 data-nosnippet>268</a>                            }
+<a href=#269 id=269 data-nosnippet>269</a>                            <span class="kw">crate</span>::parser::ClauseKind::CopyinClause {
+<a href=#270 id=270 data-nosnippet>270</a>                                modifier,
+<a href=#271 id=271 data-nosnippet>271</a>                                variables,
+<a href=#272 id=272 data-nosnippet>272</a>                            } =&gt; <span class="kw">crate</span>::parser::ClauseKind::CopyinClause {
+<a href=#273 id=273 data-nosnippet>273</a>                                modifier: <span class="kw-2">*</span>modifier,
+<a href=#274 id=274 data-nosnippet>274</a>                                variables: variables
+<a href=#275 id=275 data-nosnippet>275</a>                                    .iter()
+<a href=#276 id=276 data-nosnippet>276</a>                                    .map(|v| Cow::Owned(v.to_string()))
+<a href=#277 id=277 data-nosnippet>277</a>                                    .collect(),
+<a href=#278 id=278 data-nosnippet>278</a>                            },
+<a href=#279 id=279 data-nosnippet>279</a>                            <span class="kw">crate</span>::parser::ClauseKind::CopyoutClause {
+<a href=#280 id=280 data-nosnippet>280</a>                                modifier,
+<a href=#281 id=281 data-nosnippet>281</a>                                variables,
+<a href=#282 id=282 data-nosnippet>282</a>                            } =&gt; <span class="kw">crate</span>::parser::ClauseKind::CopyoutClause {
+<a href=#283 id=283 data-nosnippet>283</a>                                modifier: <span class="kw-2">*</span>modifier,
+<a href=#284 id=284 data-nosnippet>284</a>                                variables: variables
+<a href=#285 id=285 data-nosnippet>285</a>                                    .iter()
+<a href=#286 id=286 data-nosnippet>286</a>                                    .map(|v| Cow::Owned(v.to_string()))
+<a href=#287 id=287 data-nosnippet>287</a>                                    .collect(),
+<a href=#288 id=288 data-nosnippet>288</a>                            },
+<a href=#289 id=289 data-nosnippet>289</a>                            <span class="kw">crate</span>::parser::ClauseKind::CreateClause {
+<a href=#290 id=290 data-nosnippet>290</a>                                modifier,
+<a href=#291 id=291 data-nosnippet>291</a>                                variables,
+<a href=#292 id=292 data-nosnippet>292</a>                            } =&gt; <span class="kw">crate</span>::parser::ClauseKind::CreateClause {
+<a href=#293 id=293 data-nosnippet>293</a>                                modifier: <span class="kw-2">*</span>modifier,
+<a href=#294 id=294 data-nosnippet>294</a>                                variables: variables
+<a href=#295 id=295 data-nosnippet>295</a>                                    .iter()
+<a href=#296 id=296 data-nosnippet>296</a>                                    .map(|v| Cow::Owned(v.to_string()))
+<a href=#297 id=297 data-nosnippet>297</a>                                    .collect(),
+<a href=#298 id=298 data-nosnippet>298</a>                            },
+<a href=#299 id=299 data-nosnippet>299</a>                            <span class="kw">crate</span>::parser::ClauseKind::ReductionClause {
+<a href=#300 id=300 data-nosnippet>300</a>                                operator,
+<a href=#301 id=301 data-nosnippet>301</a>                                variables,
+<a href=#302 id=302 data-nosnippet>302</a>                                space_after_colon,
+<a href=#303 id=303 data-nosnippet>303</a>                            } =&gt; <span class="kw">crate</span>::parser::ClauseKind::ReductionClause {
+<a href=#304 id=304 data-nosnippet>304</a>                                operator: <span class="kw-2">*</span>operator,
+<a href=#305 id=305 data-nosnippet>305</a>                                variables: variables
+<a href=#306 id=306 data-nosnippet>306</a>                                    .iter()
+<a href=#307 id=307 data-nosnippet>307</a>                                    .map(|v| Cow::Owned(v.to_string()))
+<a href=#308 id=308 data-nosnippet>308</a>                                    .collect(),
+<a href=#309 id=309 data-nosnippet>309</a>                                space_after_colon: <span class="kw-2">*</span>space_after_colon,
+<a href=#310 id=310 data-nosnippet>310</a>                            },
+<a href=#311 id=311 data-nosnippet>311</a>                            <span class="kw">crate</span>::parser::ClauseKind::GangClause {
+<a href=#312 id=312 data-nosnippet>312</a>                                modifier,
+<a href=#313 id=313 data-nosnippet>313</a>                                variables,
+<a href=#314 id=314 data-nosnippet>314</a>                            } =&gt; <span class="kw">crate</span>::parser::ClauseKind::GangClause {
+<a href=#315 id=315 data-nosnippet>315</a>                                modifier: <span class="kw-2">*</span>modifier,
+<a href=#316 id=316 data-nosnippet>316</a>                                variables: variables
+<a href=#317 id=317 data-nosnippet>317</a>                                    .iter()
+<a href=#318 id=318 data-nosnippet>318</a>                                    .map(|v| Cow::Owned(v.to_string()))
+<a href=#319 id=319 data-nosnippet>319</a>                                    .collect(),
+<a href=#320 id=320 data-nosnippet>320</a>                            },
+<a href=#321 id=321 data-nosnippet>321</a>                            <span class="kw">crate</span>::parser::ClauseKind::WorkerClause {
+<a href=#322 id=322 data-nosnippet>322</a>                                modifier,
+<a href=#323 id=323 data-nosnippet>323</a>                                variables,
+<a href=#324 id=324 data-nosnippet>324</a>                            } =&gt; <span class="kw">crate</span>::parser::ClauseKind::WorkerClause {
+<a href=#325 id=325 data-nosnippet>325</a>                                modifier: <span class="kw-2">*</span>modifier,
+<a href=#326 id=326 data-nosnippet>326</a>                                variables: variables
+<a href=#327 id=327 data-nosnippet>327</a>                                    .iter()
+<a href=#328 id=328 data-nosnippet>328</a>                                    .map(|v| Cow::Owned(v.to_string()))
+<a href=#329 id=329 data-nosnippet>329</a>                                    .collect(),
+<a href=#330 id=330 data-nosnippet>330</a>                            },
+<a href=#331 id=331 data-nosnippet>331</a>                            <span class="kw">crate</span>::parser::ClauseKind::VectorClause {
+<a href=#332 id=332 data-nosnippet>332</a>                                modifier,
+<a href=#333 id=333 data-nosnippet>333</a>                                variables,
+<a href=#334 id=334 data-nosnippet>334</a>                            } =&gt; <span class="kw">crate</span>::parser::ClauseKind::VectorClause {
+<a href=#335 id=335 data-nosnippet>335</a>                                modifier: <span class="kw-2">*</span>modifier,
+<a href=#336 id=336 data-nosnippet>336</a>                                variables: variables
+<a href=#337 id=337 data-nosnippet>337</a>                                    .iter()
+<a href=#338 id=338 data-nosnippet>338</a>                                    .map(|v| Cow::Owned(v.to_string()))
+<a href=#339 id=339 data-nosnippet>339</a>                                    .collect(),
+<a href=#340 id=340 data-nosnippet>340</a>                            },
+<a href=#341 id=341 data-nosnippet>341</a>                        },
+<a href=#342 id=342 data-nosnippet>342</a>                    })
+<a href=#343 id=343 data-nosnippet>343</a>                    .collect();
+<a href=#344 id=344 data-nosnippet>344</a>
+<a href=#345 id=345 data-nosnippet>345</a>                <span class="kw">let </span>static_directive = Directive {
+<a href=#346 id=346 data-nosnippet>346</a>                    name: Cow::Owned(directive.name.to_string()),
+<a href=#347 id=347 data-nosnippet>347</a>                    parameter: directive
+<a href=#348 id=348 data-nosnippet>348</a>                        .parameter
+<a href=#349 id=349 data-nosnippet>349</a>                        .as_ref()
+<a href=#350 id=350 data-nosnippet>350</a>                        .map(|p| Cow::Owned(p.to_string())),
+<a href=#351 id=351 data-nosnippet>351</a>                    clauses: owned_clauses,
+<a href=#352 id=352 data-nosnippet>352</a>                    wait_data: directive.wait_data.as_ref().map(|wd| {
+<a href=#353 id=353 data-nosnippet>353</a>                        <span class="kw">crate</span>::parser::WaitDirectiveData {
+<a href=#354 id=354 data-nosnippet>354</a>                            devnum: wd.devnum.as_ref().map(|d| Cow::Owned(d.to_string())),
+<a href=#355 id=355 data-nosnippet>355</a>                            has_queues: wd.has_queues,
+<a href=#356 id=356 data-nosnippet>356</a>                            queue_exprs: wd
+<a href=#357 id=357 data-nosnippet>357</a>                                .queue_exprs
+<a href=#358 id=358 data-nosnippet>358</a>                                .iter()
+<a href=#359 id=359 data-nosnippet>359</a>                                .map(|e| Cow::Owned(e.to_string()))
+<a href=#360 id=360 data-nosnippet>360</a>                                .collect(),
+<a href=#361 id=361 data-nosnippet>361</a>                        }
+<a href=#362 id=362 data-nosnippet>362</a>                    }),
+<a href=#363 id=363 data-nosnippet>363</a>                    cache_data: directive.cache_data.as_ref().map(|cd| {
+<a href=#364 id=364 data-nosnippet>364</a>                        <span class="kw">crate</span>::parser::CacheDirectiveData {
+<a href=#365 id=365 data-nosnippet>365</a>                            readonly: cd.readonly,
+<a href=#366 id=366 data-nosnippet>366</a>                            variables: cd
+<a href=#367 id=367 data-nosnippet>367</a>                                .variables
+<a href=#368 id=368 data-nosnippet>368</a>                                .iter()
+<a href=#369 id=369 data-nosnippet>369</a>                                .map(|v| Cow::Owned(v.to_string()))
+<a href=#370 id=370 data-nosnippet>370</a>                                .collect(),
+<a href=#371 id=371 data-nosnippet>371</a>                        }
+<a href=#372 id=372 data-nosnippet>372</a>                    }),
+<a href=#373 id=373 data-nosnippet>373</a>                };
+<a href=#374 id=374 data-nosnippet>374</a>
+<a href=#375 id=375 data-nosnippet>375</a>                <span class="self">self</span>.final_directive = <span class="prelude-val">Some</span>(static_directive);
+<a href=#376 id=376 data-nosnippet>376</a>
+<a href=#377 id=377 data-nosnippet>377</a>                <span class="comment">// Final step: Complete
+<a href=#378 id=378 data-nosnippet>378</a>                </span><span class="self">self</span>.steps.push(DebugStep {
+<a href=#379 id=379 data-nosnippet>379</a>                    step_number,
+<a href=#380 id=380 data-nosnippet>380</a>                    kind: StepKind::Complete,
+<a href=#381 id=381 data-nosnippet>381</a>                    description: <span class="string">"Parsing complete"</span>.to_string(),
+<a href=#382 id=382 data-nosnippet>382</a>                    consumed: String::new(),
+<a href=#383 id=383 data-nosnippet>383</a>                    remaining: remaining.to_string(),
+<a href=#384 id=384 data-nosnippet>384</a>                    position,
+<a href=#385 id=385 data-nosnippet>385</a>                    context_stack: <span class="macro">vec!</span>[<span class="string">"Parser::parse"</span>.to_string()],
+<a href=#386 id=386 data-nosnippet>386</a>                    token_info: <span class="prelude-val">Some</span>(<span class="string">"Successfully parsed directive"</span>.to_string()),
+<a href=#387 id=387 data-nosnippet>387</a>                });
+<a href=#388 id=388 data-nosnippet>388</a>            }
+<a href=#389 id=389 data-nosnippet>389</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#390 id=390 data-nosnippet>390</a>                <span class="kw">let </span>error_msg = <span class="macro">format!</span>(<span class="string">"{:?}"</span>, e);
+<a href=#391 id=391 data-nosnippet>391</a>                <span class="self">self</span>.error = <span class="prelude-val">Some</span>(error_msg.clone());
+<a href=#392 id=392 data-nosnippet>392</a>                <span class="self">self</span>.steps.push(DebugStep {
+<a href=#393 id=393 data-nosnippet>393</a>                    step_number,
+<a href=#394 id=394 data-nosnippet>394</a>                    kind: StepKind::Error,
+<a href=#395 id=395 data-nosnippet>395</a>                    description: <span class="string">"Parse error"</span>.to_string(),
+<a href=#396 id=396 data-nosnippet>396</a>                    consumed: String::new(),
+<a href=#397 id=397 data-nosnippet>397</a>                    remaining: current_input.to_string(),
+<a href=#398 id=398 data-nosnippet>398</a>                    position,
+<a href=#399 id=399 data-nosnippet>399</a>                    context_stack,
+<a href=#400 id=400 data-nosnippet>400</a>                    token_info: <span class="prelude-val">Some</span>(error_msg.clone()),
+<a href=#401 id=401 data-nosnippet>401</a>                });
+<a href=#402 id=402 data-nosnippet>402</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(DebugError::ParseError(error_msg));
+<a href=#403 id=403 data-nosnippet>403</a>            }
+<a href=#404 id=404 data-nosnippet>404</a>        }
+<a href=#405 id=405 data-nosnippet>405</a>
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="prelude-val">Ok</span>(())
+<a href=#407 id=407 data-nosnippet>407</a>    }
+<a href=#408 id=408 data-nosnippet>408</a>
+<a href=#409 id=409 data-nosnippet>409</a>    <span class="doccomment">/// Parse the pragma prefix and add step (static version to avoid borrow checker issues)
+<a href=#410 id=410 data-nosnippet>410</a>    </span><span class="kw">fn </span>parse_pragma_prefix_static&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#411 id=411 data-nosnippet>411</a>        input: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+<a href=#412 id=412 data-nosnippet>412</a>        step_number: usize,
+<a href=#413 id=413 data-nosnippet>413</a>        position: usize,
+<a href=#414 id=414 data-nosnippet>414</a>        context_stack: <span class="kw-2">&amp;</span>[String],
+<a href=#415 id=415 data-nosnippet>415</a>        steps: <span class="kw-2">&amp;mut </span>Vec&lt;DebugStep&gt;,
+<a href=#416 id=416 data-nosnippet>416</a>        dialect: Dialect,
+<a href=#417 id=417 data-nosnippet>417</a>        language: Language,
+<a href=#418 id=418 data-nosnippet>418</a>    ) -&gt; DebugResult&lt;(String, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)&gt; {
+<a href=#419 id=419 data-nosnippet>419</a>        <span class="kw">let </span>dialect_keyword = <span class="kw">match </span>dialect {
+<a href=#420 id=420 data-nosnippet>420</a>            Dialect::OpenMp =&gt; <span class="string">"omp"</span>,
+<a href=#421 id=421 data-nosnippet>421</a>            Dialect::OpenAcc =&gt; <span class="string">"acc"</span>,
+<a href=#422 id=422 data-nosnippet>422</a>        };
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a>        <span class="kw">let </span>result = <span class="kw">match </span>language {
+<a href=#425 id=425 data-nosnippet>425</a>            Language::C =&gt; lexer::lex_pragma(input),
+<a href=#426 id=426 data-nosnippet>426</a>            Language::FortranFree =&gt; {
+<a href=#427 id=427 data-nosnippet>427</a>                lexer::lex_fortran_free_sentinel_with_prefix(input, dialect_keyword)
+<a href=#428 id=428 data-nosnippet>428</a>            }
+<a href=#429 id=429 data-nosnippet>429</a>            Language::FortranFixed =&gt; {
+<a href=#430 id=430 data-nosnippet>430</a>                lexer::lex_fortran_fixed_sentinel_with_prefix(input, dialect_keyword)
+<a href=#431 id=431 data-nosnippet>431</a>            }
+<a href=#432 id=432 data-nosnippet>432</a>        };
+<a href=#433 id=433 data-nosnippet>433</a>
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="kw">match </span>result {
+<a href=#435 id=435 data-nosnippet>435</a>            <span class="prelude-val">Ok</span>((remaining, prefix)) =&gt; {
+<a href=#436 id=436 data-nosnippet>436</a>                <span class="kw">let </span>description = <span class="kw">match </span>language {
+<a href=#437 id=437 data-nosnippet>437</a>                    Language::C =&gt; <span class="string">"Parse pragma prefix"</span>.to_string(),
+<a href=#438 id=438 data-nosnippet>438</a>                    Language::FortranFree =&gt; <span class="string">"Parse Fortran free-form sentinel"</span>.to_string(),
+<a href=#439 id=439 data-nosnippet>439</a>                    Language::FortranFixed =&gt; <span class="string">"Parse Fortran fixed-form sentinel"</span>.to_string(),
+<a href=#440 id=440 data-nosnippet>440</a>                };
+<a href=#441 id=441 data-nosnippet>441</a>
+<a href=#442 id=442 data-nosnippet>442</a>                steps.push(DebugStep {
+<a href=#443 id=443 data-nosnippet>443</a>                    step_number,
+<a href=#444 id=444 data-nosnippet>444</a>                    kind: StepKind::PragmaPrefix,
+<a href=#445 id=445 data-nosnippet>445</a>                    description,
+<a href=#446 id=446 data-nosnippet>446</a>                    consumed: prefix.to_string(),
+<a href=#447 id=447 data-nosnippet>447</a>                    remaining: remaining.to_string(),
+<a href=#448 id=448 data-nosnippet>448</a>                    position,
+<a href=#449 id=449 data-nosnippet>449</a>                    context_stack: context_stack.to_vec(),
+<a href=#450 id=450 data-nosnippet>450</a>                    token_info: <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"Sentinel: \"{}\""</span>, prefix)),
+<a href=#451 id=451 data-nosnippet>451</a>                });
+<a href=#452 id=452 data-nosnippet>452</a>                <span class="prelude-val">Ok</span>((prefix.to_string(), remaining))
+<a href=#453 id=453 data-nosnippet>453</a>            }
+<a href=#454 id=454 data-nosnippet>454</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#455 id=455 data-nosnippet>455</a>                <span class="kw">let </span>lang_str = <span class="kw">match </span>language {
+<a href=#456 id=456 data-nosnippet>456</a>                    Language::C =&gt; <span class="string">"C pragma prefix"</span>,
+<a href=#457 id=457 data-nosnippet>457</a>                    Language::FortranFree =&gt; <span class="string">"Fortran free-form sentinel"</span>,
+<a href=#458 id=458 data-nosnippet>458</a>                    Language::FortranFixed =&gt; <span class="string">"Fortran fixed-form sentinel"</span>,
+<a href=#459 id=459 data-nosnippet>459</a>                };
+<a href=#460 id=460 data-nosnippet>460</a>                <span class="prelude-val">Err</span>(DebugError::ParseError(<span class="macro">format!</span>(
+<a href=#461 id=461 data-nosnippet>461</a>                    <span class="string">"Failed to parse {}: {:?}"</span>,
+<a href=#462 id=462 data-nosnippet>462</a>                    lang_str, e
+<a href=#463 id=463 data-nosnippet>463</a>                )))
+<a href=#464 id=464 data-nosnippet>464</a>            }
+<a href=#465 id=465 data-nosnippet>465</a>        }
+<a href=#466 id=466 data-nosnippet>466</a>    }
+<a href=#467 id=467 data-nosnippet>467</a>
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="doccomment">/// Decompose a parsed directive into individual steps
+<a href=#469 id=469 data-nosnippet>469</a>    </span><span class="kw">fn </span>decompose_directive(
+<a href=#470 id=470 data-nosnippet>470</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#471 id=471 data-nosnippet>471</a>        directive: <span class="kw-2">&amp;</span>Directive,
+<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw-2">mut </span>current_input: <span class="kw-2">&amp;</span>str,
+<a href=#473 id=473 data-nosnippet>473</a>        step_number: <span class="kw-2">&amp;mut </span>usize,
+<a href=#474 id=474 data-nosnippet>474</a>        position: <span class="kw-2">&amp;mut </span>usize,
+<a href=#475 id=475 data-nosnippet>475</a>        context_stack: <span class="kw-2">&amp;</span>[String],
+<a href=#476 id=476 data-nosnippet>476</a>    ) -&gt; DebugResult&lt;()&gt; {
+<a href=#477 id=477 data-nosnippet>477</a>        <span class="comment">// Skip whitespace before directive name
+<a href=#478 id=478 data-nosnippet>478</a>        </span><span class="kw">if let </span><span class="prelude-val">Ok</span>((remaining, <span class="kw">_</span>)) = lexer::skip_space_and_comments(current_input) {
+<a href=#479 id=479 data-nosnippet>479</a>            <span class="kw">let </span>consumed_len = current_input.len() - remaining.len();
+<a href=#480 id=480 data-nosnippet>480</a>            <span class="kw">if </span>consumed_len &gt; <span class="number">0 </span>{
+<a href=#481 id=481 data-nosnippet>481</a>                <span class="kw">let </span>consumed = <span class="kw-2">&amp;</span>current_input[..consumed_len];
+<a href=#482 id=482 data-nosnippet>482</a>                <span class="self">self</span>.steps.push(DebugStep {
+<a href=#483 id=483 data-nosnippet>483</a>                    step_number: <span class="kw-2">*</span>step_number,
+<a href=#484 id=484 data-nosnippet>484</a>                    kind: StepKind::SkipWhitespace,
+<a href=#485 id=485 data-nosnippet>485</a>                    description: <span class="string">"Skip whitespace before directive"</span>.to_string(),
+<a href=#486 id=486 data-nosnippet>486</a>                    consumed: <span class="macro">format!</span>(<span class="string">"{:?}"</span>, consumed),
+<a href=#487 id=487 data-nosnippet>487</a>                    remaining: remaining.to_string(),
+<a href=#488 id=488 data-nosnippet>488</a>                    position: <span class="kw-2">*</span>position,
+<a href=#489 id=489 data-nosnippet>489</a>                    context_stack: context_stack.to_vec(),
+<a href=#490 id=490 data-nosnippet>490</a>                    token_info: <span class="prelude-val">None</span>,
+<a href=#491 id=491 data-nosnippet>491</a>                });
+<a href=#492 id=492 data-nosnippet>492</a>                <span class="kw-2">*</span>step_number += <span class="number">1</span>;
+<a href=#493 id=493 data-nosnippet>493</a>                <span class="kw-2">*</span>position += consumed_len;
+<a href=#494 id=494 data-nosnippet>494</a>                current_input = remaining;
+<a href=#495 id=495 data-nosnippet>495</a>            }
+<a href=#496 id=496 data-nosnippet>496</a>        }
+<a href=#497 id=497 data-nosnippet>497</a>
+<a href=#498 id=498 data-nosnippet>498</a>        <span class="comment">// Directive name
+<a href=#499 id=499 data-nosnippet>499</a>        </span><span class="self">self</span>.steps.push(DebugStep {
+<a href=#500 id=500 data-nosnippet>500</a>            step_number: <span class="kw-2">*</span>step_number,
+<a href=#501 id=501 data-nosnippet>501</a>            kind: StepKind::DirectiveName,
+<a href=#502 id=502 data-nosnippet>502</a>            description: <span class="macro">format!</span>(<span class="string">"Parse directive name '{}'"</span>, directive.name),
+<a href=#503 id=503 data-nosnippet>503</a>            consumed: directive.name.to_string(),
+<a href=#504 id=504 data-nosnippet>504</a>            remaining: current_input[directive.name.len()..].to_string(),
+<a href=#505 id=505 data-nosnippet>505</a>            position: <span class="kw-2">*</span>position,
+<a href=#506 id=506 data-nosnippet>506</a>            context_stack: context_stack.to_vec(),
+<a href=#507 id=507 data-nosnippet>507</a>            token_info: <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"Directive: \"{}\""</span>, directive.name)),
+<a href=#508 id=508 data-nosnippet>508</a>        });
+<a href=#509 id=509 data-nosnippet>509</a>        <span class="kw-2">*</span>step_number += <span class="number">1</span>;
+<a href=#510 id=510 data-nosnippet>510</a>        <span class="kw-2">*</span>position += directive.name.len();
+<a href=#511 id=511 data-nosnippet>511</a>        current_input = <span class="kw-2">&amp;</span>current_input[directive.name.len()..];
+<a href=#512 id=512 data-nosnippet>512</a>
+<a href=#513 id=513 data-nosnippet>513</a>        <span class="comment">// Directive parameter (if present)
+<a href=#514 id=514 data-nosnippet>514</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>param) = directive.parameter {
+<a href=#515 id=515 data-nosnippet>515</a>            <span class="comment">// Skip whitespace before parameter
+<a href=#516 id=516 data-nosnippet>516</a>            </span><span class="kw">if let </span><span class="prelude-val">Ok</span>((remaining, <span class="kw">_</span>)) = lexer::skip_space_and_comments(current_input) {
+<a href=#517 id=517 data-nosnippet>517</a>                <span class="kw">let </span>consumed_len = current_input.len() - remaining.len();
+<a href=#518 id=518 data-nosnippet>518</a>                <span class="kw">if </span>consumed_len &gt; <span class="number">0 </span>{
+<a href=#519 id=519 data-nosnippet>519</a>                    <span class="kw-2">*</span>position += consumed_len;
+<a href=#520 id=520 data-nosnippet>520</a>                    current_input = remaining;
+<a href=#521 id=521 data-nosnippet>521</a>                }
+<a href=#522 id=522 data-nosnippet>522</a>            }
+<a href=#523 id=523 data-nosnippet>523</a>
+<a href=#524 id=524 data-nosnippet>524</a>            <span class="comment">// The parameter may or may not have parentheses already
+<a href=#525 id=525 data-nosnippet>525</a>            // For scan: parameter is "exclusive(x, y)" which needs wrapping: "(exclusive(x, y))"
+<a href=#526 id=526 data-nosnippet>526</a>            // For allocate: parameter might be "(x, y)" already with parens
+<a href=#527 id=527 data-nosnippet>527</a>            </span><span class="kw">let </span>param_str = param.as_ref();
+<a href=#528 id=528 data-nosnippet>528</a>            <span class="kw">let </span>param_with_parens = <span class="kw">if </span>param_str.starts_with(<span class="string">'('</span>) {
+<a href=#529 id=529 data-nosnippet>529</a>                <span class="comment">// Already has parentheses
+<a href=#530 id=530 data-nosnippet>530</a>                </span>param_str.to_string()
+<a href=#531 id=531 data-nosnippet>531</a>            } <span class="kw">else </span>{
+<a href=#532 id=532 data-nosnippet>532</a>                <span class="comment">// Needs parentheses wrapped
+<a href=#533 id=533 data-nosnippet>533</a>                </span><span class="macro">format!</span>(<span class="string">"({})"</span>, param_str)
+<a href=#534 id=534 data-nosnippet>534</a>            };
 <a href=#535 id=535 data-nosnippet>535</a>
-<a href=#536 id=536 data-nosnippet>536</a>    <span class="doccomment">/// Move to the next step
-<a href=#537 id=537 data-nosnippet>537</a>    </span><span class="kw">pub fn </span>next_step(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
-<a href=#538 id=538 data-nosnippet>538</a>        <span class="kw">if </span><span class="self">self</span>.current_step_index &lt; <span class="self">self</span>.steps.len() - <span class="number">1 </span>{
-<a href=#539 id=539 data-nosnippet>539</a>            <span class="self">self</span>.current_step_index += <span class="number">1</span>;
-<a href=#540 id=540 data-nosnippet>540</a>            <span class="bool-val">true
-<a href=#541 id=541 data-nosnippet>541</a>        </span>} <span class="kw">else </span>{
-<a href=#542 id=542 data-nosnippet>542</a>            <span class="bool-val">false
-<a href=#543 id=543 data-nosnippet>543</a>        </span>}
-<a href=#544 id=544 data-nosnippet>544</a>    }
-<a href=#545 id=545 data-nosnippet>545</a>
-<a href=#546 id=546 data-nosnippet>546</a>    <span class="doccomment">/// Move to the previous step
-<a href=#547 id=547 data-nosnippet>547</a>    </span><span class="kw">pub fn </span>prev_step(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
-<a href=#548 id=548 data-nosnippet>548</a>        <span class="kw">if </span><span class="self">self</span>.current_step_index &gt; <span class="number">0 </span>{
-<a href=#549 id=549 data-nosnippet>549</a>            <span class="self">self</span>.current_step_index -= <span class="number">1</span>;
-<a href=#550 id=550 data-nosnippet>550</a>            <span class="bool-val">true
-<a href=#551 id=551 data-nosnippet>551</a>        </span>} <span class="kw">else </span>{
-<a href=#552 id=552 data-nosnippet>552</a>            <span class="bool-val">false
-<a href=#553 id=553 data-nosnippet>553</a>        </span>}
-<a href=#554 id=554 data-nosnippet>554</a>    }
-<a href=#555 id=555 data-nosnippet>555</a>
-<a href=#556 id=556 data-nosnippet>556</a>    <span class="doccomment">/// Get total number of steps
-<a href=#557 id=557 data-nosnippet>557</a>    </span><span class="kw">pub fn </span>total_steps(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-<a href=#558 id=558 data-nosnippet>558</a>        <span class="self">self</span>.steps.len()
-<a href=#559 id=559 data-nosnippet>559</a>    }
-<a href=#560 id=560 data-nosnippet>560</a>
-<a href=#561 id=561 data-nosnippet>561</a>    <span class="doccomment">/// Get all steps up to and including the current step
-<a href=#562 id=562 data-nosnippet>562</a>    </span><span class="kw">pub fn </span>steps_so_far(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[DebugStep] {
-<a href=#563 id=563 data-nosnippet>563</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.steps[..=<span class="self">self
-<a href=#564 id=564 data-nosnippet>564</a>            </span>.current_step_index
-<a href=#565 id=565 data-nosnippet>565</a>            .min(<span class="self">self</span>.steps.len().saturating_sub(<span class="number">1</span>))]
-<a href=#566 id=566 data-nosnippet>566</a>    }
-<a href=#567 id=567 data-nosnippet>567</a>}</code></pre></div></section></main></body></html>
+<a href=#536 id=536 data-nosnippet>536</a>            <span class="comment">// Safely compute remaining based on actual consumed length
+<a href=#537 id=537 data-nosnippet>537</a>            </span><span class="kw">let </span>consumed_len = param_with_parens.len().min(current_input.len());
+<a href=#538 id=538 data-nosnippet>538</a>            <span class="kw">let </span>remaining_text = <span class="kw">if </span>consumed_len &lt; current_input.len() {
+<a href=#539 id=539 data-nosnippet>539</a>                current_input[consumed_len..].to_string()
+<a href=#540 id=540 data-nosnippet>540</a>            } <span class="kw">else </span>{
+<a href=#541 id=541 data-nosnippet>541</a>                String::new()
+<a href=#542 id=542 data-nosnippet>542</a>            };
+<a href=#543 id=543 data-nosnippet>543</a>
+<a href=#544 id=544 data-nosnippet>544</a>            <span class="self">self</span>.steps.push(DebugStep {
+<a href=#545 id=545 data-nosnippet>545</a>                step_number: <span class="kw-2">*</span>step_number,
+<a href=#546 id=546 data-nosnippet>546</a>                kind: StepKind::DirectiveParameter,
+<a href=#547 id=547 data-nosnippet>547</a>                description: <span class="macro">format!</span>(<span class="string">"Parse directive parameter '{}'"</span>, param),
+<a href=#548 id=548 data-nosnippet>548</a>                consumed: param_with_parens.clone(),
+<a href=#549 id=549 data-nosnippet>549</a>                remaining: remaining_text,
+<a href=#550 id=550 data-nosnippet>550</a>                position: <span class="kw-2">*</span>position,
+<a href=#551 id=551 data-nosnippet>551</a>                context_stack: context_stack.to_vec(),
+<a href=#552 id=552 data-nosnippet>552</a>                token_info: <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"Parameter: \"{}\""</span>, param)),
+<a href=#553 id=553 data-nosnippet>553</a>            });
+<a href=#554 id=554 data-nosnippet>554</a>            <span class="kw-2">*</span>step_number += <span class="number">1</span>;
+<a href=#555 id=555 data-nosnippet>555</a>            <span class="kw-2">*</span>position += consumed_len;
+<a href=#556 id=556 data-nosnippet>556</a>            <span class="kw">if </span>consumed_len &lt; current_input.len() {
+<a href=#557 id=557 data-nosnippet>557</a>                current_input = <span class="kw-2">&amp;</span>current_input[consumed_len..];
+<a href=#558 id=558 data-nosnippet>558</a>            } <span class="kw">else </span>{
+<a href=#559 id=559 data-nosnippet>559</a>                current_input = <span class="string">""</span>;
+<a href=#560 id=560 data-nosnippet>560</a>            }
+<a href=#561 id=561 data-nosnippet>561</a>        }
+<a href=#562 id=562 data-nosnippet>562</a>
+<a href=#563 id=563 data-nosnippet>563</a>        <span class="comment">// Parse clauses
+<a href=#564 id=564 data-nosnippet>564</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>clause_context = context_stack.to_vec();
+<a href=#565 id=565 data-nosnippet>565</a>        clause_context.push(<span class="string">"ClauseRegistry::parse_sequence"</span>.to_string());
+<a href=#566 id=566 data-nosnippet>566</a>
+<a href=#567 id=567 data-nosnippet>567</a>        <span class="kw">for </span>clause <span class="kw">in </span><span class="kw-2">&amp;</span>directive.clauses {
+<a href=#568 id=568 data-nosnippet>568</a>            <span class="comment">// Skip whitespace before clause
+<a href=#569 id=569 data-nosnippet>569</a>            </span><span class="kw">if let </span><span class="prelude-val">Ok</span>((remaining, <span class="kw">_</span>)) = lexer::skip_space_and_comments(current_input) {
+<a href=#570 id=570 data-nosnippet>570</a>                <span class="kw">let </span>consumed_len = current_input.len() - remaining.len();
+<a href=#571 id=571 data-nosnippet>571</a>                <span class="kw">if </span>consumed_len &gt; <span class="number">0 </span>{
+<a href=#572 id=572 data-nosnippet>572</a>                    <span class="kw">let </span>consumed = <span class="kw-2">&amp;</span>current_input[..consumed_len];
+<a href=#573 id=573 data-nosnippet>573</a>                    <span class="self">self</span>.steps.push(DebugStep {
+<a href=#574 id=574 data-nosnippet>574</a>                        step_number: <span class="kw-2">*</span>step_number,
+<a href=#575 id=575 data-nosnippet>575</a>                        kind: StepKind::SkipWhitespace,
+<a href=#576 id=576 data-nosnippet>576</a>                        description: <span class="string">"Skip whitespace before clause"</span>.to_string(),
+<a href=#577 id=577 data-nosnippet>577</a>                        consumed: <span class="macro">format!</span>(<span class="string">"{:?}"</span>, consumed),
+<a href=#578 id=578 data-nosnippet>578</a>                        remaining: remaining.to_string(),
+<a href=#579 id=579 data-nosnippet>579</a>                        position: <span class="kw-2">*</span>position,
+<a href=#580 id=580 data-nosnippet>580</a>                        context_stack: clause_context.clone(),
+<a href=#581 id=581 data-nosnippet>581</a>                        token_info: <span class="prelude-val">None</span>,
+<a href=#582 id=582 data-nosnippet>582</a>                    });
+<a href=#583 id=583 data-nosnippet>583</a>                    <span class="kw-2">*</span>step_number += <span class="number">1</span>;
+<a href=#584 id=584 data-nosnippet>584</a>                    <span class="kw-2">*</span>position += consumed_len;
+<a href=#585 id=585 data-nosnippet>585</a>                    current_input = remaining;
+<a href=#586 id=586 data-nosnippet>586</a>                }
+<a href=#587 id=587 data-nosnippet>587</a>            }
+<a href=#588 id=588 data-nosnippet>588</a>
+<a href=#589 id=589 data-nosnippet>589</a>            <span class="comment">// Clause name
+<a href=#590 id=590 data-nosnippet>590</a>            </span><span class="self">self</span>.steps.push(DebugStep {
+<a href=#591 id=591 data-nosnippet>591</a>                step_number: <span class="kw-2">*</span>step_number,
+<a href=#592 id=592 data-nosnippet>592</a>                kind: StepKind::ClauseName,
+<a href=#593 id=593 data-nosnippet>593</a>                description: <span class="macro">format!</span>(<span class="string">"Parse clause name '{}'"</span>, clause.name),
+<a href=#594 id=594 data-nosnippet>594</a>                consumed: clause.name.to_string(),
+<a href=#595 id=595 data-nosnippet>595</a>                remaining: current_input[clause.name.len()..].to_string(),
+<a href=#596 id=596 data-nosnippet>596</a>                position: <span class="kw-2">*</span>position,
+<a href=#597 id=597 data-nosnippet>597</a>                context_stack: clause_context.clone(),
+<a href=#598 id=598 data-nosnippet>598</a>                token_info: <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"Clause: \"{}\""</span>, clause.name)),
+<a href=#599 id=599 data-nosnippet>599</a>            });
+<a href=#600 id=600 data-nosnippet>600</a>            <span class="kw-2">*</span>step_number += <span class="number">1</span>;
+<a href=#601 id=601 data-nosnippet>601</a>            <span class="kw-2">*</span>position += clause.name.len();
+<a href=#602 id=602 data-nosnippet>602</a>            current_input = <span class="kw-2">&amp;</span>current_input[clause.name.len()..];
+<a href=#603 id=603 data-nosnippet>603</a>
+<a href=#604 id=604 data-nosnippet>604</a>            <span class="comment">// Clause arguments (if parenthesized)
+<a href=#605 id=605 data-nosnippet>605</a>            </span><span class="kw">if let </span><span class="kw">crate</span>::parser::ClauseKind::Parenthesized(<span class="kw-2">ref </span>args) = clause.kind {
+<a href=#606 id=606 data-nosnippet>606</a>                <span class="kw">let </span>args_with_parens = <span class="macro">format!</span>(<span class="string">"({})"</span>, args);
+<a href=#607 id=607 data-nosnippet>607</a>                <span class="self">self</span>.steps.push(DebugStep {
+<a href=#608 id=608 data-nosnippet>608</a>                    step_number: <span class="kw-2">*</span>step_number,
+<a href=#609 id=609 data-nosnippet>609</a>                    kind: StepKind::ClauseArguments,
+<a href=#610 id=610 data-nosnippet>610</a>                    description: <span class="macro">format!</span>(<span class="string">"Parse clause arguments '{}'"</span>, args),
+<a href=#611 id=611 data-nosnippet>611</a>                    consumed: args_with_parens.clone(),
+<a href=#612 id=612 data-nosnippet>612</a>                    remaining: <span class="kw">if </span>current_input.len() &gt;= args_with_parens.len() {
+<a href=#613 id=613 data-nosnippet>613</a>                        current_input[args_with_parens.len()..].to_string()
+<a href=#614 id=614 data-nosnippet>614</a>                    } <span class="kw">else </span>{
+<a href=#615 id=615 data-nosnippet>615</a>                        String::new()
+<a href=#616 id=616 data-nosnippet>616</a>                    },
+<a href=#617 id=617 data-nosnippet>617</a>                    position: <span class="kw-2">*</span>position,
+<a href=#618 id=618 data-nosnippet>618</a>                    context_stack: clause_context.clone(),
+<a href=#619 id=619 data-nosnippet>619</a>                    token_info: <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"Arguments: \"{}\""</span>, args)),
+<a href=#620 id=620 data-nosnippet>620</a>                });
+<a href=#621 id=621 data-nosnippet>621</a>                <span class="kw-2">*</span>step_number += <span class="number">1</span>;
+<a href=#622 id=622 data-nosnippet>622</a>                <span class="kw-2">*</span>position += args_with_parens.len();
+<a href=#623 id=623 data-nosnippet>623</a>                <span class="kw">if </span>current_input.len() &gt;= args_with_parens.len() {
+<a href=#624 id=624 data-nosnippet>624</a>                    current_input = <span class="kw-2">&amp;</span>current_input[args_with_parens.len()..];
+<a href=#625 id=625 data-nosnippet>625</a>                }
+<a href=#626 id=626 data-nosnippet>626</a>            }
+<a href=#627 id=627 data-nosnippet>627</a>        }
+<a href=#628 id=628 data-nosnippet>628</a>
+<a href=#629 id=629 data-nosnippet>629</a>        <span class="prelude-val">Ok</span>(())
+<a href=#630 id=630 data-nosnippet>630</a>    }
+<a href=#631 id=631 data-nosnippet>631</a>
+<a href=#632 id=632 data-nosnippet>632</a>    <span class="doccomment">/// Get the current step
+<a href=#633 id=633 data-nosnippet>633</a>    </span><span class="kw">pub fn </span>current_step(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>DebugStep&gt; {
+<a href=#634 id=634 data-nosnippet>634</a>        <span class="self">self</span>.steps.get(<span class="self">self</span>.current_step_index)
+<a href=#635 id=635 data-nosnippet>635</a>    }
+<a href=#636 id=636 data-nosnippet>636</a>
+<a href=#637 id=637 data-nosnippet>637</a>    <span class="doccomment">/// Move to the next step
+<a href=#638 id=638 data-nosnippet>638</a>    </span><span class="kw">pub fn </span>next_step(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
+<a href=#639 id=639 data-nosnippet>639</a>        <span class="kw">if </span><span class="self">self</span>.current_step_index &lt; <span class="self">self</span>.steps.len() - <span class="number">1 </span>{
+<a href=#640 id=640 data-nosnippet>640</a>            <span class="self">self</span>.current_step_index += <span class="number">1</span>;
+<a href=#641 id=641 data-nosnippet>641</a>            <span class="bool-val">true
+<a href=#642 id=642 data-nosnippet>642</a>        </span>} <span class="kw">else </span>{
+<a href=#643 id=643 data-nosnippet>643</a>            <span class="bool-val">false
+<a href=#644 id=644 data-nosnippet>644</a>        </span>}
+<a href=#645 id=645 data-nosnippet>645</a>    }
+<a href=#646 id=646 data-nosnippet>646</a>
+<a href=#647 id=647 data-nosnippet>647</a>    <span class="doccomment">/// Move to the previous step
+<a href=#648 id=648 data-nosnippet>648</a>    </span><span class="kw">pub fn </span>prev_step(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
+<a href=#649 id=649 data-nosnippet>649</a>        <span class="kw">if </span><span class="self">self</span>.current_step_index &gt; <span class="number">0 </span>{
+<a href=#650 id=650 data-nosnippet>650</a>            <span class="self">self</span>.current_step_index -= <span class="number">1</span>;
+<a href=#651 id=651 data-nosnippet>651</a>            <span class="bool-val">true
+<a href=#652 id=652 data-nosnippet>652</a>        </span>} <span class="kw">else </span>{
+<a href=#653 id=653 data-nosnippet>653</a>            <span class="bool-val">false
+<a href=#654 id=654 data-nosnippet>654</a>        </span>}
+<a href=#655 id=655 data-nosnippet>655</a>    }
+<a href=#656 id=656 data-nosnippet>656</a>
+<a href=#657 id=657 data-nosnippet>657</a>    <span class="doccomment">/// Get total number of steps
+<a href=#658 id=658 data-nosnippet>658</a>    </span><span class="kw">pub fn </span>total_steps(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#659 id=659 data-nosnippet>659</a>        <span class="self">self</span>.steps.len()
+<a href=#660 id=660 data-nosnippet>660</a>    }
+<a href=#661 id=661 data-nosnippet>661</a>
+<a href=#662 id=662 data-nosnippet>662</a>    <span class="doccomment">/// Get all steps up to and including the current step
+<a href=#663 id=663 data-nosnippet>663</a>    </span><span class="kw">pub fn </span>steps_so_far(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[DebugStep] {
+<a href=#664 id=664 data-nosnippet>664</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.steps[..=<span class="self">self
+<a href=#665 id=665 data-nosnippet>665</a>            </span>.current_step_index
+<a href=#666 id=666 data-nosnippet>666</a>            .min(<span class="self">self</span>.steps.len().saturating_sub(<span class="number">1</span>))]
+<a href=#667 id=667 data-nosnippet>667</a>    }
+<a href=#668 id=668 data-nosnippet>668</a>}</code></pre></div></section></main></body></html>
