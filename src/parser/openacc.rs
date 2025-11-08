@@ -585,17 +585,17 @@ fn parse_copyin_clause<'a>(
     let (input, _) = tag("(")(input)?;
     let (input, _) = lexer::skip_space_and_comments(input)?;
 
-    // Try to parse "readonly:" modifier
-    let (input, modifier) = if input.trim_start().starts_with("readonly:")
-        || input.trim_start().starts_with("readonly :")
-    {
-        // Find the colon
-        let colon_idx = input.find(':').unwrap();
-        let after_colon = &input[colon_idx + 1..];
-        (after_colon, Some(CopyinModifier::Readonly))
-    } else {
-        (input, None)
-    };
+    // Try to parse "readonly:" modifier (case-insensitive)
+    let input_lower = input.trim_start().to_lowercase();
+    let (input, modifier) =
+        if input_lower.starts_with("readonly:") || input_lower.starts_with("readonly :") {
+            // Find the colon
+            let colon_idx = input.find(':').unwrap();
+            let after_colon = &input[colon_idx + 1..];
+            (after_colon, Some(CopyinModifier::Readonly))
+        } else {
+            (input, None)
+        };
 
     // Parse until closing paren
     let (input, _) = lexer::skip_space_and_comments(input)?;
@@ -647,15 +647,16 @@ fn parse_copyout_clause<'a>(
     let (input, _) = tag("(")(input)?;
     let (input, _) = lexer::skip_space_and_comments(input)?;
 
-    // Try to parse "zero:" modifier
-    let (input, modifier) =
-        if input.trim_start().starts_with("zero:") || input.trim_start().starts_with("zero :") {
-            let colon_idx = input.find(':').unwrap();
-            let after_colon = &input[colon_idx + 1..];
-            (after_colon, Some(CopyoutModifier::Zero))
-        } else {
-            (input, None)
-        };
+    // Try to parse "zero:" modifier (case-insensitive)
+    let input_lower = input.trim_start().to_lowercase();
+    let (input, modifier) = if input_lower.starts_with("zero:") || input_lower.starts_with("zero :")
+    {
+        let colon_idx = input.find(':').unwrap();
+        let after_colon = &input[colon_idx + 1..];
+        (after_colon, Some(CopyoutModifier::Zero))
+    } else {
+        (input, None)
+    };
 
     // Parse until closing paren
     let (input, _) = lexer::skip_space_and_comments(input)?;
@@ -707,15 +708,16 @@ fn parse_create_clause<'a>(
     let (input, _) = tag("(")(input)?;
     let (input, _) = lexer::skip_space_and_comments(input)?;
 
-    // Try to parse "zero:" modifier
-    let (input, modifier) =
-        if input.trim_start().starts_with("zero:") || input.trim_start().starts_with("zero :") {
-            let colon_idx = input.find(':').unwrap();
-            let after_colon = &input[colon_idx + 1..];
-            (after_colon, Some(CreateModifier::Zero))
-        } else {
-            (input, None)
-        };
+    // Try to parse "zero:" modifier (case-insensitive)
+    let input_lower = input.trim_start().to_lowercase();
+    let (input, modifier) = if input_lower.starts_with("zero:") || input_lower.starts_with("zero :")
+    {
+        let colon_idx = input.find(':').unwrap();
+        let after_colon = &input[colon_idx + 1..];
+        (after_colon, Some(CreateModifier::Zero))
+    } else {
+        (input, None)
+    };
 
     // Parse until closing paren
     let (input, _) = lexer::skip_space_and_comments(input)?;
@@ -772,8 +774,9 @@ fn parse_reduction_clause<'a>(
         nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
     })?;
 
-    let op_str = input[..colon_idx].trim();
-    let operator = match op_str {
+    // Normalize operator to lowercase for case-insensitive matching
+    let op_str = input[..colon_idx].trim().to_lowercase();
+    let operator = match op_str.as_str() {
         "+" => ReductionOperator::Add,
         "-" => ReductionOperator::Sub,
         "*" => ReductionOperator::Mul,
@@ -921,15 +924,14 @@ fn parse_gang_clause<'a>(
         let (input, _) = nom::bytes::complete::tag("(")(input)?;
         let (input, _) = lexer::skip_space_and_comments(input)?;
 
-        // Try to parse "num:" or "static:" modifier
+        // Try to parse "num:" or "static:" modifier (case-insensitive)
+        let input_lower = input.trim_start().to_lowercase();
         let (input, modifier) =
-            if input.trim_start().starts_with("num:") || input.trim_start().starts_with("num :") {
+            if input_lower.starts_with("num:") || input_lower.starts_with("num :") {
                 let colon_idx = input.find(':').unwrap();
                 let after_colon = &input[colon_idx + 1..];
                 (after_colon, Some(GangModifier::Num))
-            } else if input.trim_start().starts_with("static:")
-                || input.trim_start().starts_with("static :")
-            {
+            } else if input_lower.starts_with("static:") || input_lower.starts_with("static :") {
                 let colon_idx = input.find(':').unwrap();
                 let after_colon = &input[colon_idx + 1..];
                 (after_colon, Some(GangModifier::Static))
@@ -1004,9 +1006,10 @@ fn parse_worker_clause<'a>(
         let (input, _) = nom::bytes::complete::tag("(")(input)?;
         let (input, _) = lexer::skip_space_and_comments(input)?;
 
-        // Try to parse "num:" modifier
+        // Try to parse "num:" modifier (case-insensitive)
+        let input_lower = input.trim_start().to_lowercase();
         let (input, modifier) =
-            if input.trim_start().starts_with("num:") || input.trim_start().starts_with("num :") {
+            if input_lower.starts_with("num:") || input_lower.starts_with("num :") {
                 let colon_idx = input.find(':').unwrap();
                 let after_colon = &input[colon_idx + 1..];
                 (after_colon, Some(WorkerModifier::Num))
@@ -1081,16 +1084,16 @@ fn parse_vector_clause<'a>(
         let (input, _) = nom::bytes::complete::tag("(")(input)?;
         let (input, _) = lexer::skip_space_and_comments(input)?;
 
-        // Try to parse "length:" modifier
-        let (input, modifier) = if input.trim_start().starts_with("length:")
-            || input.trim_start().starts_with("length :")
-        {
-            let colon_idx = input.find(':').unwrap();
-            let after_colon = &input[colon_idx + 1..];
-            (after_colon, Some(VectorModifier::Length))
-        } else {
-            (input, None)
-        };
+        // Try to parse "length:" modifier (case-insensitive)
+        let input_lower = input.trim_start().to_lowercase();
+        let (input, modifier) =
+            if input_lower.starts_with("length:") || input_lower.starts_with("length :") {
+                let colon_idx = input.find(':').unwrap();
+                let after_colon = &input[colon_idx + 1..];
+                (after_colon, Some(VectorModifier::Length))
+            } else {
+                (input, None)
+            };
 
         let (input, _) = lexer::skip_space_and_comments(input)?;
 

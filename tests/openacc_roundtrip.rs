@@ -137,3 +137,152 @@ fn parses_atomic_update_as_bare_clause() {
     let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
     assert_eq!(roundtrip, input);
 }
+
+#[test]
+fn parses_case_insensitive_modifiers() {
+    use roup::parser::{
+        CopyinModifier, CopyoutModifier, CreateModifier, GangModifier, ReductionOperator,
+        VectorModifier, WorkerModifier,
+    };
+    use std::borrow::Cow;
+
+    // Test copyin with ReadOnly
+    let (_, dir) =
+        parse_acc_directive("#pragma acc parallel copyin(ReadOnly: a)").expect("should parse");
+    assert_eq!(dir.clauses.len(), 1);
+    match &dir.clauses[0].kind {
+        ClauseKind::CopyinClause {
+            modifier,
+            variables,
+        } => {
+            assert_eq!(*modifier, Some(CopyinModifier::Readonly));
+            assert_eq!(variables, &vec![Cow::Borrowed("a")]);
+        }
+        _ => panic!("Expected CopyinClause"),
+    }
+
+    // Test copyout with ZERO
+    let (_, dir) =
+        parse_acc_directive("#pragma acc parallel copyout(ZERO: b)").expect("should parse");
+    match &dir.clauses[0].kind {
+        ClauseKind::CopyoutClause {
+            modifier,
+            variables,
+        } => {
+            assert_eq!(*modifier, Some(CopyoutModifier::Zero));
+            assert_eq!(variables, &vec![Cow::Borrowed("b")]);
+        }
+        _ => panic!("Expected CopyoutClause"),
+    }
+
+    // Test create with Zero
+    let (_, dir) = parse_acc_directive("#pragma acc data create(Zero: c)").expect("should parse");
+    match &dir.clauses[0].kind {
+        ClauseKind::CreateClause {
+            modifier,
+            variables,
+        } => {
+            assert_eq!(*modifier, Some(CreateModifier::Zero));
+            assert_eq!(variables, &vec![Cow::Borrowed("c")]);
+        }
+        _ => panic!("Expected CreateClause"),
+    }
+
+    // Test gang with NUM
+    let (_, dir) = parse_acc_directive("#pragma acc parallel gang(NUM: 4)").expect("should parse");
+    match &dir.clauses[0].kind {
+        ClauseKind::GangClause {
+            modifier,
+            variables,
+        } => {
+            assert_eq!(*modifier, Some(GangModifier::Num));
+            assert_eq!(variables, &vec![Cow::Borrowed("4")]);
+        }
+        _ => panic!("Expected GangClause"),
+    }
+
+    // Test gang with Static
+    let (_, dir) =
+        parse_acc_directive("#pragma acc parallel gang(Static: *)").expect("should parse");
+    match &dir.clauses[0].kind {
+        ClauseKind::GangClause {
+            modifier,
+            variables,
+        } => {
+            assert_eq!(*modifier, Some(GangModifier::Static));
+            assert_eq!(variables, &vec![Cow::Borrowed("*")]);
+        }
+        _ => panic!("Expected GangClause"),
+    }
+
+    // Test worker with Num
+    let (_, dir) =
+        parse_acc_directive("#pragma acc parallel worker(Num: 8)").expect("should parse");
+    match &dir.clauses[0].kind {
+        ClauseKind::WorkerClause {
+            modifier,
+            variables,
+        } => {
+            assert_eq!(*modifier, Some(WorkerModifier::Num));
+            assert_eq!(variables, &vec![Cow::Borrowed("8")]);
+        }
+        _ => panic!("Expected WorkerClause"),
+    }
+
+    // Test vector with LENGTH
+    let (_, dir) =
+        parse_acc_directive("#pragma acc parallel vector(LENGTH: 32)").expect("should parse");
+    match &dir.clauses[0].kind {
+        ClauseKind::VectorClause {
+            modifier,
+            variables,
+        } => {
+            assert_eq!(*modifier, Some(VectorModifier::Length));
+            assert_eq!(variables, &vec![Cow::Borrowed("32")]);
+        }
+        _ => panic!("Expected VectorClause"),
+    }
+
+    // Test reduction with MIN
+    let (_, dir) = parse_acc_directive("#pragma acc loop reduction(MIN: x)").expect("should parse");
+    match &dir.clauses[0].kind {
+        ClauseKind::ReductionClause {
+            operator,
+            variables,
+            ..
+        } => {
+            assert_eq!(*operator, ReductionOperator::Min);
+            assert_eq!(variables, &vec![Cow::Borrowed("x")]);
+        }
+        _ => panic!("Expected ReductionClause"),
+    }
+
+    // Test reduction with Max
+    let (_, dir) = parse_acc_directive("#pragma acc loop reduction(Max: y)").expect("should parse");
+    match &dir.clauses[0].kind {
+        ClauseKind::ReductionClause {
+            operator,
+            variables,
+            ..
+        } => {
+            assert_eq!(*operator, ReductionOperator::Max);
+            assert_eq!(variables, &vec![Cow::Borrowed("y")]);
+        }
+        _ => panic!("Expected ReductionClause"),
+    }
+
+    // Test Fortran operators with mixed case
+    let (_, dir) =
+        parse_acc_directive("#pragma acc loop reduction(IAND: z)").expect("should parse");
+    match &dir.clauses[0].kind {
+        ClauseKind::ReductionClause {
+            operator,
+            variables,
+            ..
+        } => {
+            assert_eq!(*operator, ReductionOperator::FortIand);
+            assert_eq!(variables, &vec![Cow::Borrowed("z")]);
+        }
+        _ => panic!("Expected ReductionClause"),
+    }
+}
