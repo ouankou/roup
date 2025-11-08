@@ -446,8 +446,8 @@ fn parse_routine_directive<'a>(
     if input.trim_start().starts_with('(') {
         let (rest_after_paren, content) = parse_parenthesized_content_inner(input)?;
         let (rest, clauses) = clause_registry.parse_sequence(rest_after_paren)?;
-        // Store routine name without parentheses - accparser adds them during toString()
-        let parameter = content.trim().to_string();
+        // Store routine name with parentheses for round-trip compatibility
+        let parameter = format!("({})", content.trim());
         return Ok((
             rest,
             Directive {

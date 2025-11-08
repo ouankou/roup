@@ -168,7 +168,13 @@ fn build_acc_directive(parsed: Directive<'_>, language: Language) -> AccDirectiv
     // and for end directive paired kind (set by parse_end_directive)
     if let Some(param) = parsed.parameter.as_ref() {
         if name.eq_ignore_ascii_case("routine") {
-            result.routine_name = Some(make_c_string(param.as_ref()));
+            // Strip parentheses from routine name for C API
+            let routine_name = param.as_ref().trim();
+            let routine_name = routine_name
+                .strip_prefix('(')
+                .and_then(|s| s.strip_suffix(')'))
+                .unwrap_or(routine_name);
+            result.routine_name = Some(make_c_string(routine_name));
         } else if name.eq_ignore_ascii_case("end") {
             // For "end" directives, parameter contains the directive being ended (e.g., "atomic")
             let kind = acc_directive_name_to_kind(param.as_ref());

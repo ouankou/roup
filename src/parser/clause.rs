@@ -225,7 +225,7 @@ impl fmt::Display for Clause<'_> {
                     ReductionOperator::FortIor => "ior",
                     ReductionOperator::FortIeor => "ieor",
                 };
-                write!(f, "{}({}: {})", self.name, op_str, variables.join(", "))
+                write!(f, "{}({}:{})", self.name, op_str, variables.join(", "))
             }
         }
     }
