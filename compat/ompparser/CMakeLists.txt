@@ -140,6 +140,16 @@ add_test(NAME ompparser_drop_in COMMAND ompparser_example)
 add_test(NAME comprehensive COMMAND comprehensive_test)
 
 # ============================================================================
+# ompparser Test Suite (1500+ tests from 3 groups)
+# ============================================================================
+
+# Add ompparser's test suite which includes:
+# - 136 builtin .txt tests
+# - 785 OpenMP VV tests
+# - 602 OpenMP Examples tests
+add_subdirectory(ompparser/tests)
+
+# ============================================================================
 # Installation
 # ============================================================================
 

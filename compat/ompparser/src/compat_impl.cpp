@@ -17,6 +17,13 @@
 #include <roup_constants.h>
 
 // ============================================================================
+// Global Variables (required by ompparser headers)
+// ============================================================================
+
+// Defined by ompparser.yy but we're not using the parser, so define it here
+bool normalize_clauses_global = true;
+
+// ============================================================================
 // ROUP C API Forward Declarations
 // ============================================================================
 
@@ -32,6 +39,7 @@ extern "C" {
 
     // Directive queries
     int32_t roup_directive_kind(const OmpDirective* directive);
+    const char* roup_directive_name(const OmpDirective* directive);
     int32_t roup_directive_clause_count(const OmpDirective* directive);
     OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
 
@@ -61,33 +69,179 @@ extern "C" void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
 }
 
+extern "C" void setNormalizeClauses(bool normalize) {
+    normalize_clauses_global = normalize;
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
-    // ROUP directive kind mapping using named constants
-    // See roup_constants.h and src/c_api.rs:directive_name_to_kind()
-    switch (roup_kind) {
-        case ROUP_DIRECTIVE_PARALLEL:       return OMPD_parallel;
-        case ROUP_DIRECTIVE_FOR:            return OMPD_for;
-        case ROUP_DIRECTIVE_SECTIONS:       return OMPD_sections;
-        case ROUP_DIRECTIVE_SINGLE:         return OMPD_single;
-        case ROUP_DIRECTIVE_TASK:           return OMPD_task;
-        case ROUP_DIRECTIVE_MASTER:         return OMPD_master;
-        case ROUP_DIRECTIVE_CRITICAL:       return OMPD_critical;
-        case ROUP_DIRECTIVE_BARRIER:        return OMPD_barrier;
-        case ROUP_DIRECTIVE_TASKWAIT:       return OMPD_taskwait;
-        case ROUP_DIRECTIVE_TASKGROUP:      return OMPD_taskgroup;
-        case ROUP_DIRECTIVE_ATOMIC:         return OMPD_atomic;
-        case ROUP_DIRECTIVE_FLUSH:          return OMPD_flush;
-        case ROUP_DIRECTIVE_ORDERED:        return OMPD_ordered;
-        case ROUP_DIRECTIVE_TARGET:         return OMPD_target;
-        case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
-        case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
-        case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
-        default:                            return OMPD_unknown;
-    }
+// Map directive name string to ompparser kind (case-insensitive)
+// Handles all OpenMP 3.0-6.0 directives that ompparser supports
+static OpenMPDirectiveKind mapDirectiveNameToOmpparser(const char* name) {
+    if (!name) return OMPD_unknown;
+
+    // Convert to lowercase for case-insensitive matching
+    std::string name_lower(name);
+    for (char& c : name_lower) c = std::tolower(static_cast<unsigned char>(c));
+
+    // Parallel constructs
+    if (name_lower == "parallel") return OMPD_parallel;
+    if (name_lower == "parallel for") return OMPD_parallel_for;
+    if (name_lower == "parallel do") return OMPD_parallel_do;
+    if (name_lower == "parallel for simd") return OMPD_parallel_for_simd;
+    if (name_lower == "parallel do simd") return OMPD_parallel_do_simd;
+    if (name_lower == "parallel sections") return OMPD_parallel_sections;
+    if (name_lower == "parallel single") return OMPD_parallel_single;
+    if (name_lower == "parallel loop") return OMPD_parallel_loop;
+    if (name_lower == "parallel workshare") return OMPD_parallel_workshare;
+    if (name_lower == "parallel master") return OMPD_parallel_master;
+    if (name_lower == "parallel masked") return OMPD_parallel_masked;
+
+    // Work-sharing constructs
+    if (name_lower == "for") return OMPD_for;
+    if (name_lower == "do") return OMPD_do;
+    if (name_lower == "for simd") return OMPD_for_simd;
+    if (name_lower == "do simd") return OMPD_do_simd;
+    if (name_lower == "sections") return OMPD_sections;
+    if (name_lower == "section") return OMPD_section;
+    if (name_lower == "single") return OMPD_single;
+    if (name_lower == "workshare") return OMPD_workshare;
+    if (name_lower == "loop") return OMPD_loop;
+
+    // SIMD constructs
+    if (name_lower == "simd") return OMPD_simd;
+    if (name_lower == "declare simd") return OMPD_declare_simd;
+
+    // Task constructs
+    if (name_lower == "task") return OMPD_task;
+    if (name_lower == "taskloop") return OMPD_taskloop;
+    if (name_lower == "taskloop simd") return OMPD_taskloop_simd;
+    if (name_lower == "taskyield") return OMPD_taskyield;
+    if (name_lower == "taskwait") return OMPD_taskwait;
+    if (name_lower == "taskgroup") return OMPD_taskgroup;
+    if (name_lower == "master taskloop") return OMPD_master_taskloop;
+    if (name_lower == "master taskloop simd") return OMPD_master_taskloop_simd;
+    if (name_lower == "parallel master taskloop") return OMPD_parallel_master_taskloop;
+    if (name_lower == "parallel master taskloop simd") return OMPD_parallel_master_taskloop_simd;
+    if (name_lower == "masked taskloop") return OMPD_masked_taskloop;
+    if (name_lower == "masked taskloop simd") return OMPD_masked_taskloop_simd;
+    if (name_lower == "parallel masked taskloop") return OMPD_parallel_masked_taskloop;
+    if (name_lower == "parallel masked taskloop simd") return OMPD_parallel_masked_taskloop_simd;
+
+    // Target constructs
+    if (name_lower == "target") return OMPD_target;
+    if (name_lower == "target data") return OMPD_target_data;
+    if (name_lower == "target enter data") return OMPD_target_enter_data;
+    if (name_lower == "target exit data") return OMPD_target_exit_data;
+    if (name_lower == "target update") return OMPD_target_update;
+    if (name_lower == "target parallel") return OMPD_target_parallel;
+    if (name_lower == "target parallel for") return OMPD_target_parallel_for;
+    if (name_lower == "target parallel do") return OMPD_target_parallel_do;
+    if (name_lower == "target parallel for simd") return OMPD_target_parallel_for_simd;
+    if (name_lower == "target parallel do simd") return OMPD_target_parallel_do_simd;
+    if (name_lower == "target parallel loop") return OMPD_target_parallel_loop;
+    if (name_lower == "target simd") return OMPD_target_simd;
+    if (name_lower == "target teams") return OMPD_target_teams;
+    if (name_lower == "target teams distribute") return OMPD_target_teams_distribute;
+    if (name_lower == "target teams distribute simd") return OMPD_target_teams_distribute_simd;
+    if (name_lower == "target teams loop") return OMPD_target_teams_loop;
+    if (name_lower == "target teams distribute parallel for") return OMPD_target_teams_distribute_parallel_for;
+    if (name_lower == "target teams distribute parallel do") return OMPD_target_teams_distribute_parallel_do;
+    if (name_lower == "target teams distribute parallel for simd") return OMPD_target_teams_distribute_parallel_for_simd;
+    if (name_lower == "target teams distribute parallel do simd") return OMPD_target_teams_distribute_parallel_do_simd;
+    if (name_lower == "target loop") return OMPD_target_loop;
+    if (name_lower == "target loop simd") return OMPD_target_loop_simd;
+    if (name_lower == "target parallel loop simd") return OMPD_target_parallel_loop_simd;
+    if (name_lower == "target teams loop simd") return OMPD_target_teams_loop_simd;
+    if (name_lower == "target teams distribute parallel loop") return OMPD_target_teams_distribute_parallel_loop;
+    if (name_lower == "target teams distribute parallel loop simd") return OMPD_target_teams_distribute_parallel_loop_simd;
+
+    // Teams constructs
+    if (name_lower == "teams") return OMPD_teams;
+    if (name_lower == "teams distribute") return OMPD_teams_distribute;
+    if (name_lower == "teams distribute simd") return OMPD_teams_distribute_simd;
+    if (name_lower == "teams distribute parallel for") return OMPD_teams_distribute_parallel_for;
+    if (name_lower == "teams distribute parallel do") return OMPD_teams_distribute_parallel_do;
+    if (name_lower == "teams distribute parallel for simd") return OMPD_teams_distribute_parallel_for_simd;
+    if (name_lower == "teams distribute parallel do simd") return OMPD_teams_distribute_parallel_do_simd;
+    if (name_lower == "teams loop") return OMPD_teams_loop;
+    if (name_lower == "teams loop simd") return OMPD_teams_loop_simd;
+    if (name_lower == "teams distribute parallel loop") return OMPD_teams_distribute_parallel_loop;
+    if (name_lower == "teams distribute parallel loop simd") return OMPD_teams_distribute_parallel_loop_simd;
+
+    // Distribute constructs
+    if (name_lower == "distribute") return OMPD_distribute;
+    if (name_lower == "distribute simd") return OMPD_distribute_simd;
+    if (name_lower == "distribute parallel for") return OMPD_distribute_parallel_for;
+    if (name_lower == "distribute parallel do") return OMPD_distribute_parallel_do;
+    if (name_lower == "distribute parallel for simd") return OMPD_distribute_parallel_for_simd;
+    if (name_lower == "distribute parallel do simd") return OMPD_distribute_parallel_do_simd;
+    if (name_lower == "distribute parallel loop") return OMPD_distribute_parallel_loop;
+    if (name_lower == "distribute parallel loop simd") return OMPD_distribute_parallel_loop_simd;
+
+    // Synchronization constructs
+    if (name_lower == "barrier") return OMPD_barrier;
+    if (name_lower == "critical") return OMPD_critical;
+    if (name_lower == "atomic") return OMPD_atomic;
+    if (name_lower == "flush") return OMPD_flush;
+    if (name_lower == "ordered") return OMPD_ordered;
+    if (name_lower == "master") return OMPD_master;
+    if (name_lower == "masked") return OMPD_masked;
+
+    // Declare constructs
+    if (name_lower == "declare reduction") return OMPD_declare_reduction;
+    if (name_lower == "declare mapper") return OMPD_declare_mapper;
+    if (name_lower == "declare target") return OMPD_declare_target;
+    if (name_lower == "begin declare target") return OMPD_begin_declare_target;
+    if (name_lower == "end declare target") return OMPD_end_declare_target;
+    if (name_lower == "declare variant") return OMPD_declare_variant;
+    if (name_lower == "begin declare variant") return OMPD_begin_declare_variant;
+    if (name_lower == "end declare variant") return OMPD_end_declare_variant;
+
+    // Meta-directives
+    if (name_lower == "metadirective") return OMPD_metadirective;
+    if (name_lower == "begin metadirective") return OMPD_begin_metadirective;
+
+    // Loop transformation (OpenMP 6.0)
+    if (name_lower == "tile") return OMPD_tile;
+    if (name_lower == "unroll") return OMPD_unroll;
+
+    // Other constructs
+    if (name_lower == "threadprivate") return OMPD_threadprivate;
+    if (name_lower == "allocate") return OMPD_allocate;
+    if (name_lower == "requires") return OMPD_requires;
+    if (name_lower == "scan") return OMPD_scan;
+    if (name_lower == "depobj") return OMPD_depobj;
+    if (name_lower == "cancel") return OMPD_cancel;
+    if (name_lower == "cancellation point") return OMPD_cancellation_point;
+    if (name_lower == "error") return OMPD_error;
+    if (name_lower == "nothing") return OMPD_nothing;
+    if (name_lower == "scope") return OMPD_scope;
+    if (name_lower == "interop") return OMPD_interop;
+    if (name_lower == "assume") return OMPD_assume;
+    if (name_lower == "assumes") return OMPD_assumes;
+    if (name_lower == "begin assumes") return OMPD_begin_assumes;
+    if (name_lower == "end assumes") return OMPD_end_assumes;
+    if (name_lower == "end") return OMPD_end;
+
+    // OpenMP 6.0 directives
+    if (name_lower == "allocators") return OMPD_allocators;
+    if (name_lower == "taskgraph") return OMPD_taskgraph;
+    if (name_lower == "task iteration") return OMPD_task_iteration;
+    if (name_lower == "dispatch") return OMPD_dispatch;
+    if (name_lower == "groupprivate") return OMPD_groupprivate;
+    if (name_lower == "workdistribute") return OMPD_workdistribute;
+    if (name_lower == "fuse") return OMPD_fuse;
+    if (name_lower == "interchange") return OMPD_interchange;
+    if (name_lower == "reverse") return OMPD_reverse;
+    if (name_lower == "split") return OMPD_split;
+    if (name_lower == "stripe") return OMPD_stripe;
+    if (name_lower == "declare induction") return OMPD_declare_induction;
+    if (name_lower == "parallel loop simd") return OMPD_parallel_loop_simd;
+
+    return OMPD_unknown;
 }
 
 static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
@@ -155,9 +309,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         return nullptr;
     }
 
-    // Get directive kind from ROUP
-    int32_t roup_kind = roup_directive_kind(roup_dir);
-    OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
+    // Get directive name from ROUP and map to ompparser kind
+    const char* directive_name = roup_directive_name(roup_dir);
+    OpenMPDirectiveKind kind = mapDirectiveNameToOmpparser(directive_name);
 
     // Create ompparser-compatible directive
     // Use ompparser's actual constructor: OpenMPDirective(kind, lang, line, col)
