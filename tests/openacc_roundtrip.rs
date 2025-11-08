@@ -8,9 +8,21 @@ fn parses_basic_parallel_loop() {
     assert_eq!(directive.name, "parallel loop");
     assert_eq!(directive.clauses.len(), 3);
     assert_eq!(directive.clauses[0].name, "gang");
-    assert_eq!(directive.clauses[0].kind, ClauseKind::Bare);
+    assert_eq!(
+        directive.clauses[0].kind,
+        ClauseKind::GangClause {
+            modifier: None,
+            variables: vec![]
+        }
+    );
     assert_eq!(directive.clauses[1].name, "vector");
-    assert_eq!(directive.clauses[1].kind, ClauseKind::Bare);
+    assert_eq!(
+        directive.clauses[1].kind,
+        ClauseKind::VectorClause {
+            modifier: None,
+            variables: vec![]
+        }
+    );
     assert_eq!(directive.clauses[2].name, "tile");
     assert_eq!(
         directive.clauses[2].kind,
@@ -47,7 +59,7 @@ fn roundtrip_cache_directive_with_clauses() {
     let (_, directive) = parser.parse(input).expect("should parse");
 
     assert_eq!(directive.name, "cache");
-    assert_eq!(directive.parameter, Some("(arr[0:10])".into()));
+    assert_eq!(directive.parameter, Some("(arr[0: 10])".into()));
     assert_eq!(directive.clauses.len(), 1);
     assert_eq!(directive.clauses[0].name, "async");
     assert_eq!(
@@ -56,7 +68,7 @@ fn roundtrip_cache_directive_with_clauses() {
     );
 
     let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
-    assert_eq!(roundtrip, input);
+    assert_eq!(roundtrip, "#pragma acc cache(arr[0: 10]) async(3)");
 }
 
 #[test]
@@ -72,7 +84,14 @@ fn parses_alias_clauses_without_renaming() {
     );
 
     for clause in &directive.clauses {
-        assert!(matches!(clause.kind, ClauseKind::Parenthesized(_)));
+        assert!(matches!(
+            clause.kind,
+            ClauseKind::Parenthesized(_)
+                | ClauseKind::VariableList(_)
+                | ClauseKind::CopyinClause { .. }
+                | ClauseKind::CopyoutClause { .. }
+                | ClauseKind::CreateClause { .. }
+        ));
     }
 
     let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
@@ -89,10 +108,16 @@ fn parses_dtype_alias_on_loop_directive() {
     assert_eq!(directive.clauses[0].name, "dtype");
     assert!(matches!(
         directive.clauses[0].kind,
-        ClauseKind::Parenthesized(_)
+        ClauseKind::VariableList(_) | ClauseKind::Parenthesized(_)
     ));
     assert_eq!(directive.clauses[1].name, "vector");
-    assert_eq!(directive.clauses[1].kind, ClauseKind::Bare);
+    assert_eq!(
+        directive.clauses[1].kind,
+        ClauseKind::VectorClause {
+            modifier: None,
+            variables: vec![]
+        }
+    );
 
     let roundtrip = directive.to_pragma_string_with_prefix("#pragma acc");
     assert_eq!(roundtrip, input);

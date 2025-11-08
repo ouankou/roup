@@ -115,7 +115,7 @@ impl<'a> Directive<'a> {
             };
 
             let key = (clause.name.to_string(), kind_disc as u8, kind_disc);
-            merged.entry(key).or_insert_with(Vec::new).push(clause);
+            merged.entry(key).or_default().push(clause);
         }
 
         // Rebuild clauses list with merging
@@ -280,6 +280,8 @@ impl<'a> Directive<'a> {
     ///     name: Cow::Borrowed("parallel"),
     ///     parameter: None,
     ///     clauses: vec![],
+    ///     cache_data: None,
+    ///     wait_data: None,
     /// };
     /// assert_eq!(directive.to_pragma_string_with_prefix("#pragma acc"), "#pragma acc parallel");
     /// ```
@@ -301,6 +303,8 @@ impl<'a> Directive<'a> {
     ///         Clause { name: Cow::Borrowed("async"), kind: ClauseKind::Parenthesized(Cow::Borrowed("1")) },
     ///         Clause { name: Cow::Borrowed("wait"), kind: ClauseKind::Parenthesized(Cow::Borrowed("2")) },
     ///     ],
+    ///     cache_data: None,
+    ///     wait_data: None,
     /// };
     /// assert_eq!(directive.to_pragma_string_with_prefix_and_separator("#pragma acc", true), "#pragma acc parallel async(1), wait(2)");
     /// ```

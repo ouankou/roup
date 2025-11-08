@@ -777,6 +777,8 @@ pub fn parse_clause_data<'a>(
 ///             kind: ClauseKind::Parenthesized("shared".into()),
 ///         },
 ///     ],
+///     cache_data: None,
+///     wait_data: None,
 /// };
 ///
 /// let config = ParserConfig::default();

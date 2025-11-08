@@ -52,11 +52,7 @@ pub fn display_ast_tree(directive: &Directive) -> String {
                     modifier,
                     variables,
                 } => {
-                    let mod_str = if let Some(_) = modifier {
-                        " readonly"
-                    } else {
-                        ""
-                    };
+                    let mod_str = if modifier.is_some() { " readonly" } else { "" };
                     output.push_str(&format!(
                         "{}└─ kind: CopyinClause{} [{}]\n",
                         continuation,
@@ -68,7 +64,7 @@ pub fn display_ast_tree(directive: &Directive) -> String {
                     modifier,
                     variables,
                 } => {
-                    let mod_str = if let Some(_) = modifier { " zero" } else { "" };
+                    let mod_str = if modifier.is_some() { " zero" } else { "" };
                     output.push_str(&format!(
                         "{}└─ kind: CopyoutClause{} [{}]\n",
                         continuation,
@@ -80,7 +76,7 @@ pub fn display_ast_tree(directive: &Directive) -> String {
                     modifier,
                     variables,
                 } => {
-                    let mod_str = if let Some(_) = modifier { " zero" } else { "" };
+                    let mod_str = if modifier.is_some() { " zero" } else { "" };
                     output.push_str(&format!(
                         "{}└─ kind: CreateClause{} [{}]\n",
                         continuation,

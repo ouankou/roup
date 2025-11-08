@@ -47,10 +47,16 @@ target_include_directories(accparser PUBLIC
 # Link ROUP statically into libaccparser.so
 target_link_libraries(accparser PRIVATE
     ${ROUP_STATIC_LIB}
-    pthread
-    dl
-    m
 )
+
+# Platform-specific libraries
+if(UNIX AND NOT APPLE)
+    target_link_libraries(accparser PRIVATE pthread dl m)
+elseif(APPLE)
+    target_link_libraries(accparser PRIVATE pthread m)
+elseif(WIN32)
+    # Windows: no special libraries needed
+endif()
 
 set_target_properties(accparser PROPERTIES
     VERSION 1.0.0

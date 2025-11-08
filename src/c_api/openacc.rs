@@ -868,30 +868,6 @@ fn reduction_operator_token(operator: ReductionOperator) -> &'static str {
     }
 }
 
-fn parse_routine_name(name: &str) -> Option<String> {
-    let content = extract_parenthesized_content(name, "routine")?.trim();
-    if content.is_empty() {
-        None
-    } else {
-        Some(content.to_string())
-    }
-}
-
-fn parse_end_paired_kind(name: &str) -> Option<i32> {
-    let trimmed = name.trim();
-    let lower = trimmed.to_ascii_lowercase();
-    if !lower.starts_with("end ") {
-        return None;
-    }
-
-    let target = trimmed[4..].trim();
-    if target.is_empty() {
-        return None;
-    }
-
-    Some(acc_directive_name_to_kind(target))
-}
-
 fn parse_prefixed_values(
     content: Option<&str>,
     modifier_keyword: &str,
@@ -1029,7 +1005,7 @@ fn split_arguments(input: &str) -> Vec<String> {
     args
 }
 
-fn split_once_outside_double_colon<'a>(input: &'a str, needle: char) -> Option<(&'a str, &'a str)> {
+fn split_once_outside_double_colon(input: &str, needle: char) -> Option<(&str, &str)> {
     let mut idx = 0usize;
     let chars: Vec<char> = input.chars().collect();
     while idx < chars.len() {
@@ -1115,7 +1091,7 @@ fn clause_name_to_kind(name: &str) -> i32 {
         "independent" => 9,
         "auto" => 10,
         "collapse" => 11,
-        "device_type" => 12,
+        "device_type" | "dtype" => 12,
         "bind" => 13,
         "if" => 14,
         "default" => 15,
@@ -1150,26 +1126,6 @@ fn clause_name_to_kind(name: &str) -> i32 {
         "host" => 44,
         _ => 999,
     }
-}
-
-fn extract_parenthesized_content<'a>(input: &'a str, keyword: &str) -> Option<&'a str> {
-    let trimmed = input.trim_start();
-    if trimmed.len() < keyword.len() {
-        return None;
-    }
-
-    if !trimmed[..keyword.len()].eq_ignore_ascii_case(keyword) {
-        return None;
-    }
-
-    let mut rest = &trimmed[keyword.len()..];
-    rest = rest.trim_start();
-    if !rest.starts_with('(') {
-        return None;
-    }
-    rest = &rest[1..];
-    let end = rest.rfind(')')?;
-    Some(rest[..end].trim())
 }
 
 #[cfg(test)]

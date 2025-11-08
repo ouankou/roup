@@ -130,35 +130,47 @@ impl fmt::Display for Clause<'_> {
                 modifier,
                 variables,
             } => {
-                write!(f, "{}(", self.name)?;
-                if let Some(mod_val) = modifier {
-                    let mod_str = match mod_val {
-                        GangModifier::Num => "num",
-                        GangModifier::Static => "static",
-                    };
-                    write!(f, "{}: ", mod_str)?;
+                if modifier.is_none() && variables.is_empty() {
+                    write!(f, "{}", self.name)
+                } else {
+                    write!(f, "{}(", self.name)?;
+                    if let Some(mod_val) = modifier {
+                        let mod_str = match mod_val {
+                            GangModifier::Num => "num",
+                            GangModifier::Static => "static",
+                        };
+                        write!(f, "{}: ", mod_str)?;
+                    }
+                    write!(f, "{})", variables.join(", "))
                 }
-                write!(f, "{})", variables.join(", "))
             }
             ClauseKind::WorkerClause {
                 modifier,
                 variables,
             } => {
-                write!(f, "{}(", self.name)?;
-                if let Some(WorkerModifier::Num) = modifier {
-                    write!(f, "num: ")?;
+                if modifier.is_none() && variables.is_empty() {
+                    write!(f, "{}", self.name)
+                } else {
+                    write!(f, "{}(", self.name)?;
+                    if let Some(WorkerModifier::Num) = modifier {
+                        write!(f, "num: ")?;
+                    }
+                    write!(f, "{})", variables.join(", "))
                 }
-                write!(f, "{})", variables.join(", "))
             }
             ClauseKind::VectorClause {
                 modifier,
                 variables,
             } => {
-                write!(f, "{}(", self.name)?;
-                if let Some(VectorModifier::Length) = modifier {
-                    write!(f, "length: ")?;
+                if modifier.is_none() && variables.is_empty() {
+                    write!(f, "{}", self.name)
+                } else {
+                    write!(f, "{}(", self.name)?;
+                    if let Some(VectorModifier::Length) = modifier {
+                        write!(f, "length: ")?;
+                    }
+                    write!(f, "{})", variables.join(", "))
                 }
-                write!(f, "{})", variables.join(", "))
             }
             ClauseKind::CopyinClause {
                 modifier,

@@ -227,10 +227,10 @@ fn parse_cache_directive<'a>(
 
     // Parse cache directive: cache(readonly: x, y, z) or cache(x, y, z)
     let content_trimmed = content.trim();
-    let (readonly, var_part) = if content_trimmed.starts_with("readonly:") {
-        (true, content_trimmed[9..].trim())
-    } else if content_trimmed.starts_with("readonly :") {
-        (true, content_trimmed[10..].trim())
+    let (readonly, var_part) = if let Some(stripped) = content_trimmed.strip_prefix("readonly:") {
+        (true, stripped.trim())
+    } else if let Some(stripped) = content_trimmed.strip_prefix("readonly :") {
+        (true, stripped.trim())
     } else {
         (false, content_trimmed)
     };
@@ -315,42 +315,39 @@ fn parse_wait_directive<'a>(
         let mut has_queues = false;
         let mut queue_exprs = Vec::new();
 
-        if content_str.starts_with("devnum:") || content_str.starts_with("devnum :") {
-            // Parse: "devnum: 23: ..." or "devnum: 23: queues: ..."
-            let after_devnum = if content_str.starts_with("devnum:") {
-                &content_str[7..]
-            } else {
-                &content_str[8..]
-            }
-            .trim();
+        if let Some(stripped) = content_str
+            .strip_prefix("devnum:")
+            .or_else(|| content_str.strip_prefix("devnum :"))
+        {
+            // Parse: "devnum: 23" or "devnum: 23: queues: ..."
+            let after_devnum = stripped.trim();
 
             if let Some(colon_pos) = after_devnum.find(':') {
+                // Has queue list or additional content after devnum
                 devnum = Some(Cow::Owned(after_devnum[..colon_pos].trim().to_string()));
                 let rest = after_devnum[colon_pos + 1..].trim();
 
-                if rest.starts_with("queues:") || rest.starts_with("queues :") {
+                if let Some(queues_stripped) = rest
+                    .strip_prefix("queues:")
+                    .or_else(|| rest.strip_prefix("queues :"))
+                {
                     has_queues = true;
-                    let after_queues = if rest.starts_with("queues:") {
-                        &rest[7..]
-                    } else {
-                        &rest[8..]
-                    }
-                    .trim();
-                    queue_exprs = parse_variable_list(after_queues);
+                    queue_exprs = parse_variable_list(queues_stripped.trim());
                 } else {
                     queue_exprs = parse_variable_list(rest);
                 }
+            } else {
+                // Only devnum, no queue list
+                devnum = Some(Cow::Owned(after_devnum.to_string()));
             }
-        } else if content_str.starts_with("queues:") || content_str.starts_with("queues :") {
+        } else if let Some(stripped) = content_str.strip_prefix("queues:") {
             // Parse: "queues: 1, 2, 3"
             has_queues = true;
-            let after_queues = if content_str.starts_with("queues:") {
-                &content_str[7..]
-            } else {
-                &content_str[8..]
-            }
-            .trim();
-            queue_exprs = parse_variable_list(after_queues);
+            queue_exprs = parse_variable_list(stripped.trim());
+        } else if let Some(stripped) = content_str.strip_prefix("queues :") {
+            // Parse: "queues : 1, 2, 3"
+            has_queues = true;
+            queue_exprs = parse_variable_list(stripped.trim());
         } else if !content_str.is_empty() {
             // Parse: "1, 2, 3"
             queue_exprs = parse_variable_list(content_str);
