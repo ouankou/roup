@@ -770,6 +770,7 @@ fn clause_content_from_kind<'a>(kind: &'a ClauseKind<'a>) -> Option<Cow<'a, str>
         ClauseKind::ReductionClause {
             operator,
             variables,
+            ..
         } => Some(Cow::Owned(format_reduction_clause(*operator, variables))),
         ClauseKind::Bare => None,
     }

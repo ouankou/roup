@@ -87,6 +87,7 @@ pub fn display_ast_tree(directive: &Directive) -> String {
                 ClauseKind::ReductionClause {
                     operator,
                     variables,
+                    ..
                 } => {
                     output.push_str(&format!(
                         "{}└─ kind: ReductionClause {:?} [{}]\n",

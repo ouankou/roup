@@ -269,8 +269,11 @@ process_file() {
     # Process each pragma
     for pragma in "${pragmas[@]}"; do
         if [ $is_fortran -eq 1 ]; then
-            # Fortran: normalize by removing commas between clauses, converting to lowercase, and removing extra spaces
-            local original_normalized=$(echo "$pragma" | sed 's/),[[:space:]][[:space:]]*/) /g' | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            # Fortran: convert to lowercase, normalize formatting
+            # 1. Remove commas between clauses - match ), followed by clause keyword (word followed by paren or space)
+            # 2. Normalize comma spacing within clauses (e.g., ",x" -> ", x")
+            # 3. Collapse multiple spaces
+            local original_normalized=$(echo "$pragma" | tr '[:upper:]' '[:lower:]' | sed 's/),[[:space:]]*\([a-z][a-z_]*[[:space:]]*(\)/) \1/g' | sed 's/),[[:space:]]*\([a-z][a-z_]*[[:space:]]*$\)/) \1/g' | sed 's/,[[:space:]]*/, /g' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
             # Round-trip through ROUP (auto-detects Fortran from sentinel)
             if ! roundtrip=$(echo "$pragma" | "$ROUNDTRIP_BIN" --acc 2>/dev/null); then
@@ -281,7 +284,7 @@ process_file() {
             fi
 
             # Normalize round-tripped output
-            local roundtrip_normalized=$(echo "$roundtrip" | sed 's/),[[:space:]][[:space:]]*/) /g' | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            local roundtrip_normalized=$(echo "$roundtrip" | tr '[:upper:]' '[:lower:]' | sed 's/),[[:space:]]*\([a-z][a-z_]*[[:space:]]*(\)/) \1/g' | sed 's/),[[:space:]]*\([a-z][a-z_]*[[:space:]]*$\)/) \1/g' | sed 's/,[[:space:]]*/, /g' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
             # Compare
             if [ "$original_normalized" = "$roundtrip_normalized" ]; then
@@ -404,7 +407,7 @@ if [ $total_pragmas -eq 0 ]; then
     exit 0
 fi
 
-pass_rate=$(awk "BEGIN {printf \"%.1f\", ($passed * 100.0) / $total_pragmas}")
+pass_rate=$(awk "BEGIN {printf \"%.2f\", ($passed * 100.0) / $total_pragmas}")
 
 echo -e "${GREEN}Passed:${NC}                $passed"
 echo -e "${RED}Failed:${NC}                $failed"

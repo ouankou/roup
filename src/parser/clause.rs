@@ -103,6 +103,7 @@ pub enum ClauseKind<'a> {
     ReductionClause {
         operator: ReductionOperator,
         variables: Vec<Cow<'a, str>>,
+        space_after_colon: bool,
     },
 }
 
@@ -205,6 +206,7 @@ impl fmt::Display for Clause<'_> {
             ClauseKind::ReductionClause {
                 operator,
                 variables,
+                space_after_colon,
             } => {
                 let op_str = match operator {
                     ReductionOperator::Add => "+",
@@ -225,7 +227,11 @@ impl fmt::Display for Clause<'_> {
                     ReductionOperator::FortIor => "ior",
                     ReductionOperator::FortIeor => "ieor",
                 };
-                write!(f, "{}({}:{})", self.name, op_str, variables.join(", "))
+                if *space_after_colon {
+                    write!(f, "{}({}: {})", self.name, op_str, variables.join(", "))
+                } else {
+                    write!(f, "{}({}:{})", self.name, op_str, variables.join(", "))
+                }
             }
         }
     }

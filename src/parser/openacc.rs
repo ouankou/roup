@@ -801,6 +801,9 @@ fn parse_reduction_clause<'a>(
 
     let input = &input[colon_idx + 1..];
 
+    // Check if there's a space after the colon (for formatting preservation)
+    let space_after_colon = input.starts_with(|c: char| c.is_whitespace());
+
     // Parse until closing paren
     let (input, _) = lexer::skip_space_and_comments(input)?;
     let mut depth = 0;
@@ -833,6 +836,7 @@ fn parse_reduction_clause<'a>(
             kind: ClauseKind::ReductionClause {
                 operator,
                 variables,
+                space_after_colon,
             },
         },
     ))

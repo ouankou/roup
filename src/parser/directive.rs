@@ -189,6 +189,7 @@ impl<'a> Directive<'a> {
                             if let ClauseKind::ReductionClause {
                                 operator: op,
                                 variables,
+                                ..
                             } = &clause.kind
                             {
                                 if op == operator {
@@ -206,6 +207,7 @@ impl<'a> Directive<'a> {
                             kind: ClauseKind::ReductionClause {
                                 operator: *operator,
                                 variables: vars,
+                                space_after_colon: false,
                             },
                         });
                     }

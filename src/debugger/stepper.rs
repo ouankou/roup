@@ -299,12 +299,14 @@ impl DebugSession {
                             crate::parser::ClauseKind::ReductionClause {
                                 operator,
                                 variables,
+                                space_after_colon,
                             } => crate::parser::ClauseKind::ReductionClause {
                                 operator: *operator,
                                 variables: variables
                                     .iter()
                                     .map(|v| Cow::Owned(v.to_string()))
                                     .collect(),
+                                space_after_colon: *space_after_colon,
                             },
                             crate::parser::ClauseKind::GangClause {
                                 modifier,

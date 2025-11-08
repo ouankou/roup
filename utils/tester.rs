@@ -45,6 +45,7 @@ fn main() {
                     ClauseKind::ReductionClause {
                         ref operator,
                         ref variables,
+                        ..
                     } => {
                         println!(
                             "Clause: {}(operator: {:?}, vars: {:?})",
