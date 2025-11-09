@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 12 clauses) + OpenACC (18 directives + 45 clauses) = 0x377190AEB0C04C97
+// Auto-generated checksum: FNV-1a hash of OpenMP (34 directives + 89 clauses) + OpenACC (18 directives + 45 clauses) = 0x0D580BE641E02987
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x377190AEB0C04C97
+#define ROUP_CONSTANTS_CHECKSUM 0x0D580BE641E02987
 
 // ============================================================================
 // Language Format Constants
@@ -44,21 +44,38 @@ extern "C" {
 
 #define ROUP_DIRECTIVE_PARALLEL             0
 #define ROUP_DIRECTIVE_FOR                  1
-#define ROUP_DIRECTIVE_SECTIONS             2
-#define ROUP_DIRECTIVE_SINGLE               3
-#define ROUP_DIRECTIVE_TASK                 4
-#define ROUP_DIRECTIVE_MASTER               5
-#define ROUP_DIRECTIVE_CRITICAL             6
-#define ROUP_DIRECTIVE_BARRIER              7
-#define ROUP_DIRECTIVE_TASKWAIT             8
-#define ROUP_DIRECTIVE_TASKGROUP            9
-#define ROUP_DIRECTIVE_ATOMIC               10
-#define ROUP_DIRECTIVE_FLUSH                11
-#define ROUP_DIRECTIVE_ORDERED              12
-#define ROUP_DIRECTIVE_TARGET               13
-#define ROUP_DIRECTIVE_TEAMS                14
-#define ROUP_DIRECTIVE_DISTRIBUTE           15
-#define ROUP_DIRECTIVE_METADIRECTIVE        16
+#define ROUP_DIRECTIVE_DO                   2
+#define ROUP_DIRECTIVE_SIMD                 3
+#define ROUP_DIRECTIVE_DISTRIBUTE           9
+#define ROUP_DIRECTIVE_LOOP                 15
+#define ROUP_DIRECTIVE_SCAN                 16
+#define ROUP_DIRECTIVE_SECTIONS             17
+#define ROUP_DIRECTIVE_SECTION              18
+#define ROUP_DIRECTIVE_SINGLE               19
+#define ROUP_DIRECTIVE_WORKSHARE            20
+#define ROUP_DIRECTIVE_CANCEL               21
+#define ROUP_DIRECTIVE_ALLOCATE             23
+#define ROUP_DIRECTIVE_THREADPRIVATE        24
+#define ROUP_DIRECTIVE_TEAMS                37
+#define ROUP_DIRECTIVE_METADIRECTIVE        38
+#define ROUP_DIRECTIVE_TASK                 40
+#define ROUP_DIRECTIVE_TASKLOOP             41
+#define ROUP_DIRECTIVE_TASKYIELD            43
+#define ROUP_DIRECTIVE_REQUIRES             44
+#define ROUP_DIRECTIVE_TARGET               49
+#define ROUP_DIRECTIVE_MASTER               52
+#define ROUP_DIRECTIVE_END                  53
+#define ROUP_DIRECTIVE_BARRIER              54
+#define ROUP_DIRECTIVE_TASKWAIT             55
+#define ROUP_DIRECTIVE_UNROLL               56
+#define ROUP_DIRECTIVE_TILE                 57
+#define ROUP_DIRECTIVE_TASKGROUP            58
+#define ROUP_DIRECTIVE_FLUSH                59
+#define ROUP_DIRECTIVE_ATOMIC               60
+#define ROUP_DIRECTIVE_CRITICAL             61
+#define ROUP_DIRECTIVE_DEPOBJ               62
+#define ROUP_DIRECTIVE_ORDERED              63
+#define ROUP_DIRECTIVE_UNKNOWN              86
 #define ROUP_DIRECTIVE_UNKNOWN       999
 
 
@@ -67,18 +84,95 @@ extern "C" {
 // ============================================================================
 // Auto-generated from src/c_api.rs:convert_clause()
 
-#define ROUP_CLAUSE_NUM_THREADS     0
-#define ROUP_CLAUSE_IF              1
-#define ROUP_CLAUSE_PRIVATE         2
-#define ROUP_CLAUSE_SHARED          3
+#define ROUP_CLAUSE_IF              0
+#define ROUP_CLAUSE_NUM_THREADS     1
+#define ROUP_CLAUSE_DEFAULT         2
+#define ROUP_CLAUSE_PRIVATE         3
 #define ROUP_CLAUSE_FIRSTPRIVATE    4
-#define ROUP_CLAUSE_LASTPRIVATE     5
-#define ROUP_CLAUSE_REDUCTION       6
-#define ROUP_CLAUSE_SCHEDULE        7
-#define ROUP_CLAUSE_COLLAPSE        8
-#define ROUP_CLAUSE_ORDERED         9
-#define ROUP_CLAUSE_NOWAIT          10
-#define ROUP_CLAUSE_DEFAULT         11
+#define ROUP_CLAUSE_SHARED          5
+#define ROUP_CLAUSE_COPYIN          6
+#define ROUP_CLAUSE_ALIGN           7
+#define ROUP_CLAUSE_REDUCTION       8
+#define ROUP_CLAUSE_PROC_BIND       9
+#define ROUP_CLAUSE_ALLOCATE        10
+#define ROUP_CLAUSE_NUM_TEAMS       11
+#define ROUP_CLAUSE_THREAD_LIMIT    12
+#define ROUP_CLAUSE_LASTPRIVATE     13
+#define ROUP_CLAUSE_COLLAPSE        14
+#define ROUP_CLAUSE_ORDERED         15
+#define ROUP_CLAUSE_PARTIAL         16
+#define ROUP_CLAUSE_NOWAIT          17
+#define ROUP_CLAUSE_FULL            18
+#define ROUP_CLAUSE_ORDER           19
+#define ROUP_CLAUSE_LINEAR          20
+#define ROUP_CLAUSE_SCHEDULE        21
+#define ROUP_CLAUSE_SAFELEN         22
+#define ROUP_CLAUSE_SIMDLEN         23
+#define ROUP_CLAUSE_ALIGNED         24
+#define ROUP_CLAUSE_NONTEMPORAL     25
+#define ROUP_CLAUSE_UNIFORM         26
+#define ROUP_CLAUSE_INBRANCH        27
+#define ROUP_CLAUSE_NOTINBRANCH     28
+#define ROUP_CLAUSE_DIST_SCHEDULE   29
+#define ROUP_CLAUSE_BIND            30
+#define ROUP_CLAUSE_INCLUSIVE       31
+#define ROUP_CLAUSE_EXCLUSIVE       32
+#define ROUP_CLAUSE_COPYPRIVATE     33
+#define ROUP_CLAUSE_PARALLEL        34
+#define ROUP_CLAUSE_SECTIONS        35
+#define ROUP_CLAUSE_FOR             36
+#define ROUP_CLAUSE_DO              37
+#define ROUP_CLAUSE_TASKGROUP       38
+#define ROUP_CLAUSE_ALLOCATOR       39
+#define ROUP_CLAUSE_INITIALIZER     40
+#define ROUP_CLAUSE_FINAL           41
+#define ROUP_CLAUSE_UNTIED          42
+#define ROUP_CLAUSE_REQUIRES        43
+#define ROUP_CLAUSE_MERGEABLE       44
+#define ROUP_CLAUSE_IN_REDUCTION    45
+#define ROUP_CLAUSE_DEPEND          46
+#define ROUP_CLAUSE_PRIORITY        47
+#define ROUP_CLAUSE_AFFINITY        48
+#define ROUP_CLAUSE_DETACH          49
+#define ROUP_CLAUSE_GRAINSIZE       50
+#define ROUP_CLAUSE_NUM_TASKS       51
+#define ROUP_CLAUSE_NOGROUP         52
+#define ROUP_CLAUSE_REVERSE_OFFLOAD 53
+#define ROUP_CLAUSE_UNIFIED_ADDRESS 54
+#define ROUP_CLAUSE_UNIFIED_SHARED_MEMORY 55
+#define ROUP_CLAUSE_ATOMIC_DEFAULT_MEM_ORDER 56
+#define ROUP_CLAUSE_DYNAMIC_ALLOCATORS 57
+#define ROUP_CLAUSE_EXT_IMPLEMENTATION_DEFINED_REQUIREMENT 58
+#define ROUP_CLAUSE_DEVICE          59
+#define ROUP_CLAUSE_MAP             60
+#define ROUP_CLAUSE_USE_DEVICE_PTR  61
+#define ROUP_CLAUSE_SIZES           62
+#define ROUP_CLAUSE_USE_DEVICE_ADDR 63
+#define ROUP_CLAUSE_IS_DEVICE_PTR   64
+#define ROUP_CLAUSE_HAS_DEVICE_ADDR 65
+#define ROUP_CLAUSE_DEFAULTMAP      66
+#define ROUP_CLAUSE_TO              67
+#define ROUP_CLAUSE_FROM            68
+#define ROUP_CLAUSE_USES_ALLOCATORS 69
+#define ROUP_CLAUSE_WHEN            70
+#define ROUP_CLAUSE_MATCH           71
+#define ROUP_CLAUSE_LINK            72
+#define ROUP_CLAUSE_DEVICE_TYPE     73
+#define ROUP_CLAUSE_TASK_REDUCTION  74
+#define ROUP_CLAUSE_ACQ_REL         75
+#define ROUP_CLAUSE_RELEASE         76
+#define ROUP_CLAUSE_ACQUIRE         77
+#define ROUP_CLAUSE_READ            78
+#define ROUP_CLAUSE_WRITE           79
+#define ROUP_CLAUSE_UPDATE          80
+#define ROUP_CLAUSE_CAPTURE         81
+#define ROUP_CLAUSE_SEQ_CST         82
+#define ROUP_CLAUSE_RELAXED         83
+#define ROUP_CLAUSE_HINT            84
+#define ROUP_CLAUSE_DESTROY         85
+#define ROUP_CLAUSE_DEPOBJ_UPDATE   86
+#define ROUP_CLAUSE_THREADS         87
+#define ROUP_CLAUSE_SIMD            88
 #define ROUP_CLAUSE_UNKNOWN      999
 
 

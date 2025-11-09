@@ -40,14 +40,10 @@ endif()
 # Compatibility Library
 # ============================================================================
 
-# Reuse upstream implementation sources (excluding parseOpenMP symbol clash)
+# Reuse upstream implementation sources for data structures and toString
 set(OMPPARSER_IR_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ompparser/src/OpenMPIR.cpp)
 set(OMPPARSER_TOSTRING_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ompparser/src/OpenMPIRToString.cpp)
 set(OMPPARSER_TODOT_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ompparser/src/OpenMPIRToDOT.cpp)
-
-# Rename upstream parseOpenMP symbol to avoid multiple definition when linking
-set_source_files_properties(${OMPPARSER_IR_SRC}
-    PROPERTIES COMPILE_DEFINITIONS "parseOpenMP=ompparser_legacy_parseOpenMP")
 
 # Option 1: Static library (current)
 add_library(roup-ompparser-compat STATIC
@@ -138,6 +134,49 @@ enable_testing()
 add_test(NAME compat_basic COMMAND compat_example)
 add_test(NAME ompparser_drop_in COMMAND ompparser_example)
 add_test(NAME comprehensive COMMAND comprehensive_test)
+
+# ============================================================================
+# ompparser Test Suite Integration
+# ============================================================================
+
+# Build ompparser's tester executable with ROUP compat library
+add_executable(ompparser_tester
+    ompparser/tests/tester.cpp
+)
+
+target_include_directories(ompparser_tester PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/ompparser/src
+)
+
+target_link_libraries(ompparser_tester
+    ompparser  # Use ROUP-powered libompparser.so
+)
+
+# Add all ompparser .txt test files as individual ctests
+file(GLOB TEST_SUITE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/ompparser/tests/*.txt")
+list(SORT TEST_SUITE_FILES)
+foreach(TEST_FILE IN LISTS TEST_SUITE_FILES)
+    get_filename_component(TEST_NAME "${TEST_FILE}" NAME_WE)
+    add_test(NAME ompparser_${TEST_NAME}
+             COMMAND $<TARGET_FILE:ompparser_tester> "${TEST_FILE}"
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+endforeach()
+
+# Build allocator_clause_token_test
+add_executable(ompparser_allocator_test
+    ompparser/tests/allocator_clause_token_test.cpp
+)
+
+target_include_directories(ompparser_allocator_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/ompparser/src
+)
+
+target_link_libraries(ompparser_allocator_test
+    ompparser
+)
+
+add_test(NAME ompparser_allocator_clause_token
+         COMMAND $<TARGET_FILE:ompparser_allocator_test>)
 
 # ============================================================================
 # Installation
