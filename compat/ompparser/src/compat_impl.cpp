@@ -274,28 +274,137 @@ static OpenMPDirectiveKind mapDirectiveNameToKind(const char* name) {
 }
 
 static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
-    // DEPRECATED: This function is kept for reference only
-    // Use mapDirectiveNameToKind() instead for accurate mapping
-    // Integer kinds are ambiguous (many directives map to same kind)
+    // Map ROUP DirectiveKind enum (src/ir/directive.rs) to ompparser OpenMPDirectiveKind
+    // Each directive has a unique enum value - NO MORE COLLAPSING!
     switch (roup_kind) {
-        case ROUP_DIRECTIVE_PARALLEL:       return OMPD_parallel;
-        case ROUP_DIRECTIVE_FOR:            return OMPD_for;
-        case ROUP_DIRECTIVE_SECTIONS:       return OMPD_sections;
-        case ROUP_DIRECTIVE_SINGLE:         return OMPD_single;
-        case ROUP_DIRECTIVE_TASK:           return OMPD_task;
-        case ROUP_DIRECTIVE_MASTER:         return OMPD_master;
-        case ROUP_DIRECTIVE_CRITICAL:       return OMPD_critical;
-        case ROUP_DIRECTIVE_BARRIER:        return OMPD_barrier;
-        case ROUP_DIRECTIVE_TASKWAIT:       return OMPD_taskwait;
-        case ROUP_DIRECTIVE_TASKGROUP:      return OMPD_taskgroup;
-        case ROUP_DIRECTIVE_ATOMIC:         return OMPD_atomic;
-        case ROUP_DIRECTIVE_FLUSH:          return OMPD_flush;
-        case ROUP_DIRECTIVE_ORDERED:        return OMPD_ordered;
-        case ROUP_DIRECTIVE_TARGET:         return OMPD_target;
-        case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
-        case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
-        case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
-        default:                            return OMPD_unknown;
+        // Parallel constructs
+        case 0:   return OMPD_parallel;
+        case 1:   return OMPD_parallel_for;
+        case 2:   return OMPD_parallel_for_simd;
+        case 3:   return OMPD_parallel_sections;
+        case 4:   return OMPD_parallel_workshare;
+        case 5:   return OMPD_parallel_loop;
+        case 6:   return OMPD_parallel_masked;
+        case 7:   return OMPD_parallel_master;
+        case 8:   return OMPD_parallel_loop;  // parallel_loop_simd
+        case 9:   return OMPD_parallel_masked_taskloop;
+        case 17:  return OMPD_parallel_masked_taskloop_simd;
+        case 18:  return OMPD_parallel_master_taskloop;
+        case 19:  return OMPD_parallel_master_taskloop_simd;
+
+        // Work-sharing constructs
+        case 10:  return OMPD_for;
+        case 11:  return OMPD_for_simd;
+        case 12:  return OMPD_sections;
+        case 13:  return OMPD_section;
+        case 14:  return OMPD_single;
+        case 15:  return OMPD_workshare;
+        case 16:  return OMPD_loop;
+
+        // SIMD constructs
+        case 20:  return OMPD_simd;
+        case 21:  return OMPD_declare_simd;
+
+        // Task constructs
+        case 30:  return OMPD_task;
+        case 31:  return OMPD_taskloop;
+        case 32:  return OMPD_taskloop_simd;
+        case 33:  return OMPD_taskyield;
+        case 34:  return OMPD_taskwait;
+        case 35:  return OMPD_taskgroup;
+        case 38:  return OMPD_masked_taskloop;
+        case 39:  return OMPD_masked_taskloop_simd;
+
+        // Target constructs
+        case 40:  return OMPD_target;
+        case 41:  return OMPD_target_data;
+        case 42:  return OMPD_target_enter_data;
+        case 43:  return OMPD_target_exit_data;
+        case 44:  return OMPD_target_update;
+        case 45:  return OMPD_target_parallel;
+        case 46:  return OMPD_target_parallel_for;
+        case 47:  return OMPD_target_parallel_for_simd;
+        case 48:  return OMPD_target_parallel_loop;
+        case 49:  return OMPD_target_simd;
+        case 50:  return OMPD_target_teams;
+        case 51:  return OMPD_target_teams_distribute;
+        case 52:  return OMPD_target_teams_distribute_simd;
+        case 53:  return OMPD_target_teams_distribute_parallel_for;
+        case 54:  return OMPD_target_teams_distribute_parallel_for_simd;
+        case 55:  return OMPD_target_teams_loop;
+        case 56:  return OMPD_target_parallel_loop;  // target_parallel_loop_simd
+        case 57:  return OMPD_target;  // target_loop
+        case 58:  return OMPD_target;  // target_loop_simd
+
+        // Teams constructs
+        case 60:  return OMPD_teams;
+        case 61:  return OMPD_teams_distribute;
+        case 62:  return OMPD_teams_distribute_simd;
+        case 63:  return OMPD_teams_distribute_parallel_for;
+        case 64:  return OMPD_teams_distribute_parallel_for_simd;
+        case 65:  return OMPD_teams_loop;
+        case 66:  return OMPD_teams_distribute_parallel_for;  // teams_distribute_parallel_loop
+        case 67:  return OMPD_teams_distribute_parallel_for_simd;  // teams_distribute_parallel_loop_simd
+        case 68:  return OMPD_teams_loop;  // teams_loop_simd
+
+        // Synchronization constructs
+        case 70:  return OMPD_barrier;
+        case 71:  return OMPD_critical;
+        case 72:  return OMPD_atomic;
+        case 73:  return OMPD_flush;
+        case 74:  return OMPD_ordered;
+        case 75:  return OMPD_master;
+        case 76:  return OMPD_masked;
+        case 77:  return OMPD_atomic;  // atomic_read
+        case 78:  return OMPD_atomic;  // atomic_write
+        case 79:  return OMPD_atomic;  // atomic_update
+        case 86:  return OMPD_atomic;  // atomic_capture
+        case 87:  return OMPD_atomic;  // atomic_compare_capture
+
+        // Declare constructs
+        case 80:  return OMPD_declare_reduction;
+        case 81:  return OMPD_declare_mapper;
+        case 82:  return OMPD_declare_target;
+        case 83:  return OMPD_declare_variant;
+
+        // Distribute constructs
+        case 90:  return OMPD_distribute;
+        case 91:  return OMPD_distribute_simd;
+        case 92:  return OMPD_distribute_parallel_for;
+        case 93:  return OMPD_distribute_parallel_for_simd;
+        case 94:  return OMPD_distribute_parallel_for;  // distribute_parallel_loop
+        case 95:  return OMPD_distribute_parallel_for_simd;  // distribute_parallel_loop_simd
+
+        // Meta-directives
+        case 100: return OMPD_metadirective;
+
+        // Other constructs
+        case 120: return OMPD_threadprivate;
+        case 121: return OMPD_allocate;
+        case 123: return OMPD_requires;
+        case 124: return OMPD_scan;
+        case 125: return OMPD_depobj;
+        case 128: return OMPD_cancel;
+        case 129: return OMPD_cancellation_point;
+
+        // Fortran "do" variants
+        case 135: return OMPD_do;
+        case 136: return OMPD_do_simd;
+        case 137: return OMPD_parallel_do;
+        case 138: return OMPD_parallel_do_simd;
+        case 139: return OMPD_distribute_parallel_do;
+        case 140: return OMPD_distribute_parallel_do_simd;
+        case 141: return OMPD_teams_distribute_parallel_do;
+        case 142: return OMPD_teams_distribute_parallel_do_simd;
+        case 143: return OMPD_target_parallel_do;
+        case 144: return OMPD_target_parallel_do_simd;
+        case 145: return OMPD_target_teams_distribute_parallel_do;
+        case 146: return OMPD_target_teams_distribute_parallel_do_simd;
+
+        // END directive
+        case 147: return OMPD_end;  // end_target or generic end
+
+        default:  return OMPD_unknown;
     }
 }
 
@@ -384,12 +493,14 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         return nullptr;
     }
 
-    // Get directive name and kind from ROUP
-    const char* directive_name = roup_directive_name(roup_dir);
+    // Get directive kind from ROUP (DirectiveKind enum value)
     int32_t roup_kind = roup_directive_kind(roup_dir);
 
-    // Use directive name for accurate mapping (integer kinds are ambiguous)
-    OpenMPDirectiveKind kind = mapDirectiveNameToKind(directive_name);
+    // Get directive name (needed for END directive handling)
+    const char* directive_name = roup_directive_name(roup_dir);
+
+    // Map ROUP DirectiveKind enum to ompparser OpenMPDirectiveKind enum
+    OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
 
     // Create ompparser-compatible directive - use specialized types where needed
     OpenMPDirective* dir = nullptr;
