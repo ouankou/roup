@@ -360,6 +360,67 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             OpenMPClause* omp_clause = nullptr;
 
             switch (roup_kind_clause) {
+                case 1: {  // if clause - extract modifier (task:, parallel:, etc.)
+                    OmpStringList* vars = roup_clause_variables(roup_clause);
+                    int if_modifier = 10;  // OMPC_IF_MODIFIER_unspecified (default)
+                    std::string if_expr;
+
+                    if (vars && roup_string_list_len(vars) > 0) {
+                        const char* first_var = roup_string_list_get(vars, 0);
+                        if (first_var) {
+                            std::string content(first_var);
+
+                            // Check for modifier like "task:", "parallel:", "simd:", etc.
+                            size_t colon_pos = content.find(':');
+                            if (colon_pos != std::string::npos) {
+                                std::string potential_modifier = content.substr(0, colon_pos);
+                                // Trim whitespace
+                                size_t start = potential_modifier.find_first_not_of(" \t");
+                                size_t end = potential_modifier.find_last_not_of(" \t");
+                                if (start != std::string::npos && end != std::string::npos) {
+                                    potential_modifier = potential_modifier.substr(start, end - start + 1);
+                                }
+
+                                // Map modifier strings to enum values
+                                if (potential_modifier == "parallel") if_modifier = 0;
+                                else if (potential_modifier == "simd") if_modifier = 1;
+                                else if (potential_modifier == "task") if_modifier = 2;
+                                else if (potential_modifier == "cancel") if_modifier = 3;
+                                else if (potential_modifier == "target_data") if_modifier = 4;
+                                else if (potential_modifier == "target_enter_data") if_modifier = 5;
+                                else if (potential_modifier == "target_exit_data") if_modifier = 6;
+                                else if (potential_modifier == "target") if_modifier = 7;
+                                else if (potential_modifier == "target_update") if_modifier = 8;
+                                else if (potential_modifier == "taskloop") if_modifier = 9;
+
+                                if (if_modifier != 10) {
+                                    // Found a valid modifier, extract expression after colon
+                                    if_expr = content.substr(colon_pos + 1);
+                                    // Trim leading whitespace
+                                    size_t expr_start = if_expr.find_first_not_of(" \t");
+                                    if (expr_start != std::string::npos) {
+                                        if_expr = if_expr.substr(expr_start);
+                                    }
+                                } else {
+                                    // No valid modifier, use whole content as expression
+                                    if_expr = content;
+                                }
+                            } else {
+                                // No colon, use whole content as expression
+                                if_expr = content;
+                            }
+                        }
+                        roup_string_list_free(vars);
+                    }
+
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), if_modifier);
+
+                    // Add the expression
+                    if (omp_clause && !if_expr.empty()) {
+                        omp_clause->addLangExpr(if_expr.c_str());
+                    }
+                    break;
+                }
                 case 6: {  // reduction
                     int32_t op = roup_clause_reduction_operator(roup_clause);
                     int32_t modifier_code = roup_clause_reduction_modifier(roup_clause);
