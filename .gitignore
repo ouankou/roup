@@ -26,6 +26,9 @@
 # CMake build artifacts
 compat/ompparser/build/
 
+# CTest output
+Testing/
+
 # Example binaries (C)
 examples/c/basic_parse
 examples/c/tutorial
