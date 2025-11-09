@@ -24,6 +24,14 @@ pub enum CreateModifier {
     Zero,
 }
 
+/// OpenMP reduction clause modifier (OpenMP 5.0+)
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum ReductionModifier {
+    Inscan,  // inscan
+    Task,    // task
+    Default, // default
+}
+
 /// OpenACC reduction clause operator
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ReductionOperator {
@@ -101,6 +109,7 @@ pub enum ClauseKind<'a> {
     },
     /// Structured reduction clause with operator
     ReductionClause {
+        modifier: Option<ReductionModifier>,
         operator: ReductionOperator,
         variables: Vec<Cow<'a, str>>,
         space_after_colon: bool,
@@ -204,6 +213,7 @@ impl fmt::Display for Clause<'_> {
                 write!(f, "{})", variables.join(", "))
             }
             ClauseKind::ReductionClause {
+                modifier,
                 operator,
                 variables,
                 space_after_colon,
@@ -227,10 +237,19 @@ impl fmt::Display for Clause<'_> {
                     ReductionOperator::FortIor => "ior",
                     ReductionOperator::FortIeor => "ieor",
                 };
+                write!(f, "{}(", self.name)?;
+                if let Some(m) = modifier {
+                    let mod_str = match m {
+                        ReductionModifier::Inscan => "inscan",
+                        ReductionModifier::Task => "task",
+                        ReductionModifier::Default => "default",
+                    };
+                    write!(f, "{}, ", mod_str)?;
+                }
                 if *space_after_colon {
-                    write!(f, "{}({}: {})", self.name, op_str, variables.join(", "))
+                    write!(f, "{}: {})", op_str, variables.join(", "))
                 } else {
-                    write!(f, "{}({}:{})", self.name, op_str, variables.join(", "))
+                    write!(f, "{}:{})", op_str, variables.join(", "))
                 }
             }
         }

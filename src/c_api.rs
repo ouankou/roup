@@ -161,10 +161,11 @@ struct ScheduleData {
     kind: i32, // 0=static, 1=dynamic, 2=guided, 3=auto, 4=runtime
 }
 
-/// Reduction clause data (operator and variables)
+/// Reduction clause data (operator, modifier, and variables)
 #[repr(C)]
 struct ReductionData {
     operator: i32,                 // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+    modifier: i32,                 // 0=none, 1=inscan, 2=task, 3=default
     variables: *mut OmpStringList, // List of reduction variables
 }
 
@@ -724,6 +725,26 @@ pub extern "C" fn roup_clause_reduction_operator(clause: *const OmpClause) -> i3
     }
 }
 
+/// Get reduction modifier from reduction clause.
+///
+/// Returns modifier code: 0=none, 1=inscan, 2=task, 3=default
+/// Returns -1 if clause is NULL or not a reduction clause.
+#[no_mangle]
+pub extern "C" fn roup_clause_reduction_modifier(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != 6 {
+            // Not a reduction clause
+            return -1;
+        }
+        c.data.reduction.modifier
+    }
+}
+
 /// Get default data sharing from default clause.
 ///
 /// Returns -1 if clause is NULL or not a default clause.
@@ -970,12 +991,12 @@ fn convert_clause(clause: &Clause) -> OmpClause {
             (kind_code, ClauseData { variables })
         }
         "reduction" => {
-            // Reduction clause - extract operator AND variables
-            let (operator, variables) = extract_reduction_data(clause);
+            // Reduction clause - extract operator, modifier, AND variables
+            let (operator, modifier, variables) = extract_reduction_data(clause);
             (
                 6,
                 ClauseData {
-                    reduction: ManuallyDrop::new(ReductionData { operator, variables }),
+                    reduction: ManuallyDrop::new(ReductionData { operator, modifier, variables }),
                 },
             )
         }
@@ -1197,11 +1218,11 @@ fn extract_expression_from_clause(clause: &Clause) -> *mut OmpStringList {
     }
 }
 
-/// Extract reduction operator and variables
-fn extract_reduction_data(clause: &Clause) -> (i32, *mut OmpStringList) {
-    use crate::parser::{ClauseKind, ReductionOperator};
+/// Extract reduction operator, modifier, and variables
+fn extract_reduction_data(clause: &Clause) -> (i32, i32, *mut OmpStringList) {
+    use crate::parser::{ClauseKind, ReductionModifier, ReductionOperator};
 
-    if let ClauseKind::ReductionClause { operator, variables, .. } = &clause.kind {
+    if let ClauseKind::ReductionClause { modifier, operator, variables, .. } = &clause.kind {
         let op_code = match operator {
             ReductionOperator::Add => 0,
             ReductionOperator::Sub => 1,
@@ -1216,6 +1237,13 @@ fn extract_reduction_data(clause: &Clause) -> (i32, *mut OmpStringList) {
             _ => 0,
         };
 
+        let mod_code = match modifier {
+            None => 0,
+            Some(ReductionModifier::Inscan) => 1,
+            Some(ReductionModifier::Task) => 2,
+            Some(ReductionModifier::Default) => 3,
+        };
+
         let mut items = Vec::new();
         for var in variables {
             let c_string = CString::new(var.as_ref()).unwrap();
@@ -1223,7 +1251,7 @@ fn extract_reduction_data(clause: &Clause) -> (i32, *mut OmpStringList) {
         }
         let vars_list = Box::into_raw(Box::new(OmpStringList { items }));
 
-        return (op_code, vars_list);
+        return (op_code, mod_code, vars_list);
     }
 
     // Fallback to parsing from Parenthesized (older code path)
@@ -1252,7 +1280,7 @@ fn extract_reduction_data(clause: &Clause) -> (i32, *mut OmpStringList) {
     } else {
         ptr::null_mut()
     };
-    (operator, variables)
+    (operator, 0, variables)  // No modifier in fallback case
 }
 
 /// Parse reduction operator from clause arguments.

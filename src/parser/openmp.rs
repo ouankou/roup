@@ -324,8 +324,14 @@ pub fn clause_registry() -> ClauseRegistry {
     let mut builder = ClauseRegistryBuilder::new().with_default_rule(OPENMP_DEFAULT_CLAUSE_RULE);
 
     for clause in OpenMpClause::ALL {
-        builder.register_with_rule_mut(clause.name(), clause.rule());
+        // Skip reduction - we'll register a custom parser for it
+        if clause.name() != "reduction" {
+            builder.register_with_rule_mut(clause.name(), clause.rule());
+        }
     }
+
+    // Register custom parser for reduction clause to handle modifiers
+    builder = builder.register_custom("reduction", parse_reduction_clause);
 
     builder.build()
 }
@@ -368,6 +374,152 @@ fn parse_parenthesized_content(input: &str) -> nom::IResult<&str, String> {
     let rest = &input[end_index + 1..];
 
     Ok((rest, normalized.into_owned()))
+}
+
+// Custom parser for reduction clause: reduction([modifier,] operator: variables)
+fn parse_reduction_clause<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+) -> nom::IResult<&'a str, super::Clause<'a>> {
+    use crate::lexer;
+    use crate::parser::clause::{ClauseKind, ReductionModifier, ReductionOperator};
+    use nom::bytes::complete::tag;
+
+    let (input, _) = lexer::skip_space_and_comments(input)?;
+    let (input, _) = tag("(")(input)?;
+    let (input, _) = lexer::skip_space_and_comments(input)?;
+
+    // Parse until closing paren to get full content
+    let mut depth = 0;
+    let mut end_idx = None;
+    for (idx, ch) in input.char_indices() {
+        match ch {
+            '(' | '[' => depth += 1,
+            ')' if depth == 0 => {
+                end_idx = Some(idx);
+                break;
+            }
+            ')' | ']' => depth -= 1,
+            _ => {}
+        }
+    }
+
+    let end_idx = end_idx.ok_or_else(|| {
+        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
+    })?;
+
+    let content = &input[..end_idx];
+
+    // Find colon to separate operator from variables
+    let colon_idx = content.find(':').ok_or_else(|| {
+        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
+    })?;
+
+    let before_colon = content[..colon_idx].trim();
+
+    // Check for comma to separate modifier from operator
+    let (modifier, operator_str) = if let Some(comma_idx) = before_colon.find(',') {
+        let mod_str = before_colon[..comma_idx].trim().to_lowercase();
+        let op_str = before_colon[comma_idx + 1..].trim();
+
+        let modifier = match mod_str.as_str() {
+            "inscan" => Some(ReductionModifier::Inscan),
+            "task" => Some(ReductionModifier::Task),
+            "default" => Some(ReductionModifier::Default),
+            _ => None,  // Unknown modifier - keep parsing
+        };
+
+        (modifier, op_str)
+    } else {
+        (None, before_colon)
+    };
+
+    // Parse operator
+    let operator_lower = operator_str.to_lowercase();
+    let operator = match operator_lower.as_str() {
+        "+" => ReductionOperator::Add,
+        "-" => ReductionOperator::Sub,
+        "*" => ReductionOperator::Mul,
+        "max" => ReductionOperator::Max,
+        "min" => ReductionOperator::Min,
+        "&" => ReductionOperator::BitAnd,
+        "|" => ReductionOperator::BitOr,
+        "^" => ReductionOperator::BitXor,
+        "&&" => ReductionOperator::LogAnd,
+        "||" => ReductionOperator::LogOr,
+        ".and." => ReductionOperator::FortAnd,
+        ".or." => ReductionOperator::FortOr,
+        ".eqv." => ReductionOperator::FortEqv,
+        ".neqv." => ReductionOperator::FortNeqv,
+        "iand" => ReductionOperator::FortIand,
+        "ior" => ReductionOperator::FortIor,
+        "ieor" => ReductionOperator::FortIeor,
+        _ => {
+            // Unknown operator - could be user-defined
+            // Fall back to Parenthesized for now
+            return Err(nom::Err::Error(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Tag,
+            )))
+        }
+    };
+
+    let after_colon = &content[colon_idx + 1..];
+    let space_after_colon = after_colon.starts_with(|c: char| c.is_whitespace());
+
+    // Parse variable list
+    let var_list_str = after_colon.trim();
+    let variables = parse_variable_list(var_list_str);
+
+    let rest = &input[end_idx + 1..];
+
+    Ok((
+        rest,
+        super::Clause {
+            name,
+            kind: ClauseKind::ReductionClause {
+                modifier,
+                operator,
+                variables,
+                space_after_colon,
+            },
+        },
+    ))
+}
+
+// Helper function to parse comma-separated variable list
+fn parse_variable_list(input: &str) -> Vec<std::borrow::Cow<'_, str>> {
+    let mut variables = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0;
+
+    for ch in input.chars() {
+        match ch {
+            '(' | '[' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' | ']' => {
+                depth -= 1;
+                current.push(ch);
+            }
+            ',' if depth == 0 => {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    variables.push(std::borrow::Cow::Owned(trimmed.to_string()));
+                }
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        variables.push(std::borrow::Cow::Owned(trimmed.to_string()));
+    }
+
+    variables
 }
 
 // Custom parser for allocate directive: allocate(list) [clauses] or bare allocate

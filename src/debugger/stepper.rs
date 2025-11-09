@@ -297,10 +297,12 @@ impl DebugSession {
                                     .collect(),
                             },
                             crate::parser::ClauseKind::ReductionClause {
+                                modifier,
                                 operator,
                                 variables,
                                 space_after_colon,
                             } => crate::parser::ClauseKind::ReductionClause {
+                                modifier: *modifier,
                                 operator: *operator,
                                 variables: variables
                                     .iter()

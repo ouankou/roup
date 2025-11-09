@@ -5,8 +5,8 @@ pub mod openmp;
 
 pub use clause::{
     Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, ClauseRule, CopyinModifier,
-    CopyoutModifier, CreateModifier, GangModifier, ReductionOperator, VectorModifier,
-    WorkerModifier,
+    CopyoutModifier, CreateModifier, GangModifier, ReductionModifier, ReductionOperator,
+    VectorModifier, WorkerModifier,
 };
 pub use directive::{
     CacheDirectiveData, Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule,

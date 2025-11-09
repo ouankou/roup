@@ -837,6 +837,7 @@ fn parse_reduction_clause<'a>(
         super::Clause {
             name,
             kind: ClauseKind::ReductionClause {
+                modifier: None,  // OpenACC doesn't have reduction modifiers
                 operator,
                 variables,
                 space_after_colon,

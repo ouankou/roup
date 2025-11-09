@@ -6,7 +6,7 @@ use std::{
 
 use nom::{error::ErrorKind, IResult};
 
-use super::clause::{Clause, ClauseRegistry};
+use super::clause::{Clause, ClauseRegistry, ReductionModifier};
 
 type DirectiveParserFn =
     for<'a> fn(Cow<'a, str>, &'a str, &ClauseRegistry) -> IResult<&'a str, Directive<'a>>;
@@ -108,7 +108,15 @@ impl<'a> Directive<'a> {
                         20 + modifier.map_or(0, |m| m as u32)
                     }
                 }
-                ClauseKind::ReductionClause { operator, .. } => 30 + *operator as u32,
+                ClauseKind::ReductionClause { modifier, operator, .. } => {
+                    let mod_disc = match modifier {
+                        None => 0,
+                        Some(ReductionModifier::Inscan) => 100,
+                        Some(ReductionModifier::Task) => 200,
+                        Some(ReductionModifier::Default) => 300,
+                    };
+                    30 + mod_disc + *operator as u32
+                }
                 ClauseKind::CopyinClause { modifier, .. } => 40 + modifier.map_or(0, |m| m as u32),
                 ClauseKind::CopyoutClause { modifier, .. } => 50 + modifier.map_or(0, |m| m as u32),
                 ClauseKind::CreateClause { modifier, .. } => 60 + modifier.map_or(0, |m| m as u32),
@@ -205,6 +213,7 @@ impl<'a> Directive<'a> {
                         new_clauses.push(Clause {
                             name: first.name.clone(),
                             kind: ClauseKind::ReductionClause {
+                                modifier: None,  // Merged clauses lose modifiers
                                 operator: *operator,
                                 variables: vars,
                                 space_after_colon: false,

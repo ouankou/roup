@@ -45,6 +45,7 @@ extern "C" {
     OmpStringList* roup_clause_variables(const OmpClause* clause);
     int32_t roup_clause_schedule_kind(const OmpClause* clause);
     int32_t roup_clause_reduction_operator(const OmpClause* clause);
+    int32_t roup_clause_reduction_modifier(const OmpClause* clause);
     int32_t roup_clause_default_data_sharing(const OmpClause* clause);
     int32_t roup_clause_proc_bind_kind(const OmpClause* clause);
 
@@ -358,11 +359,19 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             switch (roup_kind_clause) {
                 case 6: {  // reduction
                     int32_t op = roup_clause_reduction_operator(roup_clause);
-                    // Map ROUP reduction operator to ompparser enum
-                    // For now, use basic reduction identifier
+                    int32_t modifier_code = roup_clause_reduction_modifier(roup_clause);
+
+                    // Map ROUP modifier codes to ompparser enum values
+                    // ROUP: 0=none, 1=inscan, 2=task, 3=default
+                    // ompparser: 0=inscan, 1=task, 2=default, 3=unknown, 4=unspecified
+                    int32_t modifier = 3;  // OMPC_REDUCTION_MODIFIER_unknown (default)
+                    if (modifier_code == 1) modifier = 0;  // inscan
+                    else if (modifier_code == 2) modifier = 1;  // task
+                    else if (modifier_code == 3) modifier = 2;  // default
+
                     omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
-                        0,  // OMPC_REDUCTION_MODIFIER_unknown
-                        op, // reduction operator
+                        modifier, // reduction modifier
+                        op,       // reduction operator
                         nullptr);
                     break;
                 }
