@@ -781,8 +781,8 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
         let c = &*clause;
 
         // Check if this clause type has variables or expressions
-        // Kinds: 0=num_threads, 1=if, 2-5=variable lists, 6=reduction, 8=collapse, 9=ordered, 12=copyin, 14-41=various clauses
-        if c.kind >= 2 && c.kind <= 5 || c.kind == 0 || c.kind == 1 || c.kind == 8 || c.kind == 9 || c.kind == 12 || (c.kind >= 14 && c.kind <= 41) {
+        // All variable/expression clauses: 0-5, 8-9, 12, 14-59
+        if c.kind >= 0 && c.kind <= 5 || c.kind == 8 || c.kind == 9 || c.kind == 12 || (c.kind >= 14 && c.kind <= 59) {
             // Variable list or expression clauses - return pointer to existing list
             let vars_ptr = c.data.variables;
             if !vars_ptr.is_null() {
@@ -1032,7 +1032,8 @@ fn convert_clause(clause: &Clause) -> OmpClause {
             let variables = extract_variables_from_clause(clause);
             (kind_code, ClauseData { variables })
         }
-        "final" | "untied" | "mergeable" | "threads" | "simd" | "nogroup" | "grainsize" | "num_tasks" => {
+        "final" | "untied" | "mergeable" | "threads" | "simd" | "nogroup" | "grainsize" | "num_tasks" |
+        "num_teams" | "thread_limit" | "device" | "hint" | "partial" | "full" | "initializer" | "allocator" | "sizes" => {
             // Simple parameter or flag clauses
             let kind_code = match normalized_name.as_str() {
                 "final" => 34,
@@ -1043,10 +1044,55 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 "nogroup" => 39,
                 "grainsize" => 40,
                 "num_tasks" => 41,
+                "num_teams" => 42,
+                "thread_limit" => 43,
+                "device" => 44,
+                "hint" => 45,
+                "partial" => 46,
+                "full" => 47,
+                "initializer" => 48,
+                "allocator" => 49,
+                "sizes" => 50,
                 _ => 999,
             };
             let variables = extract_expression_from_clause(clause);
             (kind_code, ClauseData { variables })
+        }
+        "uniform" | "nontemporal" | "inclusive" | "exclusive" | "copyprivate" | "link" | "is_device_ptr" | "has_device_addr" | "use_device_addr" => {
+            // Variable list clauses
+            let kind_code = match normalized_name.as_str() {
+                "uniform" => 51,
+                "nontemporal" => 52,
+                "inclusive" => 53,
+                "exclusive" => 54,
+                "copyprivate" => 55,
+                "link" => 56,
+                "is_device_ptr" => 57,
+                "has_device_addr" => 58,
+                "use_device_addr" => 59,
+                _ => 999,
+            };
+            let variables = extract_variables_from_clause(clause);
+            (kind_code, ClauseData { variables })
+        }
+        "inbranch" | "notinbranch" | "relaxed" | "acquire" | "release" | "acq_rel" | "destroy" |
+        "reverse_offload" | "unified_address" | "unified_shared_memory" | "dynamic_allocators" => {
+            // Flag clauses (no parameters)
+            let kind_code = match normalized_name.as_str() {
+                "inbranch" => 60,
+                "notinbranch" => 61,
+                "relaxed" => 62,
+                "acquire" => 63,
+                "release" => 64,
+                "acq_rel" => 65,
+                "destroy" => 66,
+                "reverse_offload" => 67,
+                "unified_address" => 68,
+                "unified_shared_memory" => 69,
+                "dynamic_allocators" => 70,
+                _ => 999,
+            };
+            (kind_code, ClauseData { default: 0 })
         }
         _ => (999, ClauseData { default: 0 }), // Unknown
     };

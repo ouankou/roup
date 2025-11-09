@@ -216,6 +216,35 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
         case 39: return OMPC_nogroup;
         case 40: return OMPC_grainsize;
         case 41: return OMPC_num_tasks;
+        case 42: return OMPC_num_teams;
+        case 43: return OMPC_thread_limit;
+        case 44: return OMPC_device;
+        case 45: return OMPC_hint;
+        case 46: return OMPC_partial;
+        case 47: return OMPC_full;
+        case 48: return OMPC_initializer;
+        case 49: return OMPC_allocator;
+        case 50: return OMPC_sizes;
+        case 51: return OMPC_uniform;
+        case 52: return OMPC_nontemporal;
+        case 53: return OMPC_inclusive;
+        case 54: return OMPC_exclusive;
+        case 55: return OMPC_copyprivate;
+        case 56: return OMPC_link;
+        case 57: return OMPC_is_device_ptr;
+        case 58: return OMPC_has_device_addr;
+        case 59: return OMPC_use_device_addr;
+        case 60: return OMPC_inbranch;
+        case 61: return OMPC_notinbranch;
+        case 62: return OMPC_relaxed;
+        case 63: return OMPC_acquire;
+        case 64: return OMPC_release;
+        case 65: return OMPC_acq_rel;
+        case 66: return OMPC_destroy;
+        case 67: return OMPC_reverse_offload;
+        case 68: return OMPC_unified_address;
+        case 69: return OMPC_unified_shared_memory;
+        case 70: return OMPC_dynamic_allocators;
         default: return OMPC_unknown;
     }
 }
