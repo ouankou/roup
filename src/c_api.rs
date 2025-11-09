@@ -125,9 +125,9 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 /// C sees this as an opaque pointer - internal structure is hidden.
 #[repr(C)]
 pub struct OmpDirective {
-    name: *const c_char,     // Directive name (e.g., "parallel")
+    name: *const c_char,      // Directive name (e.g., "parallel")
     parameter: *const c_char, // Optional parameter (e.g., "(a,b,c)" for allocate, "parallel" for cancel)
-    clauses: Vec<OmpClause>, // Associated clauses
+    clauses: Vec<OmpClause>,  // Associated clauses
 }
 
 /// Opaque clause type (C-compatible)
@@ -238,7 +238,10 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
     // Convert to C-compatible format
     let c_directive = OmpDirective {
         name: allocate_c_string(directive.name.as_ref()),
-        parameter: directive.parameter.as_ref().map_or(ptr::null(), |p| allocate_c_string(p.as_ref())),
+        parameter: directive
+            .parameter
+            .as_ref()
+            .map_or(ptr::null(), |p| allocate_c_string(p.as_ref())),
         clauses: directive
             .clauses
             .into_iter()
@@ -364,7 +367,10 @@ pub extern "C" fn roup_parse_with_language(
     // Convert to C-compatible format
     let c_directive = OmpDirective {
         name: allocate_c_string(directive.name.as_ref()),
-        parameter: directive.parameter.as_ref().map_or(ptr::null(), |p| allocate_c_string(p.as_ref())),
+        parameter: directive
+            .parameter
+            .as_ref()
+            .map_or(ptr::null(), |p| allocate_c_string(p.as_ref())),
         clauses: directive
             .clauses
             .into_iter()
