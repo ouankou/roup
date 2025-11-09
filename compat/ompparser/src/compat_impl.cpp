@@ -360,37 +360,86 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     // Only match if "end " appears right after the !$omp prefix
     size_t omp_end_pos = search_lower.find("!$omp end ");
     if (current_lang == Lang_Fortran && omp_end_pos != std::string::npos) {
-        // Extract the paired directive name (e.g., "do", "simd", "sections")
-        size_t end_pos = omp_end_pos + 6; // position of "end "
-        std::string after = search_lower.substr(end_pos + 4); // skip "end "
+        // Extract the full text after "end " (including combined directive names)
+        size_t end_pos = omp_end_pos + 10; // position after "!$omp end "
+        std::string after = search_lower.substr(end_pos);
+
+        // Trim leading/trailing whitespace
         size_t start = after.find_first_not_of(" \t");
-        std::string paired_name;
-        if (start != std::string::npos) {
-            std::string token = after.substr(start);
-            size_t end = token.find_first_of(" \t\r\n");
-            if (end != std::string::npos) {
-                paired_name = token.substr(0, end);
-            } else {
-                paired_name = token;
+        size_t last = after.find_last_not_of(" \t\r\n");
+        std::string full_name;
+        if (start != std::string::npos && last != std::string::npos) {
+            full_name = after.substr(start, last - start + 1);
+        }
+
+        // Check for nowait clause at the end
+        bool has_nowait = false;
+        size_t nowait_pos = full_name.rfind("nowait");
+        if (nowait_pos != std::string::npos) {
+            has_nowait = true;
+            // Remove "nowait" from the directive name
+            full_name = full_name.substr(0, nowait_pos);
+            // Trim trailing whitespace after removing nowait
+            last = full_name.find_last_not_of(" \t");
+            if (last != std::string::npos) {
+                full_name = full_name.substr(0, last + 1);
             }
         }
 
-        // Create a minimal paired directive that will output the correct name
-        // Map common paired names to directive kinds
+        // Map directive names to kinds (try longest matches first for combined directives)
         OpenMPDirectiveKind paired_kind = OMPD_unknown;
-        if (paired_name == "do") paired_kind = OMPD_do;
-        else if (paired_name == "simd") paired_kind = OMPD_simd;
-        else if (paired_name == "atomic") paired_kind = OMPD_atomic;
-        else if (paired_name == "critical") paired_kind = OMPD_critical;
-        else if (paired_name == "sections") paired_kind = OMPD_sections;
-        else if (paired_name == "single") paired_kind = OMPD_single;
-        else if (paired_name == "parallel") paired_kind = OMPD_parallel;
-        else if (paired_name == "ordered") paired_kind = OMPD_ordered;
-        else if (paired_name == "loop") paired_kind = OMPD_loop;
-        else if (paired_name == "distribute") paired_kind = OMPD_distribute;
-        else if (paired_name.find("do simd") != std::string::npos) paired_kind = OMPD_do_simd;
-        else if (paired_name.find("distribute parallel do simd") != std::string::npos) paired_kind = OMPD_distribute_parallel_do_simd;
-        else if (paired_name.find("distribute parallel do") != std::string::npos) paired_kind = OMPD_distribute_parallel_do;
+        if (full_name == "distribute parallel do simd") paired_kind = OMPD_distribute_parallel_do_simd;
+        else if (full_name == "distribute parallel do") paired_kind = OMPD_distribute_parallel_do;
+        else if (full_name == "distribute parallel for simd") paired_kind = OMPD_distribute_parallel_for_simd;
+        else if (full_name == "distribute parallel for") paired_kind = OMPD_distribute_parallel_for;
+        else if (full_name == "distribute simd") paired_kind = OMPD_distribute_simd;
+        else if (full_name == "do simd") paired_kind = OMPD_do_simd;
+        else if (full_name == "parallel do simd") paired_kind = OMPD_parallel_do_simd;
+        else if (full_name == "parallel do") paired_kind = OMPD_parallel_do;
+        else if (full_name == "parallel for simd") paired_kind = OMPD_parallel_for_simd;
+        else if (full_name == "parallel for") paired_kind = OMPD_parallel_for;
+        else if (full_name == "parallel sections") paired_kind = OMPD_parallel_sections;
+        else if (full_name == "parallel workshare") paired_kind = OMPD_parallel_workshare;
+        else if (full_name == "parallel master") paired_kind = OMPD_parallel_master;
+        else if (full_name == "parallel master taskloop simd") paired_kind = OMPD_parallel_master_taskloop_simd;
+        else if (full_name == "parallel master taskloop") paired_kind = OMPD_parallel_master_taskloop;
+        else if (full_name == "master taskloop simd") paired_kind = OMPD_master_taskloop_simd;
+        else if (full_name == "master taskloop") paired_kind = OMPD_master_taskloop;
+        else if (full_name == "target parallel do simd") paired_kind = OMPD_target_parallel_do_simd;
+        else if (full_name == "target parallel do") paired_kind = OMPD_target_parallel_do;
+        else if (full_name == "target parallel for simd") paired_kind = OMPD_target_parallel_for_simd;
+        else if (full_name == "target parallel for") paired_kind = OMPD_target_parallel_for;
+        else if (full_name == "target parallel") paired_kind = OMPD_target_parallel;
+        else if (full_name == "target simd") paired_kind = OMPD_target_simd;
+        else if (full_name == "target teams distribute parallel do simd") paired_kind = OMPD_target_teams_distribute_parallel_do_simd;
+        else if (full_name == "target teams distribute parallel do") paired_kind = OMPD_target_teams_distribute_parallel_do;
+        else if (full_name == "target teams distribute parallel for simd") paired_kind = OMPD_target_teams_distribute_parallel_for_simd;
+        else if (full_name == "target teams distribute parallel for") paired_kind = OMPD_target_teams_distribute_parallel_for;
+        else if (full_name == "target teams distribute simd") paired_kind = OMPD_target_teams_distribute_simd;
+        else if (full_name == "target teams distribute") paired_kind = OMPD_target_teams_distribute;
+        else if (full_name == "target teams") paired_kind = OMPD_target_teams;
+        else if (full_name == "teams distribute parallel do simd") paired_kind = OMPD_teams_distribute_parallel_do_simd;
+        else if (full_name == "teams distribute parallel do") paired_kind = OMPD_teams_distribute_parallel_do;
+        else if (full_name == "teams distribute parallel for simd") paired_kind = OMPD_teams_distribute_parallel_for_simd;
+        else if (full_name == "teams distribute parallel for") paired_kind = OMPD_teams_distribute_parallel_for;
+        else if (full_name == "teams distribute simd") paired_kind = OMPD_teams_distribute_simd;
+        else if (full_name == "teams distribute") paired_kind = OMPD_teams_distribute;
+        // Single-word directives
+        else if (full_name == "do") paired_kind = OMPD_do;
+        else if (full_name == "simd") paired_kind = OMPD_simd;
+        else if (full_name == "atomic") paired_kind = OMPD_atomic;
+        else if (full_name == "critical") paired_kind = OMPD_critical;
+        else if (full_name == "sections") paired_kind = OMPD_sections;
+        else if (full_name == "single") paired_kind = OMPD_single;
+        else if (full_name == "parallel") paired_kind = OMPD_parallel;
+        else if (full_name == "ordered") paired_kind = OMPD_ordered;
+        else if (full_name == "loop") paired_kind = OMPD_loop;
+        else if (full_name == "distribute") paired_kind = OMPD_distribute;
+        else if (full_name == "target") paired_kind = OMPD_target;
+        else if (full_name == "teams") paired_kind = OMPD_teams;
+        else if (full_name == "taskloop") paired_kind = OMPD_taskloop;
+        else if (full_name == "master") paired_kind = OMPD_master;
+        else if (full_name == "workshare") paired_kind = OMPD_workshare;
 
         // Only create end directive if we have a valid paired directive
         if (paired_kind != OMPD_unknown) {
@@ -398,6 +447,12 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             end_dir->setBaseLang(current_lang);
             OpenMPDirective* paired = new OpenMPDirective(paired_kind, current_lang, 0, 0);
             end_dir->setPairedDirective(paired);
+
+            // Add nowait clause if present
+            if (has_nowait) {
+                end_dir->addOpenMPClause(OMPC_nowait);
+            }
+
             return end_dir;
         }
         // If we can't determine the paired directive, fall through to ROUP parser
