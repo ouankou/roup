@@ -350,8 +350,134 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             // Check if we've already created this clause kind (for merging)
             OpenMPClause* omp_clause = nullptr;
 
-            // Special handling for reduction clause - don't merge, handle separately
-            if (clause_kind == OMPC_reduction) {
+            // Special handling for linear clause - needs modifier and step parsing
+            if (clause_kind == OMPC_linear) {
+                // linear clause: linear(modifier(variables): step)
+                // Format: linear(val(a,b,c):2) or linear(a,b,c:2)
+                int modifier = 4; // OMPC_LINEAR_MODIFIER_unspecified
+                std::string variables = "";
+                std::string step = "";
+
+                if (content && content[0] != '\0') {
+                    std::string content_str(content);
+
+                    // Check if content starts with a modifier (val/ref/uval followed by '(')
+                    std::string modifier_str = "";
+                    size_t paren_pos = content_str.find('(');
+
+                    if (paren_pos != std::string::npos && paren_pos < 10) {
+                        // Might be a modifier
+                        std::string potential_mod = content_str.substr(0, paren_pos);
+                        // Trim
+                        size_t start = potential_mod.find_first_not_of(" \t");
+                        if (start != std::string::npos) {
+                            potential_mod = potential_mod.substr(start);
+                        }
+                        size_t end = potential_mod.find_last_not_of(" \t");
+                        if (end != std::string::npos) {
+                            potential_mod = potential_mod.substr(0, end + 1);
+                        }
+
+                        if (potential_mod == "val" || potential_mod == "ref" || potential_mod == "uval") {
+                            modifier_str = potential_mod;
+
+                            // Extract content inside modifier parentheses
+                            // Find matching closing paren
+                            int depth = 1;
+                            size_t i = paren_pos + 1;
+                            while (i < content_str.length() && depth > 0) {
+                                if (content_str[i] == '(') depth++;
+                                else if (content_str[i] == ')') depth--;
+                                i++;
+                            }
+
+                            if (depth == 0) {
+                                // Found matching paren
+                                std::string inside_mod = content_str.substr(paren_pos + 1, i - paren_pos - 2);
+
+                                // Check for step after modifier
+                                size_t colon_pos = content_str.find(':', i);
+                                if (colon_pos != std::string::npos) {
+                                    variables = inside_mod;
+                                    step = content_str.substr(colon_pos + 1);
+                                } else {
+                                    variables = inside_mod;
+                                }
+                            }
+                        }
+                    }
+
+                    // If no modifier found, parse as simple format
+                    if (modifier_str.empty()) {
+                        size_t colon_pos = content_str.find(':');
+                        if (colon_pos != std::string::npos) {
+                            variables = content_str.substr(0, colon_pos);
+                            step = content_str.substr(colon_pos + 1);
+                        } else {
+                            variables = content_str;
+                        }
+                    }
+
+                    // Map modifier
+                    if (modifier_str == "val") modifier = 0;
+                    else if (modifier_str == "ref") modifier = 1;
+                    else if (modifier_str == "uval") modifier = 2;
+
+                    // Trim step
+                    if (!step.empty()) {
+                        size_t start = step.find_first_not_of(" \t");
+                        if (start != std::string::npos) {
+                            step = step.substr(start);
+                        }
+                        size_t end = step.find_last_not_of(" \t");
+                        if (end != std::string::npos) {
+                            step = step.substr(0, end + 1);
+                        }
+                    }
+                }
+
+                // Create linear clause
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), modifier);
+
+                // Set step if present
+                if (!step.empty() && omp_clause) {
+                    dynamic_cast<OpenMPLinearClause*>(omp_clause)->setUserDefinedStep(step.c_str());
+                }
+
+                // Add variables
+                if (omp_clause && !variables.empty()) {
+                    // Split by comma and add each variable separately
+                    size_t pos = 0;
+                    while (pos < variables.length()) {
+                        // Find next comma
+                        size_t comma_pos = variables.find(',', pos);
+                        if (comma_pos == std::string::npos) {
+                            comma_pos = variables.length();
+                        }
+
+                        // Extract variable
+                        std::string var = variables.substr(pos, comma_pos - pos);
+
+                        // Trim whitespace
+                        size_t start = var.find_first_not_of(" \t\r\n");
+                        if (start != std::string::npos) {
+                            var = var.substr(start);
+                        }
+                        size_t end = var.find_last_not_of(" \t\r\n");
+                        if (end != std::string::npos) {
+                            var = var.substr(0, end + 1);
+                        }
+
+                        // Add non-empty variable
+                        if (!var.empty()) {
+                            omp_clause->addLangExpr(var.c_str());
+                        }
+
+                        pos = comma_pos + 1;
+                    }
+                }
+            } else if (clause_kind == OMPC_reduction) {
+                // Special handling for reduction clause - don't merge, handle separately
                 // reduction clause: reduction(modifier, operator : variables)
                 // Format: reduction(inscan, + : a, foo(x))
                 //         reduction(abc : x, y, z)  [user-defined operator]
@@ -703,6 +829,25 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
                     omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), modifier);
                     created_clauses[clause_kind] = omp_clause;
+                } else if (clause_kind == OMPC_order) {
+                    // order clause needs parameter: concurrent/unspecified
+                    int order_kind = 1; // OMPC_ORDER_unspecified (default)
+
+                    if (content && content[0] != '\0') {
+                        std::string content_str(content);
+                        // Trim whitespace
+                        size_t start = content_str.find_first_not_of(" \t");
+                        size_t end = content_str.find_last_not_of(" \t");
+                        if (start != std::string::npos && end != std::string::npos) {
+                            content_str = content_str.substr(start, end - start + 1);
+                        }
+
+                        // Map order kind string to enum
+                        if (content_str == "concurrent") order_kind = 0;
+                    }
+
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), order_kind);
+                    created_clauses[clause_kind] = omp_clause;
                 } else {
                     // Generic clause creation
                     omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
@@ -712,9 +857,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
             // If clause has content, parse and add variables individually
             // This enables ompparser's duplicate detection to work correctly
-            // Skip for reduction/schedule - they handle their own variables
+            // Skip for reduction/schedule/linear - they handle their own variables
             if (omp_clause && content && content[0] != '\0' &&
-                clause_kind != OMPC_reduction && clause_kind != OMPC_schedule) {
+                clause_kind != OMPC_reduction && clause_kind != OMPC_schedule && clause_kind != OMPC_linear) {
                 std::string content_str(content);
 
                 // Special handling for lastprivate clause: strip conditional modifier prefix
