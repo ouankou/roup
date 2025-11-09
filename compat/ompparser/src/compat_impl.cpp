@@ -198,9 +198,45 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     int32_t roup_kind = roup_directive_kind(roup_dir);
     OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
 
+    // Get the original directive name for special handling
+    const char* directive_name = roup_directive_name(roup_dir);
+    std::string dir_name_str(directive_name ? directive_name : "");
+
+    // DEBUG: Print what we're parsing
+    if (std::getenv("DEBUG_OMPPARSER")) {
+        fprintf(stderr, "DEBUG: input='%s' roup_kind=%d omp_kind=%d dir_name='%s'\n",
+                input, roup_kind, (int)kind, dir_name_str.c_str());
+    }
+
     // Create ompparser-compatible directive
     // Use ompparser's actual constructor: OpenMPDirective(kind, lang, line, col)
     OpenMPDirective* dir = new OpenMPDirective(kind, current_lang, 0, 0);
+
+    // Handle atomic variants: "atomic read", "atomic write", etc.
+    // ROUP parses these as a single directive name (e.g., "atomic read")
+    // But ompparser expects OMPD_atomic with the modifier as a separate token
+    // We add the modifier as a bare clause (no content) so it appears in output
+    if (kind == OMPD_atomic && dir_name_str.length() > 7) {  // "atomic " = 7 chars
+        std::string modifier = dir_name_str.substr(7);  // Extract "read", "write", etc.
+        if (!modifier.empty()) {
+            // Map atomic modifiers to clause kinds
+            // These should appear as bare tokens in the output
+            OpenMPClauseKind modifier_kind = OMPC_unknown;
+            if (modifier == "read") {
+                modifier_kind = static_cast<OpenMPClauseKind>(78);  // OMPC_read
+            } else if (modifier == "write") {
+                modifier_kind = static_cast<OpenMPClauseKind>(79);  // OMPC_write
+            } else if (modifier == "update") {
+                modifier_kind = static_cast<OpenMPClauseKind>(80);  // OMPC_update
+            } else if (modifier == "capture") {
+                modifier_kind = static_cast<OpenMPClauseKind>(81);  // OMPC_capture
+            }
+
+            if (modifier_kind != OMPC_unknown) {
+                dir->addOpenMPClause(static_cast<int>(modifier_kind));
+            }
+        }
+    }
 
     // Convert clauses with their parameters from ROUP to ompparser
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);

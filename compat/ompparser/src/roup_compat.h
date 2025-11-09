@@ -30,6 +30,7 @@ OmpDirective* roup_parse(const char* input);
 OmpDirective* roup_parse_with_language(const char* input, int32_t language);
 void roup_directive_free(OmpDirective* dir);
 int32_t roup_directive_kind(const OmpDirective* dir);
+const char* roup_directive_name(const OmpDirective* dir);
 
 /* Clause iteration */
 OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* dir);

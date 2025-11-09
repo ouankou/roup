@@ -1397,7 +1397,15 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
             "flush" => 59,
 
             // 60: OMPD_atomic
+            // Note: ompparser uses a single OMPD_atomic for all atomic variants
+            // "read", "write", "update", "capture" are handled as clauses/modifiers
             "atomic" => 60,
+            "atomic read" => 60,
+            "atomic write" => 60,
+            "atomic update" => 60,
+            "atomic capture" => 60,
+            "atomic compare" => 60,
+            "atomic compare capture" => 60,
 
             // 61: OMPD_critical
             "critical" => 61,
