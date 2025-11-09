@@ -458,6 +458,101 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         // If we can't determine the paired directive, fall through to ROUP parser
     }
 
+    // WORKAROUND: ROUP cannot parse C atomic directives
+    // Detect and handle manually for C/C++
+    if (current_lang != Lang_Fortran && search_lower.find("atomic") != std::string::npos) {
+        // This is an atomic directive - create OpenMPAtomicDirective
+        OpenMPAtomicDirective* atomic_dir = new OpenMPAtomicDirective();
+        atomic_dir->setBaseLang(current_lang);
+
+        // Parse atomic operation (read/write/update/capture) and other clauses
+        // Format: #pragma omp atomic [clause]* [operation]
+        // Where clause can be: seq_cst, acq_rel, release, acquire, relaxed, hint(expr)
+        // And operation can be: read, write, update, capture
+
+        // Extract content after "atomic"
+        size_t atomic_pos = search_lower.find("atomic");
+        std::string after = search_lower.substr(atomic_pos + 6); // skip "atomic"
+
+        // Trim leading whitespace
+        size_t start = after.find_first_not_of(" \t");
+        if (start != std::string::npos) {
+            after = after.substr(start);
+        }
+
+        // Parse tokens manually to handle hint() properly
+        size_t pos = 0;
+        while (pos < after.length()) {
+            // Skip whitespace and commas
+            while (pos < after.length() && (after[pos] == ' ' || after[pos] == '\t' || after[pos] == ',')) {
+                pos++;
+            }
+            if (pos >= after.length()) break;
+
+            // Check for hint clause
+            if (after.substr(pos, 4) == "hint") {
+                pos += 4;
+                // Skip whitespace
+                while (pos < after.length() && (after[pos] == ' ' || after[pos] == '\t')) {
+                    pos++;
+                }
+                // Expect opening paren
+                if (pos < after.length() && after[pos] == '(') {
+                    pos++;
+                    size_t hint_start = pos;
+                    // Find matching close paren
+                    int paren_depth = 1;
+                    while (pos < after.length() && paren_depth > 0) {
+                        if (after[pos] == '(') paren_depth++;
+                        else if (after[pos] == ')') paren_depth--;
+                        if (paren_depth > 0) pos++;
+                    }
+                    std::string hint_expr = after.substr(hint_start, pos - hint_start);
+                    OpenMPClause* hint_clause = atomic_dir->addOpenMPClause(OMPC_hint);
+                    if (hint_clause && !hint_expr.empty()) {
+                        hint_clause->addLangExpr(hint_expr.c_str());
+                    }
+                    if (pos < after.length() && after[pos] == ')') pos++;
+                }
+                continue;
+            }
+
+            // Extract next token
+            size_t token_start = pos;
+            while (pos < after.length() && after[pos] != ' ' && after[pos] != '\t' && after[pos] != ',') {
+                pos++;
+            }
+            std::string token = after.substr(token_start, pos - token_start);
+
+            if (token.empty()) continue;
+
+            // Check for atomic operations
+            if (token == "read") {
+                atomic_dir->addOpenMPClause(OMPC_read);
+            } else if (token == "write") {
+                atomic_dir->addOpenMPClause(OMPC_write);
+            } else if (token == "update") {
+                atomic_dir->addOpenMPClause(OMPC_update);
+            } else if (token == "capture") {
+                atomic_dir->addOpenMPClause(OMPC_capture);
+            }
+            // Check for memory order clauses
+            else if (token == "seq_cst") {
+                atomic_dir->addOpenMPClause(OMPC_seq_cst);
+            } else if (token == "acq_rel") {
+                atomic_dir->addOpenMPClause(OMPC_acq_rel);
+            } else if (token == "release") {
+                atomic_dir->addOpenMPClause(OMPC_release);
+            } else if (token == "acquire") {
+                atomic_dir->addOpenMPClause(OMPC_acquire);
+            } else if (token == "relaxed") {
+                atomic_dir->addOpenMPClause(OMPC_relaxed);
+            }
+        }
+
+        return atomic_dir;
+    }
+
     // Call ROUP parser with language awareness - THIS IS THE REAL PARSER!
     // Map ompparser language to ROUP language constants
     int32_t roup_lang = (current_lang == Lang_Fortran) ? ROUP_LANG_FORTRAN_FREE : ROUP_LANG_C;
@@ -871,6 +966,65 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
                     static_cast<int>(behavior), static_cast<int>(category));
+                skip_std_args = true;
+            } else if (clause_kind == OMPC_uses_allocators) {
+                // uses_allocators clause: uses_allocators(alloc1(traits), alloc2, ...)
+                const char* args = roup_clause_arguments(roup_clause);
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+
+                if (args && args[0] != '\0' && omp_clause) {
+                    OpenMPUsesAllocatorsClause* uses_clause = static_cast<OpenMPUsesAllocatorsClause*>(omp_clause);
+                    std::vector<std::string> allocators = parseClauseArguments(args);
+
+                    for (const auto& alloc_str : allocators) {
+                        // Parse allocator: name or name(traits)
+                        std::string alloc_name = alloc_str;
+                        std::string traits_array;
+
+                        size_t paren_pos = alloc_str.find('(');
+                        if (paren_pos != std::string::npos) {
+                            alloc_name = alloc_str.substr(0, paren_pos);
+                            // Extract content between parentheses
+                            size_t close_paren = alloc_str.rfind(')');
+                            if (close_paren != std::string::npos && close_paren > paren_pos) {
+                                traits_array = alloc_str.substr(paren_pos + 1, close_paren - paren_pos - 1);
+                            }
+                        }
+
+                        // Trim allocator name
+                        size_t first = alloc_name.find_first_not_of(" \t");
+                        size_t last = alloc_name.find_last_not_of(" \t");
+                        if (first != std::string::npos && last != std::string::npos) {
+                            alloc_name = alloc_name.substr(first, last - first + 1);
+                        }
+
+                        // Map allocator name to enum
+                        OpenMPUsesAllocatorsClauseAllocator allocator_type = OMPC_USESALLOCATORS_ALLOCATOR_user;
+                        std::string alloc_lower = alloc_name;
+                        std::transform(alloc_lower.begin(), alloc_lower.end(), alloc_lower.begin(), ::tolower);
+
+                        if (alloc_lower.find("omp_default_mem_alloc") != std::string::npos) {
+                            allocator_type = OMPC_USESALLOCATORS_ALLOCATOR_default;
+                        } else if (alloc_lower.find("omp_large_cap_mem_alloc") != std::string::npos) {
+                            allocator_type = OMPC_USESALLOCATORS_ALLOCATOR_large_cap;
+                        } else if (alloc_lower.find("omp_const_mem_alloc") != std::string::npos) {
+                            allocator_type = OMPC_USESALLOCATORS_ALLOCATOR_cons_mem;
+                        } else if (alloc_lower.find("omp_high_bw_mem_alloc") != std::string::npos) {
+                            allocator_type = OMPC_USESALLOCATORS_ALLOCATOR_high_bw;
+                        } else if (alloc_lower.find("omp_low_lat_mem_alloc") != std::string::npos) {
+                            allocator_type = OMPC_USESALLOCATORS_ALLOCATOR_low_lat;
+                        } else if (alloc_lower.find("omp_cgroup_mem_alloc") != std::string::npos) {
+                            allocator_type = OMPC_USESALLOCATORS_ALLOCATOR_cgroup;
+                        } else if (alloc_lower.find("omp_pteam_mem_alloc") != std::string::npos) {
+                            allocator_type = OMPC_USESALLOCATORS_ALLOCATOR_pteam;
+                        } else if (alloc_lower.find("omp_thread_mem_alloc") != std::string::npos) {
+                            allocator_type = OMPC_USESALLOCATORS_ALLOCATOR_thread;
+                        }
+
+                        // Add to clause
+                        uses_clause->addUsesAllocatorsAllocatorSequence(allocator_type, traits_array, "");
+                    }
+                }
                 skip_std_args = true;
             } else {
                 // Standard clause creation
