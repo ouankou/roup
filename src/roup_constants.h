@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 12 clauses) + OpenACC (18 directives + 45 clauses) = 0x377190AEB0C04C97
+// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 49 clauses) + OpenACC (18 directives + 45 clauses) = 0x82D04DF620ACEB50
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x377190AEB0C04C97
+#define ROUP_CONSTANTS_CHECKSUM 0x82D04DF620ACEB50
 
 // ============================================================================
 // Language Format Constants
@@ -79,6 +79,43 @@ extern "C" {
 #define ROUP_CLAUSE_ORDERED         9
 #define ROUP_CLAUSE_NOWAIT          10
 #define ROUP_CLAUSE_DEFAULT         11
+#define ROUP_CLAUSE_COPYIN          12
+#define ROUP_CLAUSE_PROC_BIND       13
+#define ROUP_CLAUSE_LINEAR          14
+#define ROUP_CLAUSE_ALIGNED         15
+#define ROUP_CLAUSE_SAFELEN         16
+#define ROUP_CLAUSE_SIMDLEN         17
+#define ROUP_CLAUSE_NONTEMPORAL     18
+#define ROUP_CLAUSE_DIST_SCHEDULE   19
+#define ROUP_CLAUSE_NUM_TEAMS       20
+#define ROUP_CLAUSE_THREAD_LIMIT    21
+#define ROUP_CLAUSE_GRAINSIZE       22
+#define ROUP_CLAUSE_NUM_TASKS       23
+#define ROUP_CLAUSE_COPYPRIVATE     24
+#define ROUP_CLAUSE_FILTER          25
+#define ROUP_CLAUSE_PRIORITY        26
+#define ROUP_CLAUSE_DEVICE          27
+#define ROUP_CLAUSE_MAP             28
+#define ROUP_CLAUSE_DEPEND          29
+#define ROUP_CLAUSE_USE_DEVICE_PTR  30
+#define ROUP_CLAUSE_USE_DEVICE_ADDR 31
+#define ROUP_CLAUSE_IS_DEVICE_PTR   32
+#define ROUP_CLAUSE_HAS_DEVICE_ADDR 33
+#define ROUP_CLAUSE_AFFINITY        34
+#define ROUP_CLAUSE_ALLOCATE        35
+#define ROUP_CLAUSE_ALLOCATOR       36
+#define ROUP_CLAUSE_ORDER           38
+#define ROUP_CLAUSE_BIND            39
+#define ROUP_CLAUSE_SEQ_CST         42
+#define ROUP_CLAUSE_ACQ_REL         43
+#define ROUP_CLAUSE_RELEASE         44
+#define ROUP_CLAUSE_ACQUIRE         45
+#define ROUP_CLAUSE_RELAXED         46
+#define ROUP_CLAUSE_READ            47
+#define ROUP_CLAUSE_WRITE           48
+#define ROUP_CLAUSE_UPDATE          49
+#define ROUP_CLAUSE_CAPTURE         50
+#define ROUP_CLAUSE_COMPARE         51
 #define ROUP_CLAUSE_UNKNOWN      999
 
 
