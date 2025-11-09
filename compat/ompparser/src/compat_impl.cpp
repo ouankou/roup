@@ -618,6 +618,57 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     }
 
+    // Handle cancel directive where ROUP stores construct type in parameter
+    // e.g., ROUP: directive="cancel" param="parallel" -> add OMPC_parallel clause
+    if (kind == OMPD_cancel) {
+        const char* param = roup_directive_parameter(roup_dir);
+        if (param && strlen(param) > 0) {
+            OpenMPClauseKind construct_clause = mapRoupClauseNameToOmpparser(param);
+            if (construct_clause != OMPC_unknown) {
+                dir->addOpenMPClause(construct_clause);
+            }
+        }
+    }
+
+    // Handle scan directive where ROUP stores inclusive/exclusive in parameter
+    if (kind == OMPD_scan) {
+        const char* param = roup_directive_parameter(roup_dir);
+        if (param && strlen(param) > 0) {
+            std::string param_str(param);
+            if (param_str.find("inclusive(") == 0) {
+                OpenMPClause* scan_clause = dir->addOpenMPClause(OMPC_inclusive);
+                if (scan_clause) {
+                    size_t open_paren = param_str.find('(');
+                    size_t close_paren = param_str.rfind(')');
+                    if (open_paren != std::string::npos && close_paren != std::string::npos) {
+                        std::string var_list = param_str.substr(open_paren + 1, close_paren - open_paren - 1);
+                        std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                        for (const std::string& var : vars) {
+                            if (!var.empty()) {
+                                scan_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                    }
+                }
+            } else if (param_str.find("exclusive(") == 0) {
+                OpenMPClause* scan_clause = dir->addOpenMPClause(OMPC_exclusive);
+                if (scan_clause) {
+                    size_t open_paren = param_str.find('(');
+                    size_t close_paren = param_str.rfind(')');
+                    if (open_paren != std::string::npos && close_paren != std::string::npos) {
+                        std::string var_list = param_str.substr(open_paren + 1, close_paren - open_paren - 1);
+                        std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                        for (const std::string& var : vars) {
+                            if (!var.empty()) {
+                                scan_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Convert clauses using ompparser's addOpenMPClause method
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);
     if (iter) {
