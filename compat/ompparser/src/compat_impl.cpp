@@ -11,6 +11,7 @@
 #include <OpenMPIR.h>
 #include "roup_compat.h"
 #include <cstring>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -309,6 +310,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     }
 
     // Convert clauses with their parameters from ROUP to ompparser
+    // Track which clause kinds we've already created to enable merging
+    std::map<OpenMPClauseKind, OpenMPClause*> created_clauses;
+
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);
     if (iter) {
         const OmpClause* roup_clause;
@@ -319,13 +323,55 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             // Get the raw clause content (e.g., "a, b, c" from private(a, b, c))
             const char* content = roup_clause_content(roup_clause);
 
-            // Create clause
-            OpenMPClause* omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+            // Check if we've already created this clause kind (for merging)
+            OpenMPClause* omp_clause = nullptr;
+            auto it = created_clauses.find(clause_kind);
+            if (it != created_clauses.end()) {
+                // Reuse existing clause (merging)
+                omp_clause = it->second;
+            } else {
+                // Create new clause
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+                created_clauses[clause_kind] = omp_clause;
+            }
 
-            // If clause has content, add it as a single expression
-            // ompparser will parse it (variables, expressions, etc.)
+            // If clause has content, parse and add variables individually
+            // This enables ompparser's duplicate detection to work correctly
             if (omp_clause && content && content[0] != '\0') {
-                omp_clause->addLangExpr(content);
+                std::string content_str(content);
+
+                // Split by comma and add each variable separately
+                // This allows ompparser's addLangExpr to deduplicate
+                size_t pos = 0;
+                while (pos < content_str.length()) {
+                    // Find next comma
+                    size_t comma_pos = content_str.find(',', pos);
+                    if (comma_pos == std::string::npos) {
+                        comma_pos = content_str.length();
+                    }
+
+                    // Extract variable (trimming whitespace)
+                    std::string var = content_str.substr(pos, comma_pos - pos);
+
+                    // Trim leading whitespace
+                    size_t start = var.find_first_not_of(" \t\r\n");
+                    if (start != std::string::npos) {
+                        var = var.substr(start);
+                    }
+
+                    // Trim trailing whitespace
+                    size_t end = var.find_last_not_of(" \t\r\n");
+                    if (end != std::string::npos) {
+                        var = var.substr(0, end + 1);
+                    }
+
+                    // Add non-empty variable
+                    if (!var.empty()) {
+                        omp_clause->addLangExpr(var.c_str());
+                    }
+
+                    pos = comma_pos + 1;
+                }
             }
         }
         roup_clause_iterator_free(iter);
