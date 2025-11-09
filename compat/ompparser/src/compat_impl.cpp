@@ -302,26 +302,83 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 }
                 skip_std_args = true;
             } else if (clause_kind == OMPC_reduction) {
-                // Reduction clause needs modifier, identifier, and potentially user-defined identifier
-                int32_t roup_op = roup_clause_reduction_operator(roup_clause);
-                // Map ROUP operator codes to ompparser enum
-                // ROUP: 0=+, 1=-, 2=*, 3=&, 4=|, 5=^, 6=&&, 7=||, 8=min, 9=max
-                // ompparser: 0=+, 1=-, 2=*, 3=&, 4=|, 5=^, 6=&&, 7=||, 8-9=fortran, 10=max, 11=min
-                OpenMPReductionClauseIdentifier identifier;
-                if (roup_op >= 0 && roup_op <= 7) {
-                    identifier = static_cast<OpenMPReductionClauseIdentifier>(roup_op);
-                } else if (roup_op == 8) {
-                    identifier = OMPC_REDUCTION_IDENTIFIER_min;  // 11
-                } else if (roup_op == 9) {
-                    identifier = OMPC_REDUCTION_IDENTIFIER_max;  // 10
-                } else {
-                    identifier = OMPC_REDUCTION_IDENTIFIER_unknown;
+                // Reduction: parse modifier, operator, and variable list from arguments
+                // Format: [modifier,] operator : variables
+                const char* args = roup_clause_arguments(roup_clause);
+                OpenMPReductionClauseModifier modifier = OMPC_REDUCTION_MODIFIER_unspecified;
+                OpenMPReductionClauseIdentifier identifier = OMPC_REDUCTION_IDENTIFIER_unknown;
+                std::string vars;
+                std::string user_defined_identifier_str;
+
+                if (args && args[0] != '\0') {
+                    std::string args_str(args);
+                    size_t colon_pos = args_str.find(':');
+                    if (colon_pos != std::string::npos) {
+                        std::string before_colon = args_str.substr(0, colon_pos);
+                        vars = args_str.substr(colon_pos + 1);
+
+                        // Parse modifier and operator from before colon
+                        std::vector<std::string> parts = parseClauseArguments(before_colon.c_str());
+                        for (const auto& part : parts) {
+                            std::string p_lower = part;
+                            std::transform(p_lower.begin(), p_lower.end(), p_lower.begin(), ::tolower);
+                            // Check for modifiers
+                            if (p_lower == "inscan") modifier = OMPC_REDUCTION_MODIFIER_inscan;
+                            else if (p_lower == "task") modifier = OMPC_REDUCTION_MODIFIER_task;
+                            else if (p_lower == "default") modifier = OMPC_REDUCTION_MODIFIER_default;
+                            // Check for operators
+                            else if (part == "+") identifier = OMPC_REDUCTION_IDENTIFIER_plus;
+                            else if (part == "-") identifier = OMPC_REDUCTION_IDENTIFIER_minus;
+                            else if (part == "*") identifier = OMPC_REDUCTION_IDENTIFIER_mul;
+                            else if (part == "&") identifier = OMPC_REDUCTION_IDENTIFIER_bitand;
+                            else if (part == "|") identifier = OMPC_REDUCTION_IDENTIFIER_bitor;
+                            else if (part == "^") identifier = OMPC_REDUCTION_IDENTIFIER_bitxor;
+                            else if (part == "&&") identifier = OMPC_REDUCTION_IDENTIFIER_logand;
+                            else if (part == "||") identifier = OMPC_REDUCTION_IDENTIFIER_logor;
+                            else if (p_lower == "max") identifier = OMPC_REDUCTION_IDENTIFIER_max;
+                            else if (p_lower == "min") identifier = OMPC_REDUCTION_IDENTIFIER_min;
+                            else if (identifier == OMPC_REDUCTION_IDENTIFIER_unknown) {
+                                // User-defined identifier
+                                identifier = OMPC_REDUCTION_IDENTIFIER_user;
+                                user_defined_identifier_str = part;
+                            }
+                        }
+                    }
                 }
-                // Use unspecified modifier for now
+
+                // Allocate user-defined identifier if needed (ompparser takes ownership)
+                char* user_defined_id_cstr = nullptr;
+                if (!user_defined_identifier_str.empty()) {
+                    user_defined_id_cstr = strdup(user_defined_identifier_str.c_str());
+                }
+
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
-                    static_cast<int>(OMPC_REDUCTION_MODIFIER_unspecified),
+                    static_cast<int>(modifier),
                     static_cast<int>(identifier),
-                    nullptr);  // No user-defined identifier
+                    user_defined_id_cstr);
+
+                // Add variables
+                if (!vars.empty() && omp_clause) {
+                    std::vector<std::string> var_list = parseClauseArguments(vars.c_str());
+                    for (const auto& v : var_list) {
+                        omp_clause->addLangExpr(v.c_str());
+                    }
+                }
+                skip_std_args = true;
+            } else if (clause_kind == OMPC_proc_bind) {
+                // proc_bind(master|close|spread)
+                const char* args = roup_clause_arguments(roup_clause);
+                OpenMPProcBindClauseKind proc_bind_kind = OMPC_PROC_BIND_unknown;
+                if (args && args[0] != '\0') {
+                    std::string arg_lower(args);
+                    std::transform(arg_lower.begin(), arg_lower.end(), arg_lower.begin(), ::tolower);
+                    if (arg_lower.find("master") != std::string::npos) proc_bind_kind = OMPC_PROC_BIND_master;
+                    else if (arg_lower.find("close") != std::string::npos) proc_bind_kind = OMPC_PROC_BIND_close;
+                    else if (arg_lower.find("spread") != std::string::npos) proc_bind_kind = OMPC_PROC_BIND_spread;
+                }
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                    static_cast<int>(proc_bind_kind));
+                skip_std_args = true;
             } else {
                 // Standard clause creation
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
