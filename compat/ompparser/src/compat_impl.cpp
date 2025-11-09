@@ -34,6 +34,7 @@ extern "C" {
 
     // Directive queries
     int32_t roup_directive_kind(const OmpDirective* directive);
+    const char* roup_directive_name(const OmpDirective* directive);
     int32_t roup_directive_clause_count(const OmpDirective* directive);
     char* roup_directive_parameter(const OmpDirective* directive);
     OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
@@ -89,9 +90,193 @@ extern "C" void setNormalizeClauses(bool normalize) {
 // Helper Functions
 // ============================================================================
 
+static OpenMPDirectiveKind mapDirectiveNameToKind(const char* name) {
+    // Map ROUP directive name strings to ompparser directive kinds
+    // This is the authoritative mapping since integer kinds are ambiguous
+    if (!name) return OMPD_unknown;
+
+    std::string n(name);
+
+    // Single-word directives
+    if (n == "parallel") return OMPD_parallel;
+    if (n == "for") return OMPD_for;
+    if (n == "do") return OMPD_do;
+    if (n == "sections") return OMPD_sections;
+    if (n == "section") return OMPD_section;
+    if (n == "single") return OMPD_single;
+    if (n == "task") return OMPD_task;
+    if (n == "master") return OMPD_master;
+    if (n == "critical") return OMPD_critical;
+    if (n == "barrier") return OMPD_barrier;
+    if (n == "taskwait") return OMPD_taskwait;
+    if (n == "taskgroup") return OMPD_taskgroup;
+    if (n == "atomic") return OMPD_atomic;
+    if (n == "flush") return OMPD_flush;
+    if (n == "ordered") return OMPD_ordered;
+    if (n == "target") return OMPD_target;
+    if (n == "teams") return OMPD_teams;
+    if (n == "distribute") return OMPD_distribute;
+    if (n == "simd") return OMPD_simd;
+    if (n == "loop") return OMPD_loop;
+    if (n == "scan") return OMPD_scan;
+    if (n == "workshare") return OMPD_workshare;
+    if (n == "masked") return OMPD_masked;
+    if (n == "scope") return OMPD_scope;
+    if (n == "metadirective") return OMPD_metadirective;
+    if (n == "cancel") return OMPD_cancel;
+    if (n == "end") return OMPD_end;
+
+    // END directives (Fortran) - all map to OMPD_end, parameter has the directive being ended
+    if (n == "end parallel") return OMPD_end;
+    if (n == "end for") return OMPD_end;
+    if (n == "end do") return OMPD_end;
+    if (n == "end sections") return OMPD_end;
+    if (n == "end single") return OMPD_end;
+    if (n == "end task") return OMPD_end;
+    if (n == "end master") return OMPD_end;
+    if (n == "end critical") return OMPD_end;
+    if (n == "end taskgroup") return OMPD_end;
+    if (n == "end target") return OMPD_end;
+    if (n == "end teams") return OMPD_end;
+    if (n == "end distribute") return OMPD_end;
+    if (n == "end simd") return OMPD_end;
+    if (n == "end loop") return OMPD_end;
+    if (n == "end workshare") return OMPD_end;
+    if (n == "end masked") return OMPD_end;
+    if (n == "end scope") return OMPD_end;
+    if (n == "end parallel for") return OMPD_end;
+    if (n == "end parallel do") return OMPD_end;
+    if (n == "end parallel sections") return OMPD_end;
+    if (n == "end parallel single") return OMPD_end;
+    if (n == "end parallel workshare") return OMPD_end;
+    if (n == "end parallel master") return OMPD_end;
+    if (n == "end parallel loop") return OMPD_end;
+    if (n == "end for simd") return OMPD_end;
+    if (n == "end do simd") return OMPD_end;
+    if (n == "end target parallel") return OMPD_end;
+    if (n == "end target teams") return OMPD_end;
+    if (n == "end target data") return OMPD_end;
+    if (n == "end target simd") return OMPD_end;
+    if (n == "end teams distribute") return OMPD_end;
+    if (n == "end distribute simd") return OMPD_end;
+    if (n == "end taskloop simd") return OMPD_end;
+    if (n == "end master taskloop") return OMPD_end;
+    if (n == "end masked taskloop") return OMPD_end;
+    if (n == "end teams loop") return OMPD_end;
+    if (n == "end parallel for simd") return OMPD_end;
+    if (n == "end parallel do simd") return OMPD_end;
+    if (n == "end target parallel for") return OMPD_end;
+    if (n == "end target parallel do") return OMPD_end;
+    if (n == "end target parallel loop") return OMPD_end;
+    if (n == "end target teams distribute") return OMPD_end;
+    if (n == "end target teams loop") return OMPD_end;
+    if (n == "end teams distribute simd") return OMPD_end;
+    if (n == "end distribute parallel for") return OMPD_end;
+    if (n == "end distribute parallel do") return OMPD_end;
+    if (n == "end master taskloop simd") return OMPD_end;
+    if (n == "end masked taskloop simd") return OMPD_end;
+    if (n == "end parallel master taskloop") return OMPD_end;
+    if (n == "end target parallel for simd") return OMPD_end;
+    if (n == "end target parallel do simd") return OMPD_end;
+    if (n == "end target teams distribute simd") return OMPD_end;
+    if (n == "end distribute parallel for simd") return OMPD_end;
+    if (n == "end distribute parallel do simd") return OMPD_end;
+    if (n == "end target teams distribute parallel") return OMPD_end;
+    if (n == "end parallel master taskloop simd") return OMPD_end;
+    if (n == "end target teams distribute parallel for") return OMPD_end;
+    if (n == "end target teams distribute parallel do") return OMPD_end;
+    if (n == "end target teams distribute parallel for simd") return OMPD_end;
+    if (n == "end target teams distribute parallel do simd") return OMPD_end;
+
+    // Two-word directives
+    if (n == "parallel for") return OMPD_parallel_for;
+    if (n == "parallel do") return OMPD_parallel_do;
+    if (n == "parallel sections") return OMPD_parallel_sections;
+    if (n == "parallel single") return OMPD_parallel_single;
+    if (n == "parallel workshare") return OMPD_parallel_workshare;
+    if (n == "parallel master") return OMPD_parallel_master;
+    if (n == "parallel loop") return OMPD_parallel_loop;
+    if (n == "for simd") return OMPD_for_simd;
+    if (n == "do simd") return OMPD_do_simd;
+    if (n == "target parallel") return OMPD_target_parallel;
+    if (n == "target teams") return OMPD_target_teams;
+    if (n == "target data") return OMPD_target_data;
+    if (n == "target simd") return OMPD_target_simd;
+    if (n == "teams distribute") return OMPD_teams_distribute;
+    if (n == "distribute simd") return OMPD_distribute_simd;
+    if (n == "distribute parallel") return OMPD_distribute_parallel_for;
+    if (n == "taskloop simd") return OMPD_taskloop_simd;
+    if (n == "master taskloop") return OMPD_master_taskloop;
+    if (n == "masked taskloop") return OMPD_masked_taskloop;
+    if (n == "teams loop") return OMPD_teams_loop;
+
+    // Three-word directives
+    if (n == "parallel for simd") return OMPD_parallel_for_simd;
+    if (n == "parallel do simd") return OMPD_parallel_do_simd;
+    if (n == "target parallel for") return OMPD_target_parallel_for;
+    if (n == "target parallel do") return OMPD_target_parallel_do;
+    if (n == "target parallel loop") return OMPD_target_parallel_loop;
+    if (n == "target teams distribute") return OMPD_target_teams_distribute;
+    if (n == "target teams loop") return OMPD_target_teams_loop;
+    if (n == "teams distribute simd") return OMPD_teams_distribute_simd;
+    if (n == "distribute parallel for") return OMPD_distribute_parallel_for;
+    if (n == "distribute parallel do") return OMPD_distribute_parallel_do;
+    if (n == "master taskloop simd") return OMPD_master_taskloop_simd;
+    if (n == "masked taskloop simd") return OMPD_masked_taskloop_simd;
+    if (n == "parallel master taskloop") return OMPD_parallel_master_taskloop;
+
+    // Four-word directives
+    if (n == "target parallel for simd") return OMPD_target_parallel_for_simd;
+    if (n == "target parallel do simd") return OMPD_target_parallel_do_simd;
+    if (n == "target teams distribute simd") return OMPD_target_teams_distribute_simd;
+    if (n == "distribute parallel for simd") return OMPD_distribute_parallel_for_simd;
+    if (n == "distribute parallel do simd") return OMPD_distribute_parallel_do_simd;
+    if (n == "target teams distribute parallel") return OMPD_target_teams_distribute_parallel_for;
+    if (n == "parallel master taskloop simd") return OMPD_parallel_master_taskloop_simd;
+
+    // Five-word directives
+    if (n == "target teams distribute parallel for") return OMPD_target_teams_distribute_parallel_for;
+    if (n == "target teams distribute parallel do") return OMPD_target_teams_distribute_parallel_do;
+
+    // Six-word directives
+    if (n == "target teams distribute parallel for simd") return OMPD_target_teams_distribute_parallel_for_simd;
+    if (n == "target teams distribute parallel do simd") return OMPD_target_teams_distribute_parallel_do_simd;
+
+    // declare/special directives
+    if (n == "allocate") return OMPD_allocate;
+    if (n == "threadprivate") return OMPD_threadprivate;
+    if (n == "groupprivate") return OMPD_groupprivate;
+    if (n == "declare simd") return OMPD_declare_simd;
+    if (n == "declare reduction") return OMPD_declare_reduction;
+    if (n == "declare mapper") return OMPD_declare_mapper;
+    if (n == "declare target") return OMPD_declare_target;
+    if (n == "declare variant") return OMPD_declare_variant;
+    if (n == "begin declare target") return OMPD_begin_declare_target;
+    if (n == "end declare target") return OMPD_end_declare_target;
+    if (n == "begin declare variant") return OMPD_begin_declare_variant;
+    if (n == "end declare variant") return OMPD_end_declare_variant;
+    if (n == "taskyield") return OMPD_taskyield;
+    if (n == "taskloop") return OMPD_taskloop;
+    if (n == "target enter data") return OMPD_target_enter_data;
+    if (n == "target exit data") return OMPD_target_exit_data;
+    if (n == "target update") return OMPD_target_update;
+    if (n == "requires") return OMPD_requires;
+    if (n == "depobj") return OMPD_depobj;
+    if (n == "cancellation point") return OMPD_cancellation_point;
+
+    // atomic variants
+    if (n == "atomic read") return OMPD_atomic;
+    if (n == "atomic write") return OMPD_atomic;
+    if (n == "atomic update") return OMPD_atomic;
+    if (n == "atomic capture") return OMPD_atomic;
+
+    return OMPD_unknown;
+}
+
 static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
-    // ROUP directive kind mapping using named constants
-    // See roup_constants.h and src/c_api.rs:directive_name_to_kind()
+    // DEPRECATED: This function is kept for reference only
+    // Use mapDirectiveNameToKind() instead for accurate mapping
+    // Integer kinds are ambiguous (many directives map to same kind)
     switch (roup_kind) {
         case ROUP_DIRECTIVE_PARALLEL:       return OMPD_parallel;
         case ROUP_DIRECTIVE_FOR:            return OMPD_for;
@@ -110,42 +295,6 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
         case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
         case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
         case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
-
-        // Additional directives from c_api.rs directive_name_to_kind()
-        case 17:                            return OMPD_allocate;
-        case 18:                            return OMPD_threadprivate;
-        case 19:                            return OMPD_simd;
-        case 20:                            return OMPD_declare_simd;
-        case 21:                            return OMPD_declare_reduction;
-        case 22:                            return OMPD_declare_mapper;
-        case 23:                            return OMPD_declare_target;
-        case 24:                            return OMPD_declare_variant;
-        case 25:                            return OMPD_taskyield;
-        case 26:                            return OMPD_taskloop;
-        case 27:                            return OMPD_target_data;
-        case 28:                            return OMPD_target_enter_data;
-        case 29:                            return OMPD_target_exit_data;
-        case 30:                            return OMPD_target_update;
-        case 31:                            return OMPD_scan;
-        case 32:                            return OMPD_section;
-        case 33:                            return OMPD_workshare;
-        case 34:                            return OMPD_masked;
-        case 35:                            return OMPD_scope;
-        case 36:                            return OMPD_loop;
-        case 37:                            return OMPD_requires;
-        case 38:                            return OMPD_depobj;
-        case 39:                            return OMPD_cancel;
-        case 40:                            return OMPD_cancellation_point;
-
-        // Atomic variants (will add read/write/update/capture clause after)
-        case 77:                            return OMPD_atomic;  // atomic read
-        case 78:                            return OMPD_atomic;  // atomic write
-        case 79:                            return OMPD_atomic;  // atomic update
-        case 86:                            return OMPD_atomic;  // atomic capture
-
-        case 57:                            return OMPD_end;  // DirectiveKind::End (Fortran)
-        case 128:                           return OMPD_cancel;  // DirectiveKind::Cancel (legacy)
-        case 129:                           return OMPD_cancellation_point;  // DirectiveKind::CancellationPoint (legacy)
         default:                            return OMPD_unknown;
     }
 }
@@ -235,9 +384,12 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         return nullptr;
     }
 
-    // Get directive kind from ROUP
+    // Get directive name and kind from ROUP
+    const char* directive_name = roup_directive_name(roup_dir);
     int32_t roup_kind = roup_directive_kind(roup_dir);
-    OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
+
+    // Use directive name for accurate mapping (integer kinds are ambiguous)
+    OpenMPDirectiveKind kind = mapDirectiveNameToKind(directive_name);
 
     // Create ompparser-compatible directive - use specialized types where needed
     OpenMPDirective* dir = nullptr;
@@ -375,12 +527,23 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             OpenMPDirective* paired = new OpenMPDirective(paired_kind, current_lang, 0, 0);
             static_cast<OpenMPEndDirective*>(dir)->setPairedDirective(paired);
         }
-        // Handle cancel/cancellation_point - add construct type as a special clause
+        // Handle cancel/cancellation_point - add construct type as a clause
         else if (kind == OMPD_cancel || kind == OMPD_cancellation_point) {
             // The parameter is the construct type (parallel, sections, for, taskgroup)
-            // Convert to appropriate clause - this needs to be added as a special marker
-            // For now, create a cancel clause with the construct type
-            // TODO: May need OpenMPCancelDirective class to properly store construct type
+            // Add it as the appropriate clause
+            if (!param.empty()) {
+                if (param == "parallel") {
+                    dir->addOpenMPClause(OMPC_parallel);
+                } else if (param == "sections") {
+                    dir->addOpenMPClause(OMPC_sections);
+                } else if (param == "for") {
+                    dir->addOpenMPClause(OMPC_for);
+                } else if (param == "do") {
+                    dir->addOpenMPClause(OMPC_do);
+                } else if (param == "taskgroup") {
+                    dir->addOpenMPClause(OMPC_taskgroup);
+                }
+            }
         }
     }
 
