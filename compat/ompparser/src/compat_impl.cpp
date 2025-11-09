@@ -794,6 +794,33 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                         if (clause_kind == OMPC_linear || clause_kind == OMPC_aligned) {
                             // linear/aligned: val(a,b,c):2 -> val( a, b, c) :2
                             fixed_arg = fixLinearAlignedModifierSpacing(arg);
+                        } else if (clause_kind == OMPC_allocate) {
+                            // allocate: "allocator : var" -> "allocator: var"
+                            // But keep array sections: "var[1:5]" not "var[1: 5]"
+                            fixed_arg = arg;
+                            int bracket_depth = 0;
+                            for (size_t i = 0; i < fixed_arg.length(); ++i) {
+                                if (fixed_arg[i] == '[') bracket_depth++;
+                                else if (fixed_arg[i] == ']') bracket_depth--;
+                                else if (fixed_arg[i] == ':' && bracket_depth == 0) {
+                                    // This is an allocator:variable colon, not array section
+                                    // Remove space before if present
+                                    if (i > 0 && fixed_arg[i-1] == ' ') {
+                                        fixed_arg.erase(i-1, 1);
+                                        i--; // Adjust position
+                                    }
+                                    // Ensure space after if not present
+                                    if (i+1 < fixed_arg.length() && fixed_arg[i+1] != ' ') {
+                                        fixed_arg.insert(i+1, " ");
+                                    }
+                                    break; // Only fix first colon (allocator:variable)
+                                } else if (fixed_arg[i] == ':' && bracket_depth > 0) {
+                                    // Array section colon - remove any space after it
+                                    if (i+1 < fixed_arg.length() && fixed_arg[i+1] == ' ') {
+                                        fixed_arg.erase(i+1, 1);
+                                    }
+                                }
+                            }
                         } else {
                             // Other clauses: "conditional:a" -> "conditional: a"
                             fixed_arg = fixClauseArgumentSpacing(arg);
