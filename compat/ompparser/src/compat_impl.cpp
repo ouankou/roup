@@ -288,6 +288,53 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         return dir;
     }
 
+    // WORKAROUND: ROUP cannot parse Fortran "end X" directives (end do, end simd, etc.)
+    // Only match if "end " appears right after the !$omp prefix
+    size_t omp_end_pos = search_lower.find("!$omp end ");
+    if (current_lang == Lang_Fortran && omp_end_pos != std::string::npos) {
+        // Extract the paired directive name (e.g., "do", "simd", "sections")
+        size_t end_pos = omp_end_pos + 6; // position of "end "
+        std::string after = search_lower.substr(end_pos + 4); // skip "end "
+        size_t start = after.find_first_not_of(" \t");
+        std::string paired_name;
+        if (start != std::string::npos) {
+            std::string token = after.substr(start);
+            size_t end = token.find_first_of(" \t\r\n");
+            if (end != std::string::npos) {
+                paired_name = token.substr(0, end);
+            } else {
+                paired_name = token;
+            }
+        }
+
+        // Create a minimal paired directive that will output the correct name
+        // Map common paired names to directive kinds
+        OpenMPDirectiveKind paired_kind = OMPD_unknown;
+        if (paired_name == "do") paired_kind = OMPD_do;
+        else if (paired_name == "simd") paired_kind = OMPD_simd;
+        else if (paired_name == "atomic") paired_kind = OMPD_atomic;
+        else if (paired_name == "critical") paired_kind = OMPD_critical;
+        else if (paired_name == "sections") paired_kind = OMPD_sections;
+        else if (paired_name == "single") paired_kind = OMPD_single;
+        else if (paired_name == "parallel") paired_kind = OMPD_parallel;
+        else if (paired_name == "ordered") paired_kind = OMPD_ordered;
+        else if (paired_name == "loop") paired_kind = OMPD_loop;
+        else if (paired_name == "distribute") paired_kind = OMPD_distribute;
+        else if (paired_name.find("do simd") != std::string::npos) paired_kind = OMPD_do_simd;
+        else if (paired_name.find("distribute parallel do simd") != std::string::npos) paired_kind = OMPD_distribute_parallel_do_simd;
+        else if (paired_name.find("distribute parallel do") != std::string::npos) paired_kind = OMPD_distribute_parallel_do;
+
+        // Only create end directive if we have a valid paired directive
+        if (paired_kind != OMPD_unknown) {
+            OpenMPEndDirective* end_dir = new OpenMPEndDirective();
+            end_dir->setBaseLang(current_lang);
+            OpenMPDirective* paired = new OpenMPDirective(paired_kind, current_lang, 0, 0);
+            end_dir->setPairedDirective(paired);
+            return end_dir;
+        }
+        // If we can't determine the paired directive, fall through to ROUP parser
+    }
+
     // Call ROUP parser with language awareness - THIS IS THE REAL PARSER!
     // Map ompparser language to ROUP language constants
     int32_t roup_lang = (current_lang == Lang_Fortran) ? ROUP_LANG_FORTRAN_FREE : ROUP_LANG_C;
