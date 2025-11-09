@@ -64,7 +64,7 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
-use crate::ir::{convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
+use crate::ir::{convert::parse_directive_kind, convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
 use crate::lexer::Language;
 use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
 
@@ -88,21 +88,21 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 // Constants Documentation
 // ============================================================================
 //
-// SINGLE SOURCE OF TRUTH: This file defines all directive and clause kind codes.
+// SINGLE SOURCE OF TRUTH: DirectiveKind enum in src/ir/directive.rs
 //
-// The constants are defined in:
-// - directive_name_to_kind() function (directive codes 0-16)
-// - convert_clause() function (clause codes 0-11)
+// All directive kind values come from the DirectiveKind enum.
+// The directive_name_to_enum() function maps directive name strings
+// to their corresponding DirectiveKind enum values.
 //
 // For C/C++ usage:
-// - build.rs auto-generates src/roup_constants.h with #define macros
-// - The header provides compile-time constants for switch/case statements
-// - Never modify roup_constants.h directly - edit this file instead
+// - Use the DirectiveKind enum value returned by roup_directive_kind()
+// - Each directive has a unique enum value (e.g., TargetParallel = 45)
+// - NEVER use string comparison after parsing
 //
-// Maintenance: When adding new directives/clauses:
-// 1. Update directive_name_to_kind() or convert_clause() in this file
-// 2. Run `cargo build` to regenerate roup_constants.h
-// 3. The header will automatically include your new constants
+// Maintenance: When adding new directives:
+// 1. Add to DirectiveKind enum in src/ir/directive.rs
+// 2. Update directive_name_to_enum() in this file
+// 3. Update parser registration in src/parser/openmp.rs
 
 // ============================================================================
 // C-Compatible Types
@@ -125,7 +125,8 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 /// C sees this as an opaque pointer - internal structure is hidden.
 #[repr(C)]
 pub struct OmpDirective {
-    name: *const c_char,      // Directive name (e.g., "parallel")
+    kind: i32,                // DirectiveKind enum value (use this instead of name!)
+    name: *const c_char,      // Directive name (e.g., "parallel") - for debugging only
     parameter: *const c_char, // Optional parameter (e.g., "(a,b,c)" for allocate, "parallel" for cancel)
     clauses: Vec<OmpClause>,  // Associated clauses
 }
@@ -235,8 +236,14 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
         Err(_) => return ptr::null_mut(), // Parse error
     };
 
+    // Convert directive name to enum kind
+    let kind = parse_directive_kind(directive.name.as_ref())
+        .map(|k| k as i32)
+        .unwrap_or(-1);
+
     // Convert to C-compatible format
     let c_directive = OmpDirective {
+        kind,
         name: allocate_c_string(directive.name.as_ref()),
         parameter: directive
             .parameter
@@ -364,8 +371,14 @@ pub extern "C" fn roup_parse_with_language(
         Err(_) => return ptr::null_mut(),
     };
 
+    // Convert directive name to enum kind
+    let kind = parse_directive_kind(directive.name.as_ref())
+        .map(|k| k as i32)
+        .unwrap_or(-1);
+
     // Convert to C-compatible format
     let c_directive = OmpDirective {
+        kind,
         name: allocate_c_string(directive.name.as_ref()),
         parameter: directive
             .parameter
@@ -555,9 +568,14 @@ pub extern "C" fn roup_clause_free(clause: *mut OmpClause) {
 // Directive Query Functions (All Safe)
 // ============================================================================
 
-/// Get directive kind.
+/// Get directive kind as DirectiveKind enum value.
 ///
-/// Returns -1 if directive is NULL.
+/// Returns -1 if directive is NULL or unknown.
+/// Use the DirectiveKind enum values from src/ir/directive.rs:
+/// - Parallel = 0
+/// - ParallelFor = 1
+/// - TargetParallel = 45
+/// - etc.
 #[no_mangle]
 pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
     if directive.is_null() {
@@ -568,7 +586,7 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
     // Safety: Caller guarantees valid pointer from roup_parse
     unsafe {
         let dir = &*directive;
-        directive_name_to_kind(dir.name)
+        dir.kind
     }
 }
 
@@ -1198,19 +1216,12 @@ fn parse_default_kind(clause: &Clause) -> i32 {
     0 // Default to shared
 }
 
-/// Convert directive name to kind enum code.
+/// DEPRECATED: Convert directive name to kind enum code.
 ///
-/// Maps directive names (parallel, for, task, etc.) to integer codes
-/// so C code can use switch statements instead of string comparisons.
-///
-/// ## Directive Codes:
-/// - 0 = parallel     - 5 = critical
-/// - 1 = for          - 6 = atomic
-/// - 2 = sections     - 7 = barrier
-/// - 3 = single       - 8 = master
-/// - 4 = task         - 9 = teams
-/// - 10 = target      - 11 = distribute
-/// - -1 = NULL/unknown
+/// This function is deprecated and will be removed. It collapsed many directives
+/// to the same code which broke the compat layer. Use roup_directive_kind() instead
+/// which returns the proper DirectiveKind enum value.
+#[allow(dead_code)]
 fn directive_name_to_kind(name: *const c_char) -> i32 {
     if name.is_null() {
         return -1;
