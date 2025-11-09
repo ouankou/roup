@@ -762,15 +762,25 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
     unsafe {
         let c = &*clause;
 
-        // Check if this clause type has variables
-        // Kinds 2-5 are private/shared/firstprivate/lastprivate
-        if c.kind < 2 || c.kind > 6 {
+        // Check if this clause type has variables (kinds 2-5: private/shared/firstprivate/lastprivate)
+        // Reduction (kind 6) uses different field
+        if c.kind < 2 || c.kind > 5 {
             return ptr::null_mut();
         }
 
-        // For now, return empty list (would need clause parsing enhancement)
-        let list = OmpStringList { items: Vec::new() };
-        Box::into_raw(Box::new(list))
+        // Return the stored variable list pointer (already allocated in convert_clause)
+        // If null, create empty list for consistency
+        if c.data.variables.is_null() {
+            let list = OmpStringList { items: Vec::new() };
+            Box::into_raw(Box::new(list))
+        } else {
+            // Return a copy of the existing list since we don't own it
+            let existing = &*c.data.variables;
+            let list = OmpStringList {
+                items: existing.items.clone(),
+            };
+            Box::into_raw(Box::new(list))
+        }
     }
 }
 
@@ -879,10 +889,44 @@ fn allocate_c_string(s: &str) -> *const c_char {
     c_string.into_raw() as *const c_char
 }
 
+/// Extract variable list from ClauseKind and convert to C string list.
+///
+/// Creates an OmpStringList containing C strings for each variable.
+/// Returns null pointer if clause has no variables.
+fn extract_variable_list(kind: &crate::parser::ClauseKind) -> *mut OmpStringList {
+    use crate::parser::ClauseKind;
+
+    let variables = match kind {
+        ClauseKind::VariableList(vars) => vars,
+        ClauseKind::ReductionClause { variables, .. } => variables,
+        ClauseKind::CopyinClause { variables, .. } => variables,
+        ClauseKind::CopyoutClause { variables, .. } => variables,
+        ClauseKind::CreateClause { variables, .. } => variables,
+        ClauseKind::GangClause { variables, .. } => variables,
+        ClauseKind::WorkerClause { variables, .. } => variables,
+        ClauseKind::VectorClause { variables, .. } => variables,
+        _ => return ptr::null_mut(),
+    };
+
+    if variables.is_empty() {
+        return ptr::null_mut();
+    }
+
+    // Convert each variable to a C string
+    let c_strings: Vec<*const c_char> = variables
+        .iter()
+        .map(|var| allocate_c_string(var.as_ref()))
+        .collect();
+
+    let list = OmpStringList { items: c_strings };
+    Box::into_raw(Box::new(list))
+}
+
 /// Convert Rust Clause to C-compatible OmpClause.
 ///
 /// Maps clause names to integer kind codes (C doesn't have Rust enums).
 /// Each clause type gets a unique ID and appropriate data representation.
+/// Extracts variable lists and expressions from parsed clause data.
 ///
 /// ## Clause Kind Mapping:
 /// - 0 = num_threads    - 6 = reduction
@@ -893,40 +937,31 @@ fn allocate_c_string(s: &str) -> *const c_char {
 /// - 5 = lastprivate    - 11 = default
 /// - 999 = unknown
 fn convert_clause(clause: &Clause) -> OmpClause {
+    use crate::parser::ClauseKind;
+
     // Normalize clause name to lowercase for case-insensitive matching
     // (Fortran clauses are uppercase, C clauses are lowercase)
-    // Note: One String allocation per clause is acceptable at C API boundary.
-    // Alternative (build-time constant map) requires updating constants_gen.rs
-    // to parse if-else chains instead of match expressions.
     let normalized_name = clause.name.to_ascii_lowercase();
 
     let (kind, data) = match normalized_name.as_str() {
         "num_threads" => (0, ClauseData { default: 0 }),
         "if" => (1, ClauseData { default: 0 }),
-        "private" => (
-            2,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "shared" => (
-            3,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "firstprivate" => (
-            4,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "lastprivate" => (
-            5,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
+        "private" => {
+            let var_list = extract_variable_list(&clause.kind);
+            (2, ClauseData { variables: var_list })
+        },
+        "shared" => {
+            let var_list = extract_variable_list(&clause.kind);
+            (3, ClauseData { variables: var_list })
+        },
+        "firstprivate" => {
+            let var_list = extract_variable_list(&clause.kind);
+            (4, ClauseData { variables: var_list })
+        },
+        "lastprivate" => {
+            let var_list = extract_variable_list(&clause.kind);
+            (5, ClauseData { variables: var_list })
+        },
         "reduction" => {
             let operator = parse_reduction_operator(clause);
             (
