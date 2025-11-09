@@ -97,6 +97,74 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
     return OMPC_unknown;
 }
 
+// Fix spacing for linear/aligned modifiers: val(a,b,c):2 -> val( a, b, c) :2
+// Adds space after opening paren, before closing paren, after commas, and before colon
+static std::string fixLinearAlignedModifierSpacing(const std::string& arg) {
+    std::string result;
+    int paren_depth = 0;
+    bool in_modifier = false;  // Track if we're inside modifier parens like val()
+
+    for (size_t i = 0; i < arg.length(); ++i) {
+        char c = arg[i];
+
+        if (c == '(') {
+            result += c;
+            paren_depth++;
+            if (paren_depth == 1) {
+                in_modifier = true;
+                // Add space after opening paren
+                if (i + 1 < arg.length() && arg[i + 1] != ' ') {
+                    result += ' ';
+                }
+            }
+        } else if (c == ')') {
+            // NO space before closing paren - commas already added spaces
+            result += c;
+            paren_depth--;
+            if (paren_depth == 0) {
+                in_modifier = false;
+                // Add space before colon: ) :2
+                if (i + 1 < arg.length() && arg[i + 1] == ':') {
+                    result += ' ';
+                }
+            }
+        } else if (c == ',' && in_modifier && paren_depth == 1) {
+            // Add comma and space after it inside modifier
+            result += c;
+            if (i + 1 < arg.length() && arg[i + 1] != ' ') {
+                result += ' ';
+            }
+        } else {
+            result += c;
+        }
+    }
+    return result;
+}
+
+// Fix spacing in clause arguments: add space after colons if not present
+// "conditional:a" -> "conditional: a", "allocator:x" -> "allocator: x"
+// BUT NOT inside array sections: keep "a[1:10]" as-is
+static std::string fixClauseArgumentSpacing(const std::string& arg) {
+    std::string result;
+    int bracket_depth = 0;  // Track if we're inside []
+    for (size_t i = 0; i < arg.length(); ++i) {
+        char c = arg[i];
+        result += c;
+
+        if (c == '[') bracket_depth++;
+        else if (c == ']') bracket_depth--;
+        // Add space after colon ONLY if:
+        // - Not inside brackets (array sections)
+        // - Next char is not already a space
+        // - Not at end of string
+        else if (c == ':' && bracket_depth == 0 &&
+                 i + 1 < arg.length() && arg[i + 1] != ' ' && arg[i + 1] != '\t') {
+            result += ' ';
+        }
+    }
+    return result;
+}
+
 // Parse and split clause arguments by commas, respecting nesting
 // Handles: a, b, c[1:10], foo(x, y), bar[baz(a, b):20]
 static std::vector<std::string> parseClauseArguments(const char* args) {
@@ -442,6 +510,34 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     sched_clause->setChunkSize(sched_info.chunk.c_str());
                 }
                 skip_std_args = true;
+            } else if (clause_kind == OMPC_dist_schedule) {
+                // dist_schedule clause: kind, chunk_size (similar to schedule but simpler)
+                const char* args = roup_clause_arguments(roup_clause);
+                OpenMPDistScheduleClauseKind dist_kind = OMPC_DIST_SCHEDULE_KIND_unknown;
+                std::string chunk;
+
+                if (args && args[0] != '\0') {
+                    std::string args_str(args);
+                    // Parse: static,chunk or just static
+                    std::vector<std::string> parts = parseClauseArguments(args);
+                    if (!parts.empty()) {
+                        std::string kind_str = parts[0];
+                        std::transform(kind_str.begin(), kind_str.end(), kind_str.begin(), ::tolower);
+                        if (kind_str == "static") {
+                            dist_kind = OMPC_DIST_SCHEDULE_KIND_static;
+                        }
+                        if (parts.size() > 1) {
+                            chunk = parts[1];
+                        }
+                    }
+                }
+
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), static_cast<int>(dist_kind));
+                if (!chunk.empty() && omp_clause) {
+                    OpenMPDistScheduleClause* dist_clause = static_cast<OpenMPDistScheduleClause*>(omp_clause);
+                    dist_clause->setChunkSize(chunk.c_str());
+                }
+                skip_std_args = true;
             } else if (clause_kind == OMPC_reduction) {
                 // Reduction: parse modifier, operator, and variable list from arguments
                 // Format: [modifier,] operator : variables
@@ -520,6 +616,66 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
                     static_cast<int>(proc_bind_kind));
                 skip_std_args = true;
+            } else if (clause_kind == OMPC_if) {
+                // if clause: parse directive modifier (parallel, simd, cancel, etc.)
+                // Format: [directive_name:] expression
+                const char* args = roup_clause_arguments(roup_clause);
+                OpenMPIfClauseModifier if_modifier = OMPC_IF_MODIFIER_unspecified;
+                std::string expression;
+
+                if (args && args[0] != '\0') {
+                    std::string args_str(args);
+                    // Check if there's a colon indicating a directive modifier
+                    size_t colon_pos = args_str.find(':');
+                    if (colon_pos != std::string::npos) {
+                        // Extract modifier name before colon
+                        std::string modifier_str = args_str.substr(0, colon_pos);
+                        // Trim spaces
+                        size_t first = modifier_str.find_first_not_of(" \t");
+                        size_t last = modifier_str.find_last_not_of(" \t");
+                        if (first != std::string::npos && last != std::string::npos) {
+                            modifier_str = modifier_str.substr(first, last - first + 1);
+                        }
+
+                        std::string modifier_lower = modifier_str;
+                        std::transform(modifier_lower.begin(), modifier_lower.end(), modifier_lower.begin(), ::tolower);
+
+                        // Map to enum
+                        if (modifier_lower == "parallel") if_modifier = OMPC_IF_MODIFIER_parallel;
+                        else if (modifier_lower == "simd") if_modifier = OMPC_IF_MODIFIER_simd;
+                        else if (modifier_lower == "task") if_modifier = OMPC_IF_MODIFIER_task;
+                        else if (modifier_lower == "cancel") if_modifier = OMPC_IF_MODIFIER_cancel;
+                        else if (modifier_lower == "target") if_modifier = OMPC_IF_MODIFIER_target;
+                        else if (modifier_lower == "target data") if_modifier = OMPC_IF_MODIFIER_target_data;
+                        else if (modifier_lower == "target enter data") if_modifier = OMPC_IF_MODIFIER_target_enter_data;
+                        else if (modifier_lower == "target exit data") if_modifier = OMPC_IF_MODIFIER_target_exit_data;
+                        else if (modifier_lower == "target update") if_modifier = OMPC_IF_MODIFIER_target_update;
+                        else if (modifier_lower == "taskloop") if_modifier = OMPC_IF_MODIFIER_taskloop;
+                        else {
+                            // Unknown modifier - treat as unspecified
+                            if_modifier = OMPC_IF_MODIFIER_unspecified;
+                        }
+
+                        // Extract expression after colon
+                        expression = args_str.substr(colon_pos + 1);
+                        // Trim leading space
+                        first = expression.find_first_not_of(" \t");
+                        if (first != std::string::npos) {
+                            expression = expression.substr(first);
+                        }
+                    } else {
+                        // No colon - no modifier, just expression
+                        expression = args_str;
+                    }
+                }
+
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), static_cast<int>(if_modifier));
+
+                // Add the expression
+                if (!expression.empty() && omp_clause) {
+                    omp_clause->addLangExpr(expression.c_str());
+                }
+                skip_std_args = true;
             } else {
                 // Standard clause creation
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
@@ -534,7 +690,16 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     // ompparser's expressionToString() will join them with ", "
                     std::vector<std::string> parsed_args = parseClauseArguments(args);
                     for (const auto& arg : parsed_args) {
-                        omp_clause->addLangExpr(arg.c_str());
+                        // Apply appropriate spacing fix based on clause type
+                        std::string fixed_arg;
+                        if (clause_kind == OMPC_linear || clause_kind == OMPC_aligned) {
+                            // linear/aligned: val(a,b,c):2 -> val( a, b, c) :2
+                            fixed_arg = fixLinearAlignedModifierSpacing(arg);
+                        } else {
+                            // Other clauses: "conditional:a" -> "conditional: a"
+                            fixed_arg = fixClauseArgumentSpacing(arg);
+                        }
+                        omp_clause->addLangExpr(fixed_arg.c_str());
                     }
                 }
             }
