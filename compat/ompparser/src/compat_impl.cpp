@@ -757,6 +757,24 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     omp_clause->addLangExpr(expression.c_str());
                 }
                 skip_std_args = true;
+            } else if (clause_kind == OMPC_bind) {
+                // bind clause: bind(teams|parallel|thread)
+                const char* args = roup_clause_arguments(roup_clause);
+                OpenMPBindClauseBinding bind_binding = OMPC_BIND_unspecified;
+                if (args && args[0] != '\0') {
+                    std::string arg_lower(args);
+                    std::transform(arg_lower.begin(), arg_lower.end(), arg_lower.begin(), ::tolower);
+                    if (arg_lower.find("teams") != std::string::npos) {
+                        bind_binding = OMPC_BIND_teams;
+                    } else if (arg_lower.find("parallel") != std::string::npos) {
+                        bind_binding = OMPC_BIND_parallel;
+                    } else if (arg_lower.find("thread") != std::string::npos) {
+                        bind_binding = OMPC_BIND_thread;
+                    }
+                }
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                    static_cast<int>(bind_binding));
+                skip_std_args = true;
             } else {
                 // Standard clause creation
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
