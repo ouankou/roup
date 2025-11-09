@@ -781,17 +781,19 @@ fn parse_end_directive<'a>(
         }
     }
 
-    // Store the directive being ended as a parameter
-    let directive = directive_parts.join(" ");
+    // Store the directive being ended as a parameter (only if not empty)
     let (rest, clauses) = clause_registry.parse_sequence(rest)?;
-    // Store the directive token without presentation spacing; rendering should add spaces.
-    let parameter = directive.to_string();
+    let parameter = if directive_parts.is_empty() {
+        None
+    } else {
+        Some(std::borrow::Cow::Owned(directive_parts.join(" ")))
+    };
 
     Ok((
         rest,
         Directive {
             name,
-            parameter: Some(std::borrow::Cow::Owned(parameter)),
+            parameter,
             clauses,
             wait_data: None,
             cache_data: None,
