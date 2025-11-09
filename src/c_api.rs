@@ -137,6 +137,7 @@ pub struct OmpDirective {
 pub struct OmpClause {
     kind: i32,        // Clause type (num_threads=0, schedule=7, etc.)
     data: ClauseData, // Clause-specific data (union)
+    content: *const c_char, // Raw clause content (e.g., "a, b, c" from private(a, b, c))
 }
 
 /// Clause-specific data stored in a C union
@@ -784,6 +785,24 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
     }
 }
 
+/// Get clause content string (e.g., "a, b, c" from private(a, b, c)).
+///
+/// Returns NULL if clause is NULL or has no content.
+/// Returned pointer is valid until clause is freed.
+#[no_mangle]
+pub extern "C" fn roup_clause_content(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    // UNSAFE BLOCK: Dereference clause for content check
+    // Safety: Caller guarantees valid clause pointer
+    unsafe {
+        let c = &*clause;
+        c.content
+    }
+}
+
 /// Get length of string list.
 ///
 /// Returns 0 if list is NULL.
@@ -889,6 +908,27 @@ fn allocate_c_string(s: &str) -> *const c_char {
     c_string.into_raw() as *const c_char
 }
 
+/// Extract clause content string from ClauseKind.
+///
+/// Returns the raw content (e.g., "a, b, c" from private(a, b, c))
+/// Returns null pointer if clause has no content.
+fn extract_clause_content(kind: &crate::parser::ClauseKind) -> *const c_char {
+    use crate::parser::ClauseKind;
+
+    match kind {
+        ClauseKind::Parenthesized(content) => allocate_c_string(content.as_ref()),
+        ClauseKind::VariableList(vars) => {
+            if vars.is_empty() {
+                return ptr::null();
+            }
+            let joined = vars.iter().map(|v| v.as_ref()).collect::<Vec<_>>().join(", ");
+            allocate_c_string(&joined)
+        },
+        ClauseKind::Bare => ptr::null(),
+        _ => ptr::null(), // For complex clause types, return null for now
+    }
+}
+
 /// Extract variable list from ClauseKind and convert to C string list.
 ///
 /// Creates an OmpStringList containing C strings for each variable.
@@ -929,13 +969,11 @@ fn extract_variable_list(kind: &crate::parser::ClauseKind) -> *mut OmpStringList
 /// Extracts variable lists and expressions from parsed clause data.
 ///
 /// ## Clause Kind Mapping:
-/// - 0 = num_threads    - 6 = reduction
-/// - 1 = if             - 7 = schedule
-/// - 2 = private        - 8 = collapse
-/// - 3 = shared         - 9 = ordered
-/// - 4 = firstprivate   - 10 = nowait
-/// - 5 = lastprivate    - 11 = default
-/// - 999 = unknown
+/// Maps to OpenMPClauseKind enum indices from ompparser/src/OpenMPKinds.h
+/// Clause names map directly to their enum position (0-89)
+/// - 0=if, 1=num_threads, 2=default, 3=private, 4=firstprivate, 5=shared,
+/// - 6=copyin, 7=align, 8=reduction, 9=proc_bind, 10=allocate, etc.
+/// - 89=simd, 90=unknown
 fn convert_clause(clause: &Clause) -> OmpClause {
     use crate::parser::ClauseKind;
 
@@ -943,61 +981,108 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     // (Fortran clauses are uppercase, C clauses are lowercase)
     let normalized_name = clause.name.to_ascii_lowercase();
 
+    // Extract raw clause content for passing to ompparser
+    let content = extract_clause_content(&clause.kind);
+
     let (kind, data) = match normalized_name.as_str() {
-        "num_threads" => (0, ClauseData { default: 0 }),
-        "if" => (1, ClauseData { default: 0 }),
-        "private" => {
-            let var_list = extract_variable_list(&clause.kind);
-            (2, ClauseData { variables: var_list })
-        },
-        "shared" => {
-            let var_list = extract_variable_list(&clause.kind);
-            (3, ClauseData { variables: var_list })
-        },
-        "firstprivate" => {
-            let var_list = extract_variable_list(&clause.kind);
-            (4, ClauseData { variables: var_list })
-        },
-        "lastprivate" => {
-            let var_list = extract_variable_list(&clause.kind);
-            (5, ClauseData { variables: var_list })
-        },
-        "reduction" => {
-            let operator = parse_reduction_operator(clause);
-            (
-                6,
-                ClauseData {
-                    reduction: ManuallyDrop::new(ReductionData { operator }),
-                },
-            )
-        }
-        "schedule" => {
-            let schedule_kind = parse_schedule_kind(clause);
-            (
-                7,
-                ClauseData {
-                    schedule: ManuallyDrop::new(ScheduleData {
-                        kind: schedule_kind,
-                    }),
-                },
-            )
-        }
-        "collapse" => (8, ClauseData { default: 0 }),
-        "ordered" => (9, ClauseData { default: 0 }),
-        "nowait" => (10, ClauseData { default: 0 }),
+        // Map clause names to ompparser OpenMPClauseKind enum indices (0-90)
+        // Based on order in compat/ompparser/ompparser/src/OpenMPKinds.h
+        "if" => (0, ClauseData { default: 0 }),
+        "num_threads" => (1, ClauseData { default: 0 }),
         "default" => {
             let default_kind = parse_default_kind(clause);
-            (
-                11,
-                ClauseData {
-                    default: default_kind,
-                },
-            )
-        }
-        _ => (999, ClauseData { default: 0 }), // Unknown
+            (2, ClauseData { default: default_kind })
+        },
+        "private" => (3, ClauseData { variables: ptr::null_mut() }),
+        "firstprivate" => (4, ClauseData { variables: ptr::null_mut() }),
+        "shared" => (5, ClauseData { variables: ptr::null_mut() }),
+        "copyin" => (6, ClauseData { variables: ptr::null_mut() }),
+        "align" => (7, ClauseData { default: 0 }),
+        "reduction" => (8, ClauseData { default: 0 }),
+        "proc_bind" => (9, ClauseData { default: 0 }),
+        "allocate" => (10, ClauseData { default: 0 }),
+        "num_teams" => (11, ClauseData { default: 0 }),
+        "thread_limit" => (12, ClauseData { default: 0 }),
+        "lastprivate" => (13, ClauseData { variables: ptr::null_mut() }),
+        "collapse" => (14, ClauseData { default: 0 }),
+        "ordered" => (15, ClauseData { default: 0 }),
+        "partial" => (16, ClauseData { default: 0 }),
+        "nowait" => (17, ClauseData { default: 0 }),
+        "full" => (18, ClauseData { default: 0 }),
+        "order" => (19, ClauseData { default: 0 }),
+        "linear" => (20, ClauseData { default: 0 }),
+        "schedule" => (21, ClauseData { default: 0 }),
+        "safelen" => (22, ClauseData { default: 0 }),
+        "simdlen" => (23, ClauseData { default: 0 }),
+        "aligned" => (24, ClauseData { default: 0 }),
+        "nontemporal" => (25, ClauseData { default: 0 }),
+        "uniform" => (26, ClauseData { default: 0 }),
+        "inbranch" => (27, ClauseData { default: 0 }),
+        "notinbranch" => (28, ClauseData { default: 0 }),
+        "dist_schedule" => (29, ClauseData { default: 0 }),
+        "bind" => (30, ClauseData { default: 0 }),
+        "inclusive" => (31, ClauseData { default: 0 }),
+        "exclusive" => (32, ClauseData { default: 0 }),
+        "copyprivate" => (33, ClauseData { default: 0 }),
+        "parallel" => (34, ClauseData { default: 0 }),
+        "sections" => (35, ClauseData { default: 0 }),
+        "for" => (36, ClauseData { default: 0 }),
+        "do" => (37, ClauseData { default: 0 }),
+        "taskgroup" => (38, ClauseData { default: 0 }),
+        "allocator" => (39, ClauseData { default: 0 }),
+        "initializer" => (40, ClauseData { default: 0 }),
+        "final" => (41, ClauseData { default: 0 }),
+        "untied" => (42, ClauseData { default: 0 }),
+        "requires" => (43, ClauseData { default: 0 }),
+        "mergeable" => (44, ClauseData { default: 0 }),
+        "in_reduction" => (45, ClauseData { default: 0 }),
+        "depend" => (46, ClauseData { default: 0 }),
+        "priority" => (47, ClauseData { default: 0 }),
+        "affinity" => (48, ClauseData { default: 0 }),
+        "detach" => (49, ClauseData { default: 0 }),
+        "grainsize" => (50, ClauseData { default: 0 }),
+        "num_tasks" => (51, ClauseData { default: 0 }),
+        "nogroup" => (52, ClauseData { default: 0 }),
+        "reverse_offload" => (53, ClauseData { default: 0 }),
+        "unified_address" => (54, ClauseData { default: 0 }),
+        "unified_shared_memory" => (55, ClauseData { default: 0 }),
+        "atomic_default_mem_order" => (56, ClauseData { default: 0 }),
+        "dynamic_allocators" => (57, ClauseData { default: 0 }),
+        "ext_implementation_defined_requirement" => (58, ClauseData { default: 0 }),
+        "device" => (59, ClauseData { default: 0 }),
+        "map" => (60, ClauseData { default: 0 }),
+        "use_device_ptr" => (61, ClauseData { default: 0 }),
+        "sizes" => (62, ClauseData { default: 0 }),
+        "use_device_addr" => (63, ClauseData { default: 0 }),
+        "is_device_ptr" => (64, ClauseData { default: 0 }),
+        "has_device_addr" => (65, ClauseData { default: 0 }),
+        "defaultmap" => (66, ClauseData { default: 0 }),
+        "to" => (67, ClauseData { default: 0 }),
+        "from" => (68, ClauseData { default: 0 }),
+        "uses_allocators" => (69, ClauseData { default: 0 }),
+        "when" => (70, ClauseData { default: 0 }),
+        "match" => (71, ClauseData { default: 0 }),
+        "link" => (72, ClauseData { default: 0 }),
+        "device_type" => (73, ClauseData { default: 0 }),
+        "task_reduction" => (74, ClauseData { default: 0 }),
+        "acq_rel" => (75, ClauseData { default: 0 }),
+        "release" => (76, ClauseData { default: 0 }),
+        "acquire" => (77, ClauseData { default: 0 }),
+        "read" => (78, ClauseData { default: 0 }),
+        "write" => (79, ClauseData { default: 0 }),
+        "update" => (80, ClauseData { default: 0 }),
+        "capture" => (81, ClauseData { default: 0 }),
+        "seq_cst" => (82, ClauseData { default: 0 }),
+        "relaxed" => (83, ClauseData { default: 0 }),
+        "hint" => (84, ClauseData { default: 0 }),
+        "destroy" => (85, ClauseData { default: 0 }),
+        "depobj_update" => (86, ClauseData { default: 0 }),
+        "threads" => (87, ClauseData { default: 0 }),
+        "simd" => (88, ClauseData { default: 0 }),
+        _ => (89, ClauseData { default: 0 }), // OMPC_unknown
     };
 
-    OmpClause { kind, data }
+    OmpClause { kind, data, content }
 }
 
 /// Parse reduction operator from clause arguments.

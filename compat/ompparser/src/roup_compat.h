@@ -27,6 +27,7 @@ typedef struct OmpStringList OmpStringList;
 
 /* Parsing functions */
 OmpDirective* roup_parse(const char* input);
+OmpDirective* roup_parse_with_language(const char* input, int32_t language);
 void roup_directive_free(OmpDirective* dir);
 int32_t roup_directive_kind(const OmpDirective* dir);
 
@@ -37,6 +38,7 @@ void roup_clause_iterator_free(OmpClauseIterator* iter);
 
 /* Clause data extraction */
 int32_t roup_clause_kind(const OmpClause* clause);
+const char* roup_clause_content(const OmpClause* clause);
 OmpStringList* roup_clause_variables(const OmpClause* clause);
 int32_t roup_clause_schedule_kind(const OmpClause* clause);
 int32_t roup_clause_reduction_operator(const OmpClause* clause);

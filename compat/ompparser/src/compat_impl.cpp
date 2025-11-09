@@ -134,23 +134,13 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
 }
 
 static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
-    // ROUP clause kind mapping using named constants from roup_constants.h
-    // Single source of truth: src/c_api.rs:convert_clause()
-    switch (roup_kind) {
-        case ROUP_CLAUSE_NUM_THREADS:   return OMPC_num_threads;
-        case ROUP_CLAUSE_IF:            return OMPC_if;
-        case ROUP_CLAUSE_PRIVATE:       return OMPC_private;
-        case ROUP_CLAUSE_SHARED:        return OMPC_shared;
-        case ROUP_CLAUSE_FIRSTPRIVATE:  return OMPC_firstprivate;
-        case ROUP_CLAUSE_LASTPRIVATE:   return OMPC_lastprivate;
-        case ROUP_CLAUSE_REDUCTION:     return OMPC_reduction;
-        case ROUP_CLAUSE_SCHEDULE:      return OMPC_schedule;
-        case ROUP_CLAUSE_COLLAPSE:      return OMPC_collapse;
-        case ROUP_CLAUSE_ORDERED:       return OMPC_ordered;
-        case ROUP_CLAUSE_NOWAIT:        return OMPC_nowait;
-        case ROUP_CLAUSE_DEFAULT:       return OMPC_default;
-        default:                        return OMPC_unknown;
+    // ROUP clause kinds (0-89) map directly to ompparser OpenMPClauseKind enum
+    // Both follow the same order from OpenMPKinds.h
+    // See src/c_api.rs:convert_clause() for the mapping
+    if (roup_kind >= 0 && roup_kind <= 89) {
+        return static_cast<OpenMPClauseKind>(roup_kind);
     }
+    return OMPC_unknown;
 }
 
 // ============================================================================
@@ -174,6 +164,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     // Determine input format based on current language mode
     std::string input_str(input, input_len);
 
+    // Map ompparser language to ROUP language constant
+    int32_t roup_lang = ROUP_LANG_C;  // Default to C
+
     // Handle different language pragmas
     if (current_lang == Lang_Fortran) {
         // Fortran uses !$omp prefix - add if missing (case-insensitive check)
@@ -184,16 +177,19 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         if (!has_prefix) {
             input_str = std::string(FORTRAN_PREFIX) + " " + input_str;
         }
+        // Use Fortran free-form (ompparser doesn't distinguish free/fixed at this level)
+        roup_lang = ROUP_LANG_FORTRAN_FREE;
     } else {
         // C/C++ use #pragma omp prefix - add if missing
         // compare() returns 0 if strings match, non-zero otherwise
         if (input_str.compare(0, C_PRAGMA_PREFIX_LEN, C_PRAGMA_PREFIX) != 0) {
             input_str = std::string(C_PRAGMA_PREFIX) + " " + input_str;
         }
+        roup_lang = ROUP_LANG_C;
     }
 
-    // Call ROUP parser
-    OmpDirective* roup_dir = roup_parse(input_str.c_str());
+    // Call ROUP parser with language information
+    OmpDirective* roup_dir = roup_parse_with_language(input_str.c_str(), roup_lang);
     if (!roup_dir) {
         return nullptr;
     }
@@ -214,41 +210,16 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             int32_t roup_kind_clause = roup_clause_kind(roup_clause);
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
-            // Extract variable lists for data-sharing clauses
-            OmpStringList* var_list = roup_clause_variables(roup_clause);
-            if (var_list) {
-                int32_t num_vars = roup_string_list_len(var_list);
-                if (num_vars > 0) {
-                    // Convert ROUP string list to std::vector<std::string>
-                    std::vector<std::string> variables;
-                    for (int32_t i = 0; i < num_vars; i++) {
-                        const char* var = roup_string_list_get(var_list, i);
-                        if (var) {
-                            variables.push_back(std::string(var));
-                        }
-                    }
+            // Get the raw clause content (e.g., "a, b, c" from private(a, b, c))
+            const char* content = roup_clause_content(roup_clause);
 
-                    // Add clause with variables using ompparser's addOpenMPClause
-                    // For data-sharing clauses, we need to manually create the clause
-                    // and add variables to it
-                    if (!variables.empty()) {
-                        // Create clause and add to directive
-                        OpenMPClause* omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
-                        if (omp_clause) {
-                            // Add each variable to the clause using addLangExpr
-                            for (const auto& var : variables) {
-                                omp_clause->addLangExpr(var.c_str());
-                            }
-                        }
-                    }
-                } else {
-                    // No variables, just add clause kind
-                    dir->addOpenMPClause(static_cast<int>(clause_kind));
-                }
-                roup_string_list_free(var_list);
-            } else {
-                // No variable list (e.g., nowait, collapse, etc.)
-                dir->addOpenMPClause(static_cast<int>(clause_kind));
+            // Create clause
+            OpenMPClause* omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+
+            // If clause has content, add it as a single expression
+            // ompparser will parse it (variables, expressions, etc.)
+            if (omp_clause && content && content[0] != '\0') {
+                omp_clause->addLangExpr(content);
             }
         }
         roup_clause_iterator_free(iter);
