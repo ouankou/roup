@@ -25,6 +25,7 @@ extern "C" {
     struct OmpDirective;
     struct OmpClause;
     struct OmpClauseIterator;
+    struct OmpStringList;
 
     // Core parsing
     OmpDirective* roup_parse(const char* input);
@@ -41,6 +42,15 @@ extern "C" {
 
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
+    OmpStringList* roup_clause_variables(const OmpClause* clause);
+    int32_t roup_clause_schedule_kind(const OmpClause* clause);
+    int32_t roup_clause_reduction_operator(const OmpClause* clause);
+    int32_t roup_clause_default_data_sharing(const OmpClause* clause);
+
+    // String list operations
+    int32_t roup_string_list_len(const OmpStringList* list);
+    const char* roup_string_list_get(const OmpStringList* list, int32_t index);
+    void roup_string_list_free(OmpStringList* list);
 }
 
 // ============================================================================
@@ -57,7 +67,10 @@ static constexpr const char C_PRAGMA_PREFIX[] = "#pragma";    // C/C++ pragma pr
 static constexpr size_t FORTRAN_PREFIX_LEN = sizeof(FORTRAN_PREFIX) - 1;
 static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
 
-// setLang is a C++ function (not extern "C") to match ompparser API
+// ============================================================================
+// Language Selection (declared in roup_compat.h)
+// ============================================================================
+
 void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
 }
@@ -158,22 +171,24 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
 }
 
 static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
-    // ROUP clause kind mapping using named constants from roup_constants.h
-    // Single source of truth: src/c_api.rs:convert_clause()
+    // ROUP clause kind mapping from src/c_api.rs:convert_clause()
+    // Clause codes: 0=num_threads, 1=if, 2=private, 3=shared, 4=firstprivate,
+    //               5=lastprivate, 6=reduction, 7=schedule, 8=collapse,
+    //               9=ordered, 10=nowait, 11=default, 999=unknown
     switch (roup_kind) {
-        case ROUP_CLAUSE_NUM_THREADS:   return OMPC_num_threads;
-        case ROUP_CLAUSE_IF:            return OMPC_if;
-        case ROUP_CLAUSE_PRIVATE:       return OMPC_private;
-        case ROUP_CLAUSE_SHARED:        return OMPC_shared;
-        case ROUP_CLAUSE_FIRSTPRIVATE:  return OMPC_firstprivate;
-        case ROUP_CLAUSE_LASTPRIVATE:   return OMPC_lastprivate;
-        case ROUP_CLAUSE_REDUCTION:     return OMPC_reduction;
-        case ROUP_CLAUSE_SCHEDULE:      return OMPC_schedule;
-        case ROUP_CLAUSE_COLLAPSE:      return OMPC_collapse;
-        case ROUP_CLAUSE_ORDERED:       return OMPC_ordered;
-        case ROUP_CLAUSE_NOWAIT:        return OMPC_nowait;
-        case ROUP_CLAUSE_DEFAULT:       return OMPC_default;
-        default:                        return OMPC_unknown;
+        case 0:  return OMPC_num_threads;
+        case 1:  return OMPC_if;
+        case 2:  return OMPC_private;
+        case 3:  return OMPC_shared;
+        case 4:  return OMPC_firstprivate;
+        case 5:  return OMPC_lastprivate;
+        case 6:  return OMPC_reduction;
+        case 7:  return OMPC_schedule;
+        case 8:  return OMPC_collapse;
+        case 9:  return OMPC_ordered;
+        case 10: return OMPC_nowait;
+        case 11: return OMPC_default;
+        default: return OMPC_unknown;
     }
 }
 
@@ -238,9 +253,50 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             int32_t roup_kind_clause = roup_clause_kind(roup_clause);
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
-            // Use public variadic version: addOpenMPClause(int kind, ...)
-            // Cast to int and pass just the kind for basic clause support
-            dir->addOpenMPClause(static_cast<int>(clause_kind));
+            // Create the clause based on its type
+            OpenMPClause* omp_clause = nullptr;
+
+            switch (roup_kind_clause) {
+                case 6: {  // reduction
+                    int32_t op = roup_clause_reduction_operator(roup_clause);
+                    // Map ROUP reduction operator to ompparser enum
+                    // For now, use basic reduction identifier
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                        0,  // OMPC_REDUCTION_MODIFIER_unknown
+                        op, // reduction operator
+                        nullptr);
+                    break;
+                }
+                case 7: {  // schedule
+                    int32_t sched_kind = roup_clause_schedule_kind(roup_clause);
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), sched_kind);
+                    break;
+                }
+                case 11: {  // default
+                    int32_t default_kind = roup_clause_default_data_sharing(roup_clause);
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), default_kind);
+                    break;
+                }
+                default: {  // Simple variable list or parameter-less clauses
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+                    break;
+                }
+            }
+
+            // Extract and add variables/expressions to the clause
+            if (omp_clause) {
+                OmpStringList* vars = roup_clause_variables(roup_clause);
+                if (vars) {
+                    int32_t var_count = roup_string_list_len(vars);
+                    for (int32_t i = 0; i < var_count; ++i) {
+                        const char* var = roup_string_list_get(vars, i);
+                        if (var) {
+                            omp_clause->addLangExpr(var);
+                        }
+                    }
+                    roup_string_list_free(vars);
+                }
+            }
         }
         roup_clause_iterator_free(iter);
     }

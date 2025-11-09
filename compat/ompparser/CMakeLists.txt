@@ -133,11 +133,33 @@ target_link_libraries(comprehensive_test
     ompparser
 )
 
+# Official ompparser test suite runner
+add_executable(ompparser_tester
+    ompparser/tests/tester.cpp
+)
+
+target_include_directories(ompparser_tester PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/ompparser/src
+)
+
+target_link_libraries(ompparser_tester
+    ompparser  # Uses our ROUP-based implementation
+)
+
 # Enable testing
 enable_testing()
 add_test(NAME compat_basic COMMAND compat_example)
 add_test(NAME ompparser_drop_in COMMAND ompparser_example)
 add_test(NAME comprehensive COMMAND comprehensive_test)
+
+# Add ompparser test suite (136 tests)
+file(GLOB OMPPARSER_TEST_FILES "${CMAKE_CURRENT_SOURCE_DIR}/ompparser/tests/*.txt")
+foreach(TEST_FILE IN LISTS OMPPARSER_TEST_FILES)
+    get_filename_component(TEST_NAME "${TEST_FILE}" NAME_WE)
+    add_test(NAME ompparser_${TEST_NAME}
+             COMMAND ompparser_tester "${TEST_FILE}"
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+endforeach()
 
 # ============================================================================
 # Installation

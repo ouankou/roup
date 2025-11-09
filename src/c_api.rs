@@ -163,9 +163,9 @@ struct ScheduleData {
 
 /// Reduction clause data (operator and variables)
 #[repr(C)]
-#[derive(Copy, Clone)]
 struct ReductionData {
-    operator: i32, // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+    operator: i32,                 // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+    variables: *mut OmpStringList, // List of reduction variables
 }
 
 /// Iterator over clauses
@@ -763,14 +763,42 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
         let c = &*clause;
 
         // Check if this clause type has variables
-        // Kinds 2-5 are private/shared/firstprivate/lastprivate
-        if c.kind < 2 || c.kind > 6 {
-            return ptr::null_mut();
+        // Kinds 2-5 are private/shared/firstprivate/lastprivate, 6 is reduction
+        if c.kind >= 2 && c.kind <= 5 {
+            // Variable list clauses - return pointer to existing list
+            let vars_ptr = c.data.variables;
+            if !vars_ptr.is_null() {
+                // Clone the list so caller can own it
+                let list = &*vars_ptr;
+                let mut new_items = Vec::new();
+                for item in &list.items {
+                    // Duplicate the C string
+                    let str_ptr = *item;
+                    let c_str = CStr::from_ptr(str_ptr);
+                    let new_c_string = CString::new(c_str.to_bytes()).unwrap();
+                    new_items.push(new_c_string.into_raw() as *const c_char);
+                }
+                return Box::into_raw(Box::new(OmpStringList { items: new_items }));
+            }
+        } else if c.kind == 6 {
+            // Reduction clause - variables stored in reduction struct
+            let vars_ptr = c.data.reduction.variables;
+            if !vars_ptr.is_null() {
+                // Clone the list so caller can own it
+                let list = &*vars_ptr;
+                let mut new_items = Vec::new();
+                for item in &list.items {
+                    // Duplicate the C string
+                    let str_ptr = *item;
+                    let c_str = CStr::from_ptr(str_ptr);
+                    let new_c_string = CString::new(c_str.to_bytes()).unwrap();
+                    new_items.push(new_c_string.into_raw() as *const c_char);
+                }
+                return Box::into_raw(Box::new(OmpStringList { items: new_items }));
+            }
         }
 
-        // For now, return empty list (would need clause parsing enhancement)
-        let list = OmpStringList { items: Vec::new() };
-        Box::into_raw(Box::new(list))
+        ptr::null_mut()
     }
 }
 
@@ -893,46 +921,42 @@ fn allocate_c_string(s: &str) -> *const c_char {
 /// - 5 = lastprivate    - 11 = default
 /// - 999 = unknown
 fn convert_clause(clause: &Clause) -> OmpClause {
+    use crate::parser::ClauseKind;
+
     // Normalize clause name to lowercase for case-insensitive matching
-    // (Fortran clauses are uppercase, C clauses are lowercase)
-    // Note: One String allocation per clause is acceptable at C API boundary.
-    // Alternative (build-time constant map) requires updating constants_gen.rs
-    // to parse if-else chains instead of match expressions.
     let normalized_name = clause.name.to_ascii_lowercase();
 
     let (kind, data) = match normalized_name.as_str() {
-        "num_threads" => (0, ClauseData { default: 0 }),
-        "if" => (1, ClauseData { default: 0 }),
-        "private" => (
-            2,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "shared" => (
-            3,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "firstprivate" => (
-            4,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "lastprivate" => (
-            5,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
+        "num_threads" | "if" | "collapse" | "ordered" => {
+            // Expression clauses - extract the expression from Parenthesized
+            let kind_code = match normalized_name.as_str() {
+                "num_threads" => 0,
+                "if" => 1,
+                "collapse" => 8,
+                "ordered" => 9,
+                _ => 999,
+            };
+            (kind_code, ClauseData { default: 0 })
+        }
+        "private" | "shared" | "firstprivate" | "lastprivate" => {
+            // Variable list clauses - extract variables
+            let kind_code = match normalized_name.as_str() {
+                "private" => 2,
+                "shared" => 3,
+                "firstprivate" => 4,
+                "lastprivate" => 5,
+                _ => 999,
+            };
+            let variables = extract_variables_from_clause(clause);
+            (kind_code, ClauseData { variables })
+        }
         "reduction" => {
-            let operator = parse_reduction_operator(clause);
+            // Reduction clause - extract operator AND variables
+            let (operator, variables) = extract_reduction_data(clause);
             (
                 6,
                 ClauseData {
-                    reduction: ManuallyDrop::new(ReductionData { operator }),
+                    reduction: ManuallyDrop::new(ReductionData { operator, variables }),
                 },
             )
         }
@@ -947,22 +971,92 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 },
             )
         }
-        "collapse" => (8, ClauseData { default: 0 }),
-        "ordered" => (9, ClauseData { default: 0 }),
         "nowait" => (10, ClauseData { default: 0 }),
         "default" => {
             let default_kind = parse_default_kind(clause);
-            (
-                11,
-                ClauseData {
-                    default: default_kind,
-                },
-            )
+            (11, ClauseData { default: default_kind })
         }
         _ => (999, ClauseData { default: 0 }), // Unknown
     };
 
     OmpClause { kind, data }
+}
+
+/// Extract variables from clause kind as OmpStringList
+fn extract_variables_from_clause(clause: &Clause) -> *mut OmpStringList {
+    use crate::parser::ClauseKind;
+
+    match &clause.kind {
+        ClauseKind::VariableList(vars) => {
+            // Convert Vec<Cow<str>> to OmpStringList with allocated C strings
+            let mut items = Vec::new();
+            for var in vars {
+                let c_string = CString::new(var.as_ref()).unwrap();
+                items.push(c_string.into_raw() as *const c_char);
+            }
+            Box::into_raw(Box::new(OmpStringList { items }))
+        }
+        ClauseKind::Parenthesized(vars_str) => {
+            // Parse comma-separated variable list from parenthesized string
+            let mut items = Vec::new();
+            for var in vars_str.split(',') {
+                let trimmed = var.trim();
+                if !trimmed.is_empty() {
+                    let c_string = CString::new(trimmed).unwrap();
+                    items.push(c_string.into_raw() as *const c_char);
+                }
+            }
+            if items.is_empty() {
+                ptr::null_mut()
+            } else {
+                Box::into_raw(Box::new(OmpStringList { items }))
+            }
+        }
+        ClauseKind::ReductionClause { variables, .. } => {
+            // Reduction clause also has variables
+            let mut items = Vec::new();
+            for var in variables {
+                let c_string = CString::new(var.as_ref()).unwrap();
+                items.push(c_string.into_raw() as *const c_char);
+            }
+            Box::into_raw(Box::new(OmpStringList { items }))
+        }
+        _ => ptr::null_mut(),
+    }
+}
+
+/// Extract reduction operator and variables
+fn extract_reduction_data(clause: &Clause) -> (i32, *mut OmpStringList) {
+    use crate::parser::{ClauseKind, ReductionOperator};
+
+    if let ClauseKind::ReductionClause { operator, variables, .. } = &clause.kind {
+        let op_code = match operator {
+            ReductionOperator::Add => 0,
+            ReductionOperator::Sub => 1,
+            ReductionOperator::Mul => 2,
+            ReductionOperator::BitAnd => 3,
+            ReductionOperator::BitOr => 4,
+            ReductionOperator::BitXor => 5,
+            ReductionOperator::LogAnd => 6,
+            ReductionOperator::LogOr => 7,
+            ReductionOperator::Min => 8,
+            ReductionOperator::Max => 9,
+            _ => 0,
+        };
+
+        let mut items = Vec::new();
+        for var in variables {
+            let c_string = CString::new(var.as_ref()).unwrap();
+            items.push(c_string.into_raw() as *const c_char);
+        }
+        let vars_list = Box::into_raw(Box::new(OmpStringList { items }));
+
+        return (op_code, vars_list);
+    }
+
+    // Fallback to parsing from Parenthesized (older code path)
+    let operator = parse_reduction_operator(clause);
+    (operator, ptr::null_mut())
 }
 
 /// Parse reduction operator from clause arguments.
@@ -1254,11 +1348,15 @@ fn free_clause_data(clause: &OmpClause) {
         // Free variable lists if present
         // Clause kinds with variable lists (see convert_clause):
         //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
-        // Other kinds use different union fields:
-        //   6 = reduction (uses .reduction field, NOT .variables)
-        //   7 = schedule (uses .schedule field, NOT .variables)
         if clause.kind >= 2 && clause.kind <= 5 {
             let vars_ptr = clause.data.variables;
+            if !vars_ptr.is_null() {
+                roup_string_list_free(vars_ptr);
+            }
+        }
+        // Reduction clause (6) - free variables from reduction struct
+        else if clause.kind == 6 {
+            let vars_ptr = clause.data.reduction.variables;
             if !vars_ptr.is_null() {
                 roup_string_list_free(vars_ptr);
             }
