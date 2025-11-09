@@ -1072,6 +1072,149 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                                     }
                                 }
                             }
+                        } else if (clause_kind == OMPC_depend) {
+                            // depend clause with iterator needs special spacing
+                            // iterator(int x=1:10) -> iterator ( int x=1:10 )
+                            // But NOT space after colons in ranges: keep 1:10 not 1: 10
+                            fixed_arg = arg;
+
+                            // Find and fix iterator(...) if present
+                            size_t iter_pos = fixed_arg.find("iterator");
+                            if (iter_pos != std::string::npos) {
+                                size_t paren_start = fixed_arg.find('(', iter_pos);
+                                if (paren_start != std::string::npos) {
+                                    // Add space before opening paren if not present
+                                    if (paren_start > 0 && fixed_arg[paren_start - 1] != ' ') {
+                                        fixed_arg.insert(paren_start, " ");
+                                        paren_start++;  // Adjust position after insertion
+                                    }
+                                    // Add space after opening paren if not present
+                                    if (paren_start + 1 < fixed_arg.length() && fixed_arg[paren_start + 1] != ' ') {
+                                        fixed_arg.insert(paren_start + 1, " ");
+                                    }
+
+                                    // Find matching close paren
+                                    int paren_depth = 1;
+                                    size_t pos = paren_start + 1;
+                                    while (pos < fixed_arg.length() && paren_depth > 0) {
+                                        if (fixed_arg[pos] == '(') paren_depth++;
+                                        else if (fixed_arg[pos] == ')') {
+                                            paren_depth--;
+                                            if (paren_depth == 0) {
+                                                // Add space before closing paren if not present
+                                                if (pos > 0 && fixed_arg[pos - 1] != ' ') {
+                                                    fixed_arg.insert(pos, " ");
+                                                    pos++;
+                                                }
+                                                break;
+                                            }
+                                        }
+                                        pos++;
+                                    }
+
+                                    // Fix spacing inside iterator:
+                                    // - Remove spaces around = (bba=4 not bba = 4)
+                                    // - Remove spaces after : in ranges (4:120:2 not 4: 120: 2)
+                                    // - Add space after commas (int x, char y not int x,char y)
+                                    // But only between paren_start and the matching close paren
+                                    size_t end_pos = pos;
+                                    for (size_t i = paren_start + 1; i < end_pos; ++i) {
+                                        if (fixed_arg[i] == '=' && i + 1 < end_pos) {
+                                            // Remove space after = if present
+                                            if (fixed_arg[i + 1] == ' ') {
+                                                fixed_arg.erase(i + 1, 1);
+                                                end_pos--;
+                                            }
+                                            // Remove space before = if present
+                                            if (i > 0 && fixed_arg[i - 1] == ' ') {
+                                                fixed_arg.erase(i - 1, 1);
+                                                end_pos--;
+                                                i--;
+                                            }
+                                        } else if (fixed_arg[i] == ',' && i + 1 < end_pos) {
+                                            // Add space after comma if not present
+                                            if (fixed_arg[i + 1] != ' ') {
+                                                fixed_arg.insert(i + 1, " ");
+                                                end_pos++;
+                                            }
+                                        } else if (fixed_arg[i] == ':' && i + 1 < end_pos && fixed_arg[i + 1] == ' ') {
+                                            // Check if this is a range colon (not a type colon like "in:")
+                                            // Range colons have digits/variables around them, not keywords
+                                            bool is_range_colon = true;
+                                            // Look ahead to see if it's followed by a depend type keyword
+                                            size_t next_word_start = i + 1;
+                                            while (next_word_start < end_pos && (fixed_arg[next_word_start] == ' ' || fixed_arg[next_word_start] == '\t')) {
+                                                next_word_start++;
+                                            }
+                                            if (next_word_start < end_pos) {
+                                                std::string next_word;
+                                                size_t word_end = next_word_start;
+                                                while (word_end < end_pos && fixed_arg[word_end] != ' ' && fixed_arg[word_end] != ',' && fixed_arg[word_end] != ')') {
+                                                    word_end++;
+                                                }
+                                                next_word = fixed_arg.substr(next_word_start, word_end - next_word_start);
+                                                // Check if it's a number or variable (range), not a keyword (depend type)
+                                                if (next_word.empty() || (!isdigit(next_word[0]) && next_word[0] != '-')) {
+                                                    is_range_colon = false;  // Likely a type keyword
+                                                }
+                                            }
+                                            if (is_range_colon) {
+                                                fixed_arg.erase(i + 1, 1);
+                                                end_pos--;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // For non-iterator parts, add space after type colons: "in:x" -> "in : x"
+                            // This is handled by the general spacing function for the part after iterator
+                            // But we need to be careful not to break what we just fixed
+                            // Since iterator is at the start, we can apply spacing to the rest
+                            if (iter_pos != std::string::npos) {
+                                // Find the end of iterator(...)
+                                size_t iter_end = fixed_arg.find(')', iter_pos);
+                                if (iter_end != std::string::npos) {
+                                    iter_end++;
+                                    // Skip comma and whitespace after iterator
+                                    while (iter_end < fixed_arg.length() && (fixed_arg[iter_end] == ',' || fixed_arg[iter_end] == ' ')) {
+                                        iter_end++;
+                                    }
+                                    // Apply spacing to the rest (the depend type and variables)
+                                    // Format: "in : m, n" with space before AND after the colon
+                                    if (iter_end < fixed_arg.length()) {
+                                        std::string rest = fixed_arg.substr(iter_end);
+                                        // Find the colon in the depend type (in:, out:, inout:, etc.)
+                                        size_t colon_pos = rest.find(':');
+                                        if (colon_pos != std::string::npos) {
+                                            // Add space before colon if not present
+                                            if (colon_pos > 0 && rest[colon_pos - 1] != ' ') {
+                                                rest.insert(colon_pos, " ");
+                                                colon_pos++;
+                                            }
+                                            // Add space after colon if not present
+                                            if (colon_pos + 1 < rest.length() && rest[colon_pos + 1] != ' ') {
+                                                rest.insert(colon_pos + 1, " ");
+                                            }
+                                        }
+                                        fixed_arg = fixed_arg.substr(0, iter_end) + rest;
+                                    }
+                                }
+                            } else {
+                                // No iterator - apply spacing for depend type: "in:x" -> "in : x"
+                                size_t colon_pos = fixed_arg.find(':');
+                                if (colon_pos != std::string::npos) {
+                                    // Add space before colon if not present
+                                    if (colon_pos > 0 && fixed_arg[colon_pos - 1] != ' ') {
+                                        fixed_arg.insert(colon_pos, " ");
+                                        colon_pos++;
+                                    }
+                                    // Add space after colon if not present
+                                    if (colon_pos + 1 < fixed_arg.length() && fixed_arg[colon_pos + 1] != ' ') {
+                                        fixed_arg.insert(colon_pos + 1, " ");
+                                    }
+                                }
+                            }
                         } else {
                             // Other clauses: "conditional:a" -> "conditional: a"
                             fixed_arg = fixClauseArgumentSpacing(arg);
