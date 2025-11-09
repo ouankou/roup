@@ -223,10 +223,10 @@ static OpenMPIfClauseModifier mapIfModifier(const std::string& mod) {
     if (mod == "task") return OMPC_IF_MODIFIER_task;
     if (mod == "taskloop") return OMPC_IF_MODIFIER_taskloop;
     if (mod == "target") return OMPC_IF_MODIFIER_target;
-    if (mod == "target_data") return OMPC_IF_MODIFIER_target_data;
-    if (mod == "target_enter_data") return OMPC_IF_MODIFIER_target_enter_data;
-    if (mod == "target_exit_data") return OMPC_IF_MODIFIER_target_exit_data;
-    if (mod == "target_update") return OMPC_IF_MODIFIER_target_update;
+    if (mod == "target_data" || mod == "target data") return OMPC_IF_MODIFIER_target_data;
+    if (mod == "target_enter_data" || mod == "target enter data") return OMPC_IF_MODIFIER_target_enter_data;
+    if (mod == "target_exit_data" || mod == "target exit data") return OMPC_IF_MODIFIER_target_exit_data;
+    if (mod == "target_update" || mod == "target update") return OMPC_IF_MODIFIER_target_update;
     if (mod == "cancel") return OMPC_IF_MODIFIER_cancel;
     return OMPC_IF_MODIFIER_unspecified;
 }
@@ -837,6 +837,12 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     size_t colon_pos = params.find(':');
                     if (colon_pos != std::string::npos) {
                         alloc_str = params.substr(0, colon_pos);
+                        // Trim whitespace from alloc_str
+                        size_t start = alloc_str.find_first_not_of(" \t");
+                        size_t end = alloc_str.find_last_not_of(" \t");
+                        if (start != std::string::npos) {
+                            alloc_str = alloc_str.substr(start, end - start + 1);
+                        }
                         allocator = mapAllocator(alloc_str);
                         var_list = params.substr(colon_pos + 1);
                     }
@@ -1134,6 +1140,12 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     size_t colon_pos = params.find(':');
                     if (colon_pos != std::string::npos) {
                         operator_str = params.substr(0, colon_pos);
+                        // Trim whitespace from operator_str
+                        size_t start = operator_str.find_first_not_of(" \t");
+                        size_t end = operator_str.find_last_not_of(" \t");
+                        if (start != std::string::npos) {
+                            operator_str = operator_str.substr(start, end - start + 1);
+                        }
                         var_list = params.substr(colon_pos + 1);
                         identifier = mapInReductionIdentifier(operator_str);
                     }
@@ -1165,6 +1177,12 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     size_t colon_pos = params.find(':');
                     if (colon_pos != std::string::npos) {
                         operator_str = params.substr(0, colon_pos);
+                        // Trim whitespace from operator_str
+                        size_t start = operator_str.find_first_not_of(" \t");
+                        size_t end = operator_str.find_last_not_of(" \t");
+                        if (start != std::string::npos) {
+                            operator_str = operator_str.substr(start, end - start + 1);
+                        }
                         var_list = params.substr(colon_pos + 1);
                         identifier = mapTaskReductionIdentifier(operator_str);
                     }
