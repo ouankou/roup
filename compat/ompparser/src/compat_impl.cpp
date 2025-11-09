@@ -307,6 +307,34 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 }
             }
         }
+        // Handle END directive - create paired directive from parameter
+        else if (kind == OMPD_end) {
+            // Parameter contains the directive name (e.g., "task", "parallel", "do")
+            // Create a dummy directive to avoid segfault in generatePragmaString
+            OpenMPDirectiveKind paired_kind = OMPD_unknown;
+
+            // Map common directive names to their kinds
+            if (param == "parallel") paired_kind = OMPD_parallel;
+            else if (param == "do" || param == "for") paired_kind = OMPD_for;
+            else if (param == "task") paired_kind = OMPD_task;
+            else if (param == "sections") paired_kind = OMPD_sections;
+            else if (param == "single") paired_kind = OMPD_single;
+            else if (param == "workshare") paired_kind = OMPD_workshare;
+            else if (param == "parallel do" || param == "parallel for") paired_kind = OMPD_parallel_for;
+            else if (param == "target") paired_kind = OMPD_target;
+            else if (param == "teams") paired_kind = OMPD_teams;
+            else if (param == "distribute") paired_kind = OMPD_distribute;
+            else if (param == "taskgroup") paired_kind = OMPD_taskgroup;
+            else if (param == "master") paired_kind = OMPD_master;
+            else if (param == "masked") paired_kind = OMPD_masked;
+            else if (param == "critical") paired_kind = OMPD_critical;
+            else if (param == "ordered") paired_kind = OMPD_ordered;
+            else if (param == "target data") paired_kind = OMPD_target_data;
+
+            // Create dummy paired directive
+            OpenMPDirective* paired = new OpenMPDirective(paired_kind, current_lang, 0, 0);
+            static_cast<OpenMPEndDirective*>(dir)->setPairedDirective(paired);
+        }
         // Handle cancel/cancellation_point - add construct type as a special clause
         else if (kind == OMPD_cancel || kind == OMPD_cancellation_point) {
             // The parameter is the construct type (parallel, sections, for, taskgroup)
