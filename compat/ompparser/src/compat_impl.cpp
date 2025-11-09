@@ -10,6 +10,7 @@
 
 #include <OpenMPIR.h>
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -30,6 +31,7 @@ extern "C" {
 
     // Core parsing
     OmpDirective* roup_parse(const char* input);
+    OmpDirective* roup_parse_with_language(const char* input, int32_t language);
     void roup_directive_free(OmpDirective* directive);
 
     // Directive queries
@@ -250,8 +252,11 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     }
 
-    // Call ROUP parser - THIS IS THE REAL PARSER!
-    OmpDirective* roup_dir = roup_parse(input_str.c_str());
+    // Call ROUP parser with language awareness - THIS IS THE REAL PARSER!
+    // Map ompparser language to ROUP language constants
+    int32_t roup_lang = (current_lang == Lang_Fortran) ? ROUP_LANG_FORTRAN_FREE : ROUP_LANG_C;
+
+    OmpDirective* roup_dir = roup_parse_with_language(input_str.c_str(), roup_lang);
     if (!roup_dir) {
         return nullptr;
     }
