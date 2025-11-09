@@ -253,6 +253,41 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     }
 
+    // WORKAROUND: ROUP cannot parse "cancellation point" directive at all
+    // Detect and handle manually
+    std::string search_lower = input_str;
+    std::transform(search_lower.begin(), search_lower.end(), search_lower.begin(), ::tolower);
+    if (search_lower.find("cancellation") != std::string::npos && search_lower.find("point") != std::string::npos) {
+        // This is a "cancellation point" directive
+        OpenMPDirective* dir = new OpenMPDirective(OMPD_cancellation_point, current_lang, 0, 0);
+
+        // Extract construct type (parallel/sections/for/do/taskgroup)
+        size_t point_pos = search_lower.find("point");
+        if (point_pos != std::string::npos) {
+            std::string after = search_lower.substr(point_pos + 5); // skip "point"
+            size_t start = after.find_first_not_of(" \t");
+            if (start != std::string::npos) {
+                std::string first_token = after.substr(start);
+                size_t end = first_token.find_first_of(" \t\r\n");
+                if (end != std::string::npos) {
+                    first_token = first_token.substr(0, end);
+                }
+
+                if (first_token == "parallel") {
+                    dir->addOpenMPClause(OMPC_parallel);
+                } else if (first_token == "sections") {
+                    dir->addOpenMPClause(OMPC_sections);
+                } else if (first_token == "for" || first_token == "do") {
+                    dir->addOpenMPClause(current_lang == Lang_Fortran ? OMPC_do : OMPC_for);
+                } else if (first_token == "taskgroup") {
+                    dir->addOpenMPClause(OMPC_taskgroup);
+                }
+            }
+        }
+
+        return dir;
+    }
+
     // Call ROUP parser with language awareness - THIS IS THE REAL PARSER!
     // Map ompparser language to ROUP language constants
     int32_t roup_lang = (current_lang == Lang_Fortran) ? ROUP_LANG_FORTRAN_FREE : ROUP_LANG_C;
@@ -266,7 +301,6 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     int32_t roup_kind = roup_directive_kind(roup_dir);
     const char* roup_name = roup_directive_name(roup_dir);
     OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
-
 
     // Create ompparser-compatible directive
     // Use OpenMPAtomicDirective for atomic directives
