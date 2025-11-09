@@ -628,6 +628,20 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
                     static_cast<int>(proc_bind_kind));
                 skip_std_args = true;
+            } else if (clause_kind == OMPC_order) {
+                // order clause: order(concurrent)
+                const char* args = roup_clause_arguments(roup_clause);
+                OpenMPOrderClauseKind order_kind = OMPC_ORDER_unspecified;
+                if (args && args[0] != '\0') {
+                    std::string arg_lower(args);
+                    std::transform(arg_lower.begin(), arg_lower.end(), arg_lower.begin(), ::tolower);
+                    if (arg_lower.find("concurrent") != std::string::npos) {
+                        order_kind = OMPC_ORDER_concurrent;
+                    }
+                }
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                    static_cast<int>(order_kind));
+                skip_std_args = true;
             } else if (clause_kind == OMPC_if) {
                 // if clause: parse directive modifier (parallel, simd, cancel, etc.)
                 // Format: [directive_name:] expression
