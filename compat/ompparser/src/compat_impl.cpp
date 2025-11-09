@@ -81,6 +81,93 @@ void setLang(OpenMPBaseLang lang) {
 // Helper Functions
 // ============================================================================
 
+// Parse reduction clause to extract modifier, operator, and variables
+// Format: reduction(modifier, operator : variables) or reduction(operator : variables)
+static bool parseReductionClause(const std::string& clause_text,
+                                 std::string& modifier,
+                                 std::string& op,
+                                 std::string& vars) {
+    // Find opening and closing parentheses
+    size_t open_paren = clause_text.find('(');
+    size_t close_paren = clause_text.rfind(')');
+    if (open_paren == std::string::npos || close_paren == std::string::npos) {
+        return false;
+    }
+
+    std::string content = clause_text.substr(open_paren + 1, close_paren - open_paren - 1);
+
+    // Find the colon that separates operator from variables
+    size_t colon_pos = content.find(':');
+    if (colon_pos == std::string::npos) {
+        return false;
+    }
+
+    std::string left_part = content.substr(0, colon_pos);
+    vars = content.substr(colon_pos + 1);
+
+    // Trim whitespace from vars
+    size_t vars_start = vars.find_first_not_of(" \t");
+    size_t vars_end = vars.find_last_not_of(" \t");
+    if (vars_start != std::string::npos && vars_end != std::string::npos) {
+        vars = vars.substr(vars_start, vars_end - vars_start + 1);
+    }
+
+    // Check if left part has a comma (modifier, operator) or just operator
+    size_t comma_pos = left_part.find(',');
+    if (comma_pos != std::string::npos) {
+        // Has modifier
+        modifier = left_part.substr(0, comma_pos);
+        op = left_part.substr(comma_pos + 1);
+    } else {
+        // No modifier, just operator
+        modifier = "";
+        op = left_part;
+    }
+
+    // Trim whitespace from modifier and operator
+    auto trim = [](std::string& s) {
+        size_t start = s.find_first_not_of(" \t");
+        size_t end = s.find_last_not_of(" \t");
+        if (start != std::string::npos && end != std::string::npos) {
+            s = s.substr(start, end - start + 1);
+        } else {
+            s = "";
+        }
+    };
+
+    trim(modifier);
+    trim(op);
+
+    return true;
+}
+
+// Map reduction operator string to enum
+static OpenMPReductionClauseIdentifier mapReductionOperator(const std::string& op) {
+    if (op == "+" || op == "plus") return OMPC_REDUCTION_IDENTIFIER_plus;
+    if (op == "-" || op == "minus") return OMPC_REDUCTION_IDENTIFIER_minus;
+    if (op == "*" || op == "mul") return OMPC_REDUCTION_IDENTIFIER_mul;
+    if (op == "&" || op == "bitand") return OMPC_REDUCTION_IDENTIFIER_bitand;
+    if (op == "|" || op == "bitor") return OMPC_REDUCTION_IDENTIFIER_bitor;
+    if (op == "^" || op == "bitxor") return OMPC_REDUCTION_IDENTIFIER_bitxor;
+    if (op == "&&" || op == "logand") return OMPC_REDUCTION_IDENTIFIER_logand;
+    if (op == "||" || op == "logor") return OMPC_REDUCTION_IDENTIFIER_logor;
+    if (op == "max") return OMPC_REDUCTION_IDENTIFIER_max;
+    if (op == "min") return OMPC_REDUCTION_IDENTIFIER_min;
+    if (op == ".eqv." || op == "eqv") return OMPC_REDUCTION_IDENTIFIER_eqv;
+    if (op == ".neqv." || op == "neqv") return OMPC_REDUCTION_IDENTIFIER_neqv;
+    // User-defined operator
+    return OMPC_REDUCTION_IDENTIFIER_user;
+}
+
+// Map reduction modifier string to enum
+static OpenMPReductionClauseModifier mapReductionModifier(const std::string& mod) {
+    if (mod.empty()) return OMPC_REDUCTION_MODIFIER_unspecified;
+    if (mod == "inscan") return OMPC_REDUCTION_MODIFIER_inscan;
+    if (mod == "task") return OMPC_REDUCTION_MODIFIER_task;
+    if (mod == "default") return OMPC_REDUCTION_MODIFIER_default;
+    return OMPC_REDUCTION_MODIFIER_unknown;
+}
+
 // Normalize spacing in clause expressions (add space after commas and selective colons)
 static std::string normalizeClauseSpacing(const std::string& expr) {
     std::string result;
@@ -629,6 +716,77 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             } else if (clause_kind == OMPC_allocate) {
                 // For allocate clauses, ALWAYS create separate clause (don't merge)
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+            } else if (clause_kind == OMPC_reduction || clause_kind == OMPC_task_reduction ||
+                       clause_kind == OMPC_in_reduction) {
+                // Parse reduction clause to extract modifier and operator
+                std::string modifier_str, op_str, vars_str;
+                if (clause_text && parseReductionClause(std::string(clause_text), modifier_str, op_str, vars_str)) {
+                    OpenMPReductionClauseModifier modifier = mapReductionModifier(modifier_str);
+                    OpenMPReductionClauseIdentifier identifier = mapReductionOperator(op_str);
+
+                    // For user-defined operators, store the operator name
+                    char* user_op = nullptr;
+                    if (identifier == OMPC_REDUCTION_IDENTIFIER_user && !op_str.empty()) {
+                        user_op = strdup(op_str.c_str());
+                    }
+
+                    try {
+                        omp_clause = OpenMPReductionClause::addReductionClause(dir, modifier, identifier, user_op);
+                    } catch (...) {
+                        // If addReductionClause fails, skip this clause
+                        if (user_op) free(user_op);
+                        continue;
+                    }
+
+                    // Add variables directly here since we've already parsed them
+                    if (omp_clause && !vars_str.empty()) {
+                        // Normalize spacing in variables
+                        vars_str = normalizeClauseSpacing(vars_str);
+
+                        // Split variables by comma
+                        std::vector<std::string> vars;
+                        std::string current_var;
+                        int paren_depth = 0;
+
+                        for (size_t i = 0; i < vars_str.length(); ++i) {
+                            char c = vars_str[i];
+                            if (c == '(') paren_depth++;
+                            else if (c == ')') paren_depth--;
+
+                            if (c == ',' && paren_depth == 0) {
+                                // Trim and add variable
+                                size_t start = current_var.find_first_not_of(" \t");
+                                if (start != std::string::npos) {
+                                    size_t end = current_var.find_last_not_of(" \t");
+                                    vars.push_back(current_var.substr(start, end - start + 1));
+                                }
+                                current_var.clear();
+                            } else {
+                                current_var += c;
+                            }
+                        }
+
+                        // Add the last variable
+                        if (!current_var.empty()) {
+                            size_t start = current_var.find_first_not_of(" \t");
+                            if (start != std::string::npos) {
+                                size_t end = current_var.find_last_not_of(" \t");
+                                vars.push_back(current_var.substr(start, end - start + 1));
+                            }
+                        }
+
+                        // Add each variable to the clause
+                        for (const auto& var : vars) {
+                            omp_clause->addLangExpr(var.c_str());
+                        }
+                    }
+
+                    // Skip the normal expression parsing for reduction clauses
+                    continue;
+                } else {
+                    // Fallback to basic clause if parsing fails
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+                }
             } else if (clause_kind == OMPC_private || clause_kind == OMPC_shared ||
                        clause_kind == OMPC_firstprivate || clause_kind == OMPC_lastprivate) {
                 // These clauses merge and deduplicate variables
