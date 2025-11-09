@@ -943,7 +943,7 @@ pub extern "C" fn roup_clause_reduction_operator(clause: *const OmpClause) -> i3
 /// Returns the custom operator name if the operator is user-defined (Custom),
 /// or NULL if the clause is not a reduction clause or has a built-in operator.
 ///
-/// The returned string is owned by the clause and should NOT be freed.
+/// The returned string must be freed with roup_string_free().
 #[no_mangle]
 pub extern "C" fn roup_clause_reduction_custom_operator(clause: *const OmpClause) -> *const c_char {
     if clause.is_null() {
@@ -960,7 +960,8 @@ pub extern "C" fn roup_clause_reduction_custom_operator(clause: *const OmpClause
         // Check if the operator is Custom (value 100)
         if c.data.reduction.operator == 100 && !c.data.reduction.custom_operator.is_null() {
             let custom_op_string = &*c.data.reduction.custom_operator;
-            custom_op_string.as_ptr() as *const c_char
+            // Convert to null-terminated C string
+            allocate_c_string(custom_op_string.as_str())
         } else {
             ptr::null()
         }
@@ -2083,7 +2084,8 @@ fn map_reduction_operator(op: &ReductionOperator) -> i32 {
         ReductionOperator::LogicalOr => reduction_op::LOGICAL_OR,
         ReductionOperator::Min => reduction_op::MIN,
         ReductionOperator::Max => reduction_op::MAX,
-        _ => reduction_op::UNKNOWN,
+        ReductionOperator::MinusEqual => reduction_op::MINUS_EQUAL,
+        ReductionOperator::Custom => reduction_op::CUSTOM,
     }
 }
 
