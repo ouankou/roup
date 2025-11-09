@@ -290,22 +290,44 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     }
 
-    // Handle directives with parameter lists (allocate, threadprivate)
-    // These directives take a variable list as parameter: allocate(a,b,c)
+    // Handle directives with parameters
     const char* parameter = roup_directive_parameter(roup_dir);
     if (parameter && parameter[0] != '\0') {
-        // Remove parentheses from parameter
         std::string param_str(parameter);
+
+        // Remove parentheses if present
         if (param_str.length() >= 2 && param_str[0] == '(' && param_str.back() == ')') {
             param_str = param_str.substr(1, param_str.length() - 2);
         }
 
         if (kind == OMPD_allocate) {
+            // allocate(a,b,c) - variable list
             OpenMPAllocateDirective* alloc_dir = static_cast<OpenMPAllocateDirective*>(dir);
             alloc_dir->addAllocateList(strdup(param_str.c_str()));
         } else if (kind == OMPD_threadprivate) {
+            // threadprivate(a,b,c) - variable list
             OpenMPThreadprivateDirective* tp_dir = static_cast<OpenMPThreadprivateDirective*>(dir);
             tp_dir->addThreadprivateList(strdup(param_str.c_str()));
+        } else if (kind == OMPD_cancel || kind == OMPD_cancellation_point) {
+            // cancel parallel - construct type as bare clause
+            // Map construct type string to clause kind
+            OpenMPClauseKind construct_clause = OMPC_unknown;
+            if (param_str == "parallel") {
+                construct_clause = static_cast<OpenMPClauseKind>(34);  // OMPC_parallel
+            } else if (param_str == "sections") {
+                construct_clause = static_cast<OpenMPClauseKind>(35);  // OMPC_sections
+            } else if (param_str == "for") {
+                construct_clause = static_cast<OpenMPClauseKind>(36);  // OMPC_for
+            } else if (param_str == "do") {
+                construct_clause = static_cast<OpenMPClauseKind>(37);  // OMPC_do
+            } else if (param_str == "taskgroup") {
+                construct_clause = static_cast<OpenMPClauseKind>(38);  // OMPC_taskgroup
+            }
+
+            if (construct_clause != OMPC_unknown) {
+                // Add construct type as first clause (bare, no parameters)
+                dir->addOpenMPClause(static_cast<int>(construct_clause));
+            }
         }
     }
 
