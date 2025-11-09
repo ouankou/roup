@@ -499,29 +499,45 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 }
             }
         }
-        // Handle END directive - create paired directive from parameter
+        // Handle END directive - create paired directive from directive name
         else if (kind == OMPD_end) {
-            // Parameter contains the directive name (e.g., "task", "parallel", "do")
+            // For END directives, extract the directive being ended from the name
+            // e.g., "end atomic" → "atomic", "end parallel" → "parallel"
+            std::string ended_directive;
+            std::string dir_name(directive_name);
+            if (dir_name.compare(0, 4, "end ") == 0 && dir_name.length() > 4) {
+                ended_directive = dir_name.substr(4); // Skip "end "
+            } else if (!param.empty()) {
+                ended_directive = param; // Fallback to parameter
+            }
+
             // Create a dummy directive to avoid segfault in generatePragmaString
             OpenMPDirectiveKind paired_kind = OMPD_unknown;
 
-            // Map common directive names to their kinds
-            if (param == "parallel") paired_kind = OMPD_parallel;
-            else if (param == "do" || param == "for") paired_kind = OMPD_for;
-            else if (param == "task") paired_kind = OMPD_task;
-            else if (param == "sections") paired_kind = OMPD_sections;
-            else if (param == "single") paired_kind = OMPD_single;
-            else if (param == "workshare") paired_kind = OMPD_workshare;
-            else if (param == "parallel do" || param == "parallel for") paired_kind = OMPD_parallel_for;
-            else if (param == "target") paired_kind = OMPD_target;
-            else if (param == "teams") paired_kind = OMPD_teams;
-            else if (param == "distribute") paired_kind = OMPD_distribute;
-            else if (param == "taskgroup") paired_kind = OMPD_taskgroup;
-            else if (param == "master") paired_kind = OMPD_master;
-            else if (param == "masked") paired_kind = OMPD_masked;
-            else if (param == "critical") paired_kind = OMPD_critical;
-            else if (param == "ordered") paired_kind = OMPD_ordered;
-            else if (param == "target data") paired_kind = OMPD_target_data;
+            // Map directive names to their kinds
+            if (ended_directive == "parallel") paired_kind = OMPD_parallel;
+            else if (ended_directive == "do" || ended_directive == "for") paired_kind = OMPD_for;
+            else if (ended_directive == "task") paired_kind = OMPD_task;
+            else if (ended_directive == "sections") paired_kind = OMPD_sections;
+            else if (ended_directive == "single") paired_kind = OMPD_single;
+            else if (ended_directive == "workshare") paired_kind = OMPD_workshare;
+            else if (ended_directive == "atomic") paired_kind = OMPD_atomic;
+            else if (ended_directive == "parallel do" || ended_directive == "parallel for") paired_kind = OMPD_parallel_for;
+            else if (ended_directive == "target") paired_kind = OMPD_target;
+            else if (ended_directive == "target parallel") paired_kind = OMPD_target_parallel;
+            else if (ended_directive == "teams") paired_kind = OMPD_teams;
+            else if (ended_directive == "distribute") paired_kind = OMPD_distribute;
+            else if (ended_directive == "taskgroup") paired_kind = OMPD_taskgroup;
+            else if (ended_directive == "loop") paired_kind = OMPD_loop;
+            else if (ended_directive == "master") paired_kind = OMPD_master;
+            else if (ended_directive == "masked") paired_kind = OMPD_masked;
+            else if (ended_directive == "critical") paired_kind = OMPD_critical;
+            else if (ended_directive == "ordered") paired_kind = OMPD_ordered;
+            else if (ended_directive == "simd") paired_kind = OMPD_simd;
+            // Use mapDirectiveNameToKind for any unhandled directives
+            else {
+                paired_kind = mapDirectiveNameToKind(ended_directive.c_str());
+            }
 
             // Create dummy paired directive
             OpenMPDirective* paired = new OpenMPDirective(paired_kind, current_lang, 0, 0);
