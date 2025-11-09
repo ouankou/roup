@@ -43,6 +43,11 @@ extern "C" {
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
     const char* roup_clause_arguments(const OmpClause* clause);
+
+    // Specialized clause data
+    int32_t roup_clause_schedule_kind(const OmpClause* clause);
+    int32_t roup_clause_reduction_operator(const OmpClause* clause);
+    int32_t roup_clause_default_data_sharing(const OmpClause* clause);
 }
 
 // ============================================================================
@@ -199,8 +204,54 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             int32_t roup_kind_clause = roup_clause_kind(roup_clause);
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
-            // Create the clause object
-            OpenMPClause* omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+            OpenMPClause* omp_clause = nullptr;
+
+            // Handle specialized clauses that need parameters
+            if (clause_kind == OMPC_default) {
+                // Default clause needs default kind parameter
+                int32_t roup_default = roup_clause_default_data_sharing(roup_clause);
+                // Map ROUP values (0=shared, 1=none) to ompparser enum
+                // OMPC_DEFAULT_shared=2, OMPC_DEFAULT_none=3
+                OpenMPDefaultClauseKind default_kind =
+                    (roup_default == 0) ? OMPC_DEFAULT_shared :
+                    (roup_default == 1) ? OMPC_DEFAULT_none :
+                    OMPC_DEFAULT_unknown;
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), static_cast<int>(default_kind));
+            } else if (clause_kind == OMPC_schedule) {
+                // Schedule clause needs modifier1, modifier2, and kind
+                int32_t roup_schedule = roup_clause_schedule_kind(roup_clause);
+                // ROUP values match ompparser enum directly (0=static, 1=dynamic, etc.)
+                OpenMPScheduleClauseKind schedule_kind = static_cast<OpenMPScheduleClauseKind>(roup_schedule);
+                // Use unspecified modifiers for now (ROUP doesn't extract modifiers yet)
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                    static_cast<int>(OMPC_SCHEDULE_MODIFIER_unknown),
+                    static_cast<int>(OMPC_SCHEDULE_MODIFIER_unknown),
+                    static_cast<int>(schedule_kind));
+            } else if (clause_kind == OMPC_reduction) {
+                // Reduction clause needs modifier, identifier, and potentially user-defined identifier
+                int32_t roup_op = roup_clause_reduction_operator(roup_clause);
+                // Map ROUP operator codes to ompparser enum
+                // ROUP: 0=+, 1=-, 2=*, 3=&, 4=|, 5=^, 6=&&, 7=||, 8=min, 9=max
+                // ompparser: 0=+, 1=-, 2=*, 3=&, 4=|, 5=^, 6=&&, 7=||, 8-9=fortran, 10=max, 11=min
+                OpenMPReductionClauseIdentifier identifier;
+                if (roup_op >= 0 && roup_op <= 7) {
+                    identifier = static_cast<OpenMPReductionClauseIdentifier>(roup_op);
+                } else if (roup_op == 8) {
+                    identifier = OMPC_REDUCTION_IDENTIFIER_min;  // 11
+                } else if (roup_op == 9) {
+                    identifier = OMPC_REDUCTION_IDENTIFIER_max;  // 10
+                } else {
+                    identifier = OMPC_REDUCTION_IDENTIFIER_unknown;
+                }
+                // Use unspecified modifier for now
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                    static_cast<int>(OMPC_REDUCTION_MODIFIER_unspecified),
+                    static_cast<int>(identifier),
+                    nullptr);  // No user-defined identifier
+            } else {
+                // Standard clause creation
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+            }
 
             // Get clause arguments if present and add them to the clause
             const char* args = roup_clause_arguments(roup_clause);
