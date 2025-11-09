@@ -35,10 +35,12 @@ extern "C" {
 
     // Core parsing
     OmpDirective* roup_parse(const char* input);
+    OmpDirective* roup_parse_with_language(const char* input, int32_t language);
     void roup_directive_free(OmpDirective* directive);
 
     // Directive queries
     int32_t roup_directive_kind(const OmpDirective* directive);
+    const char* roup_directive_parameter(const OmpDirective* directive);
     int32_t roup_directive_clause_count(const OmpDirective* directive);
     OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
 
@@ -336,7 +338,8 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     // Determine input format based on current language mode
     std::string input_str(input, input_len);
 
-    // Handle different language pragmas
+    // Determine ROUP language code and handle language-specific prefixes
+    int32_t roup_lang_code;
     if (current_lang == Lang_Fortran) {
         // Fortran uses !$omp prefix - add if missing (case-insensitive check)
         const bool has_prefix =
@@ -346,16 +349,20 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         if (!has_prefix) {
             input_str = std::string(FORTRAN_PREFIX) + " " + input_str;
         }
+        // Use ROUP_LANG_FORTRAN_FREE (1) for Fortran input
+        roup_lang_code = ROUP_LANG_FORTRAN_FREE;
     } else {
         // C/C++ use #pragma omp prefix - add if missing
         // compare() returns 0 if strings match, non-zero otherwise
         if (input_str.compare(0, C_PRAGMA_PREFIX_LEN, C_PRAGMA_PREFIX) != 0) {
             input_str = std::string(C_PRAGMA_PREFIX) + " " + input_str;
         }
+        // Use ROUP_LANG_C (0) for C/C++ input
+        roup_lang_code = ROUP_LANG_C;
     }
 
-    // Call ROUP parser
-    OmpDirective* roup_dir = roup_parse(input_str.c_str());
+    // Call ROUP parser with explicit language specification
+    OmpDirective* roup_dir = roup_parse_with_language(input_str.c_str(), roup_lang_code);
     if (!roup_dir) {
         return nullptr;
     }
@@ -414,6 +421,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             break;
     }
 
+    // Set the language for all directive types (specialized constructors don't accept language)
+    dir->setBaseLang(current_lang);
+
     // Handle atomic variants - ROUP parses "atomic read" as directive AtomicRead,
     // but ompparser expects directive atomic + clause read
     if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_READ) {
@@ -427,6 +437,18 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_COMPARE_CAPTURE) {
         dir->addOpenMPClause(OMPC_compare);
         dir->addOpenMPClause(OMPC_capture);
+    }
+
+    // Handle directive parameters (e.g., critical(name), atomic(hint))
+    const char* param = roup_directive_parameter(roup_dir);
+    if (param) {
+        if (kind == OMPD_critical) {
+            // Set critical region name: critical(test1)
+            OpenMPCriticalDirective* critical_dir = static_cast<OpenMPCriticalDirective*>(dir);
+            critical_dir->setCriticalName(const_cast<char*>(param));
+        }
+        // Note: atomic directive parameters are handled differently in ompparser
+        // and are typically represented as clauses (hint clause), not as directive parameters
     }
 
     // Convert clauses using ompparser's addOpenMPClause method

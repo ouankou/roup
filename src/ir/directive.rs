@@ -1182,6 +1182,16 @@ pub struct DirectiveIR {
     /// Examples: "parallel", "parallel for", "target teams distribute"
     name: String,
 
+    /// Optional parameter for directives that support it
+    ///
+    /// Used by directives like:
+    /// - `critical(name)` - critical region name
+    /// - `atomic(hint)` - atomic hint parameter
+    /// - Some directives use this for variable lists (handled in convert.rs)
+    ///
+    /// Examples: "test1" from `critical(test1)`
+    parameter: Option<String>,
+
     /// Semantic clause data
     ///
     /// Using `Box<[ClauseData]>` instead of `Vec<ClauseData>` for the final representation:
@@ -1232,6 +1242,41 @@ impl DirectiveIR {
         Self {
             kind,
             name: name.to_string(),
+            parameter: None,
+            clauses: clauses.into_boxed_slice(),
+            location,
+            language,
+        }
+    }
+
+    /// Create a new directive IR with parameter
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # use roup::ir::{DirectiveIR, DirectiveKind, Language, SourceLocation};
+    /// let dir = DirectiveIR::with_parameter(
+    ///     DirectiveKind::Critical,
+    ///     "critical",
+    ///     Some("test1".to_string()),
+    ///     vec![],
+    ///     SourceLocation::start(),
+    ///     Language::C,
+    /// );
+    /// assert_eq!(dir.parameter(), Some("test1"));
+    /// ```
+    pub fn with_parameter(
+        kind: DirectiveKind,
+        name: &str,
+        parameter: Option<String>,
+        clauses: Vec<ClauseData>,
+        location: SourceLocation,
+        language: Language,
+    ) -> Self {
+        Self {
+            kind,
+            name: name.to_string(),
+            parameter,
             clauses: clauses.into_boxed_slice(),
             location,
             language,
@@ -1368,6 +1413,30 @@ impl DirectiveIR {
     /// ```
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Get the directive parameter, if any
+    ///
+    /// Returns the parameter for directives that support it:
+    /// - `critical(name)` returns Some("name")
+    /// - `critical` returns None
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// # use roup::ir::{DirectiveIR, DirectiveKind, Language, SourceLocation};
+    /// let dir = DirectiveIR::with_parameter(
+    ///     DirectiveKind::Critical,
+    ///     "critical",
+    ///     Some("test1".to_string()),
+    ///     vec![],
+    ///     SourceLocation::start(),
+    ///     Language::C,
+    /// );
+    /// assert_eq!(dir.parameter(), Some("test1"));
+    /// ```
+    pub fn parameter(&self) -> Option<&str> {
+        self.parameter.as_deref()
     }
 
     /// Get the clauses

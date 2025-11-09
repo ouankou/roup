@@ -160,6 +160,7 @@ mod tests {
                 Clause {
                     name,
                     kind: ClauseKind::Parenthesized(value.into()),
+                    variant: None,
                 },
             ))
         }

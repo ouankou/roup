@@ -396,6 +396,8 @@ impl DirectiveRule {
     ) -> IResult<&'a str, Directive<'a>> {
         match self {
             DirectiveRule::Generic => {
+                // Generic parser only handles clauses, not parameters
+                // Parameters are handled by custom parsers for specific directives
                 let (input, clauses) = clause_registry.parse_sequence(input)?;
                 Ok((input, Directive::new(name, None, clauses)))
             }

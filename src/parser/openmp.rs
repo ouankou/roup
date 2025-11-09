@@ -432,6 +432,35 @@ fn parse_threadprivate_directive<'a>(
     }
 }
 
+// Custom parser for critical directive: critical(name) [clauses] or bare critical
+fn parse_critical_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized parameter (critical region name)
+    if let Ok((rest, param_content)) = parse_parenthesized_content(input) {
+        // Parse remaining clauses (e.g., hint clause)
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Borrowed("critical"),
+                parameter: Some(std::borrow::Cow::Owned(param_content)),
+                clauses,
+                wait_data: None,
+                cache_data: None,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive::new(name, None, clauses)))
+    }
+}
+
 // Custom parser for flush directive: flush(list) or bare flush
 fn parse_flush_directive<'a>(
     name: std::borrow::Cow<'a, str>,
@@ -762,6 +791,8 @@ fn parse_target_data_directive<'a>(
 const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
     "allocate",
     "threadprivate",
+    "flush",
+    "critical",
     "declare target",
     "declare mapper",
     "declare variant",
@@ -778,6 +809,7 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("allocate", parse_allocate_directive);
     builder = builder.register_custom("threadprivate", parse_threadprivate_directive);
     builder = builder.register_custom("flush", parse_flush_directive);
+    builder = builder.register_custom("critical", parse_critical_directive);
     builder = builder.register_custom("declare target", parse_declare_target_extended);
     builder = builder.register_custom("declare mapper", parse_declare_mapper_directive);
     builder = builder.register_custom("declare variant", parse_declare_variant_directive);

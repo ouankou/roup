@@ -42,9 +42,9 @@
 //! ```
 
 use super::{
-    lang, ClauseData, ClauseItem, ConversionError, DefaultKind, DependType, DirectiveIR,
-    DirectiveKind, Expression, Identifier, Language, MapType, ParserConfig, ProcBind,
-    ReductionOperator, ScheduleKind, ScheduleModifier, SourceLocation,
+    lang, ClauseData, ClauseItem, ConversionError, DefaultKind, DependType, DeviceType,
+    DirectiveIR, DirectiveKind, Expression, Identifier, Language, LastprivateModifier, MapType,
+    ParserConfig, ProcBind, ReductionOperator, ScheduleKind, ScheduleModifier, SourceLocation,
 };
 use crate::parser::{Clause, ClauseKind, Directive};
 
@@ -1028,6 +1028,179 @@ pub fn parse_clause_data<'a>(
             }
         }
 
+        // lastprivate([modifier:] list)
+        Some(OpenMpClause::Lastprivate) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                // Parse modifier if present (conditional:)
+                let (modifier, items_str) = if let Some(colon_pos) = content.find(':') {
+                    let mod_str = content[..colon_pos].trim();
+                    let modifier = match mod_str {
+                        "conditional" => Some(LastprivateModifier::Conditional),
+                        _ => None,
+                    };
+                    (modifier, content[colon_pos + 1..].trim())
+                } else {
+                    (None, content.trim())
+                };
+                let items = parse_identifier_list(items_str, config)?;
+                Ok(ClauseData::Lastprivate { modifier, items })
+            } else {
+                Ok(ClauseData::Lastprivate {
+                    modifier: None,
+                    items: vec![],
+                })
+            }
+        }
+
+        // use_device_ptr(list)
+        Some(OpenMpClause::UseDevicePtr) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::UseDevicePtr { items })
+            } else {
+                Ok(ClauseData::UseDevicePtr { items: vec![] })
+            }
+        }
+
+        // use_device_addr(list)
+        Some(OpenMpClause::UseDeviceAddr) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::UseDeviceAddr { items })
+            } else {
+                Ok(ClauseData::UseDeviceAddr { items: vec![] })
+            }
+        }
+
+        // is_device_ptr(list)
+        Some(OpenMpClause::IsDevicePtr) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::IsDevicePtr { items })
+            } else {
+                Ok(ClauseData::IsDevicePtr { items: vec![] })
+            }
+        }
+
+        // has_device_addr(list)
+        Some(OpenMpClause::HasDeviceAddr) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::HasDeviceAddr { items })
+            } else {
+                Ok(ClauseData::HasDeviceAddr { items: vec![] })
+            }
+        }
+
+        // in_reduction(operator: list)
+        Some(OpenMpClause::InReduction) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                // Same parsing as regular reduction
+                if let Some((op_str, items_str)) = lang::split_once_top_level(content, ':') {
+                    let operator = parse_reduction_operator(op_str.trim())?;
+                    let items = parse_identifier_list(items_str.trim(), config)?;
+                    Ok(ClauseData::InReduction { operator, items })
+                } else {
+                    Err(ConversionError::InvalidClauseSyntax(
+                        "in_reduction requires 'operator: list' format".to_string(),
+                    ))
+                }
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "in_reduction requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // task_reduction(operator: list)
+        Some(OpenMpClause::TaskReduction) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                // Same parsing as regular reduction
+                if let Some((op_str, items_str)) = lang::split_once_top_level(content, ':') {
+                    let operator = parse_reduction_operator(op_str.trim())?;
+                    let items = parse_identifier_list(items_str.trim(), config)?;
+                    Ok(ClauseData::TaskReduction { operator, items })
+                } else {
+                    Err(ConversionError::InvalidClauseSyntax(
+                        "task_reduction requires 'operator: list' format".to_string(),
+                    ))
+                }
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "task_reduction requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // device_type(host|nohost|any)
+        Some(OpenMpClause::DeviceType) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref().trim();
+                let device_type = match content {
+                    "host" => DeviceType::Host,
+                    "nohost" => DeviceType::Nohost,
+                    "any" => DeviceType::Any,
+                    _ => {
+                        return Err(ConversionError::InvalidClauseSyntax(format!(
+                            "unknown device_type: {}",
+                            content
+                        )))
+                    }
+                };
+                Ok(ClauseData::DeviceType(device_type))
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "device_type requires argument".to_string(),
+                ))
+            }
+        }
+
+        // defaultmap(...)
+        Some(OpenMpClause::Defaultmap) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                // For now, store as generic with name
+                Ok(ClauseData::Generic {
+                    name: Identifier::new("defaultmap"),
+                    data: Some(content.to_string()),
+                })
+            } else {
+                Ok(ClauseData::Generic {
+                    name: Identifier::new("defaultmap"),
+                    data: None,
+                })
+            }
+        }
+
+        // allocate([allocator:] list)
+        Some(OpenMpClause::Allocate) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                // Parse allocator if present (allocator:)
+                let (allocator, items_str) = if let Some(colon_pos) = content.find(':') {
+                    let alloc_str = content[..colon_pos].trim();
+                    let allocator = Some(Identifier::new(alloc_str));
+                    (allocator, content[colon_pos + 1..].trim())
+                } else {
+                    (None, content.trim())
+                };
+                let items = parse_identifier_list(items_str, config)?;
+                Ok(ClauseData::Allocate { allocator, items })
+            } else {
+                Ok(ClauseData::Allocate {
+                    allocator: None,
+                    items: vec![],
+                })
+            }
+        }
+
         // For unsupported clauses, return a generic representation
         _ => Ok(ClauseData::Generic {
             name: Identifier::new(clause.name.as_ref()),
@@ -1083,9 +1256,13 @@ pub fn convert_directive<'a>(
     let mut clauses = Vec::new();
     let clause_config = config.for_language(language);
 
+    // Preserve parameter for directives that use it (critical, atomic, etc.)
+    // Some directives store variable lists in parameter, others use it as a name/identifier
+    let mut parameter = None;
+
     // Handle directive-specific variable lists from parameter field
     // Directives like allocate(a,b,c), threadprivate(x,y), flush(vars) store
-    // their variable list in the parameter field
+    // their variable list in the parameter field and we convert to ItemList clause
     if let Some(ref param) = directive.parameter {
         if matches!(kind, DirectiveKind::Allocate | DirectiveKind::Threadprivate | DirectiveKind::Flush) {
             // Parse the variable list from parameter: "(a,b,c)" -> ["a", "b", "c"]
@@ -1104,6 +1281,16 @@ pub fn convert_directive<'a>(
                     clauses.push(ClauseData::ItemList(vars));
                 }
             }
+        } else {
+            // For other directives (critical, atomic, etc.), preserve the parameter as-is
+            // Remove parentheses if present: "(test1)" -> "test1"
+            let param_str = param.trim();
+            let cleaned = if param_str.starts_with('(') && param_str.ends_with(')') {
+                &param_str[1..param_str.len()-1]
+            } else {
+                param_str
+            };
+            parameter = Some(cleaned.trim().to_string());
         }
     }
 
@@ -1112,9 +1299,10 @@ pub fn convert_directive<'a>(
         clauses.push(clause_data);
     }
 
-    Ok(DirectiveIR::new(
+    Ok(DirectiveIR::with_parameter(
         kind,
         &directive_name,
+        parameter,
         clauses,
         location,
         language,
@@ -1196,21 +1384,25 @@ mod tests {
 
     #[test]
     fn test_parse_clause_data_bare() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "nowait".into(),
             kind: ClauseKind::Bare,
+            variant: OpenMpClause::from_name("nowait"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
-        assert!(matches!(data, ClauseData::Bare(_)));
+        assert_eq!(data, ClauseData::Nowait);
         assert_eq!(data.to_string(), "nowait");
     }
 
     #[test]
     fn test_parse_clause_data_default_shared() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "default".into(),
             kind: ClauseKind::Parenthesized("shared".into()),
+            variant: OpenMpClause::from_name("default"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1219,9 +1411,11 @@ mod tests {
 
     #[test]
     fn test_parse_clause_data_private() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "private".into(),
             kind: ClauseKind::Parenthesized("x, y".into()),
+            variant: OpenMpClause::from_name("private"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1234,9 +1428,11 @@ mod tests {
 
     #[test]
     fn test_parse_clause_data_num_threads() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "num_threads".into(),
             kind: ClauseKind::Parenthesized("4".into()),
+            variant: OpenMpClause::from_name("num_threads"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1245,9 +1441,11 @@ mod tests {
 
     #[test]
     fn test_parse_clause_data_if_simple() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "if".into(),
             kind: ClauseKind::Parenthesized("n > 100".into()),
+            variant: OpenMpClause::from_name("if"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1265,9 +1463,11 @@ mod tests {
 
     #[test]
     fn test_parse_clause_data_if_with_modifier() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "if".into(),
             kind: ClauseKind::Parenthesized("parallel: n > 100".into()),
+            variant: OpenMpClause::from_name("if"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1302,6 +1502,7 @@ mod tests {
 
     #[test]
     fn test_convert_directive_with_clauses() {
+        use crate::parser::openmp::OpenMpClause;
         let directive = Directive {
             name: "parallel".into(),
             parameter: None,
@@ -1309,10 +1510,12 @@ mod tests {
                 Clause {
                     name: "default".into(),
                     kind: ClauseKind::Parenthesized("shared".into()),
+                    variant: OpenMpClause::from_name("default"),
                 },
                 Clause {
                     name: "private".into(),
                     kind: ClauseKind::Parenthesized("x".into()),
+                    variant: OpenMpClause::from_name("private"),
                 },
             ],
             wait_data: None,
@@ -1390,9 +1593,11 @@ mod tests {
     // Tests for reduction clause
     #[test]
     fn test_parse_clause_data_reduction() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "reduction".into(),
             kind: ClauseKind::Parenthesized("+: sum".into()),
+            variant: OpenMpClause::from_name("reduction"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1406,9 +1611,11 @@ mod tests {
 
     #[test]
     fn test_parse_clause_data_reduction_multiple_items() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "reduction".into(),
             kind: ClauseKind::Parenthesized("*: a, b, c".into()),
+            variant: OpenMpClause::from_name("reduction"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1422,9 +1629,11 @@ mod tests {
 
     #[test]
     fn test_parse_clause_data_reduction_minmax() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "reduction".into(),
             kind: ClauseKind::Parenthesized("min: value".into()),
+            variant: OpenMpClause::from_name("reduction"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1616,9 +1825,11 @@ mod tests {
 
     #[test]
     fn test_parse_clause_data_depend() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "depend".into(),
             kind: ClauseKind::Parenthesized("in: x, y".into()),
+            variant: OpenMpClause::from_name("depend"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1670,9 +1881,11 @@ mod tests {
 
     #[test]
     fn test_parse_clause_data_fortran_private_variables() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "private".into(),
             kind: ClauseKind::Parenthesized("A(1:N), B(:, :)".into()),
+            variant: OpenMpClause::from_name("private"),
         };
         let config = ParserConfig::with_parsing(Language::Fortran);
         let data = parse_clause_data(&clause, &config).unwrap();
@@ -1693,9 +1906,11 @@ mod tests {
     // Tests for proc_bind clause
     #[test]
     fn test_parse_clause_data_proc_bind() {
+        use crate::parser::openmp::OpenMpClause;
         let clause = Clause {
             name: "proc_bind".into(),
             kind: ClauseKind::Parenthesized("close".into()),
+            variant: OpenMpClause::from_name("proc_bind"),
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();

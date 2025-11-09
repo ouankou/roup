@@ -1083,10 +1083,22 @@ pub enum ClauseData {
     Default(DefaultKind),
 
     // ========================================================================
-    // Reduction clause
+    // Reduction clauses
     // ========================================================================
     /// `reduction([modifier,]operator: list)` - Reduction operation
     Reduction {
+        operator: ReductionOperator,
+        items: Vec<ClauseItem>,
+    },
+
+    /// `in_reduction(operator: list)` - Participate in enclosing reduction
+    InReduction {
+        operator: ReductionOperator,
+        items: Vec<ClauseItem>,
+    },
+
+    /// `task_reduction(operator: list)` - Task reduction operation
+    TaskReduction {
         operator: ReductionOperator,
         items: Vec<ClauseItem>,
     },
@@ -1337,6 +1349,26 @@ impl fmt::Display for ClauseData {
                 }
                 write!(f, ")")
             }
+            ClauseData::InReduction { operator, items } => {
+                write!(f, "in_reduction({operator}: ")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::TaskReduction { operator, items } => {
+                write!(f, "task_reduction({operator}: ")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                write!(f, ")")
+            }
             ClauseData::Map {
                 map_type,
                 mapper,
@@ -1349,6 +1381,46 @@ impl fmt::Display for ClauseData {
                 if let Some(mt) = map_type {
                     write!(f, "{mt}: ")?;
                 }
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::UseDevicePtr { items } => {
+                write!(f, "use_device_ptr(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::UseDeviceAddr { items } => {
+                write!(f, "use_device_addr(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::IsDevicePtr { items } => {
+                write!(f, "is_device_ptr(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{item}")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::HasDeviceAddr { items } => {
+                write!(f, "has_device_addr(")?;
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;

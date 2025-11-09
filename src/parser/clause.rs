@@ -531,7 +531,6 @@ mod tests {
                 name: "nowait".into(),
                 kind: ClauseKind::Bare,
                 variant: None,
-                variant: None,
             }]
         );
     }
@@ -556,7 +555,6 @@ mod tests {
             name: "nowait".into(),
             kind: ClauseKind::Bare,
             variant: None,
-            variant: None,
         };
 
         assert_eq!(clause.to_string(), "nowait");
@@ -568,7 +566,6 @@ mod tests {
         let clause = Clause {
             name: "private".into(),
             kind: ClauseKind::Parenthesized("a, b".into()),
-            variant: None,
             variant: None,
         };
 
@@ -589,7 +586,6 @@ mod tests {
             Clause {
                 name,
                 kind: ClauseKind::Parenthesized(identifier.into()),
-                variant: None,
                 variant: None,
             },
         ))

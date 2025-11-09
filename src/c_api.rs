@@ -156,6 +156,7 @@ include!(concat!(env!("OUT_DIR"), "/constants_modules.rs"));
 pub struct OmpDirective {
     kind: i32,                              // DirectiveKind enum value (e.g., Parallel=0, For=10, etc.)
     name: *const c_char,                    // Directive name for debugging (e.g., "parallel")
+    parameter: *const c_char,               // Optional parameter (e.g., "test1" from "critical(test1)")
     clauses: Vec<OmpClause>,                // Associated clauses (contain IR pointers!)
     ir_directive: Box<crate::ir::DirectiveIR>,  // OWN the IR to keep pointers valid!
 }
@@ -309,6 +310,9 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
     let c_directive = OmpDirective {
         kind,
         name: allocate_c_string(directive.name.as_ref()),
+        parameter: ir_directive.parameter()
+            .map(|p| allocate_c_string(p))
+            .unwrap_or(ptr::null()),
         clauses,
         ir_directive: Box::new(ir_directive),  // Own the IR to keep pointers valid!
     };
@@ -338,6 +342,11 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
         // Free the name string (was allocated with CString::into_raw)
         if !boxed.name.is_null() {
             drop(CString::from_raw(boxed.name as *mut c_char));
+        }
+
+        // Free the parameter string (was allocated with CString::into_raw)
+        if !boxed.parameter.is_null() {
+            drop(CString::from_raw(boxed.parameter as *mut c_char));
         }
 
         // Free clause data
@@ -456,6 +465,9 @@ pub extern "C" fn roup_parse_with_language(
     let c_directive = OmpDirective {
         kind,
         name: allocate_c_string(directive.name.as_ref()),
+        parameter: ir_directive.parameter()
+            .map(|p| allocate_c_string(p))
+            .unwrap_or(ptr::null()),
         clauses,
         ir_directive: Box::new(ir_directive),  // Own the IR to keep pointers valid!
     };
@@ -675,6 +687,39 @@ pub extern "C" fn roup_directive_name(directive: *const OmpDirective) -> *const 
     unsafe {
         let dir = &*directive;
         dir.name
+    }
+}
+
+/// Get directive parameter as a C string.
+///
+/// Returns the parameter for directives that support it:
+/// - `critical(name)` returns "name"
+/// - `critical` returns NULL
+///
+/// Returns NULL if:
+/// - directive is NULL
+/// - directive has no parameter
+///
+/// Returned pointer is valid until directive is freed.
+///
+/// ## Example
+/// ```c
+/// OmpDirective* dir = roup_parse("#pragma omp critical(test1)");
+/// const char* param = roup_directive_parameter(dir);
+/// if (param) {
+///     printf("Parameter: %s\n", param);  // Prints: Parameter: test1
+/// }
+/// roup_directive_free(dir);
+/// ```
+#[no_mangle]
+pub extern "C" fn roup_directive_parameter(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let dir = &*directive;
+        dir.parameter
     }
 }
 
