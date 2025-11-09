@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (132 directives + 4 clauses) + OpenACC (18 directives + 45 clauses) = 0xC9A94B69D6679282
+// Auto-generated checksum: FNV-1a hash of OpenMP (132 directives + 6 clauses) + OpenACC (18 directives + 45 clauses) = 0x87050342E6BBE8F1
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0xC9A94B69D6679282
+#define ROUP_CONSTANTS_CHECKSUM 0x87050342E6BBE8F1
 
 // ============================================================================
 // Language Format Constants
@@ -186,6 +186,8 @@ extern "C" {
 #define ROUP_CLAUSE_SCHEDULE        7
 #define ROUP_CLAUSE_NOWAIT          10
 #define ROUP_CLAUSE_DEFAULT         11
+#define ROUP_CLAUSE_COPYIN          12
+#define ROUP_CLAUSE_PROC_BIND       13
 #define ROUP_CLAUSE_UNKNOWN      999
 
 

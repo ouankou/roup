@@ -743,6 +743,24 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
     }
 }
 
+/// Get proc_bind kind from proc_bind clause.
+///
+/// Returns 0=master, 1=close, 2=spread, 3=unknown.
+#[no_mangle]
+pub extern "C" fn roup_clause_proc_bind_kind(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return 3;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != 13 {
+            return 3;
+        }
+        c.data.default
+    }
+}
+
 // ============================================================================
 // Variable List Functions (UNSAFE BLOCKS 9-11)
 // ============================================================================
@@ -763,8 +781,8 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
         let c = &*clause;
 
         // Check if this clause type has variables or expressions
-        // Kinds: 0=num_threads, 1=if, 2-5=variable lists, 6=reduction, 8=collapse, 9=ordered
-        if c.kind >= 2 && c.kind <= 5 || c.kind == 0 || c.kind == 1 || c.kind == 8 || c.kind == 9 {
+        // Kinds: 0=num_threads, 1=if, 2-5=variable lists, 6=reduction, 8=collapse, 9=ordered, 12=copyin
+        if c.kind >= 2 && c.kind <= 5 || c.kind == 0 || c.kind == 1 || c.kind == 8 || c.kind == 9 || c.kind == 12 {
             // Variable list or expression clauses - return pointer to existing list
             let vars_ptr = c.data.variables;
             if !vars_ptr.is_null() {
@@ -977,6 +995,14 @@ fn convert_clause(clause: &Clause) -> OmpClause {
             let default_kind = parse_default_kind(clause);
             (11, ClauseData { default: default_kind })
         }
+        "copyin" => {
+            let variables = extract_variables_from_clause(clause);
+            (12, ClauseData { variables })
+        }
+        "proc_bind" => {
+            let proc_bind_kind = parse_proc_bind_kind(clause);
+            (13, ClauseData { default: proc_bind_kind })
+        }
         _ => (999, ClauseData { default: 0 }), // Unknown
     };
 
@@ -1076,8 +1102,32 @@ fn extract_reduction_data(clause: &Clause) -> (i32, *mut OmpStringList) {
     }
 
     // Fallback to parsing from Parenthesized (older code path)
+    // Format: "reduction(+: a, b, c)" -> Parenthesized("+: a, b, c")
     let operator = parse_reduction_operator(clause);
-    (operator, ptr::null_mut())
+    let variables = if let ClauseKind::Parenthesized(ref args) = clause.kind {
+        // Extract variables after the colon
+        if let Some(colon_pos) = args.find(':') {
+            let vars_str = &args[colon_pos + 1..];
+            let mut items = Vec::new();
+            for var in vars_str.split(',') {
+                let trimmed = var.trim();
+                if !trimmed.is_empty() {
+                    let c_string = CString::new(trimmed).unwrap();
+                    items.push(c_string.into_raw() as *const c_char);
+                }
+            }
+            if !items.is_empty() {
+                Box::into_raw(Box::new(OmpStringList { items }))
+            } else {
+                ptr::null_mut()
+            }
+        } else {
+            ptr::null_mut()
+        }
+    } else {
+        ptr::null_mut()
+    };
+    (operator, variables)
 }
 
 /// Parse reduction operator from clause arguments.
@@ -1182,6 +1232,27 @@ fn parse_default_kind(clause: &Clause) -> i32 {
         }
     }
     2 // Default to shared
+}
+
+/// Parse proc_bind kind from clause arguments.
+///
+/// ## Proc_bind Codes (matching ompparser OpenMPProcBindClauseKind):
+/// - 0 = master
+/// - 1 = close
+/// - 2 = spread
+/// - 3 = unknown
+fn parse_proc_bind_kind(clause: &Clause) -> i32 {
+    if let ClauseKind::Parenthesized(ref args) = clause.kind {
+        let args = args.as_ref();
+        if args.contains("master") || args.contains("MASTER") || args.contains("Master") {
+            return 0;
+        } else if args.contains("close") || args.contains("CLOSE") || args.contains("Close") {
+            return 1;
+        } else if args.contains("spread") || args.contains("SPREAD") || args.contains("Spread") {
+            return 2;
+        }
+    }
+    3 // unknown
 }
 
 /// Convert directive name to kind enum code.

@@ -46,6 +46,7 @@ extern "C" {
     int32_t roup_clause_schedule_kind(const OmpClause* clause);
     int32_t roup_clause_reduction_operator(const OmpClause* clause);
     int32_t roup_clause_default_data_sharing(const OmpClause* clause);
+    int32_t roup_clause_proc_bind_kind(const OmpClause* clause);
 
     // String list operations
     int32_t roup_string_list_len(const OmpStringList* list);
@@ -174,7 +175,7 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
     // ROUP clause kind mapping from src/c_api.rs:convert_clause()
     // Clause codes: 0=num_threads, 1=if, 2=private, 3=shared, 4=firstprivate,
     //               5=lastprivate, 6=reduction, 7=schedule, 8=collapse,
-    //               9=ordered, 10=nowait, 11=default, 999=unknown
+    //               9=ordered, 10=nowait, 11=default, 12=copyin, 13=proc_bind, 999=unknown
     switch (roup_kind) {
         case 0:  return OMPC_num_threads;
         case 1:  return OMPC_if;
@@ -188,6 +189,8 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
         case 9:  return OMPC_ordered;
         case 10: return OMPC_nowait;
         case 11: return OMPC_default;
+        case 12: return OMPC_copyin;
+        case 13: return OMPC_proc_bind;
         default: return OMPC_unknown;
     }
 }
@@ -275,6 +278,11 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 case 11: {  // default
                     int32_t default_kind = roup_clause_default_data_sharing(roup_clause);
                     omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), default_kind);
+                    break;
+                }
+                case 13: {  // proc_bind
+                    int32_t proc_bind_kind = roup_clause_proc_bind_kind(roup_clause);
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), proc_bind_kind);
                     break;
                 }
                 default: {  // Simple variable list or parameter-less clauses
