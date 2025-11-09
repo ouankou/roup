@@ -140,6 +140,13 @@ add_test(NAME ompparser_drop_in COMMAND ompparser_example)
 add_test(NAME comprehensive COMMAND comprehensive_test)
 
 # ============================================================================
+# Include ALL ompparser tests (1524 tests) to run against OUR compat layer
+# ============================================================================
+# The tests link against "ompparser" target, which is OUR compat library!
+# This proves our compat layer passes the same test suite as original ompparser
+add_subdirectory(ompparser/tests)
+
+# ============================================================================
 # Installation
 # ============================================================================
 
