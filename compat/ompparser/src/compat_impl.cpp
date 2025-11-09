@@ -770,6 +770,22 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     continue;
                 }
 
+                // Add clause to original order vector for toString()
+                // Check if it's not already there (addReductionClause might return existing clause)
+                auto* clauses_in_order = dir->getClausesInOriginalOrder();
+                if (clauses_in_order) {
+                    bool already_added = false;
+                    for (auto* existing : *clauses_in_order) {
+                        if (existing == omp_clause) {
+                            already_added = true;
+                            break;
+                        }
+                    }
+                    if (!already_added) {
+                        clauses_in_order->push_back(omp_clause);
+                    }
+                }
+
                 // Add variables to reduction clause
                 if (clause_text) {
                     std::string text(clause_text);
@@ -818,6 +834,8 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                         }
                     }
                 }
+                // Skip general clause processing for reduction clauses
+                continue;
             } else if (clause_kind == OMPC_private || clause_kind == OMPC_shared ||
                        clause_kind == OMPC_firstprivate || clause_kind == OMPC_lastprivate) {
                 // These clauses merge and deduplicate variables
