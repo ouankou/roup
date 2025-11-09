@@ -775,6 +775,103 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
                     static_cast<int>(bind_binding));
                 skip_std_args = true;
+            } else if (clause_kind == OMPC_device) {
+                // device clause: device(ancestor:5) or device(device_num:5)
+                const char* args = roup_clause_arguments(roup_clause);
+                OpenMPDeviceClauseModifier device_modifier = OMPC_DEVICE_MODIFIER_unspecified;
+                std::string device_expr;
+
+                if (args && args[0] != '\0') {
+                    std::string args_str(args);
+                    size_t colon_pos = args_str.find(':');
+                    if (colon_pos != std::string::npos) {
+                        std::string modifier_str = args_str.substr(0, colon_pos);
+                        std::string modifier_lower = modifier_str;
+                        std::transform(modifier_lower.begin(), modifier_lower.end(), modifier_lower.begin(), ::tolower);
+
+                        if (modifier_lower.find("ancestor") != std::string::npos) {
+                            device_modifier = OMPC_DEVICE_MODIFIER_ancestor;
+                        } else if (modifier_lower.find("device_num") != std::string::npos) {
+                            device_modifier = OMPC_DEVICE_MODIFIER_device_num;
+                        }
+
+                        device_expr = args_str.substr(colon_pos + 1);
+                        // Trim leading space
+                        size_t first = device_expr.find_first_not_of(" \t");
+                        if (first != std::string::npos) {
+                            device_expr = device_expr.substr(first);
+                        }
+                    } else {
+                        device_expr = args_str;
+                    }
+                }
+
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), static_cast<int>(device_modifier));
+                if (!device_expr.empty() && omp_clause) {
+                    omp_clause->addLangExpr(device_expr.c_str());
+                }
+                skip_std_args = true;
+            } else if (clause_kind == OMPC_defaultmap) {
+                // defaultmap clause: defaultmap(behavior:category)
+                const char* args = roup_clause_arguments(roup_clause);
+                OpenMPDefaultmapClauseBehavior behavior = OMPC_DEFAULTMAP_BEHAVIOR_unspecified;
+                OpenMPDefaultmapClauseCategory category = OMPC_DEFAULTMAP_CATEGORY_unspecified;
+
+                if (args && args[0] != '\0') {
+                    std::string args_str(args);
+                    std::vector<std::string> parts = parseClauseArguments(args);
+
+                    // Parse: behavior:category or just behavior
+                    for (const auto& part : parts) {
+                        size_t colon_pos = part.find(':');
+                        std::string behavior_str, category_str;
+
+                        if (colon_pos != std::string::npos) {
+                            behavior_str = part.substr(0, colon_pos);
+                            category_str = part.substr(colon_pos + 1);
+                            // Trim spaces
+                            size_t first = category_str.find_first_not_of(" \t");
+                            if (first != std::string::npos) {
+                                category_str = category_str.substr(first);
+                            }
+                        } else {
+                            behavior_str = part;
+                        }
+
+                        // Trim behavior
+                        size_t first = behavior_str.find_first_not_of(" \t");
+                        size_t last = behavior_str.find_last_not_of(" \t");
+                        if (first != std::string::npos && last != std::string::npos) {
+                            behavior_str = behavior_str.substr(first, last - first + 1);
+                        }
+
+                        std::string behavior_lower = behavior_str;
+                        std::transform(behavior_lower.begin(), behavior_lower.end(), behavior_lower.begin(), ::tolower);
+
+                        if (behavior_lower == "alloc") behavior = OMPC_DEFAULTMAP_BEHAVIOR_alloc;
+                        else if (behavior_lower == "to") behavior = OMPC_DEFAULTMAP_BEHAVIOR_to;
+                        else if (behavior_lower == "from") behavior = OMPC_DEFAULTMAP_BEHAVIOR_from;
+                        else if (behavior_lower == "tofrom") behavior = OMPC_DEFAULTMAP_BEHAVIOR_tofrom;
+                        else if (behavior_lower == "firstprivate") behavior = OMPC_DEFAULTMAP_BEHAVIOR_firstprivate;
+                        else if (behavior_lower == "none") behavior = OMPC_DEFAULTMAP_BEHAVIOR_none;
+                        else if (behavior_lower == "default") behavior = OMPC_DEFAULTMAP_BEHAVIOR_default;
+
+                        if (!category_str.empty()) {
+                            std::string category_lower = category_str;
+                            std::transform(category_lower.begin(), category_lower.end(), category_lower.begin(), ::tolower);
+
+                            if (category_lower == "scalar") category = OMPC_DEFAULTMAP_CATEGORY_scalar;
+                            else if (category_lower == "aggregate") category = OMPC_DEFAULTMAP_CATEGORY_aggregate;
+                            else if (category_lower == "pointer") category = OMPC_DEFAULTMAP_CATEGORY_pointer;
+                            else if (category_lower == "allocatable") category = OMPC_DEFAULTMAP_CATEGORY_allocatable;
+                        }
+                        break; // Only process first argument
+                    }
+                }
+
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                    static_cast<int>(behavior), static_cast<int>(category));
+                skip_std_args = true;
             } else {
                 // Standard clause creation
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
