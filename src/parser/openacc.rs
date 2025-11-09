@@ -626,6 +626,7 @@ fn parse_copyin_clause<'a>(
         rest,
         super::Clause {
             name,
+            variant: None,
             kind: ClauseKind::CopyinClause {
                 modifier,
                 variables,
@@ -687,6 +688,7 @@ fn parse_copyout_clause<'a>(
         rest,
         super::Clause {
             name,
+            variant: None,
             kind: ClauseKind::CopyoutClause {
                 modifier,
                 variables,
@@ -748,6 +750,7 @@ fn parse_create_clause<'a>(
         rest,
         super::Clause {
             name,
+            variant: None,
             kind: ClauseKind::CreateClause {
                 modifier,
                 variables,
@@ -836,6 +839,7 @@ fn parse_reduction_clause<'a>(
         rest,
         super::Clause {
             name,
+            variant: None,
             kind: ClauseKind::ReductionClause {
                 operator,
                 variables,
@@ -892,6 +896,7 @@ fn parse_variable_list_clause<'a>(
             rest,
             super::Clause {
                 name,
+            variant: None,
                 kind: ClauseKind::VariableList(variables),
             },
         ))
@@ -901,6 +906,7 @@ fn parse_variable_list_clause<'a>(
             input,
             super::Clause {
                 name,
+            variant: None,
                 kind: ClauseKind::Bare,
             },
         ))
@@ -969,6 +975,7 @@ fn parse_gang_clause<'a>(
             rest,
             super::Clause {
                 name,
+            variant: None,
                 kind: ClauseKind::GangClause {
                     modifier,
                     variables,
@@ -981,6 +988,7 @@ fn parse_gang_clause<'a>(
             input,
             super::Clause {
                 name,
+            variant: None,
                 kind: ClauseKind::GangClause {
                     modifier: None,
                     variables: vec![],
@@ -1047,6 +1055,7 @@ fn parse_worker_clause<'a>(
             rest,
             super::Clause {
                 name,
+            variant: None,
                 kind: ClauseKind::WorkerClause {
                     modifier,
                     variables,
@@ -1059,6 +1068,7 @@ fn parse_worker_clause<'a>(
             input,
             super::Clause {
                 name,
+            variant: None,
                 kind: ClauseKind::WorkerClause {
                     modifier: None,
                     variables: vec![],
@@ -1125,6 +1135,7 @@ fn parse_vector_clause<'a>(
             rest,
             super::Clause {
                 name,
+            variant: None,
                 kind: ClauseKind::VectorClause {
                     modifier,
                     variables,
@@ -1137,6 +1148,7 @@ fn parse_vector_clause<'a>(
             input,
             super::Clause {
                 name,
+            variant: None,
                 kind: ClauseKind::VectorClause {
                     modifier: None,
                     variables: vec![],

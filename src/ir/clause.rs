@@ -585,6 +585,318 @@ impl fmt::Display for OrderKind {
 }
 
 // ============================================================================
+// Reduction Modifier (OpenMP 5.2 spec section 5.5.5)
+// ============================================================================
+
+/// Reduction clause modifier
+///
+/// Specifies how the reduction is performed.
+///
+/// ## Examples
+///
+/// ```
+/// # use roup::ir::ReductionModifier;
+/// let rm = ReductionModifier::Inscan;
+/// assert_eq!(rm.to_string(), "inscan");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum ReductionModifier {
+    /// Inscan reduction (OpenMP 5.0+)
+    Inscan = 0,
+    /// Task reduction
+    Task = 1,
+    /// Default reduction
+    Default = 2,
+    /// Unspecified (no modifier)
+    Unspecified = 3,
+}
+
+impl fmt::Display for ReductionModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReductionModifier::Inscan => write!(f, "inscan"),
+            ReductionModifier::Task => write!(f, "task"),
+            ReductionModifier::Default => write!(f, "default"),
+            ReductionModifier::Unspecified => write!(f, ""),
+        }
+    }
+}
+
+// ============================================================================
+// If Modifier (OpenMP 5.2 spec section 2.13)
+// ============================================================================
+
+/// If clause directive-name modifier
+///
+/// Specifies which directive the if clause applies to.
+///
+/// ## Examples
+///
+/// ```
+/// # use roup::ir::IfModifier;
+/// let im = IfModifier::Parallel;
+/// assert_eq!(im.to_string(), "parallel");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum IfModifier {
+    /// If applies to parallel construct
+    Parallel = 0,
+    /// If applies to simd construct
+    Simd = 1,
+    /// If applies to task construct
+    Task = 2,
+    /// If applies to taskloop construct
+    Taskloop = 3,
+    /// If applies to target construct
+    Target = 4,
+    /// If applies to target data construct
+    TargetData = 5,
+    /// If applies to target enter data
+    TargetEnterData = 6,
+    /// If applies to target exit data
+    TargetExitData = 7,
+    /// If applies to target update
+    TargetUpdate = 8,
+    /// If applies to cancel construct
+    Cancel = 9,
+    /// Unspecified (no modifier)
+    Unspecified = 10,
+}
+
+impl fmt::Display for IfModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IfModifier::Parallel => write!(f, "parallel"),
+            IfModifier::Simd => write!(f, "simd"),
+            IfModifier::Task => write!(f, "task"),
+            IfModifier::Taskloop => write!(f, "taskloop"),
+            IfModifier::Target => write!(f, "target"),
+            IfModifier::TargetData => write!(f, "target data"),
+            IfModifier::TargetEnterData => write!(f, "target enter data"),
+            IfModifier::TargetExitData => write!(f, "target exit data"),
+            IfModifier::TargetUpdate => write!(f, "target update"),
+            IfModifier::Cancel => write!(f, "cancel"),
+            IfModifier::Unspecified => write!(f, ""),
+        }
+    }
+}
+
+// ============================================================================
+// Order Modifier (OpenMP 5.2 spec section 2.9.6)
+// ============================================================================
+
+/// Order clause modifier
+///
+/// Specifies ordering constraints for concurrent execution.
+///
+/// ## Examples
+///
+/// ```
+/// # use roup::ir::OrderModifier;
+/// let om = OrderModifier::Reproducible;
+/// assert_eq!(om.to_string(), "reproducible");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum OrderModifier {
+    /// Reproducible ordering
+    Reproducible = 0,
+    /// Unconstrained ordering
+    Unconstrained = 1,
+    /// Unspecified (no modifier)
+    Unspecified = 2,
+}
+
+impl fmt::Display for OrderModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OrderModifier::Reproducible => write!(f, "reproducible"),
+            OrderModifier::Unconstrained => write!(f, "unconstrained"),
+            OrderModifier::Unspecified => write!(f, ""),
+        }
+    }
+}
+
+// ============================================================================
+// Grainsize Modifier (OpenMP 5.2 spec section 2.10.2)
+// ============================================================================
+
+/// Grainsize clause modifier
+///
+/// Specifies whether the grainsize is strict.
+///
+/// ## Examples
+///
+/// ```
+/// # use roup::ir::GrainsizeModifier;
+/// let gm = GrainsizeModifier::Strict;
+/// assert_eq!(gm.to_string(), "strict");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum GrainsizeModifier {
+    /// Strict grainsize
+    Strict = 0,
+    /// Unspecified (no modifier)
+    Unspecified = 1,
+}
+
+impl fmt::Display for GrainsizeModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GrainsizeModifier::Strict => write!(f, "strict"),
+            GrainsizeModifier::Unspecified => write!(f, ""),
+        }
+    }
+}
+
+// ============================================================================
+// NumTasks Modifier (OpenMP 5.2 spec section 2.10.2)
+// ============================================================================
+
+/// NumTasks clause modifier
+///
+/// Specifies whether the num_tasks is strict.
+///
+/// ## Examples
+///
+/// ```
+/// # use roup::ir::NumTasksModifier;
+/// let nm = NumTasksModifier::Strict;
+/// assert_eq!(nm.to_string(), "strict");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum NumTasksModifier {
+    /// Strict num_tasks
+    Strict = 0,
+    /// Unspecified (no modifier)
+    Unspecified = 1,
+}
+
+impl fmt::Display for NumTasksModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NumTasksModifier::Strict => write!(f, "strict"),
+            NumTasksModifier::Unspecified => write!(f, ""),
+        }
+    }
+}
+
+// ============================================================================
+// Bind Kind (OpenMP 5.2 spec section 2.11.3)
+// ============================================================================
+
+/// Bind clause value
+///
+/// Specifies the binding of a loop construct.
+///
+/// ## Examples
+///
+/// ```
+/// # use roup::ir::BindKind;
+/// let bk = BindKind::Thread;
+/// assert_eq!(bk.to_string(), "thread");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum BindKind {
+    /// Bind to teams
+    Teams = 0,
+    /// Bind to parallel region
+    Parallel = 1,
+    /// Bind to thread
+    Thread = 2,
+    /// Unspecified (no binding)
+    Unspecified = 3,
+}
+
+impl fmt::Display for BindKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BindKind::Teams => write!(f, "teams"),
+            BindKind::Parallel => write!(f, "parallel"),
+            BindKind::Thread => write!(f, "thread"),
+            BindKind::Unspecified => write!(f, ""),
+        }
+    }
+}
+
+// ============================================================================
+// At Kind (OpenMP 5.2 spec section 2.14.2)
+// ============================================================================
+
+/// At clause value
+///
+/// Specifies when a metadirective is evaluated.
+///
+/// ## Examples
+///
+/// ```
+/// # use roup::ir::AtKind;
+/// let ak = AtKind::Compilation;
+/// assert_eq!(ak.to_string(), "compilation");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum AtKind {
+    /// Evaluate at compilation time
+    Compilation = 0,
+    /// Evaluate at execution time
+    Execution = 1,
+    /// Unspecified
+    Unspecified = 2,
+}
+
+impl fmt::Display for AtKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AtKind::Compilation => write!(f, "compilation"),
+            AtKind::Execution => write!(f, "execution"),
+            AtKind::Unspecified => write!(f, ""),
+        }
+    }
+}
+
+// ============================================================================
+// Severity Kind (OpenMP 5.2 spec section 2.18.3)
+// ============================================================================
+
+/// Severity clause value
+///
+/// Specifies the severity level of a message.
+///
+/// ## Examples
+///
+/// ```
+/// # use roup::ir::SeverityKind;
+/// let sk = SeverityKind::Fatal;
+/// assert_eq!(sk.to_string(), "fatal");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum SeverityKind {
+    /// Fatal error
+    Fatal = 0,
+    /// Warning
+    Warning = 1,
+    /// Unspecified
+    Unspecified = 2,
+}
+
+impl fmt::Display for SeverityKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SeverityKind::Fatal => write!(f, "fatal"),
+            SeverityKind::Warning => write!(f, "warning"),
+            SeverityKind::Unspecified => write!(f, ""),
+        }
+    }
+}
+
+// ============================================================================
 // ClauseItem: Items that appear in clause lists
 // ============================================================================
 
@@ -717,7 +1029,24 @@ pub enum ClauseData {
     // ========================================================================
     // Bare clauses (no parameters)
     // ========================================================================
-    /// Clause with no parameters (e.g., `nowait`, `nogroup`)
+    /// Nowait clause - doesn't wait for other threads
+    Nowait,
+
+    /// Memory order clauses for atomic operations
+    SeqCst,
+    AcqRel,
+    Release,
+    Acquire,
+    Relaxed,
+
+    /// Atomic operation type clauses
+    Read,
+    Write,
+    Update,
+    Capture,
+    Compare,
+
+    /// Generic bare clause with identifier (e.g., `nogroup`, `untied`)
     Bare(Identifier),
 
     // ========================================================================
@@ -902,6 +1231,12 @@ pub enum ClauseData {
 
     /// `allocator(allocator-handle)` - Specify allocator
     Allocator { allocator: Identifier },
+
+    /// `hint(hint-expression)` - Hint for optimization
+    Hint { hint_expr: Expression },
+
+    /// `align(alignment)` - Alignment for allocated memory
+    Align { alignment: Expression },
 
     // ========================================================================
     // Other clauses

@@ -36,9 +36,20 @@ pub const UNKNOWN_KIND: i32 = 999;
 const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
 
-/// Normalize constant name: uppercase and replace hyphens with underscores
+/// Normalize constant name: convert CamelCase to UPPER_SNAKE_CASE
 fn normalize_constant_name(name: &str) -> String {
-    name.to_uppercase().replace('-', "_")
+    let mut result = String::new();
+    let mut chars = name.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch.is_uppercase() && !result.is_empty() {
+            // Add underscore before uppercase letters (except at start)
+            result.push('_');
+        }
+        result.push(ch.to_ascii_uppercase());
+    }
+
+    result.replace('-', "_")
 }
 
 /// Parse directive mappings from c_api.rs directive_name_to_kind() using AST
@@ -140,6 +151,312 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
                         }
                     }
                 });
+            }
+        }
+    }
+
+    mappings.sort_by_key(|(_, num)| *num);
+    mappings
+}
+
+/// Parse IR enum values and generate Rust const modules + C header defines
+///
+/// This extracts enum values from IR layer enums and generates:
+/// 1. Rust modules (clause_kind, reduction_op, schedule_kind, default_kind, etc.)
+/// 2. C header #defines (ROUP_CLAUSE_KIND_*, ROUP_REDUCTION_OP_*, etc.)
+pub fn generate_constants_from_ir() -> (
+    String,                    // rust_modules
+    Vec<(String, i32)>,       // clause_kinds
+    Vec<(String, i32)>,       // reduction_ops
+    Vec<(String, i32)>,       // schedule_kinds
+    Vec<(String, i32)>,       // default_kinds
+    Vec<(String, i32)>,       // proc_bind_kinds
+    Vec<(String, i32)>,       // reduction_modifiers
+    Vec<(String, i32)>,       // if_modifiers
+    Vec<(String, i32)>,       // order_modifiers
+    Vec<(String, i32)>,       // grainsize_modifiers
+    Vec<(String, i32)>,       // num_tasks_modifiers
+    Vec<(String, i32)>,       // bind_kinds
+    Vec<(String, i32)>,       // at_kinds
+    Vec<(String, i32)>,       // severity_kinds
+) {
+    // Parse IR enums
+    let mut reduction_ops = parse_ir_enum("src/ir/clause.rs", "ReductionOperator");
+    let schedule_kinds = parse_ir_enum("src/ir/clause.rs", "ScheduleKind");
+    let default_kinds = parse_ir_enum("src/ir/clause.rs", "DefaultKind");
+    let proc_bind_kinds = parse_ir_enum("src/ir/clause.rs", "ProcBind");
+
+    // Parse new enums added to match OpenMPKinds.h
+    let reduction_modifiers = parse_ir_enum("src/ir/clause.rs", "ReductionModifier");
+    let if_modifiers = parse_ir_enum("src/ir/clause.rs", "IfModifier");
+    let order_modifiers = parse_ir_enum("src/ir/clause.rs", "OrderModifier");
+    let grainsize_modifiers = parse_ir_enum("src/ir/clause.rs", "GrainsizeModifier");
+    let num_tasks_modifiers = parse_ir_enum("src/ir/clause.rs", "NumTasksModifier");
+    let bind_kinds = parse_ir_enum("src/ir/clause.rs", "BindKind");
+    let at_kinds = parse_ir_enum("src/ir/clause.rs", "AtKind");
+    let severity_kinds = parse_ir_enum("src/ir/clause.rs", "SeverityKind");
+
+    // Add UNKNOWN sentinel for unknown/unsupported reduction operators
+    reduction_ops.push(("UNKNOWN".to_string(), 999));
+
+    // Clause kinds are mapped from ClauseData variants (not an enum)
+    // Keep existing numbers for backward compatibility
+    let clause_kinds = vec![
+        ("NUM_THREADS".to_string(), 0),
+        ("IF".to_string(), 1),
+        ("PRIVATE".to_string(), 2),
+        ("SHARED".to_string(), 3),
+        ("FIRSTPRIVATE".to_string(), 4),
+        ("LASTPRIVATE".to_string(), 5),
+        ("REDUCTION".to_string(), 6),
+        ("SCHEDULE".to_string(), 7),
+        ("COLLAPSE".to_string(), 8),
+        ("ORDERED".to_string(), 9),
+        ("NOWAIT".to_string(), 10),
+        ("DEFAULT".to_string(), 11),
+        ("COPYIN".to_string(), 12),
+        ("PROC_BIND".to_string(), 13),
+        // New clause kinds (14+)
+        ("LINEAR".to_string(), 14),
+        ("ALIGNED".to_string(), 15),
+        ("SAFELEN".to_string(), 16),
+        ("SIMDLEN".to_string(), 17),
+        ("NONTEMPORAL".to_string(), 18),
+        ("DIST_SCHEDULE".to_string(), 19),
+        ("NUM_TEAMS".to_string(), 20),
+        ("THREAD_LIMIT".to_string(), 21),
+        ("GRAINSIZE".to_string(), 22),
+        ("NUM_TASKS".to_string(), 23),
+        ("COPYPRIVATE".to_string(), 24),
+        ("FILTER".to_string(), 25),
+        ("PRIORITY".to_string(), 26),
+        ("DEVICE".to_string(), 27),
+        ("MAP".to_string(), 28),
+        ("DEPEND".to_string(), 29),
+        ("USE_DEVICE_PTR".to_string(), 30),
+        ("USE_DEVICE_ADDR".to_string(), 31),
+        ("IS_DEVICE_PTR".to_string(), 32),
+        ("HAS_DEVICE_ADDR".to_string(), 33),
+        ("AFFINITY".to_string(), 34),
+        ("ALLOCATE".to_string(), 35),
+        ("ALLOCATOR".to_string(), 36),
+        ("ATOMIC_OPERATION".to_string(), 37),
+        ("ORDER".to_string(), 38),
+        ("BIND".to_string(), 39),
+        ("HINT".to_string(), 40),
+        ("ALIGN".to_string(), 41),
+        ("SEQ_CST".to_string(), 42),
+        ("ACQ_REL".to_string(), 43),
+        ("RELEASE".to_string(), 44),
+        ("ACQUIRE".to_string(), 45),
+        ("RELAXED".to_string(), 46),
+        ("READ".to_string(), 47),
+        ("WRITE".to_string(), 48),
+        ("UPDATE".to_string(), 49),
+        ("CAPTURE".to_string(), 50),
+        ("COMPARE".to_string(), 51),
+        ("GENERIC".to_string(), 900),
+        ("UNKNOWN".to_string(), 999),
+    ];
+
+    // Generate Rust module code
+    let rust_modules = format!(
+        r#"// Auto-generated constant modules - DO NOT EDIT
+// Generated from IR enums by build.rs
+
+pub mod clause_kind {{
+{}
+}}
+
+pub mod reduction_op {{
+{}
+}}
+
+pub mod schedule_kind {{
+{}
+}}
+
+pub mod default_kind {{
+{}
+}}
+
+pub mod proc_bind_kind {{
+{}
+}}
+
+pub mod reduction_modifier {{
+{}
+}}
+
+pub mod if_modifier {{
+{}
+}}
+
+pub mod order_modifier {{
+{}
+}}
+
+pub mod grainsize_modifier {{
+{}
+}}
+
+pub mod num_tasks_modifier {{
+{}
+}}
+
+pub mod bind_kind {{
+{}
+}}
+
+pub mod at_kind {{
+{}
+}}
+
+pub mod severity_kind {{
+{}
+}}
+"#,
+        clause_kinds
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        reduction_ops
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        schedule_kinds
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        default_kinds
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        proc_bind_kinds
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        reduction_modifiers
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        if_modifiers
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        order_modifiers
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        grainsize_modifiers
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        num_tasks_modifiers
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        bind_kinds
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        at_kinds
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        severity_kinds
+            .iter()
+            .map(|(name, val)| format!("    pub const {}: i32 = {};", name, val))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+
+    (
+        rust_modules,
+        clause_kinds,
+        reduction_ops,
+        schedule_kinds,
+        default_kinds,
+        proc_bind_kinds,
+        reduction_modifiers,
+        if_modifiers,
+        order_modifiers,
+        grainsize_modifiers,
+        num_tasks_modifiers,
+        bind_kinds,
+        at_kinds,
+        severity_kinds,
+    )
+}
+
+/// Parse an enum from a Rust source file
+fn parse_ir_enum(file_path: &str, enum_name: &str) -> Vec<(String, i32)> {
+    let source = fs::read_to_string(file_path)
+        .unwrap_or_else(|_| panic!("Failed to read {}", file_path));
+    let ast: File = syn::parse_file(&source)
+        .unwrap_or_else(|_| panic!("Failed to parse {}", file_path));
+
+    let mut mappings = Vec::new();
+
+    for item in &ast.items {
+        if let Item::Enum(item_enum) = item {
+            if item_enum.ident == enum_name {
+                for variant in &item_enum.variants {
+                    let name = normalize_constant_name(&variant.ident.to_string());
+
+                    if let Some((_, expr)) = &variant.discriminant {
+                        if let Expr::Lit(ExprLit { lit: Lit::Int(lit_int), .. }) = expr {
+                            if let Ok(value) = lit_int.base10_parse::<i32>() {
+                                mappings.push((name, value));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    mappings.sort_by_key(|(_, num)| *num);
+    mappings
+}
+
+/// Parse DirectiveKind enum values from src/ir/directive.rs
+pub fn parse_directive_kind_enum() -> Vec<(String, i32)> {
+    let source = fs::read_to_string("src/ir/directive.rs")
+        .expect("Failed to read src/ir/directive.rs");
+    let ast: File = syn::parse_file(&source).expect("Failed to parse directive.rs");
+
+    let mut mappings = Vec::new();
+
+    // Find the DirectiveKind enum
+    for item in &ast.items {
+        if let Item::Enum(item_enum) = item {
+            if item_enum.ident == "DirectiveKind" {
+                // Parse each enum variant
+                for variant in &item_enum.variants {
+                    let name = variant.ident.to_string();
+
+                    // Extract the discriminant value (the = N part)
+                    if let Some((_, expr)) = &variant.discriminant {
+                        if let Expr::Lit(ExprLit { lit: Lit::Int(lit_int), .. }) = expr {
+                            if let Ok(value) = lit_int.base10_parse::<i32>() {
+                                mappings.push((normalize_constant_name(&name), value));
+                            }
+                        }
+                    }
+                }
             }
         }
     }

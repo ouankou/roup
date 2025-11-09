@@ -26,6 +26,14 @@ macro_rules! openmp_clauses {
                     $( OpenMpClause::$variant => $rule, )+
                 }
             }
+
+            /// Convert clause name string to enum variant - NO string comparisons after this point!
+            pub fn from_name(name: &str) -> Option<OpenMpClause> {
+                match name {
+                    $( $name => Some(OpenMpClause::$variant), )+
+                    _ => None,
+                }
+            }
         }
     };
 }
@@ -424,6 +432,35 @@ fn parse_threadprivate_directive<'a>(
     }
 }
 
+// Custom parser for flush directive: flush(list) or bare flush
+fn parse_flush_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized list (flush variable list)
+    if let Ok((rest, list_content)) = parse_parenthesized_content(input) {
+        // Parse remaining clauses (e.g., memory order clauses)
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Borrowed("flush"),
+                parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
+                clauses,
+                wait_data: None,
+                cache_data: None,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form or memory order only)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive::new(name, None, clauses)))
+    }
+}
+
 // Custom parser for declare target extended form: declare target(list)
 fn parse_declare_target_extended<'a>(
     name: std::borrow::Cow<'a, str>,
@@ -740,6 +777,7 @@ pub fn directive_registry() -> DirectiveRegistry {
     // Register custom parsers for directives with special syntax
     builder = builder.register_custom("allocate", parse_allocate_directive);
     builder = builder.register_custom("threadprivate", parse_threadprivate_directive);
+    builder = builder.register_custom("flush", parse_flush_directive);
     builder = builder.register_custom("declare target", parse_declare_target_extended);
     builder = builder.register_custom("declare mapper", parse_declare_mapper_directive);
     builder = builder.register_custom("declare variant", parse_declare_variant_directive);

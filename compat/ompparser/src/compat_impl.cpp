@@ -39,7 +39,6 @@ extern "C" {
 
     // Directive queries
     int32_t roup_directive_kind(const OmpDirective* directive);
-    const char* roup_directive_name(const OmpDirective* directive);
     int32_t roup_directive_clause_count(const OmpDirective* directive);
     OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
 
@@ -49,16 +48,20 @@ extern "C" {
 
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
-    struct OmpStringList* roup_clause_variables(const OmpClause* clause);
-    const char* roup_clause_expression(const OmpClause* clause);
     int32_t roup_clause_schedule_kind(const OmpClause* clause);
+    const char* roup_clause_schedule_chunk_size(const OmpClause* clause);
     int32_t roup_clause_reduction_operator(const OmpClause* clause);
     int32_t roup_clause_default_data_sharing(const OmpClause* clause);
+    int32_t roup_clause_proc_bind_kind(const OmpClause* clause);
 
-    // String list operations
-    int32_t roup_string_list_len(const OmpStringList* list);
-    const char* roup_string_list_get(const OmpStringList* list, int32_t index);
-    void roup_string_list_free(OmpStringList* list);
+    // IR helper functions - call these to get strings when needed (NO string ops in C API!)
+    int32_t roup_clause_items_count(const OmpClause* clause);
+    const char* roup_clause_item_to_string(const OmpClause* clause, int32_t index);
+    const char* roup_clause_expression_to_string(const OmpClause* clause);
+    const char* roup_clause_identifier_to_string(const OmpClause* clause);
+    const char* roup_default_kind_to_string(int32_t kind);
+    const char* roup_proc_bind_kind_to_string(int32_t kind);
+    void roup_string_free(char* s);
 }
 
 // ============================================================================
@@ -87,191 +90,228 @@ extern "C" void setNormalizeClauses(bool normalize) {
 // Helper Functions
 // ============================================================================
 
-// Map directive name string to ompparser kind (case-insensitive)
-// Handles all OpenMP 3.0-6.0 directives that ompparser supports
-static OpenMPDirectiveKind mapDirectiveNameToOmpparser(const char* name) {
-    if (!name) return OMPD_unknown;
+// Map ROUP DirectiveKind enum to ompparser OpenMPDirectiveKind enum
+// Uses auto-generated constants from roup_constants.h - NO hard-coded numbers!
+//
+// Constants are auto-generated from src/ir/directive.rs:DirectiveKind enum.
+// If DirectiveKind enum changes, simply rebuild and constants update automatically.
+static OpenMPDirectiveKind mapRoupDirectiveKind(int32_t roup_kind) {
+    switch (roup_kind) {
+        // Parallel constructs
+        case ROUP_DIRECTIVE_KIND_PARALLEL:                  return OMPD_parallel;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_FOR:               return OMPD_parallel_for;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_FOR_SIMD:           return OMPD_parallel_for_simd;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_SECTIONS:          return OMPD_parallel_sections;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_WORKSHARE:         return OMPD_parallel_workshare;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_LOOP:              return OMPD_parallel_loop;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_MASKED:            return OMPD_parallel_masked;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_MASTER:            return OMPD_parallel_master;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_LOOP_SIMD:          return OMPD_parallel_loop_simd;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_MASKED_TASKLOOP:    return OMPD_parallel_masked_taskloop;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_MASKED_TASKLOOP_SIMD: return OMPD_parallel_masked_taskloop_simd;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_MASTER_TASKLOOP:    return OMPD_parallel_master_taskloop;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_MASTER_TASKLOOP_SIMD: return OMPD_parallel_master_taskloop_simd;
 
-    // Convert to lowercase for case-insensitive matching
-    std::string name_lower(name);
-    for (char& c : name_lower) c = std::tolower(static_cast<unsigned char>(c));
+        // Worksharing constructs
+        case ROUP_DIRECTIVE_KIND_FOR:                       return OMPD_for;
+        case ROUP_DIRECTIVE_KIND_FOR_SIMD:                   return OMPD_for_simd;
+        case ROUP_DIRECTIVE_KIND_SECTIONS:                  return OMPD_sections;
+        case ROUP_DIRECTIVE_KIND_SECTION:                   return OMPD_section;
+        case ROUP_DIRECTIVE_KIND_SINGLE:                    return OMPD_single;
+        case ROUP_DIRECTIVE_KIND_WORKSHARE:                 return OMPD_workshare;
+        case ROUP_DIRECTIVE_KIND_LOOP:                      return OMPD_loop;
+        case ROUP_DIRECTIVE_KIND_SIMD:                      return OMPD_simd;
+        case ROUP_DIRECTIVE_KIND_DECLARE_SIMD:               return OMPD_declare_simd;
 
-    // Parallel constructs
-    if (name_lower == "parallel") return OMPD_parallel;
-    if (name_lower == "parallel for") return OMPD_parallel_for;
-    if (name_lower == "parallel do") return OMPD_parallel_do;
-    if (name_lower == "parallel for simd") return OMPD_parallel_for_simd;
-    if (name_lower == "parallel do simd") return OMPD_parallel_do_simd;
-    if (name_lower == "parallel sections") return OMPD_parallel_sections;
-    if (name_lower == "parallel single") return OMPD_parallel_single;
-    if (name_lower == "parallel loop") return OMPD_parallel_loop;
-    if (name_lower == "parallel workshare") return OMPD_parallel_workshare;
-    if (name_lower == "parallel master") return OMPD_parallel_master;
-    if (name_lower == "parallel masked") return OMPD_parallel_masked;
+        // Task constructs
+        case ROUP_DIRECTIVE_KIND_TASK:                      return OMPD_task;
+        case ROUP_DIRECTIVE_KIND_TASKLOOP:                  return OMPD_taskloop;
+        case ROUP_DIRECTIVE_KIND_TASKLOOP_SIMD:              return OMPD_taskloop_simd;
+        case ROUP_DIRECTIVE_KIND_TASKYIELD:                 return OMPD_taskyield;
+        case ROUP_DIRECTIVE_KIND_TASKWAIT:                  return OMPD_taskwait;
+        case ROUP_DIRECTIVE_KIND_TASKGROUP:                 return OMPD_taskgroup;
+        case ROUP_DIRECTIVE_KIND_TASKGRAPH:                 return OMPD_taskgraph;
+        case ROUP_DIRECTIVE_KIND_TASK_ITERATION:             return OMPD_task_iteration;
+        case ROUP_DIRECTIVE_KIND_MASKED_TASKLOOP:            return OMPD_masked_taskloop;
+        case ROUP_DIRECTIVE_KIND_MASKED_TASKLOOP_SIMD:        return OMPD_masked_taskloop_simd;
 
-    // Work-sharing constructs
-    if (name_lower == "for") return OMPD_for;
-    if (name_lower == "do") return OMPD_do;
-    if (name_lower == "for simd") return OMPD_for_simd;
-    if (name_lower == "do simd") return OMPD_do_simd;
-    if (name_lower == "sections") return OMPD_sections;
-    if (name_lower == "section") return OMPD_section;
-    if (name_lower == "single") return OMPD_single;
-    if (name_lower == "workshare") return OMPD_workshare;
-    if (name_lower == "loop") return OMPD_loop;
+        // Target constructs
+        case ROUP_DIRECTIVE_KIND_TARGET:                    return OMPD_target;
+        case ROUP_DIRECTIVE_KIND_TARGET_DATA:                return OMPD_target_data;
+        case ROUP_DIRECTIVE_KIND_TARGET_ENTER_DATA:           return OMPD_target_enter_data;
+        case ROUP_DIRECTIVE_KIND_TARGET_EXIT_DATA:            return OMPD_target_exit_data;
+        case ROUP_DIRECTIVE_KIND_TARGET_UPDATE:              return OMPD_target_update;
+        case ROUP_DIRECTIVE_KIND_TARGET_PARALLEL:            return OMPD_target_parallel;
+        case ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_FOR:         return OMPD_target_parallel_for;
+        case ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_FOR_SIMD:     return OMPD_target_parallel_for_simd;
+        case ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_LOOP:        return OMPD_target_parallel_loop;
+        case ROUP_DIRECTIVE_KIND_TARGET_SIMD:                return OMPD_target_simd;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS:               return OMPD_target_teams;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE:     return OMPD_target_teams_distribute;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_SIMD: return OMPD_target_teams_distribute_simd;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR: return OMPD_target_teams_distribute_parallel_for;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR_SIMD: return OMPD_target_teams_distribute_parallel_for_simd;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS_LOOP:           return OMPD_target_teams_loop;
+        case ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_LOOP_SIMD:    return OMPD_target_parallel_loop_simd;
+        case ROUP_DIRECTIVE_KIND_TARGET_LOOP:                return OMPD_target_loop;
+        case ROUP_DIRECTIVE_KIND_TARGET_LOOP_SIMD:            return OMPD_target_loop_simd;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_LOOP: return OMPD_target_teams_distribute_parallel_loop;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_LOOP_SIMD: return OMPD_target_teams_distribute_parallel_loop_simd;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS_LOOP_SIMD:       return OMPD_target_teams_loop_simd;
 
-    // SIMD constructs
-    if (name_lower == "simd") return OMPD_simd;
-    if (name_lower == "declare simd") return OMPD_declare_simd;
+        // Teams constructs
+        case ROUP_DIRECTIVE_KIND_TEAMS:                     return OMPD_teams;
+        case ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE:           return OMPD_teams_distribute;
+        case ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_SIMD:       return OMPD_teams_distribute_simd;
+        case ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_FOR: return OMPD_teams_distribute_parallel_for;
+        case ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_FOR_SIMD: return OMPD_teams_distribute_parallel_for_simd;
+        case ROUP_DIRECTIVE_KIND_TEAMS_LOOP:                 return OMPD_teams_loop;
+        case ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_LOOP: return OMPD_teams_distribute_parallel_loop;
+        case ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_LOOP_SIMD: return OMPD_teams_distribute_parallel_loop_simd;
+        case ROUP_DIRECTIVE_KIND_TEAMS_LOOP_SIMD:             return OMPD_teams_loop_simd;
 
-    // Task constructs
-    if (name_lower == "task") return OMPD_task;
-    if (name_lower == "taskloop") return OMPD_taskloop;
-    if (name_lower == "taskloop simd") return OMPD_taskloop_simd;
-    if (name_lower == "taskyield") return OMPD_taskyield;
-    if (name_lower == "taskwait") return OMPD_taskwait;
-    if (name_lower == "taskgroup") return OMPD_taskgroup;
-    if (name_lower == "master taskloop") return OMPD_master_taskloop;
-    if (name_lower == "master taskloop simd") return OMPD_master_taskloop_simd;
-    if (name_lower == "parallel master taskloop") return OMPD_parallel_master_taskloop;
-    if (name_lower == "parallel master taskloop simd") return OMPD_parallel_master_taskloop_simd;
-    if (name_lower == "masked taskloop") return OMPD_masked_taskloop;
-    if (name_lower == "masked taskloop simd") return OMPD_masked_taskloop_simd;
-    if (name_lower == "parallel masked taskloop") return OMPD_parallel_masked_taskloop;
-    if (name_lower == "parallel masked taskloop simd") return OMPD_parallel_masked_taskloop_simd;
+        // Synchronization constructs
+        case ROUP_DIRECTIVE_KIND_BARRIER:                   return OMPD_barrier;
+        case ROUP_DIRECTIVE_KIND_CRITICAL:                  return OMPD_critical;
+        case ROUP_DIRECTIVE_KIND_ATOMIC:                    return OMPD_atomic;
+        case ROUP_DIRECTIVE_KIND_FLUSH:                     return OMPD_flush;
+        case ROUP_DIRECTIVE_KIND_ORDERED:                   return OMPD_ordered;
+        case ROUP_DIRECTIVE_KIND_MASTER:                    return OMPD_master;
+        case ROUP_DIRECTIVE_KIND_MASKED:                    return OMPD_masked;
+        case ROUP_DIRECTIVE_KIND_ATOMIC_READ:                return OMPD_atomic; // use generic atomic
+        case ROUP_DIRECTIVE_KIND_ATOMIC_WRITE:               return OMPD_atomic; // use generic atomic
+        case ROUP_DIRECTIVE_KIND_ATOMIC_UPDATE:              return OMPD_atomic; // use generic atomic
+        case ROUP_DIRECTIVE_KIND_ATOMIC_CAPTURE:             return OMPD_atomic; // use generic atomic
+        case ROUP_DIRECTIVE_KIND_ATOMIC_COMPARE_CAPTURE:      return OMPD_atomic; // use generic atomic
 
-    // Target constructs
-    if (name_lower == "target") return OMPD_target;
-    if (name_lower == "target data") return OMPD_target_data;
-    if (name_lower == "target enter data") return OMPD_target_enter_data;
-    if (name_lower == "target exit data") return OMPD_target_exit_data;
-    if (name_lower == "target update") return OMPD_target_update;
-    if (name_lower == "target parallel") return OMPD_target_parallel;
-    if (name_lower == "target parallel for") return OMPD_target_parallel_for;
-    if (name_lower == "target parallel do") return OMPD_target_parallel_do;
-    if (name_lower == "target parallel for simd") return OMPD_target_parallel_for_simd;
-    if (name_lower == "target parallel do simd") return OMPD_target_parallel_do_simd;
-    if (name_lower == "target parallel loop") return OMPD_target_parallel_loop;
-    if (name_lower == "target simd") return OMPD_target_simd;
-    if (name_lower == "target teams") return OMPD_target_teams;
-    if (name_lower == "target teams distribute") return OMPD_target_teams_distribute;
-    if (name_lower == "target teams distribute simd") return OMPD_target_teams_distribute_simd;
-    if (name_lower == "target teams loop") return OMPD_target_teams_loop;
-    if (name_lower == "target teams distribute parallel for") return OMPD_target_teams_distribute_parallel_for;
-    if (name_lower == "target teams distribute parallel do") return OMPD_target_teams_distribute_parallel_do;
-    if (name_lower == "target teams distribute parallel for simd") return OMPD_target_teams_distribute_parallel_for_simd;
-    if (name_lower == "target teams distribute parallel do simd") return OMPD_target_teams_distribute_parallel_do_simd;
-    if (name_lower == "target loop") return OMPD_target_loop;
-    if (name_lower == "target loop simd") return OMPD_target_loop_simd;
-    if (name_lower == "target parallel loop simd") return OMPD_target_parallel_loop_simd;
-    if (name_lower == "target teams loop simd") return OMPD_target_teams_loop_simd;
-    if (name_lower == "target teams distribute parallel loop") return OMPD_target_teams_distribute_parallel_loop;
-    if (name_lower == "target teams distribute parallel loop simd") return OMPD_target_teams_distribute_parallel_loop_simd;
+        // Declare directives
+        case ROUP_DIRECTIVE_KIND_DECLARE_REDUCTION:          return OMPD_declare_reduction;
+        case ROUP_DIRECTIVE_KIND_DECLARE_MAPPER:             return OMPD_declare_mapper;
+        case ROUP_DIRECTIVE_KIND_DECLARE_TARGET:             return OMPD_declare_target;
+        case ROUP_DIRECTIVE_KIND_DECLARE_VARIANT:            return OMPD_declare_variant;
+        case ROUP_DIRECTIVE_KIND_DECLARE_INDUCTION:          return OMPD_declare_induction;
 
-    // Teams constructs
-    if (name_lower == "teams") return OMPD_teams;
-    if (name_lower == "teams distribute") return OMPD_teams_distribute;
-    if (name_lower == "teams distribute simd") return OMPD_teams_distribute_simd;
-    if (name_lower == "teams distribute parallel for") return OMPD_teams_distribute_parallel_for;
-    if (name_lower == "teams distribute parallel do") return OMPD_teams_distribute_parallel_do;
-    if (name_lower == "teams distribute parallel for simd") return OMPD_teams_distribute_parallel_for_simd;
-    if (name_lower == "teams distribute parallel do simd") return OMPD_teams_distribute_parallel_do_simd;
-    if (name_lower == "teams loop") return OMPD_teams_loop;
-    if (name_lower == "teams loop simd") return OMPD_teams_loop_simd;
-    if (name_lower == "teams distribute parallel loop") return OMPD_teams_distribute_parallel_loop;
-    if (name_lower == "teams distribute parallel loop simd") return OMPD_teams_distribute_parallel_loop_simd;
+        // Distribute constructs
+        case ROUP_DIRECTIVE_KIND_DISTRIBUTE:                return OMPD_distribute;
+        case ROUP_DIRECTIVE_KIND_DISTRIBUTE_SIMD:            return OMPD_distribute_simd;
+        case ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_FOR:     return OMPD_distribute_parallel_for;
+        case ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_FOR_SIMD: return OMPD_distribute_parallel_for_simd;
+        case ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_LOOP:    return OMPD_distribute_parallel_loop;
+        case ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_LOOP_SIMD: return OMPD_distribute_parallel_loop_simd;
 
-    // Distribute constructs
-    if (name_lower == "distribute") return OMPD_distribute;
-    if (name_lower == "distribute simd") return OMPD_distribute_simd;
-    if (name_lower == "distribute parallel for") return OMPD_distribute_parallel_for;
-    if (name_lower == "distribute parallel do") return OMPD_distribute_parallel_do;
-    if (name_lower == "distribute parallel for simd") return OMPD_distribute_parallel_for_simd;
-    if (name_lower == "distribute parallel do simd") return OMPD_distribute_parallel_do_simd;
-    if (name_lower == "distribute parallel loop") return OMPD_distribute_parallel_loop;
-    if (name_lower == "distribute parallel loop simd") return OMPD_distribute_parallel_loop_simd;
+        // Metadirectives and assumptions
+        case ROUP_DIRECTIVE_KIND_METADIRECTIVE:             return OMPD_metadirective;
+        case ROUP_DIRECTIVE_KIND_ASSUME:                    return OMPD_assume;
+        case ROUP_DIRECTIVE_KIND_ASSUMES:                   return OMPD_assumes;
+        case ROUP_DIRECTIVE_KIND_BEGIN_METADIRECTIVE:        return OMPD_begin_metadirective;
+        case ROUP_DIRECTIVE_KIND_BEGIN_ASSUMES:              return OMPD_begin_assumes;
+        case ROUP_DIRECTIVE_KIND_BEGIN_DECLARE_TARGET:        return OMPD_begin_declare_target;
+        case ROUP_DIRECTIVE_KIND_END_DECLARE_TARGET:          return OMPD_end_declare_target;
+        case ROUP_DIRECTIVE_KIND_BEGIN_DECLARE_VARIANT:       return OMPD_begin_declare_variant;
+        case ROUP_DIRECTIVE_KIND_END_DECLARE_VARIANT:         return OMPD_end_declare_variant;
 
-    // Synchronization constructs
-    if (name_lower == "barrier") return OMPD_barrier;
-    if (name_lower == "critical") return OMPD_critical;
-    if (name_lower == "atomic") return OMPD_atomic;
-    if (name_lower == "flush") return OMPD_flush;
-    if (name_lower == "ordered") return OMPD_ordered;
-    if (name_lower == "master") return OMPD_master;
-    if (name_lower == "masked") return OMPD_masked;
+        // Loop transformations
+        case ROUP_DIRECTIVE_KIND_TILE:                      return OMPD_tile;
+        case ROUP_DIRECTIVE_KIND_UNROLL:                    return OMPD_unroll;
+        case ROUP_DIRECTIVE_KIND_FUSE:                      return OMPD_fuse;
+        case ROUP_DIRECTIVE_KIND_SPLIT:                     return OMPD_split;
+        case ROUP_DIRECTIVE_KIND_INTERCHANGE:               return OMPD_interchange;
+        case ROUP_DIRECTIVE_KIND_REVERSE:                   return OMPD_reverse;
+        case ROUP_DIRECTIVE_KIND_STRIPE:                    return OMPD_stripe;
 
-    // Declare constructs
-    if (name_lower == "declare reduction") return OMPD_declare_reduction;
-    if (name_lower == "declare mapper") return OMPD_declare_mapper;
-    if (name_lower == "declare target") return OMPD_declare_target;
-    if (name_lower == "begin declare target") return OMPD_begin_declare_target;
-    if (name_lower == "end declare target") return OMPD_end_declare_target;
-    if (name_lower == "declare variant") return OMPD_declare_variant;
-    if (name_lower == "begin declare variant") return OMPD_begin_declare_variant;
-    if (name_lower == "end declare variant") return OMPD_end_declare_variant;
+        // Other constructs
+        case ROUP_DIRECTIVE_KIND_THREADPRIVATE:             return OMPD_threadprivate;
+        case ROUP_DIRECTIVE_KIND_ALLOCATE:                  return OMPD_allocate;
+        case ROUP_DIRECTIVE_KIND_ALLOCATORS:                return OMPD_allocators;
+        case ROUP_DIRECTIVE_KIND_REQUIRES:                  return OMPD_requires;
+        case ROUP_DIRECTIVE_KIND_SCAN:                      return OMPD_scan;
+        case ROUP_DIRECTIVE_KIND_DEPOBJ:                    return OMPD_depobj;
+        case ROUP_DIRECTIVE_KIND_NOTHING:                   return OMPD_nothing;
+        case ROUP_DIRECTIVE_KIND_ERROR:                     return OMPD_error;
+        case ROUP_DIRECTIVE_KIND_CANCEL:                    return OMPD_cancel;
+        case ROUP_DIRECTIVE_KIND_CANCELLATION_POINT:        return OMPD_cancellation_point;
+        case ROUP_DIRECTIVE_KIND_DISPATCH:                  return OMPD_dispatch;
+        case ROUP_DIRECTIVE_KIND_INTEROP:                   return OMPD_interop;
+        case ROUP_DIRECTIVE_KIND_SCOPE:                     return OMPD_scope;
+        case ROUP_DIRECTIVE_KIND_GROUPPRIVATE:              return OMPD_groupprivate;
+        case ROUP_DIRECTIVE_KIND_WORKDISTRIBUTE:            return OMPD_workdistribute;
 
-    // Meta-directives
-    if (name_lower == "metadirective") return OMPD_metadirective;
-    if (name_lower == "begin metadirective") return OMPD_begin_metadirective;
+        // Fortran "do" variants
+        case ROUP_DIRECTIVE_KIND_DO:                        return OMPD_do;
+        case ROUP_DIRECTIVE_KIND_DO_SIMD:                   return OMPD_do_simd;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_DO:               return OMPD_parallel_do;
+        case ROUP_DIRECTIVE_KIND_PARALLEL_DO_SIMD:          return OMPD_parallel_do_simd;
+        case ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_DO:    return OMPD_distribute_parallel_do;
+        case ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_DO_SIMD: return OMPD_distribute_parallel_do_simd;
+        case ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_DO: return OMPD_teams_distribute_parallel_do;
+        case ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_DO_SIMD: return OMPD_teams_distribute_parallel_do_simd;
+        case ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_DO:        return OMPD_target_parallel_do;
+        case ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_DO_SIMD:   return OMPD_target_parallel_do_simd;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_DO: return OMPD_target_teams_distribute_parallel_do;
+        case ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_DO_SIMD: return OMPD_target_teams_distribute_parallel_do_simd;
 
-    // Loop transformation (OpenMP 6.0)
-    if (name_lower == "tile") return OMPD_tile;
-    if (name_lower == "unroll") return OMPD_unroll;
+        // Special cases
+        case ROUP_DIRECTIVE_KIND_END_TARGET:                 return OMPD_end;
 
-    // Other constructs
-    if (name_lower == "threadprivate") return OMPD_threadprivate;
-    if (name_lower == "allocate") return OMPD_allocate;
-    if (name_lower == "requires") return OMPD_requires;
-    if (name_lower == "scan") return OMPD_scan;
-    if (name_lower == "depobj") return OMPD_depobj;
-    if (name_lower == "cancel") return OMPD_cancel;
-    if (name_lower == "cancellation point") return OMPD_cancellation_point;
-    if (name_lower == "error") return OMPD_error;
-    if (name_lower == "nothing") return OMPD_nothing;
-    if (name_lower == "scope") return OMPD_scope;
-    if (name_lower == "interop") return OMPD_interop;
-    if (name_lower == "assume") return OMPD_assume;
-    if (name_lower == "assumes") return OMPD_assumes;
-    if (name_lower == "begin assumes") return OMPD_begin_assumes;
-    if (name_lower == "end assumes") return OMPD_end_assumes;
-    if (name_lower == "end") return OMPD_end;
-
-    // OpenMP 6.0 directives
-    if (name_lower == "allocators") return OMPD_allocators;
-    if (name_lower == "taskgraph") return OMPD_taskgraph;
-    if (name_lower == "task iteration") return OMPD_task_iteration;
-    if (name_lower == "dispatch") return OMPD_dispatch;
-    if (name_lower == "groupprivate") return OMPD_groupprivate;
-    if (name_lower == "workdistribute") return OMPD_workdistribute;
-    if (name_lower == "fuse") return OMPD_fuse;
-    if (name_lower == "interchange") return OMPD_interchange;
-    if (name_lower == "reverse") return OMPD_reverse;
-    if (name_lower == "split") return OMPD_split;
-    if (name_lower == "stripe") return OMPD_stripe;
-    if (name_lower == "declare induction") return OMPD_declare_induction;
-    if (name_lower == "parallel loop simd") return OMPD_parallel_loop_simd;
-
-    return OMPD_unknown;
+        default: return OMPD_unknown;
+    }
 }
 
 static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
-    // ROUP clause kind mapping (numeric codes from src/c_api.rs:convert_clause())
-    // 0=num_threads, 1=if, 2=private, 3=shared, 4=firstprivate, 5=lastprivate
-    // 6=reduction, 7=schedule, 8=collapse, 9=ordered, 10=nowait, 11=default, 999=unknown
+    // Map ROUP ClauseKind to ompparser OpenMPClauseKind
+    // Uses auto-generated constants from roup_constants.h - NO hard-coded numbers!
     switch (roup_kind) {
-        case 0:  return OMPC_num_threads;
-        case 1:  return OMPC_if;
-        case 2:  return OMPC_private;
-        case 3:  return OMPC_shared;
-        case 4:  return OMPC_firstprivate;
-        case 5:  return OMPC_lastprivate;
-        case 6:  return OMPC_reduction;
-        case 7:  return OMPC_schedule;
-        case 8:  return OMPC_collapse;
-        case 9:  return OMPC_ordered;
-        case 10: return OMPC_nowait;
-        case 11: return OMPC_default;
-        default: return OMPC_unknown;
+        case ROUP_CLAUSE_KIND_NUM_THREADS:  return OMPC_num_threads;
+        case ROUP_CLAUSE_KIND_IF:           return OMPC_if;
+        case ROUP_CLAUSE_KIND_PRIVATE:      return OMPC_private;
+        case ROUP_CLAUSE_KIND_SHARED:       return OMPC_shared;
+        case ROUP_CLAUSE_KIND_FIRSTPRIVATE: return OMPC_firstprivate;
+        case ROUP_CLAUSE_KIND_LASTPRIVATE:  return OMPC_lastprivate;
+        case ROUP_CLAUSE_KIND_REDUCTION:    return OMPC_reduction;
+        case ROUP_CLAUSE_KIND_SCHEDULE:     return OMPC_schedule;
+        case ROUP_CLAUSE_KIND_COLLAPSE:     return OMPC_collapse;
+        case ROUP_CLAUSE_KIND_ORDERED:      return OMPC_ordered;
+        case ROUP_CLAUSE_KIND_NOWAIT:       return OMPC_nowait;
+        case ROUP_CLAUSE_KIND_DEFAULT:      return OMPC_default;
+        case ROUP_CLAUSE_KIND_COPYIN:       return OMPC_copyin;
+        case ROUP_CLAUSE_KIND_PROC_BIND:    return OMPC_proc_bind;
+        // New clause kinds
+        case ROUP_CLAUSE_KIND_LINEAR:       return OMPC_linear;
+        case ROUP_CLAUSE_KIND_ALIGNED:      return OMPC_aligned;
+        case ROUP_CLAUSE_KIND_SAFELEN:      return OMPC_safelen;
+        case ROUP_CLAUSE_KIND_SIMDLEN:      return OMPC_simdlen;
+        case ROUP_CLAUSE_KIND_NONTEMPORAL:  return OMPC_nontemporal;
+        case ROUP_CLAUSE_KIND_DIST_SCHEDULE: return OMPC_dist_schedule;
+        case ROUP_CLAUSE_KIND_NUM_TEAMS:    return OMPC_num_teams;
+        case ROUP_CLAUSE_KIND_THREAD_LIMIT: return OMPC_thread_limit;
+        case ROUP_CLAUSE_KIND_GRAINSIZE:    return OMPC_grainsize;
+        case ROUP_CLAUSE_KIND_NUM_TASKS:    return OMPC_num_tasks;
+        case ROUP_CLAUSE_KIND_COPYPRIVATE:  return OMPC_copyprivate;
+        case ROUP_CLAUSE_KIND_FILTER:       return OMPC_filter;
+        case ROUP_CLAUSE_KIND_PRIORITY:     return OMPC_priority;
+        case ROUP_CLAUSE_KIND_DEVICE:       return OMPC_device;
+        case ROUP_CLAUSE_KIND_ORDER:        return OMPC_order;
+        case ROUP_CLAUSE_KIND_BIND:         return OMPC_bind;
+        case ROUP_CLAUSE_KIND_MAP:          return OMPC_map;
+        case ROUP_CLAUSE_KIND_DEPEND:       return OMPC_depend;
+        case ROUP_CLAUSE_KIND_ALLOCATOR:    return OMPC_allocator;
+        case ROUP_CLAUSE_KIND_HINT:         return OMPC_hint;
+        case ROUP_CLAUSE_KIND_ALIGN:        return OMPC_align;
+        case ROUP_CLAUSE_KIND_READ:         return OMPC_read;
+        case ROUP_CLAUSE_KIND_WRITE:        return OMPC_write;
+        case ROUP_CLAUSE_KIND_UPDATE:       return OMPC_update;
+        case ROUP_CLAUSE_KIND_CAPTURE:      return OMPC_capture;
+        case ROUP_CLAUSE_KIND_COMPARE:      return OMPC_compare;
+        case ROUP_CLAUSE_KIND_USE_DEVICE_PTR:  return OMPC_use_device_ptr;
+        case ROUP_CLAUSE_KIND_USE_DEVICE_ADDR: return OMPC_use_device_addr;
+        case ROUP_CLAUSE_KIND_IS_DEVICE_PTR:   return OMPC_is_device_ptr;
+        case ROUP_CLAUSE_KIND_HAS_DEVICE_ADDR: return OMPC_has_device_addr;
+        case ROUP_CLAUSE_KIND_SEQ_CST:       return OMPC_seq_cst;
+        case ROUP_CLAUSE_KIND_ACQ_REL:       return OMPC_acq_rel;
+        case ROUP_CLAUSE_KIND_RELEASE:       return OMPC_release;
+        case ROUP_CLAUSE_KIND_ACQUIRE:       return OMPC_acquire;
+        case ROUP_CLAUSE_KIND_RELAXED:       return OMPC_relaxed;
+        default:                             return OMPC_unknown;
     }
 }
 
@@ -320,13 +360,74 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         return nullptr;
     }
 
-    // Get directive name from ROUP and map to ompparser kind
-    const char* directive_name = roup_directive_name(roup_dir);
-    OpenMPDirectiveKind kind = mapDirectiveNameToOmpparser(directive_name);
+    // Get directive kind from ROUP (integer enum value)
+    int32_t roup_dir_kind = roup_directive_kind(roup_dir);
+    OpenMPDirectiveKind kind = mapRoupDirectiveKind(roup_dir_kind);
 
-    // Create ompparser-compatible directive
-    // Use ompparser's actual constructor: OpenMPDirective(kind, lang, line, col)
-    OpenMPDirective* dir = new OpenMPDirective(kind, current_lang, 0, 0);
+    // Create ompparser-compatible directive - use specialized types where needed
+    OpenMPDirective* dir = nullptr;
+
+    // Create specialized directive types for directives that need them
+    switch (kind) {
+        case OMPD_atomic:
+            dir = new OpenMPAtomicDirective();
+            break;
+        case OMPD_critical:
+            dir = new OpenMPCriticalDirective();
+            break;
+        case OMPD_flush:
+            dir = new OpenMPFlushDirective();
+            break;
+        case OMPD_ordered:
+            dir = new OpenMPOrderedDirective();
+            break;
+        case OMPD_depobj:
+            dir = new OpenMPDepobjDirective();
+            break;
+        case OMPD_allocate:
+            dir = new OpenMPAllocateDirective();
+            break;
+        case OMPD_threadprivate:
+            dir = new OpenMPThreadprivateDirective();
+            break;
+        case OMPD_groupprivate:
+            dir = new OpenMPGroupprivateDirective();
+            break;
+        case OMPD_declare_simd:
+            dir = new OpenMPDeclareSimdDirective();
+            break;
+        case OMPD_declare_reduction:
+            dir = new OpenMPDeclareReductionDirective();
+            break;
+        case OMPD_declare_variant:
+            dir = new OpenMPDeclareVariantDirective();
+            break;
+        case OMPD_requires:
+            dir = new OpenMPRequiresDirective();
+            break;
+        case OMPD_end:
+            dir = new OpenMPEndDirective();
+            break;
+        default:
+            // Use generic OpenMPDirective for other directive types
+            dir = new OpenMPDirective(kind, current_lang, 0, 0);
+            break;
+    }
+
+    // Handle atomic variants - ROUP parses "atomic read" as directive AtomicRead,
+    // but ompparser expects directive atomic + clause read
+    if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_READ) {
+        dir->addOpenMPClause(OMPC_read);
+    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_WRITE) {
+        dir->addOpenMPClause(OMPC_write);
+    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_UPDATE) {
+        dir->addOpenMPClause(OMPC_update);
+    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_CAPTURE) {
+        dir->addOpenMPClause(OMPC_capture);
+    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_COMPARE_CAPTURE) {
+        dir->addOpenMPClause(OMPC_compare);
+        dir->addOpenMPClause(OMPC_capture);
+    }
 
     // Convert clauses using ompparser's addOpenMPClause method
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);
@@ -336,30 +437,189 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             int32_t roup_kind_clause = roup_clause_kind(roup_clause);
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
+            // Special handling for clauses that need kind parameter at creation time
+            if (clause_kind == OMPC_default) {
+                int32_t default_kind = roup_clause_default_data_sharing(roup_clause);
+                // Map ROUP default kind to ompparser default kind using constants
+                OpenMPDefaultClauseKind omp_default_kind = OMPC_DEFAULT_unknown;
+                if (default_kind == ROUP_DEFAULT_KIND_SHARED) omp_default_kind = OMPC_DEFAULT_shared;
+                else if (default_kind == ROUP_DEFAULT_KIND_NONE) omp_default_kind = OMPC_DEFAULT_none;
+                else if (default_kind == ROUP_DEFAULT_KIND_PRIVATE) omp_default_kind = OMPC_DEFAULT_private;
+                else if (default_kind == ROUP_DEFAULT_KIND_FIRSTPRIVATE) omp_default_kind = OMPC_DEFAULT_firstprivate;
+                dir->addOpenMPClause(OMPC_default, omp_default_kind);
+                continue;
+            }
+
+            if (clause_kind == OMPC_proc_bind) {
+                int32_t proc_bind_kind = roup_clause_proc_bind_kind(roup_clause);
+                // Map ROUP proc_bind kind to ompparser proc_bind kind using constants
+                OpenMPProcBindClauseKind omp_proc_bind_kind = OMPC_PROC_BIND_unknown;
+                if (proc_bind_kind == ROUP_PROC_BIND_KIND_MASTER) omp_proc_bind_kind = OMPC_PROC_BIND_master;
+                else if (proc_bind_kind == ROUP_PROC_BIND_KIND_CLOSE) omp_proc_bind_kind = OMPC_PROC_BIND_close;
+                else if (proc_bind_kind == ROUP_PROC_BIND_KIND_SPREAD) omp_proc_bind_kind = OMPC_PROC_BIND_spread;
+                else if (proc_bind_kind == ROUP_PROC_BIND_KIND_PRIMARY) omp_proc_bind_kind = OMPC_PROC_BIND_primary;
+                dir->addOpenMPClause(OMPC_proc_bind, omp_proc_bind_kind);
+                continue;
+            }
+
             // Create the clause
             OpenMPClause* omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
             if (!omp_clause) continue;
 
-            // Add variables for variable-list clauses (private, shared, etc.)
-            OmpStringList* vars = roup_clause_variables(roup_clause);
-            if (vars) {
-                int32_t var_count = roup_string_list_len(vars);
+            // Special handling for linear clause - use proper ompparser API
+            if (clause_kind == OMPC_linear) {
+                OpenMPLinearClause* linear_clause = static_cast<OpenMPLinearClause*>(omp_clause);
+
+                // Add variables
+                int32_t var_count = roup_clause_items_count(roup_clause);
                 for (int32_t i = 0; i < var_count; ++i) {
-                    const char* var = roup_string_list_get(vars, i);
+                    char* var = const_cast<char*>(roup_clause_item_to_string(roup_clause, i));
                     if (var) {
-                        omp_clause->addLangExpr(var);
+                        linear_clause->addLangExpr(var);
+                        roup_string_free(var);
                     }
                 }
-                // Note: Don't free vars - it's owned by the clause data
+
+                // Set step if present
+                char* step = const_cast<char*>(roup_clause_expression_to_string(roup_clause));
+                if (step && step[0] != '\0') {
+                    linear_clause->setUserDefinedStep(step);
+                    roup_string_free(step);
+                }
+
+                // Finalize the clause
+                linear_clause->mergeLinear(dir, linear_clause);
+                continue; // Skip generic handling
+            }
+
+            // Special handling for aligned clause - use proper ompparser API
+            if (clause_kind == OMPC_aligned) {
+                OpenMPAlignedClause* aligned_clause = static_cast<OpenMPAlignedClause*>(omp_clause);
+
+                // Add variables
+                int32_t var_count = roup_clause_items_count(roup_clause);
+                for (int32_t i = 0; i < var_count; ++i) {
+                    char* var = const_cast<char*>(roup_clause_item_to_string(roup_clause, i));
+                    if (var) {
+                        aligned_clause->addLangExpr(var);
+                        roup_string_free(var);
+                    }
+                }
+
+                // Set alignment if present
+                char* alignment = const_cast<char*>(roup_clause_expression_to_string(roup_clause));
+                if (alignment && alignment[0] != '\0') {
+                    aligned_clause->setUserDefinedAlignment(alignment);
+                    roup_string_free(alignment);
+                }
+
+                continue; // Skip generic handling
+            }
+
+            // Special handling for schedule clause - use proper ompparser API
+            if (clause_kind == OMPC_schedule) {
+                OpenMPScheduleClause* schedule_clause = static_cast<OpenMPScheduleClause*>(omp_clause);
+
+                // Get schedule kind (static, dynamic, guided, auto, runtime)
+                int32_t sched_kind = roup_clause_schedule_kind(roup_clause);
+                // Schedule kind is already set when the clause was created with addOpenMPClause()
+                // The kind parameter was passed during clause creation in the mapRoupToOmpparserClause call
+
+                // Set chunk size if present
+                char* chunk_size = const_cast<char*>(roup_clause_schedule_chunk_size(roup_clause));
+                if (chunk_size && chunk_size[0] != '\0') {
+                    schedule_clause->setChunkSize(chunk_size);
+                    roup_string_free(chunk_size);
+                }
+
+                continue; // Skip generic handling
+            }
+
+            // Special handling for allocator clause - uses identifier instead of expression
+            if (clause_kind == OMPC_allocator) {
+                char* allocator_id = const_cast<char*>(roup_clause_identifier_to_string(roup_clause));
+                if (allocator_id && allocator_id[0] != '\0') {
+                    omp_clause->addLangExpr(allocator_id);
+                    // DON'T FREE: ompparser stores the pointer directly (like addAllocateList)
+                    // roup_string_free(allocator_id);
+                }
+                continue; // Skip generic handling
+            }
+
+            // Add variables for variable-list clauses (private, shared, etc.)
+            // Call IR helper to get count, then convert each item to string on-demand
+            int32_t var_count = roup_clause_items_count(roup_clause);
+            for (int32_t i = 0; i < var_count; ++i) {
+                char* var = const_cast<char*>(roup_clause_item_to_string(roup_clause, i));
+                if (var) {
+                    omp_clause->addLangExpr(var);
+                    roup_string_free(var);  // Free the string after use
+                }
             }
 
             // Add expression for expression clauses (num_threads, if, collapse, etc.)
-            const char* expr = roup_clause_expression(roup_clause);
+            // Call IR helper to convert expression to string on-demand
+            char* expr = const_cast<char*>(roup_clause_expression_to_string(roup_clause));
             if (expr) {
                 omp_clause->addLangExpr(expr);
+                roup_string_free(expr);  // Free the string after use
             }
         }
         roup_clause_iterator_free(iter);
+    }
+
+    // Handle directive-specific variable lists for specialized directives
+    // These are directives where the variable list appears in the directive itself, not as a clause
+    // e.g., #pragma omp allocate(a,b,c), #pragma omp threadprivate(x,y)
+    if (kind == OMPD_allocate) {
+        OpenMPAllocateDirective* allocate_dir = static_cast<OpenMPAllocateDirective*>(dir);
+        // Look for ItemList clauses which contain the allocate variable list
+        OmpClauseIterator* var_iter = roup_directive_clauses_iter(roup_dir);
+        if (var_iter) {
+            const OmpClause* roup_clause;
+            while (roup_clause_iterator_next(var_iter, &roup_clause) == 1) {
+                // Check if this is an ItemList clause (contains the allocate variables)
+                int32_t var_count = roup_clause_items_count(roup_clause);
+                if (var_count > 0) {
+                    // Add each variable to the allocate list
+                    // Note: addAllocateList stores the pointer, doesn't copy the string
+                    // So we must NOT call roup_string_free on these strings!
+                    // They will be freed when the directive is destroyed.
+                    for (int32_t i = 0; i < var_count; ++i) {
+                        char* var = const_cast<char*>(roup_clause_item_to_string(roup_clause, i));
+                        if (var) {
+                            allocate_dir->addAllocateList(var);
+                            // DON'T FREE: ompparser stores the pointer directly
+                            // roup_string_free(var);
+                        }
+                    }
+                }
+            }
+            roup_clause_iterator_free(var_iter);
+        }
+    } else if (kind == OMPD_threadprivate) {
+        OpenMPThreadprivateDirective* threadprivate_dir = static_cast<OpenMPThreadprivateDirective*>(dir);
+        // Look for ItemList clauses which contain the threadprivate variable list
+        OmpClauseIterator* var_iter = roup_directive_clauses_iter(roup_dir);
+        if (var_iter) {
+            const OmpClause* roup_clause;
+            while (roup_clause_iterator_next(var_iter, &roup_clause) == 1) {
+                int32_t var_count = roup_clause_items_count(roup_clause);
+                if (var_count > 0) {
+                    // Note: addThreadprivateList stores the pointer, doesn't copy
+                    // So we must NOT call roup_string_free!
+                    for (int32_t i = 0; i < var_count; ++i) {
+                        char* var = const_cast<char*>(roup_clause_item_to_string(roup_clause, i));
+                        if (var) {
+                            threadprivate_dir->addThreadprivateList(var);
+                            // DON'T FREE: ompparser stores the pointer directly
+                            // roup_string_free(var);
+                        }
+                    }
+                }
+            }
+            roup_clause_iterator_free(var_iter);
+        }
     }
 
     // Free ROUP directive (we've extracted what we need)

@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 8 clauses) + OpenACC (18 directives + 45 clauses) = 0x5B820C45E8BEB640
+// Auto-generated checksum: FNV-1a hash of OpenMP (0 directives + 0 clauses) + OpenACC (18 directives + 45 clauses) = 0x081C740186403876
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x5B820C45E8BEB640
+#define ROUP_CONSTANTS_CHECKSUM 0x081C740186403876
 
 // ============================================================================
 // Language Format Constants
@@ -38,27 +38,353 @@ extern "C" {
 #define ROUP_LANG_FORTRAN_FIXED             2  // Fortran fixed-form (!$OMP/!$ACC or C$OMP/C$ACC)
 
 // ============================================================================
+// DirectiveKind Enum Constants (ROUP IR Layer)
+// ============================================================================
+// Auto-generated from src/ir/directive.rs:DirectiveKind enum
+// These are the authoritative directive kind values from ROUP's IR layer.
+// Use these for mapping ROUP DirectiveKind to other parser enums.
+
+#define ROUP_DIRECTIVE_KIND_PARALLEL                            0
+#define ROUP_DIRECTIVE_KIND_PARALLEL_FOR                        1
+#define ROUP_DIRECTIVE_KIND_PARALLEL_FOR_SIMD                   2
+#define ROUP_DIRECTIVE_KIND_PARALLEL_SECTIONS                   3
+#define ROUP_DIRECTIVE_KIND_PARALLEL_WORKSHARE                  4
+#define ROUP_DIRECTIVE_KIND_PARALLEL_LOOP                       5
+#define ROUP_DIRECTIVE_KIND_PARALLEL_MASKED                     6
+#define ROUP_DIRECTIVE_KIND_PARALLEL_MASTER                     7
+#define ROUP_DIRECTIVE_KIND_PARALLEL_LOOP_SIMD                  8
+#define ROUP_DIRECTIVE_KIND_PARALLEL_MASKED_TASKLOOP            9
+#define ROUP_DIRECTIVE_KIND_FOR                                 10
+#define ROUP_DIRECTIVE_KIND_FOR_SIMD                            11
+#define ROUP_DIRECTIVE_KIND_SECTIONS                            12
+#define ROUP_DIRECTIVE_KIND_SECTION                             13
+#define ROUP_DIRECTIVE_KIND_SINGLE                              14
+#define ROUP_DIRECTIVE_KIND_WORKSHARE                           15
+#define ROUP_DIRECTIVE_KIND_LOOP                                16
+#define ROUP_DIRECTIVE_KIND_PARALLEL_MASKED_TASKLOOP_SIMD       17
+#define ROUP_DIRECTIVE_KIND_PARALLEL_MASTER_TASKLOOP            18
+#define ROUP_DIRECTIVE_KIND_PARALLEL_MASTER_TASKLOOP_SIMD       19
+#define ROUP_DIRECTIVE_KIND_SIMD                                20
+#define ROUP_DIRECTIVE_KIND_DECLARE_SIMD                        21
+#define ROUP_DIRECTIVE_KIND_TASK                                30
+#define ROUP_DIRECTIVE_KIND_TASKLOOP                            31
+#define ROUP_DIRECTIVE_KIND_TASKLOOP_SIMD                       32
+#define ROUP_DIRECTIVE_KIND_TASKYIELD                           33
+#define ROUP_DIRECTIVE_KIND_TASKWAIT                            34
+#define ROUP_DIRECTIVE_KIND_TASKGROUP                           35
+#define ROUP_DIRECTIVE_KIND_TASKGRAPH                           36
+#define ROUP_DIRECTIVE_KIND_TASK_ITERATION                      37
+#define ROUP_DIRECTIVE_KIND_MASKED_TASKLOOP                     38
+#define ROUP_DIRECTIVE_KIND_MASKED_TASKLOOP_SIMD                39
+#define ROUP_DIRECTIVE_KIND_TARGET                              40
+#define ROUP_DIRECTIVE_KIND_TARGET_DATA                         41
+#define ROUP_DIRECTIVE_KIND_TARGET_ENTER_DATA                   42
+#define ROUP_DIRECTIVE_KIND_TARGET_EXIT_DATA                    43
+#define ROUP_DIRECTIVE_KIND_TARGET_UPDATE                       44
+#define ROUP_DIRECTIVE_KIND_TARGET_PARALLEL                     45
+#define ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_FOR                 46
+#define ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_FOR_SIMD            47
+#define ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_LOOP                48
+#define ROUP_DIRECTIVE_KIND_TARGET_SIMD                         49
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS                        50
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE             51
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_SIMD        52
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR 53
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR_SIMD 54
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS_LOOP                   55
+#define ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_LOOP_SIMD           56
+#define ROUP_DIRECTIVE_KIND_TARGET_LOOP                         57
+#define ROUP_DIRECTIVE_KIND_TARGET_LOOP_SIMD                    58
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_LOOP 59
+#define ROUP_DIRECTIVE_KIND_TEAMS                               60
+#define ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE                    61
+#define ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_SIMD               62
+#define ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_FOR       63
+#define ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_FOR_SIMD  64
+#define ROUP_DIRECTIVE_KIND_TEAMS_LOOP                          65
+#define ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_LOOP      66
+#define ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_LOOP_SIMD 67
+#define ROUP_DIRECTIVE_KIND_TEAMS_LOOP_SIMD                     68
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_LOOP_SIMD 69
+#define ROUP_DIRECTIVE_KIND_BARRIER                             70
+#define ROUP_DIRECTIVE_KIND_CRITICAL                            71
+#define ROUP_DIRECTIVE_KIND_ATOMIC                              72
+#define ROUP_DIRECTIVE_KIND_FLUSH                               73
+#define ROUP_DIRECTIVE_KIND_ORDERED                             74
+#define ROUP_DIRECTIVE_KIND_MASTER                              75
+#define ROUP_DIRECTIVE_KIND_MASKED                              76
+#define ROUP_DIRECTIVE_KIND_ATOMIC_READ                         77
+#define ROUP_DIRECTIVE_KIND_ATOMIC_WRITE                        78
+#define ROUP_DIRECTIVE_KIND_ATOMIC_UPDATE                       79
+#define ROUP_DIRECTIVE_KIND_DECLARE_REDUCTION                   80
+#define ROUP_DIRECTIVE_KIND_DECLARE_MAPPER                      81
+#define ROUP_DIRECTIVE_KIND_DECLARE_TARGET                      82
+#define ROUP_DIRECTIVE_KIND_DECLARE_VARIANT                     83
+#define ROUP_DIRECTIVE_KIND_DECLARE_INDUCTION                   84
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS_LOOP_SIMD              85
+#define ROUP_DIRECTIVE_KIND_ATOMIC_CAPTURE                      86
+#define ROUP_DIRECTIVE_KIND_ATOMIC_COMPARE_CAPTURE              87
+#define ROUP_DIRECTIVE_KIND_DISTRIBUTE                          90
+#define ROUP_DIRECTIVE_KIND_DISTRIBUTE_SIMD                     91
+#define ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_FOR             92
+#define ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_FOR_SIMD        93
+#define ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_LOOP            94
+#define ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_LOOP_SIMD       95
+#define ROUP_DIRECTIVE_KIND_METADIRECTIVE                       100
+#define ROUP_DIRECTIVE_KIND_ASSUME                              101
+#define ROUP_DIRECTIVE_KIND_ASSUMES                             102
+#define ROUP_DIRECTIVE_KIND_BEGIN_METADIRECTIVE                 103
+#define ROUP_DIRECTIVE_KIND_BEGIN_ASSUMES                       104
+#define ROUP_DIRECTIVE_KIND_TILE                                105
+#define ROUP_DIRECTIVE_KIND_UNROLL                              106
+#define ROUP_DIRECTIVE_KIND_FUSE                                107
+#define ROUP_DIRECTIVE_KIND_SPLIT                               108
+#define ROUP_DIRECTIVE_KIND_INTERCHANGE                         109
+#define ROUP_DIRECTIVE_KIND_REVERSE                             110
+#define ROUP_DIRECTIVE_KIND_STRIPE                              111
+#define ROUP_DIRECTIVE_KIND_BEGIN_DECLARE_TARGET                112
+#define ROUP_DIRECTIVE_KIND_END_DECLARE_TARGET                  113
+#define ROUP_DIRECTIVE_KIND_BEGIN_DECLARE_VARIANT               114
+#define ROUP_DIRECTIVE_KIND_END_DECLARE_VARIANT                 115
+#define ROUP_DIRECTIVE_KIND_THREADPRIVATE                       120
+#define ROUP_DIRECTIVE_KIND_ALLOCATE                            121
+#define ROUP_DIRECTIVE_KIND_ALLOCATORS                          122
+#define ROUP_DIRECTIVE_KIND_REQUIRES                            123
+#define ROUP_DIRECTIVE_KIND_SCAN                                124
+#define ROUP_DIRECTIVE_KIND_DEPOBJ                              125
+#define ROUP_DIRECTIVE_KIND_NOTHING                             126
+#define ROUP_DIRECTIVE_KIND_ERROR                               127
+#define ROUP_DIRECTIVE_KIND_CANCEL                              128
+#define ROUP_DIRECTIVE_KIND_CANCELLATION_POINT                  129
+#define ROUP_DIRECTIVE_KIND_DISPATCH                            130
+#define ROUP_DIRECTIVE_KIND_INTEROP                             131
+#define ROUP_DIRECTIVE_KIND_SCOPE                               132
+#define ROUP_DIRECTIVE_KIND_GROUPPRIVATE                        133
+#define ROUP_DIRECTIVE_KIND_WORKDISTRIBUTE                      134
+#define ROUP_DIRECTIVE_KIND_DO                                  135
+#define ROUP_DIRECTIVE_KIND_DO_SIMD                             136
+#define ROUP_DIRECTIVE_KIND_PARALLEL_DO                         137
+#define ROUP_DIRECTIVE_KIND_PARALLEL_DO_SIMD                    138
+#define ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_DO              139
+#define ROUP_DIRECTIVE_KIND_DISTRIBUTE_PARALLEL_DO_SIMD         140
+#define ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_DO        141
+#define ROUP_DIRECTIVE_KIND_TEAMS_DISTRIBUTE_PARALLEL_DO_SIMD   142
+#define ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_DO                  143
+#define ROUP_DIRECTIVE_KIND_TARGET_PARALLEL_DO_SIMD             144
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_DO 145
+#define ROUP_DIRECTIVE_KIND_TARGET_TEAMS_DISTRIBUTE_PARALLEL_DO_SIMD 146
+#define ROUP_DIRECTIVE_KIND_END_TARGET                          147
+#define ROUP_DIRECTIVE_KIND_UNKNOWN                             255
+
+// ============================================================================
+// ClauseKind Constants (C API Layer)
+// ============================================================================
+// Auto-generated from src/c_api.rs:clause_kind module
+// These are the clause kind codes used by the C API.
+
+#define ROUP_CLAUSE_KIND_NUM_THREADS     0
+#define ROUP_CLAUSE_KIND_IF              1
+#define ROUP_CLAUSE_KIND_PRIVATE         2
+#define ROUP_CLAUSE_KIND_SHARED          3
+#define ROUP_CLAUSE_KIND_FIRSTPRIVATE    4
+#define ROUP_CLAUSE_KIND_LASTPRIVATE     5
+#define ROUP_CLAUSE_KIND_REDUCTION       6
+#define ROUP_CLAUSE_KIND_SCHEDULE        7
+#define ROUP_CLAUSE_KIND_COLLAPSE        8
+#define ROUP_CLAUSE_KIND_ORDERED         9
+#define ROUP_CLAUSE_KIND_NOWAIT          10
+#define ROUP_CLAUSE_KIND_DEFAULT         11
+#define ROUP_CLAUSE_KIND_COPYIN          12
+#define ROUP_CLAUSE_KIND_PROC_BIND       13
+#define ROUP_CLAUSE_KIND_LINEAR          14
+#define ROUP_CLAUSE_KIND_ALIGNED         15
+#define ROUP_CLAUSE_KIND_SAFELEN         16
+#define ROUP_CLAUSE_KIND_SIMDLEN         17
+#define ROUP_CLAUSE_KIND_NONTEMPORAL     18
+#define ROUP_CLAUSE_KIND_DIST_SCHEDULE   19
+#define ROUP_CLAUSE_KIND_NUM_TEAMS       20
+#define ROUP_CLAUSE_KIND_THREAD_LIMIT    21
+#define ROUP_CLAUSE_KIND_GRAINSIZE       22
+#define ROUP_CLAUSE_KIND_NUM_TASKS       23
+#define ROUP_CLAUSE_KIND_COPYPRIVATE     24
+#define ROUP_CLAUSE_KIND_FILTER          25
+#define ROUP_CLAUSE_KIND_PRIORITY        26
+#define ROUP_CLAUSE_KIND_DEVICE          27
+#define ROUP_CLAUSE_KIND_MAP             28
+#define ROUP_CLAUSE_KIND_DEPEND          29
+#define ROUP_CLAUSE_KIND_USE_DEVICE_PTR  30
+#define ROUP_CLAUSE_KIND_USE_DEVICE_ADDR 31
+#define ROUP_CLAUSE_KIND_IS_DEVICE_PTR   32
+#define ROUP_CLAUSE_KIND_HAS_DEVICE_ADDR 33
+#define ROUP_CLAUSE_KIND_AFFINITY        34
+#define ROUP_CLAUSE_KIND_ALLOCATE        35
+#define ROUP_CLAUSE_KIND_ALLOCATOR       36
+#define ROUP_CLAUSE_KIND_ATOMIC_OPERATION 37
+#define ROUP_CLAUSE_KIND_ORDER           38
+#define ROUP_CLAUSE_KIND_BIND            39
+#define ROUP_CLAUSE_KIND_HINT            40
+#define ROUP_CLAUSE_KIND_ALIGN           41
+#define ROUP_CLAUSE_KIND_SEQ_CST         42
+#define ROUP_CLAUSE_KIND_ACQ_REL         43
+#define ROUP_CLAUSE_KIND_RELEASE         44
+#define ROUP_CLAUSE_KIND_ACQUIRE         45
+#define ROUP_CLAUSE_KIND_RELAXED         46
+#define ROUP_CLAUSE_KIND_READ            47
+#define ROUP_CLAUSE_KIND_WRITE           48
+#define ROUP_CLAUSE_KIND_UPDATE          49
+#define ROUP_CLAUSE_KIND_CAPTURE         50
+#define ROUP_CLAUSE_KIND_COMPARE         51
+#define ROUP_CLAUSE_KIND_GENERIC         900
+#define ROUP_CLAUSE_KIND_UNKNOWN         999
+
+
+// ============================================================================
+// Default Kind Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:DefaultKind enum
+
+#define ROUP_DEFAULT_KIND_SHARED          0
+#define ROUP_DEFAULT_KIND_NONE            1
+#define ROUP_DEFAULT_KIND_PRIVATE         2
+#define ROUP_DEFAULT_KIND_FIRSTPRIVATE    3
+
+
+// ============================================================================
+// Proc Bind Kind Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:ProcBind enum
+
+#define ROUP_PROC_BIND_KIND_MASTER          0
+#define ROUP_PROC_BIND_KIND_CLOSE           1
+#define ROUP_PROC_BIND_KIND_SPREAD          2
+#define ROUP_PROC_BIND_KIND_PRIMARY         3
+
+
+// ============================================================================
+// Schedule Kind Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:ScheduleKind enum
+
+#define ROUP_SCHEDULE_KIND_STATIC          0
+#define ROUP_SCHEDULE_KIND_DYNAMIC         1
+#define ROUP_SCHEDULE_KIND_GUIDED          2
+#define ROUP_SCHEDULE_KIND_AUTO            3
+#define ROUP_SCHEDULE_KIND_RUNTIME         4
+
+
+// ============================================================================
+// Reduction Operator Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:ReductionOperator enum
+
+#define ROUP_REDUCTION_OP_ADD             0
+#define ROUP_REDUCTION_OP_MULTIPLY        1
+#define ROUP_REDUCTION_OP_SUBTRACT        2
+#define ROUP_REDUCTION_OP_BITWISE_AND     10
+#define ROUP_REDUCTION_OP_BITWISE_OR      11
+#define ROUP_REDUCTION_OP_BITWISE_XOR     12
+#define ROUP_REDUCTION_OP_LOGICAL_AND     20
+#define ROUP_REDUCTION_OP_LOGICAL_OR      21
+#define ROUP_REDUCTION_OP_MIN             30
+#define ROUP_REDUCTION_OP_MAX             31
+#define ROUP_REDUCTION_OP_MINUS_EQUAL     40
+#define ROUP_REDUCTION_OP_CUSTOM          100
+#define ROUP_REDUCTION_OP_UNKNOWN         999
+
+
+// ============================================================================
+// Reduction Modifier Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:ReductionModifier enum
+
+#define ROUP_REDUCTION_MODIFIER_INSCAN          0
+#define ROUP_REDUCTION_MODIFIER_TASK            1
+#define ROUP_REDUCTION_MODIFIER_DEFAULT         2
+#define ROUP_REDUCTION_MODIFIER_UNSPECIFIED     3
+
+
+// ============================================================================
+// If Modifier Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:IfModifier enum
+
+#define ROUP_IF_MODIFIER_PARALLEL             0
+#define ROUP_IF_MODIFIER_SIMD                 1
+#define ROUP_IF_MODIFIER_TASK                 2
+#define ROUP_IF_MODIFIER_TASKLOOP             3
+#define ROUP_IF_MODIFIER_TARGET               4
+#define ROUP_IF_MODIFIER_TARGET_DATA          5
+#define ROUP_IF_MODIFIER_TARGET_ENTER_DATA    6
+#define ROUP_IF_MODIFIER_TARGET_EXIT_DATA     7
+#define ROUP_IF_MODIFIER_TARGET_UPDATE        8
+#define ROUP_IF_MODIFIER_CANCEL               9
+#define ROUP_IF_MODIFIER_UNSPECIFIED          10
+
+
+// ============================================================================
+// Order Modifier Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:OrderModifier enum
+
+#define ROUP_ORDER_MODIFIER_REPRODUCIBLE    0
+#define ROUP_ORDER_MODIFIER_UNCONSTRAINED   1
+#define ROUP_ORDER_MODIFIER_UNSPECIFIED     2
+
+
+// ============================================================================
+// Grainsize Modifier Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:GrainsizeModifier enum
+
+#define ROUP_GRAINSIZE_MODIFIER_STRICT          0
+#define ROUP_GRAINSIZE_MODIFIER_UNSPECIFIED     1
+
+
+// ============================================================================
+// NumTasks Modifier Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:NumTasksModifier enum
+
+#define ROUP_NUM_TASKS_MODIFIER_STRICT          0
+#define ROUP_NUM_TASKS_MODIFIER_UNSPECIFIED     1
+
+
+// ============================================================================
+// Bind Kind Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:BindKind enum
+
+#define ROUP_BIND_KIND_TEAMS           0
+#define ROUP_BIND_KIND_PARALLEL        1
+#define ROUP_BIND_KIND_THREAD          2
+#define ROUP_BIND_KIND_UNSPECIFIED     3
+
+
+// ============================================================================
+// At Kind Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:AtKind enum
+
+#define ROUP_AT_KIND_COMPILATION     0
+#define ROUP_AT_KIND_EXECUTION       1
+#define ROUP_AT_KIND_UNSPECIFIED     2
+
+
+// ============================================================================
+// Severity Kind Constants (IR Enum)
+// ============================================================================
+// Auto-generated from src/ir/clause.rs:SeverityKind enum
+
+#define ROUP_SEVERITY_KIND_FATAL           0
+#define ROUP_SEVERITY_KIND_WARNING         1
+#define ROUP_SEVERITY_KIND_UNSPECIFIED     2
+
+
+// ============================================================================
 // OpenMP Directive Kind Constants
 // ============================================================================
 // Auto-generated from src/c_api.rs:directive_name_to_kind()
 
-#define ROUP_DIRECTIVE_PARALLEL             0
-#define ROUP_DIRECTIVE_FOR                  1
-#define ROUP_DIRECTIVE_SECTIONS             2
-#define ROUP_DIRECTIVE_SINGLE               3
-#define ROUP_DIRECTIVE_TASK                 4
-#define ROUP_DIRECTIVE_MASTER               5
-#define ROUP_DIRECTIVE_CRITICAL             6
-#define ROUP_DIRECTIVE_BARRIER              7
-#define ROUP_DIRECTIVE_TASKWAIT             8
-#define ROUP_DIRECTIVE_TASKGROUP            9
-#define ROUP_DIRECTIVE_ATOMIC               10
-#define ROUP_DIRECTIVE_FLUSH                11
-#define ROUP_DIRECTIVE_ORDERED              12
-#define ROUP_DIRECTIVE_TARGET               13
-#define ROUP_DIRECTIVE_TEAMS                14
-#define ROUP_DIRECTIVE_DISTRIBUTE           15
-#define ROUP_DIRECTIVE_METADIRECTIVE        16
 #define ROUP_DIRECTIVE_UNKNOWN       999
 
 
@@ -67,14 +393,6 @@ extern "C" {
 // ============================================================================
 // Auto-generated from src/c_api.rs:convert_clause()
 
-#define ROUP_CLAUSE_PRIVATE         2
-#define ROUP_CLAUSE_SHARED          3
-#define ROUP_CLAUSE_FIRSTPRIVATE    4
-#define ROUP_CLAUSE_LASTPRIVATE     5
-#define ROUP_CLAUSE_REDUCTION       6
-#define ROUP_CLAUSE_SCHEDULE        7
-#define ROUP_CLAUSE_NOWAIT          10
-#define ROUP_CLAUSE_DEFAULT         11
 #define ROUP_CLAUSE_UNKNOWN      999
 
 

@@ -154,10 +154,12 @@ impl<'a> Directive<'a> {
                         let merged_clause = match &first.kind {
                             ClauseKind::VariableList(_) => Clause {
                                 name: first.name.clone(),
+                        variant: None,
                                 kind: ClauseKind::VariableList(vars),
                             },
                             ClauseKind::GangClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
+                        variant: None,
                                 kind: ClauseKind::GangClause {
                                     modifier: *modifier,
                                     variables: vars,
@@ -165,6 +167,7 @@ impl<'a> Directive<'a> {
                             },
                             ClauseKind::WorkerClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
+                        variant: None,
                                 kind: ClauseKind::WorkerClause {
                                     modifier: *modifier,
                                     variables: vars,
@@ -172,6 +175,7 @@ impl<'a> Directive<'a> {
                             },
                             ClauseKind::VectorClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
+                        variant: None,
                                 kind: ClauseKind::VectorClause {
                                     modifier: *modifier,
                                     variables: vars,
@@ -204,6 +208,7 @@ impl<'a> Directive<'a> {
                         }
                         new_clauses.push(Clause {
                             name: first.name.clone(),
+                        variant: None,
                             kind: ClauseKind::ReductionClause {
                                 operator: *operator,
                                 variables: vars,
@@ -234,6 +239,7 @@ impl<'a> Directive<'a> {
                         let merged_clause = match &first.kind {
                             ClauseKind::CopyinClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
+                        variant: None,
                                 kind: ClauseKind::CopyinClause {
                                     modifier: *modifier,
                                     variables: vars,
@@ -241,6 +247,7 @@ impl<'a> Directive<'a> {
                             },
                             ClauseKind::CopyoutClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
+                        variant: None,
                                 kind: ClauseKind::CopyoutClause {
                                     modifier: *modifier,
                                     variables: vars,
@@ -248,6 +255,7 @@ impl<'a> Directive<'a> {
                             },
                             ClauseKind::CreateClause { modifier, .. } => Clause {
                                 name: first.name.clone(),
+                        variant: None,
                                 kind: ClauseKind::CreateClause {
                                     modifier: *modifier,
                                     variables: vars,
@@ -302,8 +310,8 @@ impl<'a> Directive<'a> {
     ///     name: Cow::Borrowed("parallel"),
     ///     parameter: None,
     ///     clauses: vec![
-    ///         Clause { name: Cow::Borrowed("async"), kind: ClauseKind::Parenthesized(Cow::Borrowed("1")) },
-    ///         Clause { name: Cow::Borrowed("wait"), kind: ClauseKind::Parenthesized(Cow::Borrowed("2")) },
+    ///         Clause { name: Cow::Borrowed("async"), variant: None, kind: ClauseKind::Parenthesized(Cow::Borrowed("1")) },
+    ///         Clause { name: Cow::Borrowed("wait"), variant: None, kind: ClauseKind::Parenthesized(Cow::Borrowed("2")) },
     ///     ],
     ///     cache_data: None,
     ///     wait_data: None,
@@ -744,10 +752,12 @@ mod tests {
             clauses: vec![
                 Clause {
                     name: "private".into(),
+                        variant: None,
                     kind: ClauseKind::Parenthesized("a, b".into()),
                 },
                 Clause {
                     name: "nowait".into(),
+                        variant: None,
                     kind: ClauseKind::Bare,
                 },
             ],

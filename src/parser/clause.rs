@@ -111,6 +111,8 @@ pub enum ClauseKind<'a> {
 pub struct Clause<'a> {
     pub name: Cow<'a, str>,
     pub kind: ClauseKind<'a>,
+    /// OpenMP clause enum - USE THIS INSTEAD OF STRING COMPARISON!
+    pub variant: Option<crate::parser::openmp::OpenMpClause>,
 }
 
 impl Clause<'_> {
@@ -254,6 +256,7 @@ impl ClauseRule {
                 Clause {
                     name,
                     kind: ClauseKind::Bare,
+                    variant: None,
                 },
             )),
             ClauseRule::Parenthesized => parse_parenthesized_clause(name, input),
@@ -350,7 +353,12 @@ impl ClauseRegistry {
                 .unwrap_or(self.default_rule)
         };
 
-        rule.parse(name, input)
+        let (input, mut clause) = rule.parse(name, input)?;
+
+        // Convert string to enum - THIS IS THE ONLY STRING COMPARISON!
+        clause.variant = crate::parser::openmp::OpenMpClause::from_name(clause.name.as_ref());
+
+        Ok((input, clause))
     }
 }
 
@@ -481,6 +489,7 @@ fn parse_parenthesized_clause<'a>(
             Clause {
                 name,
                 kind: ClauseKind::Parenthesized(normalized),
+                variant: None,
             },
         ));
     }
@@ -521,6 +530,8 @@ mod tests {
             vec![Clause {
                 name: "nowait".into(),
                 kind: ClauseKind::Bare,
+                variant: None,
+                variant: None,
             }]
         );
     }
@@ -544,6 +555,8 @@ mod tests {
         let clause = Clause {
             name: "nowait".into(),
             kind: ClauseKind::Bare,
+            variant: None,
+            variant: None,
         };
 
         assert_eq!(clause.to_string(), "nowait");
@@ -555,6 +568,8 @@ mod tests {
         let clause = Clause {
             name: "private".into(),
             kind: ClauseKind::Parenthesized("a, b".into()),
+            variant: None,
+            variant: None,
         };
 
         assert_eq!(clause.to_string(), "private(a, b)");
@@ -574,6 +589,8 @@ mod tests {
             Clause {
                 name,
                 kind: ClauseKind::Parenthesized(identifier.into()),
+                variant: None,
+                variant: None,
             },
         ))
     }

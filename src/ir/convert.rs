@@ -511,15 +511,27 @@ pub fn parse_clause_data<'a>(
     clause: &'a Clause<'a>,
     config: &ParserConfig,
 ) -> Result<ClauseData, ConversionError> {
-    let clause_name = clause.name.as_ref();
+    use crate::parser::openmp::OpenMpClause;
 
-    match clause_name {
-        // Bare clauses (no parameters)
-        "nowait" | "nogroup" | "untied" | "mergeable" | "seq_cst" | "relaxed" | "release"
-        | "acquire" | "acq_rel" => Ok(ClauseData::Bare(Identifier::new(clause_name))),
+    // USE ENUM INSTEAD OF STRING COMPARISON!
+    match clause.variant {
+        Some(OpenMpClause::Nowait) => Ok(ClauseData::Nowait),
+        Some(OpenMpClause::SeqCst) => Ok(ClauseData::SeqCst),
+        Some(OpenMpClause::AcqRel) => Ok(ClauseData::AcqRel),
+        Some(OpenMpClause::Release) => Ok(ClauseData::Release),
+        Some(OpenMpClause::Acquire) => Ok(ClauseData::Acquire),
+        Some(OpenMpClause::Relaxed) => Ok(ClauseData::Relaxed),
+        Some(OpenMpClause::Read) => Ok(ClauseData::Read),
+        Some(OpenMpClause::Write) => Ok(ClauseData::Write),
+        Some(OpenMpClause::Update) => Ok(ClauseData::Update),
+        Some(OpenMpClause::Capture) => Ok(ClauseData::Capture),
+        Some(OpenMpClause::Compare) => Ok(ClauseData::Compare),
+        Some(OpenMpClause::Nogroup) | Some(OpenMpClause::Untied) | Some(OpenMpClause::Mergeable) => {
+            Ok(ClauseData::Bare(Identifier::new(clause.name.as_ref())))
+        }
 
         // default(kind)
-        "default" => {
+        Some(OpenMpClause::Default) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let kind_str = content.trim();
@@ -543,7 +555,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // private(list)
-        "private" => {
+        Some(OpenMpClause::Private) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let items = parse_identifier_list(content, config)?;
@@ -554,7 +566,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // firstprivate(list)
-        "firstprivate" => {
+        Some(OpenMpClause::Firstprivate) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let items = parse_identifier_list(content, config)?;
@@ -565,7 +577,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // shared(list)
-        "shared" => {
+        Some(OpenMpClause::Shared) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let items = parse_identifier_list(content, config)?;
@@ -575,8 +587,19 @@ pub fn parse_clause_data<'a>(
             }
         }
 
+        // copyin(list)
+        Some(OpenMpClause::Copyin) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::Copyin { items })
+            } else {
+                Ok(ClauseData::Copyin { items: vec![] })
+            }
+        }
+
         // num_threads(expr)
-        "num_threads" => {
+        Some(OpenMpClause::NumThreads) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 Ok(ClauseData::NumThreads {
@@ -590,7 +613,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // if(expr)
-        "if" => {
+        Some(OpenMpClause::If) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 // Check for directive-name modifier: "if(parallel: condition)"
@@ -613,7 +636,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // collapse(n)
-        "collapse" => {
+        Some(OpenMpClause::Collapse) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 Ok(ClauseData::Collapse {
@@ -627,7 +650,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // ordered or ordered(n)
-        "ordered" => match clause.kind {
+        Some(OpenMpClause::Ordered) => match clause.kind {
             ClauseKind::Bare => Ok(ClauseData::Ordered { n: None }),
             ClauseKind::Parenthesized(ref content) => Ok(ClauseData::Ordered {
                 n: Some(Expression::new(content.as_ref().trim(), config)),
@@ -639,7 +662,7 @@ pub fn parse_clause_data<'a>(
         },
 
         // reduction(operator: list)
-        "reduction" => {
+        Some(OpenMpClause::Reduction) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 // Find the colon separator between operator and list
@@ -664,7 +687,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // schedule([modifier[, modifier]:] kind[, chunk_size])
-        "schedule" => {
+        Some(OpenMpClause::Schedule) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 parse_schedule_clause(content, config)
@@ -676,7 +699,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // map([[mapper(mapper-identifier),] map-type:] list)
-        "map" => {
+        Some(OpenMpClause::Map) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 parse_map_clause(content, config)
@@ -688,7 +711,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // depend(dependence-type: list)
-        "depend" => {
+        Some(OpenMpClause::Depend) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 // Find the colon separator using top-level detection
@@ -713,7 +736,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // linear([modifier(list):] list[:step])
-        "linear" => {
+        Some(OpenMpClause::Linear) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 parse_linear_clause(content, config)
@@ -725,7 +748,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // proc_bind(master|close|spread|primary)
-        "proc_bind" => {
+        Some(OpenMpClause::ProcBind) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let kind_str = content.trim();
@@ -748,9 +771,266 @@ pub fn parse_clause_data<'a>(
             }
         }
 
+        // aligned(list[:alignment])
+        Some(OpenMpClause::Aligned) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                // Check for alignment specifier: "aligned(list:alignment)"
+                if let Some((items_str, align_str)) = lang::split_once_top_level(content, ':') {
+                    let items = parse_identifier_list(items_str.trim(), config)?;
+                    let alignment = Some(Expression::new(align_str.trim(), config));
+                    Ok(ClauseData::Aligned { items, alignment })
+                } else {
+                    let items = parse_identifier_list(content.trim(), config)?;
+                    Ok(ClauseData::Aligned {
+                        items,
+                        alignment: None,
+                    })
+                }
+            } else {
+                Ok(ClauseData::Aligned {
+                    items: vec![],
+                    alignment: None,
+                })
+            }
+        }
+
+        // safelen(length)
+        Some(OpenMpClause::Safelen) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Safelen {
+                    length: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "safelen requires expression".to_string(),
+                ))
+            }
+        }
+
+        // simdlen(length)
+        Some(OpenMpClause::Simdlen) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Simdlen {
+                    length: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "simdlen requires expression".to_string(),
+                ))
+            }
+        }
+
+        // nontemporal(list)
+        Some(OpenMpClause::Nontemporal) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                // Nontemporal uses Generic with special handling
+                Ok(ClauseData::Generic {
+                    name: Identifier::new("nontemporal"),
+                    data: Some(content.to_string()),
+                })
+            } else {
+                Ok(ClauseData::Generic {
+                    name: Identifier::new("nontemporal"),
+                    data: None,
+                })
+            }
+        }
+
+        // dist_schedule(kind[, chunk_size])
+        Some(OpenMpClause::DistSchedule) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                // Parse "static" or "static, chunk_size"
+                if let Some((kind_str, chunk_str)) = lang::split_once_top_level(content, ',') {
+                    let kind = match kind_str.trim() {
+                        "static" => ScheduleKind::Static,
+                        "dynamic" => ScheduleKind::Dynamic,
+                        "guided" => ScheduleKind::Guided,
+                        "auto" => ScheduleKind::Auto,
+                        "runtime" => ScheduleKind::Runtime,
+                        _ => ScheduleKind::Static, // Default to static for unknown
+                    };
+                    Ok(ClauseData::DistSchedule {
+                        kind,
+                        chunk_size: Some(Expression::new(chunk_str.trim(), config)),
+                    })
+                } else {
+                    let kind = match content.trim() {
+                        "static" => ScheduleKind::Static,
+                        "dynamic" => ScheduleKind::Dynamic,
+                        "guided" => ScheduleKind::Guided,
+                        "auto" => ScheduleKind::Auto,
+                        "runtime" => ScheduleKind::Runtime,
+                        _ => ScheduleKind::Static, // Default to static for unknown
+                    };
+                    Ok(ClauseData::DistSchedule {
+                        kind,
+                        chunk_size: None,
+                    })
+                }
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "dist_schedule requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // num_teams(num)
+        Some(OpenMpClause::NumTeams) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::NumTeams {
+                    num: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "num_teams requires expression".to_string(),
+                ))
+            }
+        }
+
+        // thread_limit(limit)
+        Some(OpenMpClause::ThreadLimit) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::ThreadLimit {
+                    limit: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "thread_limit requires expression".to_string(),
+                ))
+            }
+        }
+
+        // grainsize(grain)
+        Some(OpenMpClause::Grainsize) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Grainsize {
+                    grain: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "grainsize requires expression".to_string(),
+                ))
+            }
+        }
+
+        // num_tasks(num)
+        Some(OpenMpClause::NumTasks) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::NumTasks {
+                    num: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "num_tasks requires expression".to_string(),
+                ))
+            }
+        }
+
+        // copyprivate(list)
+        Some(OpenMpClause::Copyprivate) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::Copyprivate { items })
+            } else {
+                Ok(ClauseData::Copyprivate { items: vec![] })
+            }
+        }
+
+        // filter(thread_num)
+        Some(OpenMpClause::Filter) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Filter {
+                    thread_num: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "filter requires expression".to_string(),
+                ))
+            }
+        }
+
+        // priority(priority)
+        Some(OpenMpClause::Priority) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Priority {
+                    priority: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "priority requires expression".to_string(),
+                ))
+            }
+        }
+
+        // device(device_num)
+        Some(OpenMpClause::Device) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Device {
+                    device_num: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "device requires expression".to_string(),
+                ))
+            }
+        }
+
+        Some(OpenMpClause::Hint) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Hint {
+                    hint_expr: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "hint requires expression".to_string(),
+                ))
+            }
+        }
+
+        Some(OpenMpClause::Align) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Align {
+                    alignment: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "align requires expression".to_string(),
+                ))
+            }
+        }
+
+        Some(OpenMpClause::Allocator) => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Allocator {
+                    allocator: Identifier::new(content.trim()),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "allocator requires identifier".to_string(),
+                ))
+            }
+        }
+
         // For unsupported clauses, return a generic representation
         _ => Ok(ClauseData::Generic {
-            name: Identifier::new(clause_name),
+            name: Identifier::new(clause.name.as_ref()),
             data: match &clause.kind {
                 ClauseKind::Bare => None,
                 ClauseKind::Parenthesized(ref content) => Some(content.as_ref().to_string()),
@@ -802,6 +1082,31 @@ pub fn convert_directive<'a>(
     // Convert clauses
     let mut clauses = Vec::new();
     let clause_config = config.for_language(language);
+
+    // Handle directive-specific variable lists from parameter field
+    // Directives like allocate(a,b,c), threadprivate(x,y), flush(vars) store
+    // their variable list in the parameter field
+    if let Some(ref param) = directive.parameter {
+        if matches!(kind, DirectiveKind::Allocate | DirectiveKind::Threadprivate | DirectiveKind::Flush) {
+            // Parse the variable list from parameter: "(a,b,c)" -> ["a", "b", "c"]
+            let param_str = param.trim();
+            if param_str.starts_with('(') && param_str.ends_with(')') {
+                let list_content = &param_str[1..param_str.len()-1];
+                let vars: Vec<ClauseItem> = list_content
+                    .split(',')
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .map(|s| ClauseItem::Identifier(Identifier::new(s)))
+                    .collect();
+
+                if !vars.is_empty() {
+                    // Add as ItemList clause at the beginning
+                    clauses.push(ClauseData::ItemList(vars));
+                }
+            }
+        }
+    }
+
     for clause in &directive.clauses {
         let clause_data = parse_clause_data(clause, &clause_config)?;
         clauses.push(clause_data);

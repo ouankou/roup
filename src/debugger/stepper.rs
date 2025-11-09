@@ -253,6 +253,7 @@ impl DebugSession {
                     .iter()
                     .map(|c| Clause {
                         name: Cow::Owned(c.name.to_string()),
+                        variant: c.variant,
                         kind: match &c.kind {
                             crate::parser::ClauseKind::Bare => crate::parser::ClauseKind::Bare,
                             crate::parser::ClauseKind::Parenthesized(s) => {

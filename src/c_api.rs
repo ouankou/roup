@@ -64,9 +64,12 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
-use crate::ir::{convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
+use crate::ir::{
+    convert_directive, ClauseData as IrClauseData, DefaultKind, Language as IrLanguage,
+    ParserConfig, ProcBind, ReductionOperator, ScheduleKind, SourceLocation,
+};
 use crate::lexer::Language;
-use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
+use crate::parser::{openmp, parse_omp_directive};
 
 mod openacc;
 pub use openacc::*;
@@ -85,22 +88,44 @@ pub const ROUP_LANG_FORTRAN_FREE: i32 = 1;
 pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 
 // ============================================================================
+// Clause Kind Constants - Source of Truth for Auto-Generation
+// ============================================================================
+// These constants are auto-generated to roup_constants.h as ROUP_CLAUSE_KIND_*
+// NEVER use hard-coded numbers - always use these constants!
+
+// ============================================================================
+// Auto-Generated Constants Modules
+// ============================================================================
+// ALL constants are auto-generated to roup_constants.h during build
+// Source of truth for each:
+// - clause_kind: Defined in IR ClauseData enum variants
+// - reduction_op: Defined in IR ReductionOperator enum
+// - schedule_kind: Defined in IR ScheduleKind enum
+// - default_kind: Defined in IR DefaultKind enum
+//
+// NO hard-coded numbers in source code!
+// To add new constants: Update the IR enum, then rebuild
+
+// Import auto-generated constants
+include!(concat!(env!("OUT_DIR"), "/constants_modules.rs"));
+
+// ============================================================================
 // Constants Documentation
 // ============================================================================
 //
 // SINGLE SOURCE OF TRUTH: This file defines all directive and clause kind codes.
 //
 // The constants are defined in:
-// - directive_name_to_kind() function (directive codes 0-16)
-// - convert_clause() function (clause codes 0-11)
+// - clause_kind module above (clause codes, auto-generated to roup_constants.h)
+// - IR DirectiveKind enum (directive codes, auto-generated from src/ir/directive.rs)
 //
 // For C/C++ usage:
 // - build.rs auto-generates src/roup_constants.h with #define macros
 // - The header provides compile-time constants for switch/case statements
 // - Never modify roup_constants.h directly - edit this file instead
 //
-// Maintenance: When adding new directives/clauses:
-// 1. Update directive_name_to_kind() or convert_clause() in this file
+// Maintenance: When adding new clauses:
+// 1. Update clause_kind module in this file
 // 2. Run `cargo build` to regenerate roup_constants.h
 // 3. The header will automatically include your new constants
 
@@ -123,10 +148,16 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 ///
 /// Represents a parsed OpenMP directive with its clauses.
 /// C sees this as an opaque pointer - internal structure is hidden.
+///
+/// CRITICAL: Owns the DirectiveIR to keep clause pointers valid!
+/// OmpClause structs contain pointers to IR data (Expression, ClauseItem).
+/// We MUST keep the DirectiveIR alive for as long as OmpDirective exists.
 #[repr(C)]
 pub struct OmpDirective {
-    name: *const c_char,     // Directive name (e.g., "parallel")
-    clauses: Vec<OmpClause>, // Associated clauses
+    kind: i32,                              // DirectiveKind enum value (e.g., Parallel=0, For=10, etc.)
+    name: *const c_char,                    // Directive name for debugging (e.g., "parallel")
+    clauses: Vec<OmpClause>,                // Associated clauses (contain IR pointers!)
+    ir_directive: Box<crate::ir::DirectiveIR>,  // OWN the IR to keep pointers valid!
 }
 
 /// Opaque clause type (C-compatible)
@@ -141,6 +172,12 @@ pub struct OmpClause {
 
 /// Clause-specific data stored in a C union
 ///
+/// ARCHITECTURE: NO STRING OPERATIONS!
+/// ===================================
+/// This union stores POINTERS to IR objects, NOT converted strings.
+/// The compat layer calls IR helper functions when it needs actual strings.
+/// ALL string conversion happens in IR layer only.
+///
 /// Learning Rust: Why ManuallyDrop?
 /// =================================
 /// Unions in Rust don't know which variant is active, so they can't
@@ -150,23 +187,41 @@ pub struct OmpClause {
 union ClauseData {
     schedule: ManuallyDrop<ScheduleData>,
     reduction: ManuallyDrop<ReductionData>,
+    linear: ManuallyDrop<LinearData>,
+    aligned: ManuallyDrop<AlignedData>,
     default: i32,
-    variables: *mut OmpStringList,
-    expression: *const c_char, // For num_threads, if, collapse, etc.
+    items: *const Vec<crate::ir::ClauseItem>,    // Pointer to IR clause items (NO string conversion!)
+    expression: *const crate::ir::Expression,     // Pointer to IR expression (NO string conversion!)
+    identifier: *const crate::ir::Identifier,     // Pointer to IR identifier (NO string conversion!)
 }
 
 /// Schedule clause data (static, dynamic, guided, etc.)
 #[repr(C)]
-#[derive(Copy, Clone)]
 struct ScheduleData {
     kind: i32, // 0=static, 1=dynamic, 2=guided, 3=auto, 4=runtime
+    chunk_size: *const crate::ir::Expression,  // Optional chunk size expression
 }
 
 /// Reduction clause data (operator and variables)
 #[repr(C)]
 struct ReductionData {
-    operator: i32,                // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
-    variables: *mut OmpStringList, // Variable list
+    operator: i32,                             // Reduction operator enum value
+    items: *const Vec<crate::ir::ClauseItem>,  // Pointer to IR clause items (NO string conversion!)
+}
+
+/// Linear clause data (variables, step, modifier)
+#[repr(C)]
+struct LinearData {
+    items: *const Vec<crate::ir::ClauseItem>,  // Pointer to variable list
+    step: *const crate::ir::Expression,        // Pointer to step expression (nullable)
+    modifier: i32,                             // Linear modifier: 0=val, 1=ref, 2=uval, -1=none
+}
+
+/// Aligned clause data (variables, alignment)
+#[repr(C)]
+struct AlignedData {
+    items: *const Vec<crate::ir::ClauseItem>,  // Pointer to variable list
+    alignment: *const crate::ir::Expression,   // Pointer to alignment expression (nullable)
 }
 
 /// Iterator over clauses
@@ -177,14 +232,6 @@ struct ReductionData {
 pub struct OmpClauseIterator {
     clauses: Vec<*const OmpClause>, // Pointers to clauses
     index: usize,                   // Current position
-}
-
-/// List of strings (for variable names in clauses)
-///
-/// Used for private, shared, reduction variable lists.
-#[repr(C)]
-pub struct OmpStringList {
-    items: Vec<*const c_char>, // NULL-terminated C strings
 }
 
 // ============================================================================
@@ -235,14 +282,35 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
         Err(_) => return ptr::null_mut(), // Parse error
     };
 
+    // Convert to IR to get DirectiveKind enum (avoids string operations in C API)
+    let ir_directive = match convert_directive(
+        &directive,
+        SourceLocation::default(),
+        IrLanguage::C,
+        &ParserConfig::default(),
+    ) {
+        Ok(ir) => ir,
+        Err(_) => return ptr::null_mut(), // Conversion error
+    };
+
+    // Extract DirectiveKind as integer (no string operations!)
+    let kind = ir_directive.kind() as i32;
+
+    // Convert IR clauses (ClauseData) to C-compatible format
+    // Use IR layer's semantic clauses, NOT raw parser clauses!
+    let clauses: Vec<OmpClause> = ir_directive
+        .clauses()
+        .iter()
+        .map(|c| convert_clause_from_ir(c))
+        .collect();
+
     // Convert to C-compatible format
+    // CRITICAL: Store ir_directive so clause pointers remain valid!
     let c_directive = OmpDirective {
+        kind,
         name: allocate_c_string(directive.name.as_ref()),
-        clauses: directive
-            .clauses
-            .into_iter()
-            .map(|c| convert_clause(&c))
-            .collect(),
+        clauses,
+        ir_directive: Box::new(ir_directive),  // Own the IR to keep pointers valid!
     };
 
     // UNSAFE BLOCK 2: Convert Box to raw pointer for C
@@ -355,14 +423,41 @@ pub extern "C" fn roup_parse_with_language(
         Err(_) => return ptr::null_mut(),
     };
 
+    // Convert lexer::Language to ir::Language
+    let ir_lang = match lang {
+        Language::C => IrLanguage::C,
+        Language::FortranFree | Language::FortranFixed => IrLanguage::Fortran,
+    };
+
+    // Convert to IR to get DirectiveKind enum (avoids string operations in C API)
+    let ir_directive = match convert_directive(
+        &directive,
+        SourceLocation::default(),
+        ir_lang,
+        &ParserConfig::default(),
+    ) {
+        Ok(ir) => ir,
+        Err(_) => return ptr::null_mut(), // Conversion error
+    };
+
+    // Extract DirectiveKind as integer (no string operations!)
+    let kind = ir_directive.kind() as i32;
+
+    // Convert IR clauses (ClauseData) to C-compatible format
+    // Use IR layer's semantic clauses, NOT raw parser clauses!
+    let clauses: Vec<OmpClause> = ir_directive
+        .clauses()
+        .iter()
+        .map(|c| convert_clause_from_ir(c))
+        .collect();
+
     // Convert to C-compatible format
+    // CRITICAL: Store ir_directive so clause pointers remain valid!
     let c_directive = OmpDirective {
+        kind,
         name: allocate_c_string(directive.name.as_ref()),
-        clauses: directive
-            .clauses
-            .into_iter()
-            .map(|c| convert_clause(&c))
-            .collect(),
+        clauses,
+        ir_directive: Box::new(ir_directive),  // Own the IR to keep pointers valid!
     };
 
     Box::into_raw(Box::new(c_directive))
@@ -542,9 +637,17 @@ pub extern "C" fn roup_clause_free(clause: *mut OmpClause) {
 // Directive Query Functions (All Safe)
 // ============================================================================
 
-/// Get directive kind.
+/// Get directive kind as integer enum value.
 ///
+/// Returns DirectiveKind enum value (e.g., Parallel=0, For=10, etc.).
 /// Returns -1 if directive is NULL.
+///
+/// ## Example
+/// ```c
+/// OmpDirective* dir = roup_parse("#pragma omp parallel");
+/// int32_t kind = roup_directive_kind(dir);
+/// // kind == 0 (Parallel)
+/// ```
 #[no_mangle]
 pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
     if directive.is_null() {
@@ -555,7 +658,7 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
     // Safety: Caller guarantees valid pointer from roup_parse
     unsafe {
         let dir = &*directive;
-        directive_name_to_kind(dir.name)
+        dir.kind  // DirectiveKind enum value stored during parsing
     }
 }
 
@@ -698,11 +801,37 @@ pub extern "C" fn roup_clause_schedule_kind(clause: *const OmpClause) -> i32 {
 
     unsafe {
         let c = &*clause;
-        if c.kind != 7 {
+        if c.kind != clause_kind::SCHEDULE {
             // Not a schedule clause
             return -1;
         }
         c.data.schedule.kind
+    }
+}
+
+/// Get chunk size from schedule clause as a string.
+///
+/// Returns NULL if clause is NULL, not a schedule clause, or has no chunk size.
+/// Caller must free the returned string with roup_string_free().
+#[no_mangle]
+pub extern "C" fn roup_clause_schedule_chunk_size(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != clause_kind::SCHEDULE {
+            return ptr::null();
+        }
+
+        let chunk_ptr = c.data.schedule.chunk_size;
+        if chunk_ptr.is_null() {
+            return ptr::null();
+        }
+
+        let chunk_expr = &*chunk_ptr;
+        allocate_c_string(&chunk_expr.to_string())
     }
 }
 
@@ -717,7 +846,7 @@ pub extern "C" fn roup_clause_reduction_operator(clause: *const OmpClause) -> i3
 
     unsafe {
         let c = &*clause;
-        if c.kind != 6 {
+        if c.kind != clause_kind::REDUCTION {
             // Not a reduction clause
             return -1;
         }
@@ -736,7 +865,7 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
 
     unsafe {
         let c = &*clause;
-        if c.kind != 11 {
+        if c.kind != clause_kind::DEFAULT {
             // Not a default clause
             return -1;
         }
@@ -744,107 +873,246 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
     }
 }
 
-// ============================================================================
-// Variable List Functions (UNSAFE BLOCKS 9-11)
-// ============================================================================
-
-/// Get variable list from clause (private, shared, reduction, etc.).
+/// Get proc bind kind from proc_bind clause.
 ///
-/// Returns NULL if clause is NULL or has no variables.
-/// Returned pointer is valid until clause is freed.
+/// Returns -1 if clause is NULL or not a proc_bind clause.
 #[no_mangle]
-pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStringList {
+pub extern "C" fn roup_clause_proc_bind_kind(clause: *const OmpClause) -> i32 {
     if clause.is_null() {
-        return ptr::null_mut();
+        return -1;
     }
 
-    // UNSAFE BLOCK 8: Dereference clause for variable check
-    // Safety: Caller guarantees valid clause pointer
     unsafe {
         let c = &*clause;
-
-        // Variable list clauses: private(2), shared(3), firstprivate(4), lastprivate(5)
-        if c.kind >= 2 && c.kind <= 5 {
-            return c.data.variables;
+        if c.kind != clause_kind::PROC_BIND {
+            // Not a proc_bind clause
+            return -1;
         }
-
-        // Reduction clause (6) has variables in reduction struct
-        if c.kind == 6 {
-            return c.data.reduction.variables;
-        }
-
-        ptr::null_mut()
+        c.data.default
     }
 }
 
-/// Get length of string list.
+/// Convert default kind integer to string (calls IR to_string).
 ///
-/// Returns 0 if list is NULL.
+/// Returns NULL if kind is invalid.
+/// Caller must free the returned string with roup_string_free().
 #[no_mangle]
-pub extern "C" fn roup_string_list_len(list: *const OmpStringList) -> i32 {
-    if list.is_null() {
+pub extern "C" fn roup_default_kind_to_string(kind: i32) -> *const c_char {
+    let default_kind = match kind {
+        k if k == default_kind::SHARED => DefaultKind::Shared,
+        k if k == default_kind::NONE => DefaultKind::None,
+        k if k == default_kind::PRIVATE => DefaultKind::Private,
+        k if k == default_kind::FIRSTPRIVATE => DefaultKind::Firstprivate,
+        _ => return ptr::null(),
+    };
+
+    allocate_c_string(&default_kind.to_string())
+}
+
+/// Convert proc bind kind integer to string (calls IR to_string).
+///
+/// Returns NULL if kind is invalid.
+/// Caller must free the returned string with roup_string_free().
+#[no_mangle]
+pub extern "C" fn roup_proc_bind_kind_to_string(kind: i32) -> *const c_char {
+    let proc_bind = match kind {
+        k if k == proc_bind_kind::MASTER => ProcBind::Master,
+        k if k == proc_bind_kind::CLOSE => ProcBind::Close,
+        k if k == proc_bind_kind::SPREAD => ProcBind::Spread,
+        k if k == proc_bind_kind::PRIMARY => ProcBind::Primary,
+        _ => return ptr::null(),
+    };
+
+    allocate_c_string(&proc_bind.to_string())
+}
+
+// ============================================================================
+// IR Helper Functions - String Conversion (ONLY place with string operations!)
+// ============================================================================
+//
+// ARCHITECTURE: NO STRING OPERATIONS in C API!
+// ============================================
+// These helper functions are the ONLY place where string conversion happens.
+// They call IR layer's Display/to_string methods when compat layer needs strings.
+// The C API itself NEVER converts to strings - it only exposes IR pointers.
+
+/// Get count of items in clause (for private, shared, firstprivate, lastprivate, reduction).
+///
+/// Returns 0 if clause is NULL or has no items.
+#[no_mangle]
+pub extern "C" fn roup_clause_items_count(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
         return 0;
     }
 
     unsafe {
-        let l = &*list;
-        l.items.len() as i32
+        let c = &*clause;
+
+        // Variable list clauses: private, shared, firstprivate, lastprivate,
+        // copyin, copyprivate, affinity
+        if c.kind == clause_kind::PRIVATE
+            || c.kind == clause_kind::SHARED
+            || c.kind == clause_kind::FIRSTPRIVATE
+            || c.kind == clause_kind::LASTPRIVATE
+            || c.kind == clause_kind::COPYIN
+            || c.kind == clause_kind::COPYPRIVATE
+            || c.kind == clause_kind::AFFINITY {
+            let items_ptr = c.data.items;
+            if items_ptr.is_null() {
+                return 0;
+            }
+            let items = &*items_ptr;
+            return items.len() as i32;
+        }
+
+        // Linear clause: access items from specialized struct
+        if c.kind == clause_kind::LINEAR {
+            let linear_data = &*c.data.linear;
+            if linear_data.items.is_null() {
+                return 0;
+            }
+            let items = &*linear_data.items;
+            return items.len() as i32;
+        }
+
+        // Aligned clause: access items from specialized struct
+        if c.kind == clause_kind::ALIGNED {
+            let aligned_data = &*c.data.aligned;
+            if aligned_data.items.is_null() {
+                return 0;
+            }
+            let items = &*aligned_data.items;
+            return items.len() as i32;
+        }
+
+        // Reduction clause (6) has items in reduction struct
+        if c.kind == clause_kind::REDUCTION {
+            let items_ptr = c.data.reduction.items;
+            if items_ptr.is_null() {
+                return 0;
+            }
+            let items = &*items_ptr;
+            return items.len() as i32;
+        }
+
+        // Generic/ItemList clause: used by allocate, threadprivate directives
+        if c.kind == clause_kind::GENERIC {
+            let items_ptr = c.data.items;
+            if items_ptr.is_null() {
+                return 0;
+            }
+            let items = &*items_ptr;
+            return items.len() as i32;
+        }
+
+        0
     }
 }
 
-/// Get string at index from list.
+/// Convert clause item at index to C string (calls IR to_string).
 ///
-/// Returns NULL if list is NULL or index out of bounds.
-/// Returned pointer is valid until list is freed.
+/// This function calls the IR layer's Display trait to convert ClauseItem to string.
+/// The compat layer calls this ONLY when it needs actual string representation.
+///
+/// Returns NULL if clause is NULL, has no items, or index out of bounds.
+/// Caller must free the returned string with roup_string_free().
 #[no_mangle]
-pub extern "C" fn roup_string_list_get(list: *const OmpStringList, index: i32) -> *const c_char {
-    if list.is_null() || index < 0 {
+pub extern "C" fn roup_clause_item_to_string(clause: *const OmpClause, index: i32) -> *const c_char {
+    if clause.is_null() || index < 0 {
         return ptr::null();
     }
 
-    // UNSAFE BLOCK 9: Dereference list
-    // Safety: Caller guarantees valid list pointer
     unsafe {
-        let l = &*list;
+        let c = &*clause;
         let idx = index as usize;
 
-        if idx >= l.items.len() {
-            return ptr::null();
-        }
-
-        l.items[idx]
-    }
-}
-
-/// Free string list.
-#[no_mangle]
-pub extern "C" fn roup_string_list_free(list: *mut OmpStringList) {
-    if list.is_null() {
-        return;
-    }
-
-    // UNSAFE BLOCK 10: Free list and strings
-    // Safety: Pointer from roup_clause_variables
-    unsafe {
-        let boxed = Box::from_raw(list);
-
-        // Free each C string (was allocated with CString::into_raw)
-        for item_ptr in &boxed.items {
-            if !item_ptr.is_null() {
-                drop(CString::from_raw(*item_ptr as *mut c_char));
+        // Variable list clauses: private, shared, firstprivate, lastprivate,
+        // copyin, copyprivate, affinity
+        if c.kind == clause_kind::PRIVATE
+            || c.kind == clause_kind::SHARED
+            || c.kind == clause_kind::FIRSTPRIVATE
+            || c.kind == clause_kind::LASTPRIVATE
+            || c.kind == clause_kind::COPYIN
+            || c.kind == clause_kind::COPYPRIVATE
+            || c.kind == clause_kind::AFFINITY {
+            let items_ptr = c.data.items;
+            if items_ptr.is_null() {
+                return ptr::null();
             }
+            let items = &*items_ptr;
+            if idx >= items.len() {
+                return ptr::null();
+            }
+            // Call IR layer's Display trait (ONLY place with string conversion!)
+            return allocate_c_string(&items[idx].to_string());
         }
 
-        // Box dropped here
+        // Linear clause: access items from specialized struct
+        if c.kind == clause_kind::LINEAR {
+            let linear_data = &*c.data.linear;
+            if linear_data.items.is_null() {
+                return ptr::null();
+            }
+            let items = &*linear_data.items;
+            if idx >= items.len() {
+                return ptr::null();
+            }
+            return allocate_c_string(&items[idx].to_string());
+        }
+
+        // Aligned clause: access items from specialized struct
+        if c.kind == clause_kind::ALIGNED {
+            let aligned_data = &*c.data.aligned;
+            if aligned_data.items.is_null() {
+                return ptr::null();
+            }
+            let items = &*aligned_data.items;
+            if idx >= items.len() {
+                return ptr::null();
+            }
+            return allocate_c_string(&items[idx].to_string());
+        }
+
+        // Reduction clause (6) has items in reduction struct
+        if c.kind == clause_kind::REDUCTION {
+            let items_ptr = c.data.reduction.items;
+            if items_ptr.is_null() {
+                return ptr::null();
+            }
+            let items = &*items_ptr;
+            if idx >= items.len() {
+                return ptr::null();
+            }
+            // Call IR layer's Display trait (ONLY place with string conversion!)
+            return allocate_c_string(&items[idx].to_string());
+        }
+
+        // Generic/ItemList clause: used by allocate, threadprivate directives
+        if c.kind == clause_kind::GENERIC {
+            let items_ptr = c.data.items;
+            if items_ptr.is_null() {
+                return ptr::null();
+            }
+            let items = &*items_ptr;
+            if idx >= items.len() {
+                return ptr::null();
+            }
+            return allocate_c_string(&items[idx].to_string());
+        }
+
+        ptr::null()
     }
 }
 
-/// Get expression from clause (num_threads, if, collapse, etc.).
+/// Convert clause expression to C string (calls IR to_string).
+///
+/// This function calls the IR layer's Display trait to convert Expression to string.
+/// The compat layer calls this ONLY when it needs actual string representation.
 ///
 /// Returns NULL if clause is NULL or has no expression.
-/// Returned pointer is valid until clause is freed.
+/// Caller must free the returned string with roup_string_free().
 #[no_mangle]
-pub extern "C" fn roup_clause_expression(clause: *const OmpClause) -> *const c_char {
+pub extern "C" fn roup_clause_expression_to_string(clause: *const OmpClause) -> *const c_char {
     if clause.is_null() {
         return ptr::null();
     }
@@ -852,9 +1120,93 @@ pub extern "C" fn roup_clause_expression(clause: *const OmpClause) -> *const c_c
     unsafe {
         let c = &*clause;
 
-        // Expression clauses: num_threads(0), if(1), collapse(8), ordered(9)
-        if c.kind == 0 || c.kind == 1 || c.kind == 8 || c.kind == 9 {
-            return c.data.expression;
+        // Expression clauses: num_threads(0), if(1), collapse(8), ordered(9),
+        // safelen(16), simdlen(17), num_teams(20), thread_limit(21),
+        // grainsize(22), num_tasks(23), filter(25), priority(26), device(27),
+        // hint, align
+        if c.kind == clause_kind::NUM_THREADS
+            || c.kind == clause_kind::IF
+            || c.kind == clause_kind::COLLAPSE
+            || c.kind == clause_kind::ORDERED
+            || c.kind == clause_kind::SAFELEN
+            || c.kind == clause_kind::SIMDLEN
+            || c.kind == clause_kind::NUM_TEAMS
+            || c.kind == clause_kind::THREAD_LIMIT
+            || c.kind == clause_kind::GRAINSIZE
+            || c.kind == clause_kind::NUM_TASKS
+            || c.kind == clause_kind::FILTER
+            || c.kind == clause_kind::PRIORITY
+            || c.kind == clause_kind::DEVICE
+            || c.kind == clause_kind::HINT
+            || c.kind == clause_kind::ALIGN
+        {
+            let expr_ptr = c.data.expression;
+            if expr_ptr.is_null() {
+                return ptr::null();
+            }
+            let expression = &*expr_ptr;
+            // Call IR layer's Display trait (ONLY place with string conversion!)
+            return allocate_c_string(&expression.to_string());
+        }
+
+        // Linear clause: return step expression
+        if c.kind == clause_kind::LINEAR {
+            let linear_data = &*c.data.linear;
+            if linear_data.step.is_null() {
+                return ptr::null();
+            }
+            let expression = &*linear_data.step;
+            return allocate_c_string(&expression.to_string());
+        }
+
+        // Aligned clause: return alignment expression
+        if c.kind == clause_kind::ALIGNED {
+            let aligned_data = &*c.data.aligned;
+            if aligned_data.alignment.is_null() {
+                return ptr::null();
+            }
+            let expression = &*aligned_data.alignment;
+            return allocate_c_string(&expression.to_string());
+        }
+
+        ptr::null()
+    }
+}
+
+/// Get identifier string from clause (allocator, etc.)
+///
+/// Returns a C string containing the identifier name, or NULL if the clause
+/// doesn't have an identifier or on error.
+///
+/// ## Memory Management
+/// The returned string must be freed with `roup_string_free()`.
+///
+/// ## Example
+/// ```c
+/// const char* allocator = roup_clause_identifier_to_string(clause);
+/// if (allocator) {
+///     printf("Allocator: %s\n", allocator);
+///     roup_string_free((char*)allocator);
+/// }
+/// ```
+#[no_mangle]
+pub extern "C" fn roup_clause_identifier_to_string(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+
+        // Allocator clause uses identifier
+        if c.kind == clause_kind::ALLOCATOR {
+            let id_ptr = c.data.identifier;
+            if id_ptr.is_null() {
+                return ptr::null();
+            }
+            let identifier = &*id_ptr;
+            // Call IR layer's name() method to get the string
+            return allocate_c_string(identifier.name());
         }
 
         ptr::null()
@@ -904,10 +1256,10 @@ fn allocate_c_string(s: &str) -> *const c_char {
     c_string.into_raw() as *const c_char
 }
 
-/// Convert Rust Clause to C-compatible OmpClause.
+/// Convert IR ClauseData to C-compatible OmpClause.
 ///
-/// Maps clause names to integer kind codes (C doesn't have Rust enums).
-/// Each clause type gets a unique ID and appropriate data representation.
+/// Uses ROUP IR's structured ClauseData - NO string parsing!
+/// All semantic information (variables, expressions, operators) comes from IR layer.
 ///
 /// ## Clause Kind Mapping:
 /// - 0 = num_threads    - 6 = reduction
@@ -917,363 +1269,345 @@ fn allocate_c_string(s: &str) -> *const c_char {
 /// - 4 = firstprivate   - 10 = nowait
 /// - 5 = lastprivate    - 11 = default
 /// - 999 = unknown
-/// Helper: Convert Rust variable list to C string list
-fn variables_to_c_list(variables: &[std::borrow::Cow<str>]) -> *mut OmpStringList {
-    if variables.is_empty() {
-        return ptr::null_mut();
-    }
+/// Convert IR ClauseData to C API OmpClause
+///
+/// ARCHITECTURE: NO STRING OPERATIONS!
+/// ===================================
+/// This function stores POINTERS to IR objects, NOT converted strings.
+/// NO .to_string(), NO allocate_c_string(), NO string comparisons.
+/// The compat layer calls IR helper functions when it needs strings.
+fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
+    use IrClauseData::*;
 
-    let c_strings: Vec<*const c_char> = variables
-        .iter()
-        .map(|v| {
-            let c_str = CString::new(v.as_ref()).unwrap();
-            c_str.into_raw() as *const c_char
-        })
-        .collect();
+    match clause {
+        // NumThreads: expression clause - store pointer to IR Expression
+        NumThreads { num } => OmpClause {
+            kind: clause_kind::NUM_THREADS,
+            data: ClauseData {
+                expression: num as *const crate::ir::Expression,
+            },
+        },
 
-    let list = OmpStringList { items: c_strings };
-    Box::into_raw(Box::new(list))
-}
+        // If: expression clause - store pointer to IR Expression
+        If { condition, .. } => OmpClause {
+            kind: clause_kind::IF,
+            data: ClauseData {
+                expression: condition as *const crate::ir::Expression,
+            },
+        },
 
-/// Helper: Convert expression to C string
-fn expression_to_c_string(expr: &str) -> *const c_char {
-    if expr.is_empty() {
-        return ptr::null();
-    }
-    let c_str = CString::new(expr).unwrap();
-    c_str.into_raw() as *const c_char
-}
+        // Private: variable list - store pointer to IR ClauseItem Vec
+        Private { items } => OmpClause {
+            kind: clause_kind::PRIVATE,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
 
-fn convert_clause(clause: &Clause) -> OmpClause {
-    // Normalize clause name to lowercase for case-insensitive matching
-    // (Fortran clauses are uppercase, C clauses are lowercase)
-    // Note: One String allocation per clause is acceptable at C API boundary.
-    // Alternative (build-time constant map) requires updating constants_gen.rs
-    // to parse if-else chains instead of match expressions.
-    let normalized_name = clause.name.to_ascii_lowercase();
+        // Shared: variable list - store pointer to IR ClauseItem Vec
+        Shared { items } => OmpClause {
+            kind: clause_kind::SHARED,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
 
-    let (kind, data) = match normalized_name.as_str() {
-        "num_threads" | "if" => {
-            let expr = if let ClauseKind::Parenthesized(ref val) = clause.kind {
-                expression_to_c_string(val.as_ref())
-            } else {
-                ptr::null()
-            };
-            let kind_code = if normalized_name == "num_threads" { 0 } else { 1 };
-            (kind_code, ClauseData { expression: expr })
-        }
-        "private" => {
-            let vars = if let ClauseKind::Parenthesized(ref val) = clause.kind {
-                // Parse comma-separated variable list
-                let var_list: Vec<std::borrow::Cow<str>> = val
-                    .split(',')
-                    .map(|v| std::borrow::Cow::Borrowed(v.trim()))
-                    .collect();
-                variables_to_c_list(&var_list)
-            } else {
-                ptr::null_mut()
-            };
-            (2, ClauseData { variables: vars })
-        }
-        "shared" => {
-            let vars = if let ClauseKind::Parenthesized(ref val) = clause.kind {
-                let var_list: Vec<std::borrow::Cow<str>> = val
-                    .split(',')
-                    .map(|v| std::borrow::Cow::Borrowed(v.trim()))
-                    .collect();
-                variables_to_c_list(&var_list)
-            } else {
-                ptr::null_mut()
-            };
-            (3, ClauseData { variables: vars })
-        }
-        "firstprivate" => {
-            let vars = if let ClauseKind::Parenthesized(ref val) = clause.kind {
-                let var_list: Vec<std::borrow::Cow<str>> = val
-                    .split(',')
-                    .map(|v| std::borrow::Cow::Borrowed(v.trim()))
-                    .collect();
-                variables_to_c_list(&var_list)
-            } else {
-                ptr::null_mut()
-            };
-            (4, ClauseData { variables: vars })
-        }
-        "lastprivate" => {
-            let vars = if let ClauseKind::Parenthesized(ref val) = clause.kind {
-                // Handle lastprivate which might have modifiers like "conditional:vars"
-                let vars_part = if let Some(colon_idx) = val.find(':') {
-                    &val[colon_idx + 1..]
-                } else {
-                    val.as_ref()
-                };
-                let var_list: Vec<std::borrow::Cow<str>> = vars_part
-                    .split(',')
-                    .map(|v| std::borrow::Cow::Borrowed(v.trim()))
-                    .collect();
-                variables_to_c_list(&var_list)
-            } else {
-                ptr::null_mut()
-            };
-            (5, ClauseData { variables: vars })
-        }
-        "reduction" => {
-            let operator = parse_reduction_operator(clause);
-            let vars = if let ClauseKind::Parenthesized(ref args) = clause.kind {
-                // Extract variables after colon in "reduction(+: var1, var2)"
-                if let Some(colon_idx) = args.find(':') {
-                    let vars_part = &args[colon_idx + 1..];
-                    let var_list: Vec<std::borrow::Cow<str>> = vars_part
-                        .split(',')
-                        .map(|v| std::borrow::Cow::Borrowed(v.trim()))
-                        .collect();
-                    variables_to_c_list(&var_list)
-                } else {
-                    ptr::null_mut()
-                }
-            } else {
-                ptr::null_mut()
-            };
-            (
-                6,
-                ClauseData {
-                    reduction: ManuallyDrop::new(ReductionData { operator, variables: vars }),
-                },
-            )
-        }
-        "schedule" => {
-            let schedule_kind = parse_schedule_kind(clause);
-            (
-                7,
-                ClauseData {
-                    schedule: ManuallyDrop::new(ScheduleData {
-                        kind: schedule_kind,
+        // Firstprivate: variable list - store pointer to IR ClauseItem Vec
+        Firstprivate { items } => OmpClause {
+            kind: clause_kind::FIRSTPRIVATE,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // Lastprivate: variable list - store pointer to IR ClauseItem Vec
+        Lastprivate { items, .. } => OmpClause {
+            kind: clause_kind::LASTPRIVATE,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // Reduction: operator + variable list - store enum code + pointer to IR ClauseItem Vec
+        Reduction { operator, items } => {
+            let op_code = map_reduction_operator(operator);
+            OmpClause {
+                kind: clause_kind::REDUCTION,
+                data: ClauseData {
+                    reduction: ManuallyDrop::new(ReductionData {
+                        operator: op_code,
+                        items: items as *const Vec<crate::ir::ClauseItem>,
                     }),
                 },
-            )
+            }
         }
-        "collapse" | "ordered" => {
-            let expr = if let ClauseKind::Parenthesized(ref val) = clause.kind {
-                expression_to_c_string(val.as_ref())
-            } else {
-                ptr::null()
-            };
-            let kind_code = if normalized_name == "collapse" { 8 } else { 9 };
-            (kind_code, ClauseData { expression: expr })
-        }
-        "nowait" => (10, ClauseData { default: 0 }),
-        "default" => {
-            let default_kind = parse_default_kind(clause);
-            (
-                11,
-                ClauseData {
-                    default: default_kind,
+
+        // Schedule: kind + optional chunk size
+        Schedule {
+            kind: sched_kind,
+            chunk_size,
+            ..
+        } => {
+            let kind_code = map_schedule_kind(sched_kind);
+            let chunk_ptr = chunk_size.as_ref().map_or(ptr::null(), |e| e as *const _);
+            OmpClause {
+                kind: clause_kind::SCHEDULE,
+                data: ClauseData {
+                    schedule: ManuallyDrop::new(ScheduleData {
+                        kind: kind_code,
+                        chunk_size: chunk_ptr,
+                    }),
                 },
-            )
+            }
         }
-        _ => (999, ClauseData { default: 0 }), // Unknown
-    };
 
-    OmpClause { kind, data }
+        // Collapse: expression clause - store pointer to IR Expression
+        Collapse { n } => OmpClause {
+            kind: clause_kind::COLLAPSE,
+            data: ClauseData {
+                expression: n as *const crate::ir::Expression,
+            },
+        },
+
+        // Ordered: bare or expression clause - store pointer to IR Expression or default
+        Ordered { n } => {
+            if let Some(expr) = n {
+                OmpClause {
+                    kind: clause_kind::ORDERED,
+                    data: ClauseData {
+                        expression: expr as *const crate::ir::Expression,
+                    },
+                }
+            } else {
+                OmpClause {
+                    kind: clause_kind::ORDERED,
+                    data: ClauseData { default: 0 },
+                }
+            }
+        }
+
+        // Nowait: bare clause - use specific enum variant
+        Nowait => OmpClause {
+            kind: clause_kind::NOWAIT,
+            data: ClauseData { default: 0 },
+        },
+
+        // Memory order clauses - use specific enum variants
+        SeqCst => OmpClause {
+            kind: clause_kind::SEQ_CST,
+            data: ClauseData { default: 0 },
+        },
+
+        AcqRel => OmpClause {
+            kind: clause_kind::ACQ_REL,
+            data: ClauseData { default: 0 },
+        },
+
+        Release => OmpClause {
+            kind: clause_kind::RELEASE,
+            data: ClauseData { default: 0 },
+        },
+
+        Acquire => OmpClause {
+            kind: clause_kind::ACQUIRE,
+            data: ClauseData { default: 0 },
+        },
+
+        Relaxed => OmpClause {
+            kind: clause_kind::RELAXED,
+            data: ClauseData { default: 0 },
+        },
+
+        // Atomic operation type clauses - use specific enum variants
+        Read => OmpClause {
+            kind: clause_kind::READ,
+            data: ClauseData { default: 0 },
+        },
+
+        Write => OmpClause {
+            kind: clause_kind::WRITE,
+            data: ClauseData { default: 0 },
+        },
+
+        Update => OmpClause {
+            kind: clause_kind::UPDATE,
+            data: ClauseData { default: 0 },
+        },
+
+        Capture => OmpClause {
+            kind: clause_kind::CAPTURE,
+            data: ClauseData { default: 0 },
+        },
+
+        Compare => OmpClause {
+            kind: clause_kind::COMPARE,
+            data: ClauseData { default: 0 },
+        },
+
+        // Default: default kind - store enum code
+        Default(default_kind) => {
+            let kind_code = map_default_kind(default_kind);
+            OmpClause {
+                kind: clause_kind::DEFAULT,
+                data: ClauseData {
+                    default: kind_code,
+                },
+            }
+        }
+
+        // Copyin: variable list - store pointer to IR ClauseItem Vec
+        Copyin { items } => OmpClause {
+            kind: clause_kind::COPYIN,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // ProcBind: proc bind kind - store enum code
+        ProcBind(proc_bind_kind) => {
+            let kind_code = map_proc_bind_kind(proc_bind_kind);
+            OmpClause {
+                kind: clause_kind::PROC_BIND,
+                data: ClauseData {
+                    default: kind_code,
+                },
+            }
+        }
+
+        // Linear: variable list + optional step + optional modifier
+        Linear { items, step, modifier } => {
+            let modifier_code = match modifier {
+                Some(m) => *m as i32,
+                None => -1,
+            };
+            let step_ptr = match step {
+                Some(s) => s as *const crate::ir::Expression,
+                None => std::ptr::null(),
+            };
+            OmpClause {
+                kind: clause_kind::LINEAR,
+                data: ClauseData {
+                    linear: ManuallyDrop::new(LinearData {
+                        items: items as *const Vec<crate::ir::ClauseItem>,
+                        step: step_ptr,
+                        modifier: modifier_code,
+                    }),
+                },
+            }
+        }
+
+        // Aligned: variable list + optional alignment
+        Aligned { items, alignment } => {
+            let alignment_ptr = match alignment {
+                Some(a) => a as *const crate::ir::Expression,
+                None => std::ptr::null(),
+            };
+            OmpClause {
+                kind: clause_kind::ALIGNED,
+                data: ClauseData {
+                    aligned: ManuallyDrop::new(AlignedData {
+                        items: items as *const Vec<crate::ir::ClauseItem>,
+                        alignment: alignment_ptr,
+                    }),
+                },
+            }
+        }
+
+        // ItemList: generic variable list used by directives like allocate, threadprivate
+        // These get added to the directive by the convert_directive function
+        ItemList(items) => OmpClause {
+            kind: clause_kind::GENERIC,  // ItemList is not a real clause kind, just a container
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // Hint: expression clause - store pointer to IR Expression
+        Hint { hint_expr } => OmpClause {
+            kind: clause_kind::HINT,
+            data: ClauseData {
+                expression: hint_expr as *const crate::ir::Expression,
+            },
+        },
+
+        // Align: expression clause - store pointer to IR Expression
+        Align { alignment } => OmpClause {
+            kind: clause_kind::ALIGN,
+            data: ClauseData {
+                expression: alignment as *const crate::ir::Expression,
+            },
+        },
+
+        // Allocator: identifier clause - store pointer to identifier
+        Allocator { allocator } => OmpClause {
+            kind: clause_kind::ALLOCATOR,
+            data: ClauseData {
+                identifier: allocator as *const crate::ir::Identifier,
+            },
+        },
+
+        // Generic bare clauses (nogroup, untied, mergeable, etc.) - use GENERIC kind
+        // NO STRING COMPARISON - handled as generic bare clause
+        Bare(_identifier) => {
+            OmpClause {
+                kind: clause_kind::GENERIC,
+                data: ClauseData { default: 0 },
+            }
+        },
+
+        // Unknown/unsupported clauses
+        _ => OmpClause {
+            kind: clause_kind::UNKNOWN,
+            data: ClauseData { default: 0 },
+        },
+    }
 }
 
-/// Parse reduction operator from clause arguments.
-///
-/// Extracts the operator from reduction clause like "reduction(+: sum)".
-/// Returns integer code for the operator type.
-///
-/// ## Operator Codes:
-/// - 0 = +  (addition)      - 5 = ^  (bitwise XOR)
-/// - 1 = -  (subtraction)   - 6 = && (logical AND)
-/// - 2 = *  (multiplication) - 7 = || (logical OR)
-/// - 3 = &  (bitwise AND)   - 8 = min
-/// - 4 = |  (bitwise OR)    - 9 = max
-fn parse_reduction_operator(clause: &Clause) -> i32 {
-    // Look for operator in clause kind
-    if let ClauseKind::Parenthesized(ref args) = clause.kind {
-        let args = args.as_ref();
-        // Operators (+, -, *, etc.) are ASCII symbols - no case conversion needed
-        if args.contains('+') && !args.contains("++") {
-            return 0; // Plus
-        } else if args.contains('-') && !args.contains("--") {
-            return 1; // Minus
-        } else if args.contains('*') {
-            return 2; // Times
-        } else if args.contains('&') && !args.contains("&&") {
-            return 3; // BitwiseAnd
-        } else if args.contains('|') && !args.contains("||") {
-            return 4; // BitwiseOr
-        } else if args.contains('^') {
-            return 5; // BitwiseXor
-        } else if args.contains("&&") {
-            return 6; // LogicalAnd
-        } else if args.contains("||") {
-            return 7; // LogicalOr
-        }
-
-        // For text keywords (min, max), normalize once for case-insensitive comparison
-        let args_lower = args.to_ascii_lowercase();
-        if args_lower.contains("min") {
-            return 8; // Min
-        } else if args_lower.contains("max") {
-            return 9; // Max
-        }
+/// Map IR ReductionOperator to integer code (NO hard-coded numbers!)
+fn map_reduction_operator(op: &ReductionOperator) -> i32 {
+    match op {
+        ReductionOperator::Add => reduction_op::ADD,
+        ReductionOperator::Subtract => reduction_op::SUBTRACT,
+        ReductionOperator::Multiply => reduction_op::MULTIPLY,
+        ReductionOperator::BitwiseAnd => reduction_op::BITWISE_AND,
+        ReductionOperator::BitwiseOr => reduction_op::BITWISE_OR,
+        ReductionOperator::BitwiseXor => reduction_op::BITWISE_XOR,
+        ReductionOperator::LogicalAnd => reduction_op::LOGICAL_AND,
+        ReductionOperator::LogicalOr => reduction_op::LOGICAL_OR,
+        ReductionOperator::Min => reduction_op::MIN,
+        ReductionOperator::Max => reduction_op::MAX,
+        _ => reduction_op::UNKNOWN,
     }
-    0 // Default to plus
 }
 
-/// Parse schedule kind from clause arguments.
-///
-/// Extracts schedule type from clause like "schedule(dynamic, 4)".
-/// Returns integer code for the schedule policy.
-///
-/// ## Schedule Codes:
-/// - 0 = static   (default, divide iterations evenly)
-/// - 1 = dynamic  (distribute at runtime)
-/// - 2 = guided   (decreasing chunk sizes)
-/// - 3 = auto     (compiler decides)
-/// - 4 = runtime  (OMP_SCHEDULE environment variable)
-fn parse_schedule_kind(clause: &Clause) -> i32 {
-    if let ClauseKind::Parenthesized(ref args) = clause.kind {
-        let args = args.as_ref();
-        // Case-insensitive keyword matching without String allocation
-        // Check common case variants (lowercase, uppercase, title case)
-        if args.contains("static") || args.contains("STATIC") || args.contains("Static") {
-            return 0;
-        } else if args.contains("dynamic") || args.contains("DYNAMIC") || args.contains("Dynamic") {
-            return 1;
-        } else if args.contains("guided") || args.contains("GUIDED") || args.contains("Guided") {
-            return 2;
-        } else if args.contains("auto") || args.contains("AUTO") || args.contains("Auto") {
-            return 3;
-        } else if args.contains("runtime") || args.contains("RUNTIME") || args.contains("Runtime") {
-            return 4;
-        }
+/// Map IR ScheduleKind to integer code (NO hard-coded numbers!)
+fn map_schedule_kind(kind: &ScheduleKind) -> i32 {
+    match kind {
+        ScheduleKind::Static => schedule_kind::STATIC,
+        ScheduleKind::Dynamic => schedule_kind::DYNAMIC,
+        ScheduleKind::Guided => schedule_kind::GUIDED,
+        ScheduleKind::Auto => schedule_kind::AUTO,
+        ScheduleKind::Runtime => schedule_kind::RUNTIME,
     }
-    0 // Default to static
 }
 
-/// Parse default clause data-sharing attribute.
-///
-/// Extracts the default sharing from clause like "default(shared)".
-/// Returns integer code for the default policy.
-///
-/// ## Default Codes:
-/// - 0 = shared (all variables shared by default)
-/// - 1 = none   (must explicitly declare all variables)
-fn parse_default_kind(clause: &Clause) -> i32 {
-    if let ClauseKind::Parenthesized(ref args) = clause.kind {
-        let args = args.as_ref();
-        // Case-insensitive keyword matching without String allocation
-        // Check common case variants (lowercase, uppercase, title case)
-        if args.contains("shared") || args.contains("SHARED") || args.contains("Shared") {
-            return 0;
-        } else if args.contains("none") || args.contains("NONE") || args.contains("None") {
-            return 1;
-        }
+/// Map IR DefaultKind to integer code (NO hard-coded numbers!)
+fn map_default_kind(kind: &DefaultKind) -> i32 {
+    match kind {
+        DefaultKind::Shared => default_kind::SHARED,
+        DefaultKind::None => default_kind::NONE,
+        DefaultKind::Private => default_kind::PRIVATE,
+        DefaultKind::Firstprivate => default_kind::FIRSTPRIVATE,
     }
-    0 // Default to shared
 }
 
-/// Convert directive name to kind enum code.
-///
-/// Maps directive names (parallel, for, task, etc.) to integer codes
-/// so C code can use switch statements instead of string comparisons.
-///
-/// ## Directive Codes:
-/// - 0 = parallel     - 5 = critical
-/// - 1 = for          - 6 = atomic
-/// - 2 = sections     - 7 = barrier
-/// - 3 = single       - 8 = master
-/// - 4 = task         - 9 = teams
-/// - 10 = target      - 11 = distribute
-/// - -1 = NULL/unknown
-fn directive_name_to_kind(name: *const c_char) -> i32 {
-    if name.is_null() {
-        return -1;
-    }
-
-    // UNSAFE BLOCK 11: Read directive name
-    // Safety: name pointer is valid (from our own allocation)
-    unsafe {
-        let c_str = CStr::from_ptr(name);
-        let name_str = c_str.to_str().unwrap_or("");
-
-        // Case-insensitive directive name matching via to_lowercase()
-        // Note: This allocates a String. While eq_ignore_ascii_case() would be more efficient,
-        // the build system's constant parser requires a match expression with string literals.
-        // The performance impact is negligible for the C API boundary.
-        //
-        // Fortran DO variants map to same codes as their C FOR equivalents:
-        // - "do" -> 1 (same as "for")
-        // - "parallel do" -> 0 (same as "parallel for")
-        // - "distribute parallel do" -> 15 (same as "distribute parallel for")
-        // - "target parallel do" -> 13 (same as "target parallel for")
-        // etc.
-        match name_str.to_lowercase().as_str() {
-            // Parallel directives (kind 0)
-            "parallel" => 0,
-            "parallel for" => 0,
-            "parallel do" => 0, // Fortran variant
-            "parallel for simd" => 0,
-            "parallel do simd" => 0, // Fortran variant
-            "parallel sections" => 0,
-
-            // For/Do directives (kind 1)
-            "for" => 1,
-            "do" => 1, // Fortran variant
-            "for simd" => 1,
-            "do simd" => 1, // Fortran variant
-
-            // Other basic directives
-            "sections" => 2,
-            "single" => 3,
-            "task" => 4,
-            "master" => 5,
-            "critical" => 6,
-            "barrier" => 7,
-            "taskwait" => 8,
-            "taskgroup" => 9,
-            "atomic" => 10,
-            "flush" => 11,
-            "ordered" => 12,
-
-            // Target directives (kind 13)
-            "target" => 13,
-            "target teams" => 13,
-            "target parallel" => 13,
-            "target parallel for" => 13,
-            "target parallel do" => 13, // Fortran variant
-            "target parallel for simd" => 13,
-            "target parallel do simd" => 13, // Fortran variant
-            "target teams distribute" => 13,
-            "target teams distribute parallel for" => 13,
-            "target teams distribute parallel do" => 13, // Fortran variant
-            "target teams distribute parallel for simd" => 13,
-            "target teams distribute parallel do simd" => 13, // Fortran variant
-
-            // Teams directives (kind 14)
-            "teams" => 14,
-            "teams distribute" => 14,
-            "teams distribute parallel for" => 14,
-            "teams distribute parallel do" => 14, // Fortran variant
-            "teams distribute parallel for simd" => 14,
-            "teams distribute parallel do simd" => 14, // Fortran variant
-
-            // Distribute directives (kind 15)
-            "distribute" => 15,
-            "distribute parallel for" => 15,
-            "distribute parallel do" => 15, // Fortran variant
-            "distribute parallel for simd" => 15,
-            "distribute parallel do simd" => 15, // Fortran variant
-            "distribute simd" => 15,
-
-            // Metadirective (kind 16)
-            "metadirective" => 16,
-
-            // Unknown directive
-            _ => 999,
-        }
+/// Map IR ProcBind to integer code (NO hard-coded numbers!)
+fn map_proc_bind_kind(kind: &ProcBind) -> i32 {
+    match kind {
+        ProcBind::Master => proc_bind_kind::MASTER,
+        ProcBind::Close => proc_bind_kind::CLOSE,
+        ProcBind::Spread => proc_bind_kind::SPREAD,
+        ProcBind::Primary => proc_bind_kind::PRIMARY,
     }
 }
 
@@ -1297,21 +1631,18 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
 /// Reduction clauses (kind 6) do NOT use the `variables` field. Trying to free
 /// clause.data.variables on a reduction clause would read garbage memory from the
 /// wrong union variant (the bytes of ReductionData::operator interpreted as a pointer).
-fn free_clause_data(clause: &OmpClause) {
-    unsafe {
-        // Free variable lists if present
-        // Clause kinds with variable lists (see convert_clause):
-        //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
-        // Other kinds use different union fields:
-        //   6 = reduction (uses .reduction field, NOT .variables)
-        //   7 = schedule (uses .schedule field, NOT .variables)
-        if clause.kind >= 2 && clause.kind <= 5 {
-            let vars_ptr = clause.data.variables;
-            if !vars_ptr.is_null() {
-                roup_string_list_free(vars_ptr);
-            }
-        }
-    }
+/// Free clause data
+///
+/// ARCHITECTURE: NO STRING OPERATIONS!
+/// ===================================
+/// Since ClauseData now stores POINTERS to IR objects (not owned strings),
+/// we do NOT free these pointers here. They are owned by DirectiveIR and
+/// will be freed when the OmpDirective is freed.
+///
+/// This function is now a no-op but kept for API compatibility.
+fn free_clause_data(_clause: &OmpClause) {
+    // No-op: ClauseData stores borrowed pointers to IR objects, not owned data
+    // IR objects are freed when DirectiveIR is dropped
 }
 
 // ============================================================================
