@@ -171,9 +171,75 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     int32_t roup_kind = roup_directive_kind(roup_dir);
     OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
 
-    // Create ompparser-compatible directive
-    // Use ompparser's actual constructor: OpenMPDirective(kind, lang, line, col)
-    OpenMPDirective* dir = new OpenMPDirective(kind, current_lang, 0, 0);
+    // Create ompparser-compatible directive - use specialized types where needed
+    OpenMPDirective* dir = nullptr;
+
+    // Create specialized directive types for directives that need them
+    switch (kind) {
+        case OMPD_atomic:
+            dir = new OpenMPAtomicDirective();
+            break;
+        case OMPD_critical:
+            dir = new OpenMPCriticalDirective();
+            break;
+        case OMPD_flush:
+            dir = new OpenMPFlushDirective();
+            break;
+        case OMPD_ordered:
+            dir = new OpenMPOrderedDirective();
+            break;
+        case OMPD_depobj:
+            dir = new OpenMPDepobjDirective();
+            break;
+        case OMPD_allocate:
+            dir = new OpenMPAllocateDirective();
+            break;
+        case OMPD_threadprivate:
+            dir = new OpenMPThreadprivateDirective();
+            break;
+        case OMPD_groupprivate:
+            dir = new OpenMPGroupprivateDirective();
+            break;
+        case OMPD_declare_simd:
+            dir = new OpenMPDeclareSimdDirective();
+            break;
+        case OMPD_declare_reduction:
+            dir = new OpenMPDeclareReductionDirective();
+            break;
+        case OMPD_declare_variant:
+            dir = new OpenMPDeclareVariantDirective();
+            break;
+        case OMPD_requires:
+            dir = new OpenMPRequiresDirective();
+            break;
+        case OMPD_end:
+            dir = new OpenMPEndDirective();
+            break;
+        default:
+            // Use generic OpenMPDirective for other directive types
+            dir = new OpenMPDirective(kind, current_lang, 0, 0);
+            break;
+    }
+
+    // Set base language for all directive types (generic constructor sets it, but specialized types need it)
+    if (dir) {
+        dir->setBaseLang(current_lang);
+    }
+
+    // Handle atomic variants - ROUP parses "atomic read" as directive AtomicRead,
+    // but ompparser expects directive atomic + clause read
+    if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_READ) {
+        dir->addOpenMPClause(OMPC_read);
+    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_WRITE) {
+        dir->addOpenMPClause(OMPC_write);
+    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_UPDATE) {
+        dir->addOpenMPClause(OMPC_update);
+    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_CAPTURE) {
+        dir->addOpenMPClause(OMPC_capture);
+    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_COMPARE_CAPTURE) {
+        dir->addOpenMPClause(OMPC_compare);
+        dir->addOpenMPClause(OMPC_capture);
+    }
 
     // Convert clauses using ompparser's addOpenMPClause method
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);
