@@ -998,7 +998,9 @@ impl From<Expression> for ClauseItem {
 ///
 /// // reduction(+: sum)
 /// let clause = ClauseData::Reduction {
+///     modifier: None,
 ///     operator: ReductionOperator::Add,
+///     custom_operator: None,
 ///     items: vec![Identifier::new("sum").into()],
 /// };
 /// assert_eq!(clause.to_string(), "reduction(+: sum)");
@@ -1089,18 +1091,21 @@ pub enum ClauseData {
     Reduction {
         modifier: Option<ReductionModifier>,
         operator: ReductionOperator,
+        custom_operator: Option<String>,  // Store custom operator name when operator is Custom
         items: Vec<ClauseItem>,
     },
 
     /// `in_reduction(operator: list)` - Participate in enclosing reduction
     InReduction {
         operator: ReductionOperator,
+        custom_operator: Option<String>,  // Store custom operator name when operator is Custom
         items: Vec<ClauseItem>,
     },
 
     /// `task_reduction(operator: list)` - Task reduction operation
     TaskReduction {
         operator: ReductionOperator,
+        custom_operator: Option<String>,  // Store custom operator name when operator is Custom
         items: Vec<ClauseItem>,
     },
 
@@ -1340,14 +1345,23 @@ impl fmt::Display for ClauseData {
                 write!(f, ")")
             }
             ClauseData::Default(kind) => write!(f, "default({kind})"),
-            ClauseData::Reduction { modifier, operator, items } => {
+            ClauseData::Reduction { modifier, operator, custom_operator, items } => {
                 write!(f, "reduction(")?;
                 if let Some(m) = modifier {
                     if !matches!(m, ReductionModifier::Unspecified) {
                         write!(f, "{m}, ")?;
                     }
                 }
-                write!(f, "{operator}: ")?;
+                // Use custom operator name if provided and operator is Custom
+                if matches!(operator, ReductionOperator::Custom) {
+                    if let Some(custom_op) = custom_operator {
+                        write!(f, "{custom_op}: ")?;
+                    } else {
+                        write!(f, "{operator}: ")?;
+                    }
+                } else {
+                    write!(f, "{operator}: ")?;
+                }
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -1356,8 +1370,18 @@ impl fmt::Display for ClauseData {
                 }
                 write!(f, ")")
             }
-            ClauseData::InReduction { operator, items } => {
-                write!(f, "in_reduction({operator}: ")?;
+            ClauseData::InReduction { operator, custom_operator, items } => {
+                write!(f, "in_reduction(")?;
+                // Use custom operator name if provided and operator is Custom
+                if matches!(operator, ReductionOperator::Custom) {
+                    if let Some(custom_op) = custom_operator {
+                        write!(f, "{custom_op}: ")?;
+                    } else {
+                        write!(f, "{operator}: ")?;
+                    }
+                } else {
+                    write!(f, "{operator}: ")?;
+                }
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -1366,8 +1390,18 @@ impl fmt::Display for ClauseData {
                 }
                 write!(f, ")")
             }
-            ClauseData::TaskReduction { operator, items } => {
-                write!(f, "task_reduction({operator}: ")?;
+            ClauseData::TaskReduction { operator, custom_operator, items } => {
+                write!(f, "task_reduction(")?;
+                // Use custom operator name if provided and operator is Custom
+                if matches!(operator, ReductionOperator::Custom) {
+                    if let Some(custom_op) = custom_operator {
+                        write!(f, "{custom_op}: ")?;
+                    } else {
+                        write!(f, "{operator}: ")?;
+                    }
+                } else {
+                    write!(f, "{operator}: ")?;
+                }
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -2034,7 +2068,9 @@ mod tests {
     fn test_clause_data_reduction() {
         let items = vec![ClauseItem::Identifier(Identifier::new("sum"))];
         let clause = ClauseData::Reduction {
+            modifier: None,
             operator: ReductionOperator::Add,
+            custom_operator: None,
             items,
         };
         assert_eq!(clause.to_string(), "reduction(+: sum)");
@@ -2047,7 +2083,9 @@ mod tests {
             ClauseItem::Identifier(Identifier::new("total")),
         ];
         let clause = ClauseData::Reduction {
+            modifier: None,
             operator: ReductionOperator::Add,
+            custom_operator: None,
             items,
         };
         assert_eq!(clause.to_string(), "reduction(+: sum, total)");
@@ -2057,7 +2095,9 @@ mod tests {
     fn test_clause_data_reduction_max() {
         let items = vec![ClauseItem::Identifier(Identifier::new("max_val"))];
         let clause = ClauseData::Reduction {
+            modifier: None,
             operator: ReductionOperator::Max,
+            custom_operator: None,
             items,
         };
         assert_eq!(clause.to_string(), "reduction(max: max_val)");

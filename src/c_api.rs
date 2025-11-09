@@ -191,6 +191,7 @@ union ClauseData {
     linear: ManuallyDrop<LinearData>,
     lastprivate: ManuallyDrop<LastprivateData>,
     aligned: ManuallyDrop<AlignedData>,
+    allocate: ManuallyDrop<AllocateData>,
     default: i32,
     items: *const Vec<crate::ir::ClauseItem>,    // Pointer to IR clause items (NO string conversion!)
     expression: *const crate::ir::Expression,     // Pointer to IR expression (NO string conversion!)
@@ -210,6 +211,7 @@ struct ScheduleData {
 struct ReductionData {
     modifier: i32,                             // Reduction modifier: 0=inscan, 1=task, 2=default, -1=none
     operator: i32,                             // Reduction operator enum value
+    custom_operator: *const String,            // Custom operator name for user-defined operators (null if not custom)
     items: *const Vec<crate::ir::ClauseItem>,  // Pointer to IR clause items (NO string conversion!)
 }
 
@@ -233,6 +235,13 @@ struct LastprivateData {
 struct AlignedData {
     items: *const Vec<crate::ir::ClauseItem>,  // Pointer to variable list
     alignment: *const crate::ir::Expression,   // Pointer to alignment expression (nullable)
+}
+
+/// Allocate clause data (allocator, variable list)
+#[repr(C)]
+struct AllocateData {
+    allocator: *const crate::ir::Identifier,      // Optional allocator identifier (NULL if not specified)
+    items: *const Vec<crate::ir::ClauseItem>,     // Pointer to IR clause items
 }
 
 /// Iterator over clauses
@@ -929,6 +938,63 @@ pub extern "C" fn roup_clause_reduction_operator(clause: *const OmpClause) -> i3
     }
 }
 
+/// Get custom reduction operator name from reduction clause.
+///
+/// Returns the custom operator name if the operator is user-defined (Custom),
+/// or NULL if the clause is not a reduction clause or has a built-in operator.
+///
+/// The returned string is owned by the clause and should NOT be freed.
+#[no_mangle]
+pub extern "C" fn roup_clause_reduction_custom_operator(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != clause_kind::REDUCTION {
+            // Not a reduction clause
+            return ptr::null();
+        }
+
+        // Check if the operator is Custom (value 100)
+        if c.data.reduction.operator == 100 && !c.data.reduction.custom_operator.is_null() {
+            let custom_op_string = &*c.data.reduction.custom_operator;
+            custom_op_string.as_ptr() as *const c_char
+        } else {
+            ptr::null()
+        }
+    }
+}
+
+/// Get allocator from allocate clause.
+///
+/// Returns a string representation of the allocator identifier,
+/// or NULL if no allocator is specified.
+///
+/// The returned string must be freed using roup_string_free().
+#[no_mangle]
+pub extern "C" fn roup_clause_allocate_allocator(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != clause_kind::ALLOCATE {
+            // Not an allocate clause
+            return ptr::null();
+        }
+
+        if c.data.allocate.allocator.is_null() {
+            return ptr::null();
+        }
+
+        let allocator = &*c.data.allocate.allocator;
+        allocate_c_string(&allocator.to_string())
+    }
+}
+
 /// Get default data sharing from default clause.
 ///
 /// Returns -1 if clause is NULL or not a default clause.
@@ -1519,7 +1585,7 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
         }
 
         // Reduction: modifier + operator + variable list - store modifier code + enum code + pointer to IR ClauseItem Vec
-        Reduction { modifier, operator, items } => {
+        Reduction { modifier, operator, custom_operator, items } => {
             let mod_code = map_reduction_modifier(modifier);
             let op_code = map_reduction_operator(operator);
             OmpClause {
@@ -1528,6 +1594,7 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
                     reduction: ManuallyDrop::new(ReductionData {
                         modifier: mod_code,
                         operator: op_code,
+                        custom_operator: custom_operator.as_ref().map(|s| s as *const String).unwrap_or(ptr::null()),
                         items: items as *const Vec<crate::ir::ClauseItem>,
                     }),
                 },
@@ -1751,7 +1818,7 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
         },
 
         // InReduction: operator + variable list (like Reduction)
-        InReduction { operator, items } => {
+        InReduction { operator, custom_operator, items } => {
             let op_code = map_reduction_operator(operator);
             OmpClause {
                 kind: clause_kind::REDUCTION,  // Map to REDUCTION for now, compat layer will handle
@@ -1759,6 +1826,7 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
                     reduction: ManuallyDrop::new(ReductionData {
                         modifier: -1,  // InReduction doesn't have modifier in IR
                         operator: op_code,
+                        custom_operator: custom_operator.as_ref().map(|s| s as *const String).unwrap_or(ptr::null()),
                         items: items as *const Vec<crate::ir::ClauseItem>,
                     }),
                 },
@@ -1766,7 +1834,7 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
         }
 
         // TaskReduction: operator + variable list (like Reduction)
-        TaskReduction { operator, items } => {
+        TaskReduction { operator, custom_operator, items } => {
             let op_code = map_reduction_operator(operator);
             OmpClause {
                 kind: clause_kind::REDUCTION,  // Map to REDUCTION for now, compat layer will handle
@@ -1774,6 +1842,7 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
                     reduction: ManuallyDrop::new(ReductionData {
                         modifier: -1,  // TaskReduction doesn't have modifier in IR
                         operator: op_code,
+                        custom_operator: custom_operator.as_ref().map(|s| s as *const String).unwrap_or(ptr::null()),
                         items: items as *const Vec<crate::ir::ClauseItem>,
                     }),
                 },
@@ -1933,12 +2002,18 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
         },
 
         // Allocate: variable list with optional allocator
-        Allocate { items, .. } => OmpClause {
-            kind: clause_kind::ALLOCATE,
-            data: ClauseData {
-                items: items as *const Vec<crate::ir::ClauseItem>,
-            },
-        },
+        Allocate { allocator, items } => {
+            let allocator_ptr = allocator.as_ref().map_or(ptr::null(), |a| a as *const _);
+            OmpClause {
+                kind: clause_kind::ALLOCATE,
+                data: ClauseData {
+                    allocate: ManuallyDrop::new(AllocateData {
+                        allocator: allocator_ptr,
+                        items: items as *const Vec<crate::ir::ClauseItem>,
+                    }),
+                },
+            }
+        }
 
         // Order: order kind
         Order(_order_kind) => OmpClause {

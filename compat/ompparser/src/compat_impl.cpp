@@ -66,6 +66,8 @@ extern "C" {
     const char* roup_clause_item_to_string(const OmpClause* clause, int32_t index);
     const char* roup_clause_expression_to_string(const OmpClause* clause);
     const char* roup_clause_identifier_to_string(const OmpClause* clause);
+    const char* roup_clause_reduction_custom_operator(const OmpClause* clause);
+    const char* roup_clause_allocate_allocator(const OmpClause* clause);
     const char* roup_default_kind_to_string(int32_t kind);
     const char* roup_proc_bind_kind_to_string(int32_t kind);
     void roup_string_free(char* s);
@@ -505,8 +507,10 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
                 // Map ROUP operator to ompparser identifier
                 // ROUP enum values: Add=0, Multiply=1, Subtract=2, BitwiseAnd=10, BitwiseOr=11,
-                // BitwiseXor=12, LogicalAnd=20, LogicalOr=21, Min=30, Max=31
+                // BitwiseXor=12, LogicalAnd=20, LogicalOr=21, Min=30, Max=31, Custom=100
                 OpenMPReductionClauseIdentifier identifier = OMPC_REDUCTION_IDENTIFIER_unknown;
+                char* custom_op_name = nullptr;
+
                 if (op == 0) identifier = OMPC_REDUCTION_IDENTIFIER_plus;       // Add
                 else if (op == 1) identifier = OMPC_REDUCTION_IDENTIFIER_mul;   // Multiply
                 else if (op == 2) identifier = OMPC_REDUCTION_IDENTIFIER_minus; // Subtract
@@ -517,10 +521,18 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 else if (op == 21) identifier = OMPC_REDUCTION_IDENTIFIER_logor;  // LogicalOr
                 else if (op == 30) identifier = OMPC_REDUCTION_IDENTIFIER_min;    // Min
                 else if (op == 31) identifier = OMPC_REDUCTION_IDENTIFIER_max;    // Max
+                else if (op == 100) {
+                    // User-defined operator - get the custom operator name
+                    identifier = OMPC_REDUCTION_IDENTIFIER_user;
+                    const char* custom_op = roup_clause_reduction_custom_operator(roup_clause);
+                    if (custom_op) {
+                        custom_op_name = const_cast<char*>(custom_op);
+                    }
+                }
 
                 // Use the static addReductionClause method which properly sets modifier and identifier
                 OpenMPClause* reduction_clause = OpenMPReductionClause::addReductionClause(
-                    dir, modifier, identifier, nullptr, nullptr
+                    dir, modifier, identifier, custom_op_name, nullptr
                 );
 
                 if (!reduction_clause) continue;
@@ -635,8 +647,8 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
             // Special handling for allocate clause - use static method
             if (clause_kind == OMPC_allocate) {
-                // Get allocator if present (stored as identifier)
-                char* allocator_id = const_cast<char*>(roup_clause_identifier_to_string(roup_clause));
+                // Get allocator if present
+                char* allocator_id = const_cast<char*>(roup_clause_allocate_allocator(roup_clause));
                 OpenMPAllocateClauseAllocator allocator = OMPC_ALLOCATE_ALLOCATOR_unspecified;
 
                 // Use static method to create clause with allocator
@@ -725,8 +737,7 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     roup_string_free(step);
                 }
 
-                // Finalize the clause
-                linear_clause->mergeLinear(dir, linear_clause);
+                // Don't call mergeLinear - it causes formatting issues
                 continue; // Skip generic handling
             }
 

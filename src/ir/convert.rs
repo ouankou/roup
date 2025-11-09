@@ -253,30 +253,34 @@ pub fn parse_identifier_list(
 ///
 /// ```
 /// # use roup::ir::{convert::parse_reduction_operator, ReductionOperator};
-/// let op = parse_reduction_operator("+").unwrap();
+/// let (op, custom) = parse_reduction_operator("+").unwrap();
 /// assert_eq!(op, ReductionOperator::Add);
+/// assert!(custom.is_none());
 ///
-/// let op = parse_reduction_operator("min").unwrap();
+/// let (op, custom) = parse_reduction_operator("min").unwrap();
 /// assert_eq!(op, ReductionOperator::Min);
+/// assert!(custom.is_none());
+///
+/// let (op, custom) = parse_reduction_operator("myop").unwrap();
+/// assert_eq!(op, ReductionOperator::Custom);
+/// assert_eq!(custom, Some("myop".to_string()));
 /// ```
-pub fn parse_reduction_operator(op_str: &str) -> Result<ReductionOperator, ConversionError> {
+pub fn parse_reduction_operator(op_str: &str) -> Result<(ReductionOperator, Option<String>), ConversionError> {
     match op_str {
-        "+" => Ok(ReductionOperator::Add),
-        "-" => Ok(ReductionOperator::Subtract),
-        "*" => Ok(ReductionOperator::Multiply),
-        "&" => Ok(ReductionOperator::BitwiseAnd),
-        "|" => Ok(ReductionOperator::BitwiseOr),
-        "^" => Ok(ReductionOperator::BitwiseXor),
-        "&&" => Ok(ReductionOperator::LogicalAnd),
-        "||" => Ok(ReductionOperator::LogicalOr),
-        "min" => Ok(ReductionOperator::Min),
-        "max" => Ok(ReductionOperator::Max),
-        "-=" => Ok(ReductionOperator::MinusEqual),
+        "+" => Ok((ReductionOperator::Add, None)),
+        "-" => Ok((ReductionOperator::Subtract, None)),
+        "*" => Ok((ReductionOperator::Multiply, None)),
+        "&" => Ok((ReductionOperator::BitwiseAnd, None)),
+        "|" => Ok((ReductionOperator::BitwiseOr, None)),
+        "^" => Ok((ReductionOperator::BitwiseXor, None)),
+        "&&" => Ok((ReductionOperator::LogicalAnd, None)),
+        "||" => Ok((ReductionOperator::LogicalOr, None)),
+        "min" => Ok((ReductionOperator::Min, None)),
+        "max" => Ok((ReductionOperator::Max, None)),
+        "-=" => Ok((ReductionOperator::MinusEqual, None)),
         _ => {
-            // Allow user-defined reduction identifiers (e.g., "abc", "user_defined_value")
-            // These are custom reduction operators defined by the user
-            // For now, treat as Custom (no identifier stored)
-            Ok(ReductionOperator::Custom)
+            // User-defined reduction operator - store the custom name
+            Ok((ReductionOperator::Custom, Some(op_str.to_string())))
         }
     }
 }
@@ -296,7 +300,7 @@ pub fn parse_reduction_modifier(mod_str: &str) -> Result<ReductionModifier, Conv
         "task" => Ok(ReductionModifier::Task),
         "default" => Ok(ReductionModifier::Default),
         "" => Ok(ReductionModifier::Unspecified),
-        other => {
+        _other => {
             // Allow custom modifiers (like "abc" in the test)
             // Treat unknown modifiers as custom reduction identifiers
             // For now, just return Unspecified for unknown modifiers
@@ -699,21 +703,21 @@ pub fn parse_clause_data<'a>(
                     let before_colon = before_colon.trim();
 
                     // Check if there's a modifier (comma-separated)
-                    let (modifier, operator) = if let Some((mod_str, op_str)) = lang::split_once_top_level(before_colon, ',') {
+                    let (modifier, operator, custom_operator) = if let Some((mod_str, op_str)) = lang::split_once_top_level(before_colon, ',') {
                         // Has modifier: "inscan, +"
                         let modifier = parse_reduction_modifier(mod_str.trim())?;
-                        let operator = parse_reduction_operator(op_str.trim())?;
-                        (Some(modifier), operator)
+                        let (operator, custom_op) = parse_reduction_operator(op_str.trim())?;
+                        (Some(modifier), operator, custom_op)
                     } else {
                         // No modifier: just "+"
-                        let operator = parse_reduction_operator(before_colon)?;
-                        (None, operator)
+                        let (operator, custom_op) = parse_reduction_operator(before_colon)?;
+                        (None, operator, custom_op)
                     };
 
                     // Parse the item list
                     let items = parse_identifier_list(items_str.trim(), config)?;
 
-                    Ok(ClauseData::Reduction { modifier, operator, items })
+                    Ok(ClauseData::Reduction { modifier, operator, custom_operator, items })
                 } else {
                     Err(ConversionError::InvalidClauseSyntax(
                         "reduction clause requires 'operator: list' format".to_string(),
@@ -867,7 +871,7 @@ pub fn parse_clause_data<'a>(
         Some(OpenMpClause::Nontemporal) => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
-                let items = parse_identifier_list(content, config)?;
+                let _items = parse_identifier_list(content, config)?;
                 // Nontemporal uses Generic with special handling
                 Ok(ClauseData::Generic {
                     name: Identifier::new("nontemporal"),
@@ -1143,9 +1147,9 @@ pub fn parse_clause_data<'a>(
                 let content = content.as_ref();
                 // Same parsing as regular reduction
                 if let Some((op_str, items_str)) = lang::split_once_top_level(content, ':') {
-                    let operator = parse_reduction_operator(op_str.trim())?;
+                    let (operator, custom_operator) = parse_reduction_operator(op_str.trim())?;
                     let items = parse_identifier_list(items_str.trim(), config)?;
-                    Ok(ClauseData::InReduction { operator, items })
+                    Ok(ClauseData::InReduction { operator, custom_operator, items })
                 } else {
                     Err(ConversionError::InvalidClauseSyntax(
                         "in_reduction requires 'operator: list' format".to_string(),
@@ -1164,9 +1168,9 @@ pub fn parse_clause_data<'a>(
                 let content = content.as_ref();
                 // Same parsing as regular reduction
                 if let Some((op_str, items_str)) = lang::split_once_top_level(content, ':') {
-                    let operator = parse_reduction_operator(op_str.trim())?;
+                    let (operator, custom_operator) = parse_reduction_operator(op_str.trim())?;
                     let items = parse_identifier_list(items_str.trim(), config)?;
-                    Ok(ClauseData::TaskReduction { operator, items })
+                    Ok(ClauseData::TaskReduction { operator, custom_operator, items })
                 } else {
                     Err(ConversionError::InvalidClauseSyntax(
                         "task_reduction requires 'operator: list' format".to_string(),
@@ -1571,63 +1575,58 @@ mod tests {
     // Tests for reduction operator parsing
     #[test]
     fn test_parse_reduction_operator_arithmetic() {
-        assert_eq!(
-            parse_reduction_operator("+").unwrap(),
-            ReductionOperator::Add
-        );
-        assert_eq!(
-            parse_reduction_operator("-").unwrap(),
-            ReductionOperator::Subtract
-        );
-        assert_eq!(
-            parse_reduction_operator("*").unwrap(),
-            ReductionOperator::Multiply
-        );
+        let (op, custom) = parse_reduction_operator("+").unwrap();
+        assert_eq!(op, ReductionOperator::Add);
+        assert!(custom.is_none());
+
+        let (op, custom) = parse_reduction_operator("-").unwrap();
+        assert_eq!(op, ReductionOperator::Subtract);
+        assert!(custom.is_none());
+
+        let (op, custom) = parse_reduction_operator("*").unwrap();
+        assert_eq!(op, ReductionOperator::Multiply);
+        assert!(custom.is_none());
     }
 
     #[test]
     fn test_parse_reduction_operator_bitwise() {
-        assert_eq!(
-            parse_reduction_operator("&").unwrap(),
-            ReductionOperator::BitwiseAnd
-        );
-        assert_eq!(
-            parse_reduction_operator("|").unwrap(),
-            ReductionOperator::BitwiseOr
-        );
-        assert_eq!(
-            parse_reduction_operator("^").unwrap(),
-            ReductionOperator::BitwiseXor
-        );
+        let (op, custom) = parse_reduction_operator("&").unwrap();
+        assert_eq!(op, ReductionOperator::BitwiseAnd);
+        assert!(custom.is_none());
+        let (op, custom) = parse_reduction_operator("|").unwrap();
+        assert_eq!(op, ReductionOperator::BitwiseOr);
+        assert!(custom.is_none());
+        let (op, custom) = parse_reduction_operator("^").unwrap();
+        assert_eq!(op, ReductionOperator::BitwiseXor);
+        assert!(custom.is_none());
     }
 
     #[test]
     fn test_parse_reduction_operator_logical() {
-        assert_eq!(
-            parse_reduction_operator("&&").unwrap(),
-            ReductionOperator::LogicalAnd
-        );
-        assert_eq!(
-            parse_reduction_operator("||").unwrap(),
-            ReductionOperator::LogicalOr
-        );
+        let (op, custom) = parse_reduction_operator("&&").unwrap();
+        assert_eq!(op, ReductionOperator::LogicalAnd);
+        assert!(custom.is_none());
+        let (op, custom) = parse_reduction_operator("||").unwrap();
+        assert_eq!(op, ReductionOperator::LogicalOr);
+        assert!(custom.is_none());
     }
 
     #[test]
     fn test_parse_reduction_operator_minmax() {
-        assert_eq!(
-            parse_reduction_operator("min").unwrap(),
-            ReductionOperator::Min
-        );
-        assert_eq!(
-            parse_reduction_operator("max").unwrap(),
-            ReductionOperator::Max
-        );
+        let (op, custom) = parse_reduction_operator("min").unwrap();
+        assert_eq!(op, ReductionOperator::Min);
+        assert!(custom.is_none());
+        let (op, custom) = parse_reduction_operator("max").unwrap();
+        assert_eq!(op, ReductionOperator::Max);
+        assert!(custom.is_none());
     }
 
     #[test]
     fn test_parse_reduction_operator_unknown() {
-        assert!(parse_reduction_operator("unknown").is_err());
+        // Unknown operators now return Custom with the operator name
+        let (op, custom) = parse_reduction_operator("unknown").unwrap();
+        assert_eq!(op, ReductionOperator::Custom);
+        assert_eq!(custom, Some("unknown".to_string()));
     }
 
     // Tests for reduction clause
@@ -1641,8 +1640,9 @@ mod tests {
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
-        if let ClauseData::Reduction { operator, items } = data {
+        if let ClauseData::Reduction { operator, custom_operator, items, .. } = data {
             assert_eq!(operator, ReductionOperator::Add);
+            assert!(custom_operator.is_none());
             assert_eq!(items.len(), 1);
         } else {
             panic!("Expected Reduction clause");
@@ -1659,8 +1659,9 @@ mod tests {
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
-        if let ClauseData::Reduction { operator, items } = data {
+        if let ClauseData::Reduction { operator, custom_operator, items, .. } = data {
             assert_eq!(operator, ReductionOperator::Multiply);
+            assert!(custom_operator.is_none());
             assert_eq!(items.len(), 3);
         } else {
             panic!("Expected Reduction clause");
@@ -1677,8 +1678,9 @@ mod tests {
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
-        if let ClauseData::Reduction { operator, items } = data {
+        if let ClauseData::Reduction { operator, custom_operator, items, .. } = data {
             assert_eq!(operator, ReductionOperator::Min);
+            assert!(custom_operator.is_none());
             assert_eq!(items.len(), 1);
         } else {
             panic!("Expected Reduction clause");
