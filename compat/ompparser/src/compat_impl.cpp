@@ -51,11 +51,15 @@ extern "C" {
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
     int32_t roup_clause_schedule_kind(const OmpClause* clause);
+    int32_t roup_clause_schedule_modifiers(const OmpClause* clause);
     const char* roup_clause_schedule_chunk_size(const OmpClause* clause);
     int32_t roup_clause_reduction_operator(const OmpClause* clause);
     int32_t roup_clause_reduction_modifier(const OmpClause* clause);
     int32_t roup_clause_default_data_sharing(const OmpClause* clause);
     int32_t roup_clause_proc_bind_kind(const OmpClause* clause);
+    int32_t roup_clause_linear_modifier(const OmpClause* clause);
+    int32_t roup_clause_lastprivate_modifier(const OmpClause* clause);
+    int32_t roup_clause_order_kind(const OmpClause* clause);
 
     // IR helper functions - call these to get strings when needed (NO string ops in C API!)
     int32_t roup_clause_items_count(const OmpClause* clause);
@@ -297,6 +301,7 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
         case ROUP_CLAUSE_KIND_BIND:         return OMPC_bind;
         case ROUP_CLAUSE_KIND_MAP:          return OMPC_map;
         case ROUP_CLAUSE_KIND_DEPEND:       return OMPC_depend;
+        case ROUP_CLAUSE_KIND_ALLOCATE:     return OMPC_allocate;
         case ROUP_CLAUSE_KIND_ALLOCATOR:    return OMPC_allocator;
         case ROUP_CLAUSE_KIND_HINT:         return OMPC_hint;
         case ROUP_CLAUSE_KIND_ALIGN:        return OMPC_align;
@@ -540,6 +545,151 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 continue; // Skip generic handling
             }
 
+            // Special handling for schedule clause - use static addScheduleClause method
+            if (clause_kind == OMPC_schedule) {
+                // Get schedule kind (static, dynamic, guided, auto, runtime)
+                int32_t sched_kind = roup_clause_schedule_kind(roup_clause);
+                // Map ROUP schedule kind to ompparser schedule kind
+                OpenMPScheduleClauseKind omp_sched_kind = OMPC_SCHEDULE_KIND_unspecified;
+                if (sched_kind == 0) omp_sched_kind = OMPC_SCHEDULE_KIND_static;
+                else if (sched_kind == 1) omp_sched_kind = OMPC_SCHEDULE_KIND_dynamic;
+                else if (sched_kind == 2) omp_sched_kind = OMPC_SCHEDULE_KIND_guided;
+                else if (sched_kind == 3) omp_sched_kind = OMPC_SCHEDULE_KIND_auto;
+                else if (sched_kind == 4) omp_sched_kind = OMPC_SCHEDULE_KIND_runtime;
+
+                // Get schedule modifiers (bitmask: bit 0=monotonic, bit 1=nonmonotonic, bit 2=simd)
+                int32_t modifiers = roup_clause_schedule_modifiers(roup_clause);
+                OpenMPScheduleClauseModifier modifier1 = OMPC_SCHEDULE_MODIFIER_unspecified;
+                OpenMPScheduleClauseModifier modifier2 = OMPC_SCHEDULE_MODIFIER_unspecified;
+
+                // Map modifiers (can have up to 2)
+                if (modifiers & 1) {  // Monotonic
+                    modifier1 = OMPC_SCHEDULE_MODIFIER_monotonic;
+                } else if (modifiers & 2) {  // Nonmonotonic
+                    modifier1 = OMPC_SCHEDULE_MODIFIER_nonmonotonic;
+                }
+                if (modifiers & 4) {  // Simd (can be second modifier)
+                    if (modifier1 == OMPC_SCHEDULE_MODIFIER_unspecified) {
+                        modifier1 = OMPC_SCHEDULE_MODIFIER_simd;
+                    } else {
+                        modifier2 = OMPC_SCHEDULE_MODIFIER_simd;
+                    }
+                }
+
+                // Get chunk size if present
+                char* chunk_size = const_cast<char*>(roup_clause_schedule_chunk_size(roup_clause));
+
+                // Use static addScheduleClause method
+                OpenMPClause* schedule_clause = OpenMPScheduleClause::addScheduleClause(
+                    dir, modifier1, modifier2, omp_sched_kind, chunk_size
+                );
+
+                if (chunk_size) {
+                    roup_string_free(chunk_size);
+                }
+
+                // Manually add to clauses_in_original_order since addScheduleClause doesn't do it
+                if (schedule_clause && schedule_clause->getClausePosition() == -1) {
+                    dir->getClausesInOriginalOrder()->push_back(schedule_clause);
+                    schedule_clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
+                }
+
+                continue; // Skip generic handling
+            }
+
+            // Special handling for lastprivate clause - use static method if modifier present
+            if (clause_kind == OMPC_lastprivate) {
+                int32_t modifier = roup_clause_lastprivate_modifier(roup_clause);
+                OpenMPClause* lp_clause = nullptr;
+
+                if (modifier == 0) {  // Conditional
+                    // Use static method to create clause with modifier
+                    lp_clause = OpenMPLastprivateClause::addLastprivateClause(
+                        dir, OMPC_LASTPRIVATE_MODIFIER_conditional
+                    );
+
+                    // Manually add to clauses_in_original_order
+                    if (lp_clause && lp_clause->getClausePosition() == -1) {
+                        dir->getClausesInOriginalOrder()->push_back(lp_clause);
+                        lp_clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
+                    }
+                } else {
+                    // No modifier, use normal creation
+                    lp_clause = dir->addOpenMPClause(OMPC_lastprivate);
+                }
+
+                if (lp_clause) {
+                    // Add variables
+                    int32_t var_count = roup_clause_items_count(roup_clause);
+                    for (int32_t i = 0; i < var_count; ++i) {
+                        char* var = const_cast<char*>(roup_clause_item_to_string(roup_clause, i));
+                        if (var) {
+                            lp_clause->addLangExpr(var);
+                            roup_string_free(var);
+                        }
+                    }
+                }
+
+                continue; // Skip generic handling
+            }
+
+            // Special handling for allocate clause - use static method
+            if (clause_kind == OMPC_allocate) {
+                // Get allocator if present (stored as identifier)
+                char* allocator_id = const_cast<char*>(roup_clause_identifier_to_string(roup_clause));
+                OpenMPAllocateClauseAllocator allocator = OMPC_ALLOCATE_ALLOCATOR_unspecified;
+
+                // Use static method to create clause with allocator
+                OpenMPClause* allocate_clause = OpenMPAllocateClause::addAllocateClause(
+                    dir, allocator, allocator_id
+                );
+
+                if (allocator_id) {
+                    roup_string_free(allocator_id);
+                }
+
+                // Manually add to clauses_in_original_order
+                if (allocate_clause && allocate_clause->getClausePosition() == -1) {
+                    dir->getClausesInOriginalOrder()->push_back(allocate_clause);
+                    allocate_clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
+                }
+
+                if (allocate_clause) {
+                    // Add variables
+                    int32_t var_count = roup_clause_items_count(roup_clause);
+                    for (int32_t i = 0; i < var_count; ++i) {
+                        char* var = const_cast<char*>(roup_clause_item_to_string(roup_clause, i));
+                        if (var) {
+                            allocate_clause->addLangExpr(var);
+                            roup_string_free(var);
+                        }
+                    }
+                }
+
+                continue; // Skip generic handling
+            }
+
+            // Special handling for order clause - use static method
+            if (clause_kind == OMPC_order) {
+                int32_t order_kind = roup_clause_order_kind(roup_clause);
+                OpenMPOrderClauseKind omp_order_kind = OMPC_ORDER_concurrent;  // Default
+
+                if (order_kind == 0) {
+                    omp_order_kind = OMPC_ORDER_concurrent;
+                }
+
+                // Use static method to create clause
+                OpenMPClause* order_clause = OpenMPOrderClause::addOrderClause(dir, omp_order_kind);
+
+                // Manually add to clauses_in_original_order
+                if (order_clause && order_clause->getClausePosition() == -1) {
+                    dir->getClausesInOriginalOrder()->push_back(order_clause);
+                    order_clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
+                }
+
+                continue; // Skip generic handling
+            }
+
             // Create the clause
             OpenMPClause* omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
             if (!omp_clause) continue;
@@ -547,6 +697,16 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             // Special handling for linear clause - use proper ompparser API
             if (clause_kind == OMPC_linear) {
                 OpenMPLinearClause* linear_clause = static_cast<OpenMPLinearClause*>(omp_clause);
+
+                // Get linear modifier (0=val, 1=ref, 2=uval, -1=none)
+                int32_t modifier = roup_clause_linear_modifier(roup_clause);
+                if (modifier == 0) {
+                    linear_clause->setModifier(OMPC_LINEAR_MODIFIER_val);
+                } else if (modifier == 1) {
+                    linear_clause->setModifier(OMPC_LINEAR_MODIFIER_ref);
+                } else if (modifier == 2) {
+                    linear_clause->setModifier(OMPC_LINEAR_MODIFIER_uval);
+                }
 
                 // Add variables
                 int32_t var_count = roup_clause_items_count(roup_clause);
@@ -589,25 +749,6 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 if (alignment && alignment[0] != '\0') {
                     aligned_clause->setUserDefinedAlignment(alignment);
                     roup_string_free(alignment);
-                }
-
-                continue; // Skip generic handling
-            }
-
-            // Special handling for schedule clause - use proper ompparser API
-            if (clause_kind == OMPC_schedule) {
-                OpenMPScheduleClause* schedule_clause = static_cast<OpenMPScheduleClause*>(omp_clause);
-
-                // Get schedule kind (static, dynamic, guided, auto, runtime)
-                int32_t sched_kind = roup_clause_schedule_kind(roup_clause);
-                // Schedule kind is already set when the clause was created with addOpenMPClause()
-                // The kind parameter was passed during clause creation in the mapRoupToOmpparserClause call
-
-                // Set chunk size if present
-                char* chunk_size = const_cast<char*>(roup_clause_schedule_chunk_size(roup_clause));
-                if (chunk_size && chunk_size[0] != '\0') {
-                    schedule_clause->setChunkSize(chunk_size);
-                    roup_string_free(chunk_size);
                 }
 
                 continue; // Skip generic handling

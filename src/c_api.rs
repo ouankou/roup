@@ -189,6 +189,7 @@ union ClauseData {
     schedule: ManuallyDrop<ScheduleData>,
     reduction: ManuallyDrop<ReductionData>,
     linear: ManuallyDrop<LinearData>,
+    lastprivate: ManuallyDrop<LastprivateData>,
     aligned: ManuallyDrop<AlignedData>,
     default: i32,
     items: *const Vec<crate::ir::ClauseItem>,    // Pointer to IR clause items (NO string conversion!)
@@ -200,6 +201,7 @@ union ClauseData {
 #[repr(C)]
 struct ScheduleData {
     kind: i32, // 0=static, 1=dynamic, 2=guided, 3=auto, 4=runtime
+    modifiers: i32,  // Bitmask: bit 0=monotonic, bit 1=nonmonotonic, bit 2=simd
     chunk_size: *const crate::ir::Expression,  // Optional chunk size expression
 }
 
@@ -217,6 +219,13 @@ struct LinearData {
     items: *const Vec<crate::ir::ClauseItem>,  // Pointer to variable list
     step: *const crate::ir::Expression,        // Pointer to step expression (nullable)
     modifier: i32,                             // Linear modifier: 0=val, 1=ref, 2=uval, -1=none
+}
+
+/// Lastprivate clause data (variables, modifier)
+#[repr(C)]
+struct LastprivateData {
+    items: *const Vec<crate::ir::ClauseItem>,  // Pointer to variable list
+    modifier: i32,                             // Lastprivate modifier: 0=conditional, -1=none
 }
 
 /// Aligned clause data (variables, alignment)
@@ -1014,12 +1023,11 @@ pub extern "C" fn roup_clause_items_count(clause: *const OmpClause) -> i32 {
     unsafe {
         let c = &*clause;
 
-        // Variable list clauses: private, shared, firstprivate, lastprivate,
+        // Variable list clauses: private, shared, firstprivate,
         // copyin, copyprivate, affinity
         if c.kind == clause_kind::PRIVATE
             || c.kind == clause_kind::SHARED
             || c.kind == clause_kind::FIRSTPRIVATE
-            || c.kind == clause_kind::LASTPRIVATE
             || c.kind == clause_kind::COPYIN
             || c.kind == clause_kind::COPYPRIVATE
             || c.kind == clause_kind::AFFINITY {
@@ -1028,6 +1036,16 @@ pub extern "C" fn roup_clause_items_count(clause: *const OmpClause) -> i32 {
                 return 0;
             }
             let items = &*items_ptr;
+            return items.len() as i32;
+        }
+
+        // Lastprivate clause: access items from specialized struct
+        if c.kind == clause_kind::LASTPRIVATE {
+            let lastprivate_data = &*c.data.lastprivate;
+            if lastprivate_data.items.is_null() {
+                return 0;
+            }
+            let items = &*lastprivate_data.items;
             return items.len() as i32;
         }
 
@@ -1092,12 +1110,11 @@ pub extern "C" fn roup_clause_item_to_string(clause: *const OmpClause, index: i3
         let c = &*clause;
         let idx = index as usize;
 
-        // Variable list clauses: private, shared, firstprivate, lastprivate,
+        // Variable list clauses: private, shared, firstprivate,
         // copyin, copyprivate, affinity
         if c.kind == clause_kind::PRIVATE
             || c.kind == clause_kind::SHARED
             || c.kind == clause_kind::FIRSTPRIVATE
-            || c.kind == clause_kind::LASTPRIVATE
             || c.kind == clause_kind::COPYIN
             || c.kind == clause_kind::COPYPRIVATE
             || c.kind == clause_kind::AFFINITY {
@@ -1110,6 +1127,19 @@ pub extern "C" fn roup_clause_item_to_string(clause: *const OmpClause, index: i3
                 return ptr::null();
             }
             // Call IR layer's Display trait (ONLY place with string conversion!)
+            return allocate_c_string(&items[idx].to_string());
+        }
+
+        // Lastprivate clause: access items from specialized struct
+        if c.kind == clause_kind::LASTPRIVATE {
+            let lastprivate_data = &*c.data.lastprivate;
+            if lastprivate_data.items.is_null() {
+                return ptr::null();
+            }
+            let items = &*lastprivate_data.items;
+            if idx >= items.len() {
+                return ptr::null();
+            }
             return allocate_c_string(&items[idx].to_string());
         }
 
@@ -1167,6 +1197,91 @@ pub extern "C" fn roup_clause_item_to_string(clause: *const OmpClause, index: i3
         }
 
         ptr::null()
+    }
+}
+
+/// Get schedule modifiers from schedule clause (bitmask).
+///
+/// Returns a bitmask of schedule modifiers:
+/// - Bit 0 (value 1): monotonic
+/// - Bit 1 (value 2): nonmonotonic
+/// - Bit 2 (value 4): simd
+///
+/// Returns 0 if clause is NULL, not a schedule clause, or has no modifiers.
+#[no_mangle]
+pub extern "C" fn roup_clause_schedule_modifiers(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != clause_kind::SCHEDULE {
+            return 0;
+        }
+
+        // Get the schedule data and return modifiers bitmask
+        c.data.schedule.modifiers
+    }
+}
+
+/// Get linear modifier from linear clause.
+///
+/// Returns: 0=val, 1=ref, 2=uval, -1=none
+/// Returns -1 if clause is NULL or not a linear clause.
+#[no_mangle]
+pub extern "C" fn roup_clause_linear_modifier(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != clause_kind::LINEAR {
+            return -1;
+        }
+        c.data.linear.modifier
+    }
+}
+
+/// Get lastprivate modifier from lastprivate clause.
+///
+/// Returns: 0=conditional, -1=none
+/// Returns -1 if clause is NULL or not a lastprivate clause.
+#[no_mangle]
+pub extern "C" fn roup_clause_lastprivate_modifier(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != clause_kind::LASTPRIVATE {
+            return -1;
+        }
+
+        // Get the lastprivate data and return modifier
+        c.data.lastprivate.modifier
+    }
+}
+
+/// Get order kind from order clause.
+///
+/// Returns: 0=concurrent, -1=none/invalid
+/// Returns -1 if clause is NULL or not an order clause.
+#[no_mangle]
+pub extern "C" fn roup_clause_order_kind(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != clause_kind::ORDER {
+            return -1;
+        }
+        // Order kind is stored in the default field (0=concurrent)
+        c.data.default
     }
 }
 
@@ -1386,13 +1501,22 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
             },
         },
 
-        // Lastprivate: variable list - store pointer to IR ClauseItem Vec
-        Lastprivate { items, .. } => OmpClause {
-            kind: clause_kind::LASTPRIVATE,
-            data: ClauseData {
-                items: items as *const Vec<crate::ir::ClauseItem>,
-            },
-        },
+        // Lastprivate: variable list + optional modifier
+        Lastprivate { modifier, items } => {
+            let modifier_code = match modifier {
+                Some(crate::ir::LastprivateModifier::Conditional) => 0,
+                None => -1,
+            };
+            OmpClause {
+                kind: clause_kind::LASTPRIVATE,
+                data: ClauseData {
+                    lastprivate: ManuallyDrop::new(LastprivateData {
+                        items: items as *const Vec<crate::ir::ClauseItem>,
+                        modifier: modifier_code,
+                    }),
+                },
+            }
+        }
 
         // Reduction: modifier + operator + variable list - store modifier code + enum code + pointer to IR ClauseItem Vec
         Reduction { modifier, operator, items } => {
@@ -1410,19 +1534,31 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
             }
         }
 
-        // Schedule: kind + optional chunk size
+        // Schedule: kind + modifiers + optional chunk size
         Schedule {
             kind: sched_kind,
+            modifiers,
             chunk_size,
-            ..
         } => {
             let kind_code = map_schedule_kind(sched_kind);
+
+            // Convert modifiers Vec to bitmask: bit 0=monotonic, bit 1=nonmonotonic, bit 2=simd
+            let mut modifiers_mask = 0i32;
+            for modifier in modifiers {
+                match modifier {
+                    crate::ir::ScheduleModifier::Monotonic => modifiers_mask |= 1,
+                    crate::ir::ScheduleModifier::Nonmonotonic => modifiers_mask |= 2,
+                    crate::ir::ScheduleModifier::Simd => modifiers_mask |= 4,
+                }
+            }
+
             let chunk_ptr = chunk_size.as_ref().map_or(ptr::null(), |e| e as *const _);
             OmpClause {
                 kind: clause_kind::SCHEDULE,
                 data: ClauseData {
                     schedule: ManuallyDrop::new(ScheduleData {
                         kind: kind_code,
+                        modifiers: modifiers_mask,
                         chunk_size: chunk_ptr,
                     }),
                 },
@@ -1708,7 +1844,7 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
             },
         },
 
-        // DistSchedule: kind + optional chunk size
+        // DistSchedule: kind + optional chunk size (no modifiers)
         DistSchedule { kind: sched_kind, chunk_size } => {
             let kind_code = map_schedule_kind(sched_kind);
             let chunk_ptr = chunk_size.as_ref().map_or(ptr::null(), |e| e as *const _);
@@ -1717,6 +1853,7 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
                 data: ClauseData {
                     schedule: ManuallyDrop::new(ScheduleData {
                         kind: kind_code,
+                        modifiers: 0,  // DistSchedule doesn't have modifiers
                         chunk_size: chunk_ptr,
                     }),
                 },
