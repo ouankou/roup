@@ -333,7 +333,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
     // Convert clauses with their parameters from ROUP to ompparser
     // Track which clause kinds we've already created to enable merging
+    // For if clauses, we need separate tracking per modifier
     std::map<OpenMPClauseKind, OpenMPClause*> created_clauses;
+    std::map<int, OpenMPClause*> created_if_clauses; // key is modifier
 
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);
     if (iter) {
@@ -347,52 +349,481 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
             // Check if we've already created this clause kind (for merging)
             OpenMPClause* omp_clause = nullptr;
-            auto it = created_clauses.find(clause_kind);
-            if (it != created_clauses.end()) {
-                // Reuse existing clause (merging)
-                omp_clause = it->second;
+
+            // Special handling for reduction clause - don't merge, handle separately
+            if (clause_kind == OMPC_reduction) {
+                // reduction clause: reduction(modifier, operator : variables)
+                // Format: reduction(inscan, + : a, foo(x))
+                //         reduction(abc : x, y, z)  [user-defined operator]
+                //         reduction(task, user_defined_value : x, y, z)
+
+                int modifier = 4; // OMPC_REDUCTION_MODIFIER_unspecified
+                int identifier = 13; // OMPC_REDUCTION_IDENTIFIER_unknown
+                std::string user_defined_identifier = "";
+                std::string variables = "";
+
+                if (content && content[0] != '\0') {
+                    std::string content_str(content);
+
+                    // Find colon (separates operator from variables)
+                    size_t colon_pos = content_str.find(':');
+
+                    if (colon_pos != std::string::npos) {
+                        std::string before_colon = content_str.substr(0, colon_pos);
+                        variables = content_str.substr(colon_pos + 1);
+
+                        // Trim variables
+                        size_t start = variables.find_first_not_of(" \t");
+                        if (start != std::string::npos) {
+                            variables = variables.substr(start);
+                        }
+
+                        // Parse before_colon for modifier and operator
+                        // Check if there's a comma (indicates modifier present)
+                        size_t comma_pos = before_colon.find(',');
+
+                        std::string modifier_str, operator_str;
+
+                        if (comma_pos != std::string::npos) {
+                            // Has modifier
+                            modifier_str = before_colon.substr(0, comma_pos);
+                            operator_str = before_colon.substr(comma_pos + 1);
+                        } else {
+                            // No modifier, just operator
+                            operator_str = before_colon;
+                        }
+
+                        // Trim and map modifier
+                        if (!modifier_str.empty()) {
+                            size_t mod_start = modifier_str.find_first_not_of(" \t");
+                            size_t mod_end = modifier_str.find_last_not_of(" \t");
+                            if (mod_start != std::string::npos && mod_end != std::string::npos) {
+                                modifier_str = modifier_str.substr(mod_start, mod_end - mod_start + 1);
+                            }
+
+                            if (modifier_str == "inscan") modifier = 0;
+                            else if (modifier_str == "task") modifier = 1;
+                            else if (modifier_str == "default") modifier = 2;
+                        }
+
+                        // Trim and map operator
+                        size_t op_start = operator_str.find_first_not_of(" \t");
+                        size_t op_end = operator_str.find_last_not_of(" \t");
+                        if (op_start != std::string::npos && op_end != std::string::npos) {
+                            operator_str = operator_str.substr(op_start, op_end - op_start + 1);
+                        }
+
+                        // Map operator to identifier
+                        if (operator_str == "+") identifier = 0; // plus
+                        else if (operator_str == "-") identifier = 1; // minus
+                        else if (operator_str == "*") identifier = 2; // mul
+                        else if (operator_str == "&") identifier = 3; // bitand
+                        else if (operator_str == "|") identifier = 4; // bitor
+                        else if (operator_str == "^") identifier = 5; // bitxor
+                        else if (operator_str == "&&") identifier = 6; // logand
+                        else if (operator_str == "||") identifier = 7; // logor
+                        else if (operator_str == ".eqv.") identifier = 8; // eqv
+                        else if (operator_str == ".neqv.") identifier = 9; // neqv
+                        else if (operator_str == "max") identifier = 10;
+                        else if (operator_str == "min") identifier = 11;
+                        else {
+                            // User-defined operator
+                            identifier = 12; // user
+                            user_defined_identifier = operator_str;
+                        }
+                    }
+                }
+
+                // Create reduction clause (don't track in created_clauses - it handles its own merging)
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                                                  modifier, identifier,
+                                                  user_defined_identifier.empty() ? nullptr : const_cast<char*>(user_defined_identifier.c_str()));
+
+                // Add variables
+                if (omp_clause && !variables.empty()) {
+                    // Split by comma and add each variable separately
+                    size_t pos = 0;
+                    while (pos < variables.length()) {
+                        // Find next comma (but respect parentheses for function calls like foo(x))
+                        int paren_depth = 0;
+                        size_t comma_pos = pos;
+                        while (comma_pos < variables.length()) {
+                            if (variables[comma_pos] == '(') paren_depth++;
+                            else if (variables[comma_pos] == ')') paren_depth--;
+                            else if (variables[comma_pos] == ',' && paren_depth == 0) break;
+                            comma_pos++;
+                        }
+
+                        // Extract variable
+                        std::string var = variables.substr(pos, comma_pos - pos);
+
+                        // Trim whitespace
+                        size_t start = var.find_first_not_of(" \t\r\n");
+                        if (start != std::string::npos) {
+                            var = var.substr(start);
+                        }
+                        size_t end = var.find_last_not_of(" \t\r\n");
+                        if (end != std::string::npos) {
+                            var = var.substr(0, end + 1);
+                        }
+
+                        // Add non-empty variable
+                        if (!var.empty()) {
+                            omp_clause->addLangExpr(var.c_str());
+                        }
+
+                        pos = comma_pos + 1;
+                    }
+                }
+            } else if (clause_kind == OMPC_if) {
+                // Special handling for if clause - each modifier needs separate clause
+                // Parse if clause: "if(modifier: condition)" or "if(condition)"
+                // Default modifier is unspecified (10) if not provided
+                int modifier = 10; // OMPC_IF_MODIFIER_unspecified
+
+                if (content && content[0] != '\0') {
+                    std::string content_str(content);
+                    size_t colon_pos = content_str.find(':');
+
+                    if (colon_pos != std::string::npos) {
+                        // Extract modifier
+                        std::string modifier_str = content_str.substr(0, colon_pos);
+                        // Trim whitespace
+                        size_t start = modifier_str.find_first_not_of(" \t");
+                        size_t end = modifier_str.find_last_not_of(" \t");
+                        if (start != std::string::npos && end != std::string::npos) {
+                            modifier_str = modifier_str.substr(start, end - start + 1);
+                        }
+
+                        // Map modifier string to enum
+                        if (modifier_str == "parallel") modifier = 0;
+                        else if (modifier_str == "simd") modifier = 1;
+                        else if (modifier_str == "task") modifier = 2;
+                        else if (modifier_str == "cancel") modifier = 3;
+                        else if (modifier_str == "target_data") modifier = 4;
+                        else if (modifier_str == "target_enter_data") modifier = 5;
+                        else if (modifier_str == "target_exit_data") modifier = 6;
+                        else if (modifier_str == "target") modifier = 7;
+                        else if (modifier_str == "target_update") modifier = 8;
+                        else if (modifier_str == "taskloop") modifier = 9;
+                    }
+                }
+
+                // Check if we already created an if clause with this modifier
+                auto if_it = created_if_clauses.find(modifier);
+                if (if_it != created_if_clauses.end()) {
+                    omp_clause = if_it->second;
+                } else {
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), modifier, nullptr);
+                    created_if_clauses[modifier] = omp_clause;
+                }
             } else {
-                // Create new clause
-                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
-                created_clauses[clause_kind] = omp_clause;
+                // Check for existing clause of this kind (for merging)
+                auto it = created_clauses.find(clause_kind);
+                if (it != created_clauses.end()) {
+                    // Reuse existing clause (merging)
+                    omp_clause = it->second;
+                } else if (clause_kind == OMPC_default) {
+                    // default clause needs parameter: shared/none/private/firstprivate
+                    int default_kind = 2; // OMPC_DEFAULT_shared (default)
+
+                    if (content && content[0] != '\0') {
+                        std::string content_str(content);
+                        // Trim whitespace
+                        size_t start = content_str.find_first_not_of(" \t");
+                        size_t end = content_str.find_last_not_of(" \t");
+                        if (start != std::string::npos && end != std::string::npos) {
+                            content_str = content_str.substr(start, end - start + 1);
+                        }
+
+                        // Map default kind string to enum
+                        if (content_str == "private") default_kind = 0;
+                        else if (content_str == "firstprivate") default_kind = 1;
+                        else if (content_str == "shared") default_kind = 2;
+                        else if (content_str == "none") default_kind = 3;
+                        else if (content_str == "variant") default_kind = 4;
+                    }
+
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), default_kind);
+                    created_clauses[clause_kind] = omp_clause;
+                } else if (clause_kind == OMPC_schedule) {
+                    // schedule clause: schedule(mod1,mod2:kind,chunk)
+                    // Possible formats:
+                    // - schedule(monotonic,simd:runtime,2)
+                    // - schedule(monotonic:runtime,2)
+                    // - schedule(runtime,2)
+                    // - schedule(runtime)
+
+                    int modifier1 = 4; // OMPC_SCHEDULE_MODIFIER_unspecified
+                    int modifier2 = 4; // OMPC_SCHEDULE_MODIFIER_unspecified
+                    int schedule_kind = 0; // OMPC_SCHEDULE_KIND_static (default)
+                    std::string chunk_size = "";
+
+                    if (content && content[0] != '\0') {
+                        std::string content_str(content);
+
+                        // Find colon (separates modifiers from kind)
+                        size_t colon_pos = content_str.find(':');
+
+                        std::string before_colon;
+                        std::string after_colon;
+
+                        if (colon_pos != std::string::npos) {
+                            before_colon = content_str.substr(0, colon_pos);
+                            after_colon = content_str.substr(colon_pos + 1);
+                        } else {
+                            after_colon = content_str;
+                        }
+
+                        // Parse modifiers from before_colon (if present)
+                        if (!before_colon.empty()) {
+                            // Split by comma
+                            size_t comma_pos = before_colon.find(',');
+                            std::string mod1_str, mod2_str;
+
+                            if (comma_pos != std::string::npos) {
+                                mod1_str = before_colon.substr(0, comma_pos);
+                                mod2_str = before_colon.substr(comma_pos + 1);
+                            } else {
+                                mod1_str = before_colon;
+                            }
+
+                            // Trim and map modifier1
+                            size_t start = mod1_str.find_first_not_of(" \t");
+                            size_t end = mod1_str.find_last_not_of(" \t");
+                            if (start != std::string::npos && end != std::string::npos) {
+                                mod1_str = mod1_str.substr(start, end - start + 1);
+                            }
+
+                            if (mod1_str == "monotonic") modifier1 = 0;
+                            else if (mod1_str == "nonmonotonic") modifier1 = 1;
+                            else if (mod1_str == "simd") modifier1 = 2;
+                            else if (mod1_str == "user") modifier1 = 3;
+
+                            // Trim and map modifier2
+                            if (!mod2_str.empty()) {
+                                start = mod2_str.find_first_not_of(" \t");
+                                end = mod2_str.find_last_not_of(" \t");
+                                if (start != std::string::npos && end != std::string::npos) {
+                                    mod2_str = mod2_str.substr(start, end - start + 1);
+                                }
+
+                                if (mod2_str == "monotonic") modifier2 = 0;
+                                else if (mod2_str == "nonmonotonic") modifier2 = 1;
+                                else if (mod2_str == "simd") modifier2 = 2;
+                                else if (mod2_str == "user") modifier2 = 3;
+                            }
+                        }
+
+                        // Parse kind and chunk_size from after_colon
+                        if (!after_colon.empty()) {
+                            // Find last comma (separates kind from chunk_size)
+                            size_t last_comma = after_colon.rfind(',');
+                            std::string kind_str;
+
+                            if (last_comma != std::string::npos) {
+                                kind_str = after_colon.substr(0, last_comma);
+                                chunk_size = after_colon.substr(last_comma + 1);
+
+                                // Trim chunk_size
+                                size_t start = chunk_size.find_first_not_of(" \t");
+                                if (start != std::string::npos) {
+                                    chunk_size = chunk_size.substr(start);
+                                }
+                                size_t end = chunk_size.find_last_not_of(" \t");
+                                if (end != std::string::npos) {
+                                    chunk_size = chunk_size.substr(0, end + 1);
+                                }
+                            } else {
+                                kind_str = after_colon;
+                            }
+
+                            // Trim and map schedule kind
+                            size_t start = kind_str.find_first_not_of(" \t");
+                            size_t end = kind_str.find_last_not_of(" \t");
+                            if (start != std::string::npos && end != std::string::npos) {
+                                kind_str = kind_str.substr(start, end - start + 1);
+                            }
+
+                            if (kind_str == "static") schedule_kind = 0;
+                            else if (kind_str == "dynamic") schedule_kind = 1;
+                            else if (kind_str == "guided") schedule_kind = 2;
+                            else if (kind_str == "auto") schedule_kind = 3;
+                            else if (kind_str == "runtime") schedule_kind = 4;
+                            else if (kind_str == "user") schedule_kind = 5;
+                        }
+                    }
+
+                    // Create schedule clause with all parameters
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                                                      modifier1, modifier2, schedule_kind, nullptr);
+
+                    // Set chunk size if present
+                    if (!chunk_size.empty() && omp_clause) {
+                        dynamic_cast<OpenMPScheduleClause*>(omp_clause)->setChunkSize(chunk_size.c_str());
+                    }
+
+                    created_clauses[clause_kind] = omp_clause;
+                } else if (clause_kind == OMPC_proc_bind) {
+                    // proc_bind clause needs parameter: master/close/spread
+                    int proc_bind_kind = 3; // OMPC_PROC_BIND_unknown (default)
+
+                    if (content && content[0] != '\0') {
+                        std::string content_str(content);
+                        // Trim whitespace
+                        size_t start = content_str.find_first_not_of(" \t");
+                        size_t end = content_str.find_last_not_of(" \t");
+                        if (start != std::string::npos && end != std::string::npos) {
+                            content_str = content_str.substr(start, end - start + 1);
+                        }
+
+                        // Map proc_bind kind string to enum
+                        if (content_str == "master") proc_bind_kind = 0;
+                        else if (content_str == "close") proc_bind_kind = 1;
+                        else if (content_str == "spread") proc_bind_kind = 2;
+                    }
+
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), proc_bind_kind);
+                    created_clauses[clause_kind] = omp_clause;
+                } else if (clause_kind == OMPC_lastprivate) {
+                    // lastprivate clause needs modifier: unspecified/conditional
+                    // Format: lastprivate(conditional: a, b, c) or lastprivate(a, b, c)
+                    int modifier = 0; // OMPC_LASTPRIVATE_MODIFIER_unspecified (default)
+
+                    if (content && content[0] != '\0') {
+                        std::string content_str(content);
+
+                        // Check if content starts with "conditional:"
+                        if (content_str.find("conditional") == 0 ||
+                            content_str.find("conditional:") == 0 ||
+                            content_str.find("conditional :") == 0) {
+                            modifier = 1; // OMPC_LASTPRIVATE_MODIFIER_conditional
+                        }
+                    }
+
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), modifier);
+                    created_clauses[clause_kind] = omp_clause;
+                } else {
+                    // Generic clause creation
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+                    created_clauses[clause_kind] = omp_clause;
+                }
             }
 
             // If clause has content, parse and add variables individually
             // This enables ompparser's duplicate detection to work correctly
-            if (omp_clause && content && content[0] != '\0') {
+            // Skip for reduction/schedule - they handle their own variables
+            if (omp_clause && content && content[0] != '\0' &&
+                clause_kind != OMPC_reduction && clause_kind != OMPC_schedule) {
                 std::string content_str(content);
 
-                // Split by comma and add each variable separately
-                // This allows ompparser's addLangExpr to deduplicate
-                size_t pos = 0;
-                while (pos < content_str.length()) {
-                    // Find next comma
-                    size_t comma_pos = content_str.find(',', pos);
-                    if (comma_pos == std::string::npos) {
-                        comma_pos = content_str.length();
+                // Special handling for lastprivate clause: strip conditional modifier prefix
+                if (clause_kind == OMPC_lastprivate) {
+                    size_t colon_pos = content_str.find(':');
+                    if (colon_pos != std::string::npos) {
+                        // Check if it's "conditional:" prefix
+                        std::string before_colon = content_str.substr(0, colon_pos);
+                        // Trim
+                        size_t start = before_colon.find_first_not_of(" \t");
+                        if (start != std::string::npos) {
+                            before_colon = before_colon.substr(start);
+                        }
+                        size_t end = before_colon.find_last_not_of(" \t");
+                        if (end != std::string::npos) {
+                            before_colon = before_colon.substr(0, end + 1);
+                        }
+
+                        if (before_colon == "conditional") {
+                            // Strip "conditional:" prefix, keep only the variables
+                            content_str = content_str.substr(colon_pos + 1);
+                            // Trim leading whitespace
+                            start = content_str.find_first_not_of(" \t");
+                            if (start != std::string::npos) {
+                                content_str = content_str.substr(start);
+                            }
+                        }
                     }
 
-                    // Extract variable (trimming whitespace)
-                    std::string var = content_str.substr(pos, comma_pos - pos);
+                    // Split by comma and add each variable separately
+                    size_t pos = 0;
+                    while (pos < content_str.length()) {
+                        // Find next comma
+                        size_t comma_pos = content_str.find(',', pos);
+                        if (comma_pos == std::string::npos) {
+                            comma_pos = content_str.length();
+                        }
 
-                    // Trim leading whitespace
-                    size_t start = var.find_first_not_of(" \t\r\n");
-                    if (start != std::string::npos) {
-                        var = var.substr(start);
+                        // Extract variable (trimming whitespace)
+                        std::string var = content_str.substr(pos, comma_pos - pos);
+
+                        // Trim leading whitespace
+                        size_t start = var.find_first_not_of(" \t\r\n");
+                        if (start != std::string::npos) {
+                            var = var.substr(start);
+                        }
+
+                        // Trim trailing whitespace
+                        size_t end = var.find_last_not_of(" \t\r\n");
+                        if (end != std::string::npos) {
+                            var = var.substr(0, end + 1);
+                        }
+
+                        // Add non-empty variable
+                        if (!var.empty()) {
+                            omp_clause->addLangExpr(var.c_str());
+                        }
+
+                        pos = comma_pos + 1;
                     }
-
-                    // Trim trailing whitespace
-                    size_t end = var.find_last_not_of(" \t\r\n");
-                    if (end != std::string::npos) {
-                        var = var.substr(0, end + 1);
+                } else if (clause_kind == OMPC_if) {
+                    // Special handling for if clause: strip modifier prefix
+                    size_t colon_pos = content_str.find(':');
+                    if (colon_pos != std::string::npos) {
+                        // Strip "modifier:" prefix, keep only the condition
+                        content_str = content_str.substr(colon_pos + 1);
+                        // Trim leading whitespace
+                        size_t start = content_str.find_first_not_of(" \t");
+                        if (start != std::string::npos) {
+                            content_str = content_str.substr(start);
+                        }
                     }
-
-                    // Add non-empty variable
-                    if (!var.empty()) {
-                        omp_clause->addLangExpr(var.c_str());
+                    // Add the condition expression
+                    if (!content_str.empty()) {
+                        omp_clause->addLangExpr(content_str.c_str());
                     }
+                } else {
+                    // Split by comma and add each variable separately
+                    // This allows ompparser's addLangExpr to deduplicate
+                    size_t pos = 0;
+                    while (pos < content_str.length()) {
+                        // Find next comma
+                        size_t comma_pos = content_str.find(',', pos);
+                        if (comma_pos == std::string::npos) {
+                            comma_pos = content_str.length();
+                        }
 
-                    pos = comma_pos + 1;
+                        // Extract variable (trimming whitespace)
+                        std::string var = content_str.substr(pos, comma_pos - pos);
+
+                        // Trim leading whitespace
+                        size_t start = var.find_first_not_of(" \t\r\n");
+                        if (start != std::string::npos) {
+                            var = var.substr(start);
+                        }
+
+                        // Trim trailing whitespace
+                        size_t end = var.find_last_not_of(" \t\r\n");
+                        if (end != std::string::npos) {
+                            var = var.substr(0, end + 1);
+                        }
+
+                        // Add non-empty variable
+                        if (!var.empty()) {
+                            omp_clause->addLangExpr(var.c_str());
+                        }
+
+                        pos = comma_pos + 1;
+                    }
                 }
             }
         }
