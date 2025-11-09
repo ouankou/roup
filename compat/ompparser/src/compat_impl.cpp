@@ -486,13 +486,25 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             // Handle specialized clauses that need parameters
             if (clause_kind == OMPC_default) {
                 // Default clause needs default kind parameter
-                int32_t roup_default = roup_clause_default_data_sharing(roup_clause);
-                // Map ROUP values (0=shared, 1=none) to ompparser enum
-                // OMPC_DEFAULT_shared=2, OMPC_DEFAULT_none=3
-                OpenMPDefaultClauseKind default_kind =
-                    (roup_default == 0) ? OMPC_DEFAULT_shared :
-                    (roup_default == 1) ? OMPC_DEFAULT_none :
-                    OMPC_DEFAULT_unknown;
+                // Parse from arguments: "shared", "none", "private", "firstprivate"
+                const char* args = roup_clause_arguments(roup_clause);
+                OpenMPDefaultClauseKind default_kind = OMPC_DEFAULT_unknown;
+                if (args && args[0] != '\0') {
+                    std::string arg_lower(args);
+                    std::transform(arg_lower.begin(), arg_lower.end(), arg_lower.begin(), ::tolower);
+                    if (arg_lower.find("shared") != std::string::npos) {
+                        default_kind = OMPC_DEFAULT_shared;
+                    } else if (arg_lower.find("none") != std::string::npos) {
+                        default_kind = OMPC_DEFAULT_none;
+                    } else if (arg_lower.find("private") != std::string::npos) {
+                        // Check for "firstprivate" before "private"
+                        if (arg_lower.find("first") != std::string::npos) {
+                            default_kind = OMPC_DEFAULT_firstprivate;
+                        } else {
+                            default_kind = OMPC_DEFAULT_private;
+                        }
+                    }
+                }
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), static_cast<int>(default_kind));
                 skip_std_args = true;
             } else if (clause_kind == OMPC_schedule) {
