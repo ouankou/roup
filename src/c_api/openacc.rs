@@ -872,6 +872,7 @@ fn reduction_operator_token(operator: ReductionOperator) -> &'static str {
         ReductionOperator::FortIand => "iand",
         ReductionOperator::FortIor => "ior",
         ReductionOperator::FortIeor => "ieor",
+        ReductionOperator::UserDefined => "user",
     }
 }
 

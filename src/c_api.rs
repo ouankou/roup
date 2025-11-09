@@ -167,7 +167,9 @@ struct ScheduleData {
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct ReductionData {
-    operator: i32, // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+    operator: i32, // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max, etc.
+    modifier: i32, // -1=none, 0=inscan, 1=task, 2=default
+    user_operator: *const c_char, // For user-defined operators, NULL otherwise
 }
 
 /// Iterator over clauses
@@ -757,6 +759,46 @@ pub extern "C" fn roup_clause_reduction_operator(clause: *const OmpClause) -> i3
     }
 }
 
+/// Get reduction modifier from reduction clause.
+///
+/// Returns -1 if clause is NULL, not a reduction clause, or has no modifier.
+/// Return values: 0=inscan, 1=task, 2=default
+#[no_mangle]
+pub extern "C" fn roup_clause_reduction_modifier(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let c = &*clause;
+        // Check if it's a reduction clause (kind 6, 45=in_reduction, 75=task_reduction)
+        if c.kind != 6 && c.kind != 45 && c.kind != 75 {
+            return -1;
+        }
+        c.data.reduction.modifier
+    }
+}
+
+/// Get user-defined operator string from reduction clause.
+///
+/// Returns NULL if clause is NULL, not a reduction clause, or uses a built-in operator.
+/// Returns pointer to operator string for user-defined operators.
+#[no_mangle]
+pub extern "C" fn roup_clause_reduction_user_operator(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        // Check if it's a reduction clause (kind 6, 45=in_reduction, 75=task_reduction)
+        if c.kind != 6 && c.kind != 45 && c.kind != 75 {
+            return ptr::null();
+        }
+        c.data.reduction.user_operator
+    }
+}
+
 /// Get default data sharing from default clause.
 ///
 /// Returns -1 if clause is NULL or not a default clause.
@@ -1013,8 +1055,8 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "firstprivate" => (4, ClauseData { variables: ptr::null_mut() }),
         "lastprivate" => (5, ClauseData { variables: ptr::null_mut() }),
         "reduction" => {
-            let operator = parse_reduction_operator(clause);
-            (6, ClauseData { reduction: ManuallyDrop::new(ReductionData { operator }) })
+            let (operator, modifier, user_operator) = parse_reduction_clause(clause);
+            (6, ClauseData { reduction: ManuallyDrop::new(ReductionData { operator, modifier, user_operator }) })
         }
         "schedule" => {
             let schedule_kind = parse_schedule_kind(clause);
@@ -1063,7 +1105,10 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "untied" => (42, ClauseData { default: 0 }),
         "requires" => (43, ClauseData { default: 0 }),
         "mergeable" => (44, ClauseData { default: 0 }),
-        "in_reduction" => (45, ClauseData { reduction: ManuallyDrop::new(ReductionData { operator: 0 }) }),
+        "in_reduction" => {
+            let (operator, modifier, user_operator) = parse_reduction_clause(clause);
+            (45, ClauseData { reduction: ManuallyDrop::new(ReductionData { operator, modifier, user_operator }) })
+        }
         "depend" => (46, ClauseData { default: 0 }),
         "priority" => (47, ClauseData { default: 0 }),
         "affinity" => (48, ClauseData { variables: ptr::null_mut() }),
@@ -1092,7 +1137,10 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "match" => (72, ClauseData { default: 0 }),
         "link" => (73, ClauseData { variables: ptr::null_mut() }),
         "device_type" => (74, ClauseData { default: 0 }),
-        "task_reduction" => (75, ClauseData { reduction: ManuallyDrop::new(ReductionData { operator: 0 }) }),
+        "task_reduction" => {
+            let (operator, modifier, user_operator) = parse_reduction_clause(clause);
+            (75, ClauseData { reduction: ManuallyDrop::new(ReductionData { operator, modifier, user_operator }) })
+        }
         "acq_rel" => (76, ClauseData { default: 0 }),
         "release" => (77, ClauseData { default: 0 }),
         "acquire" => (78, ClauseData { default: 0 }),
@@ -1129,38 +1177,62 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 /// - 2 = *  (multiplication) - 7 = || (logical OR)
 /// - 3 = &  (bitwise AND)   - 8 = min
 /// - 4 = |  (bitwise OR)    - 9 = max
-fn parse_reduction_operator(clause: &Clause) -> i32 {
-    // Look for operator in clause kind
-    if let ClauseKind::Parenthesized(ref args) = clause.kind {
-        let args = args.as_ref();
-        // Operators (+, -, *, etc.) are ASCII symbols - no case conversion needed
-        if args.contains('+') && !args.contains("++") {
-            return 0; // Plus
-        } else if args.contains('-') && !args.contains("--") {
-            return 1; // Minus
-        } else if args.contains('*') {
-            return 2; // Times
-        } else if args.contains('&') && !args.contains("&&") {
-            return 3; // BitwiseAnd
-        } else if args.contains('|') && !args.contains("||") {
-            return 4; // BitwiseOr
-        } else if args.contains('^') {
-            return 5; // BitwiseXor
-        } else if args.contains("&&") {
-            return 6; // LogicalAnd
-        } else if args.contains("||") {
-            return 7; // LogicalOr
-        }
+/// Parse reduction clause to extract operator, modifier, and user-defined operator string.
+///
+/// Returns (operator_code, modifier_code, user_operator_ptr):
+/// - operator_code: 0=+, 1=-, 2=*, 3=&, 4=|, 5=^, 6=&&, 7=||, 8=min, 9=max, 10+=Fort operators, 19=UserDefined
+/// - modifier_code: -1=none, 0=inscan, 1=task, 2=default
+/// - user_operator_ptr: CString pointer for user-defined operators, NULL otherwise
+fn parse_reduction_clause(clause: &Clause) -> (i32, i32, *const c_char) {
+    use crate::parser::{ClauseKind, ReductionModifier, ReductionOperator};
 
-        // For text keywords (min, max), normalize once for case-insensitive comparison
-        let args_lower = args.to_ascii_lowercase();
-        if args_lower.contains("min") {
-            return 8; // Min
-        } else if args_lower.contains("max") {
-            return 9; // Max
-        }
+    if let ClauseKind::ReductionClause { modifier, operator, operator_str, .. } = &clause.kind {
+        // Map operator enum to integer code
+        let op_code = match operator {
+            ReductionOperator::Add => 0,
+            ReductionOperator::Sub => 1,
+            ReductionOperator::Mul => 2,
+            ReductionOperator::BitAnd => 3,
+            ReductionOperator::BitOr => 4,
+            ReductionOperator::BitXor => 5,
+            ReductionOperator::LogAnd => 6,
+            ReductionOperator::LogOr => 7,
+            ReductionOperator::Min => 8,
+            ReductionOperator::Max => 9,
+            ReductionOperator::FortAnd => 10,
+            ReductionOperator::FortOr => 11,
+            ReductionOperator::FortEqv => 12,
+            ReductionOperator::FortNeqv => 13,
+            ReductionOperator::FortIand => 14,
+            ReductionOperator::FortIor => 15,
+            ReductionOperator::FortIeor => 16,
+            ReductionOperator::UserDefined => 19,
+        };
+
+        // Map modifier enum to integer code
+        let mod_code = match modifier {
+            None => -1,
+            Some(ReductionModifier::Inscan) => 0,
+            Some(ReductionModifier::Task) => 1,
+            Some(ReductionModifier::Default) => 2,
+        };
+
+        // For user-defined operators, create a CString
+        let user_op_ptr = if *operator == ReductionOperator::UserDefined {
+            if let Some(ref op_str) = operator_str {
+                CString::new(op_str.to_string()).unwrap().into_raw()
+            } else {
+                ptr::null()
+            }
+        } else {
+            ptr::null()
+        };
+
+        (op_code, mod_code, user_op_ptr)
+    } else {
+        // Fallback for non-structured reduction clauses (shouldn't happen with new parser)
+        (0, -1, ptr::null())
     }
-    0 // Default to plus
 }
 
 /// Parse schedule kind from clause arguments.

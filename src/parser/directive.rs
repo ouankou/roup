@@ -108,7 +108,9 @@ impl<'a> Directive<'a> {
                         20 + modifier.map_or(0, |m| m as u32)
                     }
                 }
-                ClauseKind::ReductionClause { operator, .. } => 30 + *operator as u32,
+                ClauseKind::ReductionClause { modifier, operator, .. } => {
+                    30 + (*operator as u32) * 10 + modifier.map_or(0, |m| m as u32)
+                }
                 ClauseKind::CopyinClause { modifier, .. } => 40 + modifier.map_or(0, |m| m as u32),
                 ClauseKind::CopyoutClause { modifier, .. } => 50 + modifier.map_or(0, |m| m as u32),
                 ClauseKind::CreateClause { modifier, .. } => 60 + modifier.map_or(0, |m| m as u32),
@@ -181,18 +183,26 @@ impl<'a> Directive<'a> {
                         };
                         new_clauses.push(merged_clause);
                     }
-                    ClauseKind::ReductionClause { operator, .. } => {
-                        // Merge reduction clauses with same operator
+                    ClauseKind::ReductionClause { modifier, operator, .. } => {
+                        // Merge reduction clauses with same modifier and operator
                         let mut vars = Vec::new();
                         let mut seen = HashSet::new();
+                        let mut space_after_colon = false;
+                        let mut operator_str_val = None;
                         for clause in &group {
                             if let ClauseKind::ReductionClause {
+                                modifier: m,
                                 operator: op,
+                                operator_str: op_str,
                                 variables,
-                                ..
+                                space_after_colon: sac,
                             } = &clause.kind
                             {
-                                if op == operator {
+                                if m == modifier && op == operator {
+                                    space_after_colon = *sac;
+                                    if operator_str_val.is_none() {
+                                        operator_str_val = op_str.clone();
+                                    }
                                     for var in variables {
                                         let var_str = var.as_ref();
                                         if seen.insert(var_str.to_string()) {
@@ -205,9 +215,11 @@ impl<'a> Directive<'a> {
                         new_clauses.push(Clause {
                             name: first.name.clone(),
                             kind: ClauseKind::ReductionClause {
+                                modifier: *modifier,
                                 operator: *operator,
+                                operator_str: operator_str_val,
                                 variables: vars,
-                                space_after_colon: false,
+                                space_after_colon,
                             },
                         });
                     }

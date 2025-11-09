@@ -24,7 +24,7 @@ pub enum CreateModifier {
     Zero,
 }
 
-/// OpenACC reduction clause operator
+/// Reduction clause operator (OpenMP and OpenACC)
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ReductionOperator {
     Add,    // +
@@ -45,6 +45,16 @@ pub enum ReductionOperator {
     FortIand, // iand
     FortIor,  // ior
     FortIeor, // ieor
+    // User-defined operator (store full string)
+    UserDefined,
+}
+
+/// OpenMP reduction clause modifier
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ReductionModifier {
+    Inscan,
+    Task,
+    Default,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -99,9 +109,11 @@ pub enum ClauseKind<'a> {
         modifier: Option<CreateModifier>,
         variables: Vec<Cow<'a, str>>,
     },
-    /// Structured reduction clause with operator
+    /// Structured reduction clause with operator and optional modifier
     ReductionClause {
+        modifier: Option<ReductionModifier>,
         operator: ReductionOperator,
+        operator_str: Option<Cow<'a, str>>, // For user-defined operators
         variables: Vec<Cow<'a, str>>,
         space_after_colon: bool,
     },
@@ -204,7 +216,9 @@ impl fmt::Display for Clause<'_> {
                 write!(f, "{})", variables.join(", "))
             }
             ClauseKind::ReductionClause {
+                modifier,
                 operator,
+                operator_str,
                 variables,
                 space_after_colon,
             } => {
@@ -226,11 +240,26 @@ impl fmt::Display for Clause<'_> {
                     ReductionOperator::FortIand => "iand",
                     ReductionOperator::FortIor => "ior",
                     ReductionOperator::FortIeor => "ieor",
+                    ReductionOperator::UserDefined => operator_str.as_ref().map(|s| s.as_ref()).unwrap_or(""),
                 };
+
+                write!(f, "{}(", self.name)?;
+
+                // Write modifier if present
+                if let Some(mod_val) = modifier {
+                    let mod_str = match mod_val {
+                        ReductionModifier::Inscan => "inscan",
+                        ReductionModifier::Task => "task",
+                        ReductionModifier::Default => "default",
+                    };
+                    write!(f, "{}, ", mod_str)?;
+                }
+
+                // Write operator and variables
                 if *space_after_colon {
-                    write!(f, "{}({}: {})", self.name, op_str, variables.join(", "))
+                    write!(f, "{}: {})", op_str, variables.join(", "))
                 } else {
-                    write!(f, "{}({}:{})", self.name, op_str, variables.join(", "))
+                    write!(f, "{}:{})", op_str, variables.join(", "))
                 }
             }
         }

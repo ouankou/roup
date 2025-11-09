@@ -535,7 +535,7 @@ fn parse_parenthesized_content_inner(input: &str) -> nom::IResult<&str, String> 
 /// Handles: m, n, p
 ///          x[0:N], y[1:10]
 ///          max::x, readonly::y (C++ scope resolution)
-fn parse_variable_list(input: &str) -> Vec<Cow<'_, str>> {
+pub(super) fn parse_variable_list(input: &str) -> Vec<Cow<'_, str>> {
     let mut variables = Vec::new();
     let mut current = String::new();
     let mut depth = 0; // Track parenthesis/bracket depth for array sections
@@ -837,7 +837,9 @@ fn parse_reduction_clause<'a>(
         super::Clause {
             name,
             kind: ClauseKind::ReductionClause {
+                modifier: None, // OpenACC doesn't use modifiers
                 operator,
+                operator_str: None,
                 variables,
                 space_after_colon,
             },

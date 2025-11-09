@@ -81,7 +81,7 @@ openmp_clauses! {
     Hint => { name: "hint", rule: ClauseRule::Parenthesized },
     Holds => { name: "holds", rule: ClauseRule::Parenthesized },
     If => { name: "if", rule: ClauseRule::Parenthesized },
-    InReduction => { name: "in_reduction", rule: ClauseRule::Parenthesized },
+    InReduction => { name: "in_reduction", rule: ClauseRule::Custom(parse_reduction_clause) },
     Induction => { name: "induction", rule: ClauseRule::Parenthesized },
     Inductor => { name: "inductor", rule: ClauseRule::Parenthesized },
     Inbranch => { name: "inbranch", rule: ClauseRule::Bare },
@@ -126,7 +126,7 @@ openmp_clauses! {
     ProcBind => { name: "proc_bind", rule: ClauseRule::Parenthesized },
     Public => { name: "public", rule: ClauseRule::Flexible },
     Read => { name: "read", rule: ClauseRule::Flexible },
-    Reduction => { name: "reduction", rule: ClauseRule::Parenthesized },
+    Reduction => { name: "reduction", rule: ClauseRule::Custom(parse_reduction_clause) },
     Release => { name: "release", rule: ClauseRule::Bare },
     Relaxed => { name: "relaxed", rule: ClauseRule::Bare },
     Replayable => { name: "replayable", rule: ClauseRule::Flexible },
@@ -143,7 +143,7 @@ openmp_clauses! {
     Simd => { name: "simd", rule: ClauseRule::Bare },
     Simdlen => { name: "simdlen", rule: ClauseRule::Parenthesized },
     Sizes => { name: "sizes", rule: ClauseRule::Parenthesized },
-    TaskReduction => { name: "task_reduction", rule: ClauseRule::Parenthesized },
+    TaskReduction => { name: "task_reduction", rule: ClauseRule::Custom(parse_reduction_clause) },
     ThreadLimit => { name: "thread_limit", rule: ClauseRule::Parenthesized },
     Threads => { name: "threads", rule: ClauseRule::Bare },
     Threadset => { name: "threadset", rule: ClauseRule::Parenthesized },
@@ -702,6 +702,115 @@ fn parse_groupprivate_directive<'a>(
         let (rest, clauses) = clause_registry.parse_sequence(input)?;
         Ok((rest, Directive::new(name, None, clauses)))
     }
+}
+
+// Custom parser for reduction clause: reduction(modifier, operator : variables)
+// Supports modifiers (inscan, task, default) and various operators
+fn parse_reduction_clause<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+) -> nom::IResult<&'a str, super::Clause<'a>> {
+    use crate::lexer;
+    use crate::parser::clause::{ClauseKind, ReductionModifier, ReductionOperator};
+    use nom::bytes::complete::tag;
+
+    let (input, _) = lexer::skip_space_and_comments(input)?;
+    let (input, _) = tag("(")(input)?;
+    let (input, _) = lexer::skip_space_and_comments(input)?;
+
+    // Find the colon that separates operator (and modifier) from variables
+    let colon_idx = input.find(':').ok_or_else(|| {
+        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
+    })?;
+
+    let left_part = input[..colon_idx].trim();
+
+    // Check if there's a comma (modifier, operator) or just operator
+    let (modifier, op_str) = if let Some(comma_idx) = left_part.find(',') {
+        let mod_str = left_part[..comma_idx].trim().to_lowercase();
+        let op = left_part[comma_idx + 1..].trim();
+
+        let modifier = match mod_str.as_str() {
+            "inscan" => Some(ReductionModifier::Inscan),
+            "task" => Some(ReductionModifier::Task),
+            "default" => Some(ReductionModifier::Default),
+            _ => None,
+        };
+
+        (modifier, op)
+    } else {
+        (None, left_part)
+    };
+
+    // Parse operator
+    let op_lower = op_str.trim().to_lowercase();
+    let (operator, operator_str) = match op_lower.as_str() {
+        "+" => (ReductionOperator::Add, None),
+        "-" => (ReductionOperator::Sub, None),
+        "*" => (ReductionOperator::Mul, None),
+        "max" => (ReductionOperator::Max, None),
+        "min" => (ReductionOperator::Min, None),
+        "&" => (ReductionOperator::BitAnd, None),
+        "|" => (ReductionOperator::BitOr, None),
+        "^" => (ReductionOperator::BitXor, None),
+        "&&" => (ReductionOperator::LogAnd, None),
+        "||" => (ReductionOperator::LogOr, None),
+        ".and." => (ReductionOperator::FortAnd, None),
+        ".or." => (ReductionOperator::FortOr, None),
+        ".eqv." => (ReductionOperator::FortEqv, None),
+        ".neqv." => (ReductionOperator::FortNeqv, None),
+        "iand" => (ReductionOperator::FortIand, None),
+        "ior" => (ReductionOperator::FortIor, None),
+        "ieor" => (ReductionOperator::FortIeor, None),
+        _ => {
+            // User-defined operator
+            (ReductionOperator::UserDefined, Some(std::borrow::Cow::Borrowed(op_str.trim())))
+        }
+    };
+
+    let input = &input[colon_idx + 1..];
+
+    // Check if there's a space after the colon (for formatting preservation)
+    let space_after_colon = input.starts_with(|c: char| c.is_whitespace());
+
+    // Parse until closing paren
+    let (input, _) = lexer::skip_space_and_comments(input)?;
+    let mut depth = 0;
+    let mut end_idx = None;
+
+    for (idx, ch) in input.char_indices() {
+        match ch {
+            '(' | '[' => depth += 1,
+            ')' if depth == 0 => {
+                end_idx = Some(idx);
+                break;
+            }
+            ')' | ']' => depth -= 1,
+            _ => {}
+        }
+    }
+
+    let end_idx = end_idx.ok_or_else(|| {
+        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
+    })?;
+
+    let var_list_str = &input[..end_idx];
+    let variables = super::openacc::parse_variable_list(var_list_str);
+    let rest = &input[end_idx + 1..];
+
+    Ok((
+        rest,
+        super::Clause {
+            name,
+            kind: ClauseKind::ReductionClause {
+                modifier,
+                operator,
+                operator_str,
+                variables,
+                space_after_colon,
+            },
+        },
+    ))
 }
 
 // Custom parser for target_data directive (handles underscore variant)
