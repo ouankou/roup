@@ -5,14 +5,13 @@
 //! - build.rs (to generate the header during compilation)
 //! - Standalone mode (to verify header is up-to-date in CI)
 //!
-//! # Current Limitations
+//! # Generated Constants
 //!
-//! **Composite Directives**: Directives with spaces (e.g., "parallel for", "target teams")
-//! are currently excluded from the constant mapping. In the ompparser compatibility layer,
-//! these have dedicated enum values (e.g., OMPD_parallel_for, OMPD_target_teams in
-//! OpenMPDirectiveKind), but mapping composite directives from ROUP to these ompparser
-//! enums is not yet implemented. Only simple, single-word directive names are currently
-//! supported in the generated constants.
+//! **All Directives**: All OpenMP and OpenACC directives are now included in the constant mapping.
+//! Composite directives with spaces (e.g., "parallel for", "target teams") are converted to
+//! C constants with underscores (e.g., ROUP_DIRECTIVE_PARALLEL_FOR, ROUP_DIRECTIVE_TARGET_TEAMS)
+//! Each directive now has a unique integer code (0-131 for OpenMP) for accurate mapping to
+//! ompparser/accparser compatibility layer enums.
 //!
 //! # Hash Function Choice
 //!
@@ -57,18 +56,15 @@ pub fn parse_directive_mappings() -> Vec<(String, i32)> {
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
                         if let Some((name, num)) = parse_directive_arm(arm) {
-                            // Filter out: (1) composite directives with spaces, (2) UNKNOWN_KIND, (3) duplicates
-                            // Note: OpenMP spec defines composite directives as having spaces
-                            // (e.g., "parallel for", "target teams"). Single-word directives
-                            // like "parallel", "for", "target" never contain spaces by definition.
-                            // Exclude composite directives with spaces - these require special mapping logic
-                            // not yet implemented in the compatibility layer (see module docs).
-                            let is_simple_directive = name.split_whitespace().count() == 1;
+                            // Filter out: (1) UNKNOWN_KIND, (2) duplicates
+                            // Include ALL directives now that each has a unique code
                             let is_known_kind = num != UNKNOWN_KIND; // Exclude unknown sentinel
                             let is_first_occurrence = seen_numbers.insert(num); // Deduplicate
 
-                            if is_simple_directive && is_known_kind && is_first_occurrence {
-                                mappings.push((normalize_constant_name(&name), num));
+                            if is_known_kind && is_first_occurrence {
+                                // Replace spaces with underscores for C constant names
+                                let const_name = normalize_constant_name(&name).replace(' ', "_");
+                                mappings.push((const_name, num));
                             }
                         }
                     }
