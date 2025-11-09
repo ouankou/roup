@@ -250,6 +250,58 @@ static OpenMPDependClauseType mapDependType(const std::string& type) {
     return OMPC_DEPENDENCE_TYPE_unknown;
 }
 
+// Helper to map proc_bind kind string to enum
+static OpenMPProcBindClauseKind mapProcBindKind(const std::string& kind) {
+    if (kind == "master") return OMPC_PROC_BIND_master;
+    if (kind == "close") return OMPC_PROC_BIND_close;
+    if (kind == "spread") return OMPC_PROC_BIND_spread;
+    return OMPC_PROC_BIND_unknown;
+}
+
+// Helper to map bind clause binding string to enum
+static OpenMPBindClauseBinding mapBindBinding(const std::string& binding) {
+    if (binding == "teams") return OMPC_BIND_teams;
+    if (binding == "parallel") return OMPC_BIND_parallel;
+    if (binding == "thread") return OMPC_BIND_thread;
+    return OMPC_BIND_unknown;
+}
+
+// Helper to map dist_schedule kind string to enum
+static OpenMPDistScheduleClauseKind mapDistScheduleKind(const std::string& kind) {
+    if (kind == "static") return OMPC_DIST_SCHEDULE_KIND_static;
+    return OMPC_DIST_SCHEDULE_KIND_unknown;
+}
+
+// Helper to map in_reduction identifier string to enum
+static OpenMPInReductionClauseIdentifier mapInReductionIdentifier(const std::string& id) {
+    if (id == "+" || id == "plus") return OMPC_IN_REDUCTION_IDENTIFIER_plus;
+    if (id == "-" || id == "minus") return OMPC_IN_REDUCTION_IDENTIFIER_minus;
+    if (id == "*" || id == "mul") return OMPC_IN_REDUCTION_IDENTIFIER_mul;
+    if (id == "&" || id == "bitand") return OMPC_IN_REDUCTION_IDENTIFIER_bitand;
+    if (id == "|" || id == "bitor") return OMPC_IN_REDUCTION_IDENTIFIER_bitor;
+    if (id == "^" || id == "bitxor") return OMPC_IN_REDUCTION_IDENTIFIER_bitxor;
+    if (id == "&&" || id == "logand") return OMPC_IN_REDUCTION_IDENTIFIER_logand;
+    if (id == "||" || id == "logor") return OMPC_IN_REDUCTION_IDENTIFIER_logor;
+    if (id == "max") return OMPC_IN_REDUCTION_IDENTIFIER_max;
+    if (id == "min") return OMPC_IN_REDUCTION_IDENTIFIER_min;
+    return OMPC_IN_REDUCTION_IDENTIFIER_user;
+}
+
+// Helper to map task_reduction identifier string to enum
+static OpenMPTaskReductionClauseIdentifier mapTaskReductionIdentifier(const std::string& id) {
+    if (id == "+" || id == "plus") return OMPC_TASK_REDUCTION_IDENTIFIER_plus;
+    if (id == "-" || id == "minus") return OMPC_TASK_REDUCTION_IDENTIFIER_minus;
+    if (id == "*" || id == "mul") return OMPC_TASK_REDUCTION_IDENTIFIER_mul;
+    if (id == "&" || id == "bitand") return OMPC_TASK_REDUCTION_IDENTIFIER_bitand;
+    if (id == "|" || id == "bitor") return OMPC_TASK_REDUCTION_IDENTIFIER_bitor;
+    if (id == "^" || id == "bitxor") return OMPC_TASK_REDUCTION_IDENTIFIER_bitxor;
+    if (id == "&&" || id == "logand") return OMPC_TASK_REDUCTION_IDENTIFIER_logand;
+    if (id == "||" || id == "logor") return OMPC_TASK_REDUCTION_IDENTIFIER_logor;
+    if (id == "max") return OMPC_TASK_REDUCTION_IDENTIFIER_max;
+    if (id == "min") return OMPC_TASK_REDUCTION_IDENTIFIER_min;
+    return OMPC_TASK_REDUCTION_IDENTIFIER_user;
+}
+
 static OpenMPDirectiveKind mapRoupDirectiveNameToOmpparser(const char* name) {
     // Direct string-based mapping from directive name to ompparser kind
     // This bypasses ROUP's simplified directive kind system and uses the actual directive name
@@ -886,6 +938,108 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     }
 
                     omp_clause = dir->addOpenMPClause(OMPC_depend, modifier, type);
+                    if (omp_clause && !var_list.empty()) {
+                        std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                        for (const std::string& var : vars) {
+                            if (!var.empty()) {
+                                omp_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case OMPC_proc_bind: {
+                    // Format: proc_bind(kind)
+                    // Example: proc_bind(master)
+                    OpenMPProcBindClauseKind kind = mapProcBindKind(params);
+                    omp_clause = dir->addOpenMPClause(OMPC_proc_bind, kind);
+                    break;
+                }
+
+                case OMPC_bind: {
+                    // Format: bind(binding)
+                    // Example: bind(teams)
+                    OpenMPBindClauseBinding binding = mapBindBinding(params);
+                    omp_clause = dir->addOpenMPClause(OMPC_bind, binding);
+                    break;
+                }
+
+                case OMPC_dist_schedule: {
+                    // Format: dist_schedule(kind,chunk) or dist_schedule(kind)
+                    // Example: dist_schedule(static,2)
+                    OpenMPDistScheduleClauseKind kind = OMPC_DIST_SCHEDULE_KIND_static;
+                    std::string chunk_expr;
+
+                    std::vector<std::string> kind_chunk = parseCommaSeparatedList(params);
+                    if (kind_chunk.size() >= 1) {
+                        kind = mapDistScheduleKind(kind_chunk[0]);
+                    }
+                    if (kind_chunk.size() >= 2) {
+                        chunk_expr = kind_chunk[1];
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_dist_schedule, kind);
+                    if (omp_clause && !chunk_expr.empty()) {
+                        OpenMPDistScheduleClause* dist_schedule_clause = dynamic_cast<OpenMPDistScheduleClause*>(omp_clause);
+                        if (dist_schedule_clause) {
+                            dist_schedule_clause->setChunkSize(chunk_expr.c_str());
+                        }
+                    }
+                    break;
+                }
+
+                case OMPC_in_reduction: {
+                    // Format: in_reduction(operator:list)
+                    // Example: in_reduction(max:a,b,c)
+                    OpenMPInReductionClauseIdentifier identifier = OMPC_IN_REDUCTION_IDENTIFIER_plus;
+                    std::string var_list;
+                    std::string operator_str;
+
+                    size_t colon_pos = params.find(':');
+                    if (colon_pos != std::string::npos) {
+                        operator_str = params.substr(0, colon_pos);
+                        var_list = params.substr(colon_pos + 1);
+                        identifier = mapInReductionIdentifier(operator_str);
+                    }
+
+                    char* user_defined = nullptr;
+                    if (identifier == OMPC_IN_REDUCTION_IDENTIFIER_user && !operator_str.empty()) {
+                        user_defined = strdup(operator_str.c_str());
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_in_reduction, identifier, user_defined);
+                    if (omp_clause && !var_list.empty()) {
+                        std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                        for (const std::string& var : vars) {
+                            if (!var.empty()) {
+                                omp_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case OMPC_task_reduction: {
+                    // Format: task_reduction(operator:list)
+                    // Example: task_reduction(max:a,b,c)
+                    OpenMPTaskReductionClauseIdentifier identifier = OMPC_TASK_REDUCTION_IDENTIFIER_plus;
+                    std::string var_list;
+                    std::string operator_str;
+
+                    size_t colon_pos = params.find(':');
+                    if (colon_pos != std::string::npos) {
+                        operator_str = params.substr(0, colon_pos);
+                        var_list = params.substr(colon_pos + 1);
+                        identifier = mapTaskReductionIdentifier(operator_str);
+                    }
+
+                    char* user_defined = nullptr;
+                    if (identifier == OMPC_TASK_REDUCTION_IDENTIFIER_user && !operator_str.empty()) {
+                        user_defined = strdup(operator_str.c_str());
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_task_reduction, identifier, user_defined);
                     if (omp_clause && !var_list.empty()) {
                         std::vector<std::string> vars = parseCommaSeparatedList(var_list);
                         for (const std::string& var : vars) {
