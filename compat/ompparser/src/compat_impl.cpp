@@ -308,6 +308,10 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             // threadprivate(a,b,c) - variable list
             OpenMPThreadprivateDirective* tp_dir = static_cast<OpenMPThreadprivateDirective*>(dir);
             tp_dir->addThreadprivateList(strdup(param_str.c_str()));
+        } else if (kind == OMPD_critical) {
+            // critical(name) - critical section name
+            OpenMPCriticalDirective* crit_dir = static_cast<OpenMPCriticalDirective*>(dir);
+            crit_dir->setCriticalName(param_str.c_str());
         } else if (kind == OMPD_cancel || kind == OMPD_cancellation_point) {
             // cancel parallel - construct type as bare clause
             // Map construct type string to clause kind

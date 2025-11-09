@@ -640,6 +640,47 @@ fn parse_scan_directive<'a>(
     Ok((rest, Directive::new(name, None, clauses)))
 }
 
+// Custom parser for critical directive: critical(name) or bare critical
+fn parse_critical_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+    use nom::bytes::complete::take_until;
+    use nom::character::complete::char;
+
+    let input_trimmed = input.trim_start();
+
+    // Try to parse (name) form
+    if input_trimmed.starts_with('(') {
+        // Parse opening paren
+        let (rest, _) = char::<&str, nom::error::Error<&str>>('(')(input_trimmed)?;
+        // Parse until closing paren
+        let (rest, critical_name) = take_until(")")(rest)?;
+        // Parse closing paren
+        let (rest, _) = char::<&str, nom::error::Error<&str>>(')')( rest)?;
+
+        // Parse any additional clauses
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Borrowed("critical"),
+                parameter: Some(std::borrow::Cow::Owned(critical_name.to_string())),
+                clauses,
+                wait_data: None,
+                cache_data: None,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive::new(name, None, clauses)))
+    }
+}
+
 // Custom parser for cancel directive: cancel construct-type-clause or bare cancel
 fn parse_cancel_directive<'a>(
     name: std::borrow::Cow<'a, str>,
@@ -765,6 +806,7 @@ const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
     "scan",
     "cancel",
     "cancellation point",
+    "critical",
     "groupprivate",
 ];
 
@@ -781,6 +823,7 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("scan", parse_scan_directive);
     builder = builder.register_custom("cancel", parse_cancel_directive);
     builder = builder.register_custom("cancellation point", parse_cancellation_point_directive);
+    builder = builder.register_custom("critical", parse_critical_directive);
     builder = builder.register_custom("groupprivate", parse_groupprivate_directive);
 
     // Handle underscore variant of "target data"
