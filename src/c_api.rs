@@ -126,6 +126,7 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 #[repr(C)]
 pub struct OmpDirective {
     name: *const c_char,     // Directive name (e.g., "parallel")
+    parameter: *const c_char, // Optional parameter (e.g., "(a,b,c)" for allocate(a,b,c))
     clauses: Vec<OmpClause>, // Associated clauses
 }
 
@@ -238,6 +239,7 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
     // Convert to C-compatible format
     let c_directive = OmpDirective {
         name: allocate_c_string(directive.name.as_ref()),
+        parameter: directive.parameter.as_ref().map_or(ptr::null(), |p| allocate_c_string(p.as_ref())),
         clauses: directive
             .clauses
             .into_iter()
@@ -358,6 +360,7 @@ pub extern "C" fn roup_parse_with_language(
     // Convert to C-compatible format
     let c_directive = OmpDirective {
         name: allocate_c_string(directive.name.as_ref()),
+        parameter: directive.parameter.as_ref().map_or(ptr::null(), |p| allocate_c_string(p.as_ref())),
         clauses: directive
             .clauses
             .into_iter()
@@ -572,6 +575,22 @@ pub extern "C" fn roup_directive_name(directive: *const OmpDirective) -> *const 
     unsafe {
         let dir = &*directive;
         dir.name
+    }
+}
+
+/// Get directive parameter (e.g., "(a,b,c)" for allocate(a,b,c)).
+///
+/// Returns NULL if directive is NULL or has no parameter.
+/// Returned pointer is valid until directive is freed.
+#[no_mangle]
+pub extern "C" fn roup_directive_parameter(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let dir = &*directive;
+        dir.parameter
     }
 }
 

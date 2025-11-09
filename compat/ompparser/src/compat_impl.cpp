@@ -208,9 +208,60 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 input, roup_kind, (int)kind, dir_name_str.c_str());
     }
 
-    // Create ompparser-compatible directive
-    // Use ompparser's actual constructor: OpenMPDirective(kind, lang, line, col)
-    OpenMPDirective* dir = new OpenMPDirective(kind, current_lang, 0, 0);
+    // Create ompparser-compatible directive based on kind
+    // Some directives require special subclasses (allocate, threadprivate, atomic, etc.)
+    OpenMPDirective* dir = nullptr;
+
+    switch (kind) {
+        case OMPD_allocate:
+            dir = new OpenMPAllocateDirective();
+            break;
+        case OMPD_threadprivate:
+            dir = new OpenMPThreadprivateDirective();
+            break;
+        case OMPD_atomic:
+            dir = new OpenMPAtomicDirective();
+            break;
+        case OMPD_critical:
+            dir = new OpenMPCriticalDirective();
+            break;
+        case OMPD_flush:
+            dir = new OpenMPFlushDirective();
+            break;
+        case OMPD_ordered:
+            dir = new OpenMPOrderedDirective();
+            break;
+        case OMPD_depobj:
+            dir = new OpenMPDepobjDirective();
+            break;
+        case OMPD_declare_simd:
+            dir = new OpenMPDeclareSimdDirective();
+            break;
+        case OMPD_declare_reduction:
+            dir = new OpenMPDeclareReductionDirective();
+            break;
+        case OMPD_declare_mapper:
+            // Requires parameter, use generic directive
+            dir = new OpenMPDirective(kind, current_lang, 0, 0);
+            break;
+        case OMPD_declare_target:
+            dir = new OpenMPDeclareTargetDirective();
+            break;
+        case OMPD_declare_variant:
+            // Requires parameter, use generic directive
+            dir = new OpenMPDirective(kind, current_lang, 0, 0);
+            break;
+        case OMPD_requires:
+            dir = new OpenMPRequiresDirective();
+            break;
+        case OMPD_end:
+            dir = new OpenMPEndDirective();
+            break;
+        default:
+            // Generic directive
+            dir = new OpenMPDirective(kind, current_lang, 0, 0);
+            break;
+    }
 
     // Handle atomic variants: "atomic read", "atomic write", etc.
     // ROUP parses these as a single directive name (e.g., "atomic read")
@@ -235,6 +286,25 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             if (modifier_kind != OMPC_unknown) {
                 dir->addOpenMPClause(static_cast<int>(modifier_kind));
             }
+        }
+    }
+
+    // Handle directives with parameter lists (allocate, threadprivate)
+    // These directives take a variable list as parameter: allocate(a,b,c)
+    const char* parameter = roup_directive_parameter(roup_dir);
+    if (parameter && parameter[0] != '\0') {
+        // Remove parentheses from parameter
+        std::string param_str(parameter);
+        if (param_str.length() >= 2 && param_str[0] == '(' && param_str.back() == ')') {
+            param_str = param_str.substr(1, param_str.length() - 2);
+        }
+
+        if (kind == OMPD_allocate) {
+            OpenMPAllocateDirective* alloc_dir = static_cast<OpenMPAllocateDirective*>(dir);
+            alloc_dir->addAllocateList(strdup(param_str.c_str()));
+        } else if (kind == OMPD_threadprivate) {
+            OpenMPThreadprivateDirective* tp_dir = static_cast<OpenMPThreadprivateDirective*>(dir);
+            tp_dir->addThreadprivateList(strdup(param_str.c_str()));
         }
     }
 
