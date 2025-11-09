@@ -9,6 +9,7 @@
  */
 
 #include <OpenMPIR.h>
+#include <algorithm>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -144,6 +145,72 @@ static std::vector<std::string> parseClauseArguments(const char* args) {
     return result;
 }
 
+// Parse schedule clause arguments: modifier1,modifier2:kind,chunk
+// Returns: {modifiers, kind, chunk}
+struct ScheduleInfo {
+    OpenMPScheduleClauseModifier modifier1;
+    OpenMPScheduleClauseModifier modifier2;
+    OpenMPScheduleClauseKind kind;
+    std::string chunk;
+};
+
+static ScheduleInfo parseScheduleArguments(const char* args) {
+    ScheduleInfo info;
+    info.modifier1 = OMPC_SCHEDULE_MODIFIER_unknown;
+    info.modifier2 = OMPC_SCHEDULE_MODIFIER_unknown;
+    info.kind = OMPC_SCHEDULE_KIND_unspecified;
+    info.chunk = "";
+
+    if (!args || args[0] == '\0') {
+        return info;
+    }
+
+    std::string args_str(args);
+
+    // Split by colon to separate modifiers from kind/chunk
+    size_t colon_pos = args_str.find(':');
+    std::string modifiers_str = (colon_pos != std::string::npos) ? args_str.substr(0, colon_pos) : "";
+    std::string kind_chunk_str = (colon_pos != std::string::npos) ? args_str.substr(colon_pos + 1) : args_str;
+
+    // Parse modifiers (comma-separated before colon)
+    if (!modifiers_str.empty()) {
+        std::vector<std::string> modifiers = parseClauseArguments(modifiers_str.c_str());
+        for (size_t i = 0; i < modifiers.size() && i < 2; ++i) {
+            std::string mod_lower = modifiers[i];
+            std::transform(mod_lower.begin(), mod_lower.end(), mod_lower.begin(), ::tolower);
+
+            OpenMPScheduleClauseModifier mod = OMPC_SCHEDULE_MODIFIER_unknown;
+            if (mod_lower == "monotonic") mod = OMPC_SCHEDULE_MODIFIER_monotonic;
+            else if (mod_lower == "nonmonotonic") mod = OMPC_SCHEDULE_MODIFIER_nonmonotonic;
+            else if (mod_lower == "simd") mod = OMPC_SCHEDULE_MODIFIER_simd;
+
+            if (i == 0) info.modifier1 = mod;
+            else info.modifier2 = mod;
+        }
+    }
+
+    // Parse kind and chunk (comma-separated after colon)
+    if (!kind_chunk_str.empty()) {
+        std::vector<std::string> parts = parseClauseArguments(kind_chunk_str.c_str());
+        if (!parts.empty()) {
+            std::string kind_lower = parts[0];
+            std::transform(kind_lower.begin(), kind_lower.end(), kind_lower.begin(), ::tolower);
+
+            if (kind_lower == "static") info.kind = OMPC_SCHEDULE_KIND_static;
+            else if (kind_lower == "dynamic") info.kind = OMPC_SCHEDULE_KIND_dynamic;
+            else if (kind_lower == "guided") info.kind = OMPC_SCHEDULE_KIND_guided;
+            else if (kind_lower == "auto") info.kind = OMPC_SCHEDULE_KIND_auto;
+            else if (kind_lower == "runtime") info.kind = OMPC_SCHEDULE_KIND_runtime;
+
+            if (parts.size() > 1) {
+                info.chunk = parts[1];
+            }
+        }
+    }
+
+    return info;
+}
+
 // ============================================================================
 // Main Entry Point - ROUP-BASED PARSER
 // ============================================================================
@@ -205,6 +272,7 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
             OpenMPClause* omp_clause = nullptr;
+            bool skip_std_args = false;  // Flag to skip standard argument processing
 
             // Handle specialized clauses that need parameters
             if (clause_kind == OMPC_default) {
@@ -217,16 +285,22 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     (roup_default == 1) ? OMPC_DEFAULT_none :
                     OMPC_DEFAULT_unknown;
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), static_cast<int>(default_kind));
+                skip_std_args = true;
             } else if (clause_kind == OMPC_schedule) {
                 // Schedule clause needs modifier1, modifier2, and kind
-                int32_t roup_schedule = roup_clause_schedule_kind(roup_clause);
-                // ROUP values match ompparser enum directly (0=static, 1=dynamic, etc.)
-                OpenMPScheduleClauseKind schedule_kind = static_cast<OpenMPScheduleClauseKind>(roup_schedule);
-                // Use unspecified modifiers for now (ROUP doesn't extract modifiers yet)
+                const char* args = roup_clause_arguments(roup_clause);
+                ScheduleInfo sched_info = parseScheduleArguments(args);
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
-                    static_cast<int>(OMPC_SCHEDULE_MODIFIER_unknown),
-                    static_cast<int>(OMPC_SCHEDULE_MODIFIER_unknown),
-                    static_cast<int>(schedule_kind));
+                    static_cast<int>(sched_info.modifier1),
+                    static_cast<int>(sched_info.modifier2),
+                    static_cast<int>(sched_info.kind));
+
+                // Set chunk size using the specialized method
+                if (!sched_info.chunk.empty() && omp_clause) {
+                    OpenMPScheduleClause* sched_clause = static_cast<OpenMPScheduleClause*>(omp_clause);
+                    sched_clause->setChunkSize(sched_info.chunk.c_str());
+                }
+                skip_std_args = true;
             } else if (clause_kind == OMPC_reduction) {
                 // Reduction clause needs modifier, identifier, and potentially user-defined identifier
                 int32_t roup_op = roup_clause_reduction_operator(roup_clause);
@@ -254,13 +328,16 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             }
 
             // Get clause arguments if present and add them to the clause
-            const char* args = roup_clause_arguments(roup_clause);
-            if (args && args[0] != '\0' && omp_clause) {
-                // Parse arguments and add each one separately
-                // ompparser's expressionToString() will join them with ", "
-                std::vector<std::string> parsed_args = parseClauseArguments(args);
-                for (const auto& arg : parsed_args) {
-                    omp_clause->addLangExpr(arg.c_str());
+            // Skip for clauses that handle arguments specially
+            if (!skip_std_args) {
+                const char* args = roup_clause_arguments(roup_clause);
+                if (args && args[0] != '\0' && omp_clause) {
+                    // Parse arguments and add each one separately
+                    // ompparser's expressionToString() will join them with ", "
+                    std::vector<std::string> parsed_args = parseClauseArguments(args);
+                    for (const auto& arg : parsed_args) {
+                        omp_clause->addLangExpr(arg.c_str());
+                    }
                 }
             }
         }
