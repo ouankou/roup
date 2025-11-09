@@ -781,8 +781,8 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
         let c = &*clause;
 
         // Check if this clause type has variables or expressions
-        // All variable/expression clauses: 0-5, 8-9, 12, 14-59
-        if c.kind >= 0 && c.kind <= 5 || c.kind == 8 || c.kind == 9 || c.kind == 12 || (c.kind >= 14 && c.kind <= 59) {
+        // All variable/expression clauses: 0-5, 8-9, 12, 14-59, 71-87
+        if c.kind >= 0 && c.kind <= 5 || c.kind == 8 || c.kind == 9 || c.kind == 12 || (c.kind >= 14 && c.kind <= 59) || (c.kind >= 71 && c.kind <= 87) {
             // Variable list or expression clauses - return pointer to existing list
             let vars_ptr = c.data.variables;
             if !vars_ptr.is_null() {
@@ -1093,6 +1093,40 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 _ => 999,
             };
             (kind_code, ClauseData { default: 0 })
+        }
+        "order" | "bind" | "dist_schedule" | "defaultmap" | "when" | "match" | "requires" |
+        "atomic_default_mem_order" | "depobj_update" | "device_type" => {
+            // Clauses with special parameters - treat as expressions for now
+            let kind_code = match normalized_name.as_str() {
+                "order" => 71,
+                "bind" => 72,
+                "dist_schedule" => 73,
+                "defaultmap" => 74,
+                "when" => 75,
+                "match" => 76,
+                "requires" => 77,
+                "atomic_default_mem_order" => 78,
+                "depobj_update" => 79,
+                "device_type" => 80,
+                _ => 999,
+            };
+            let variables = extract_expression_from_clause(clause);
+            (kind_code, ClauseData { variables })
+        }
+        "parallel" | "sections" | "for" | "do" | "taskgroup" | "uses_allocators" | "align" => {
+            // Additional clauses
+            let kind_code = match normalized_name.as_str() {
+                "parallel" => 81,
+                "sections" => 82,
+                "for" => 83,
+                "do" => 84,
+                "taskgroup" => 85,
+                "uses_allocators" => 86,
+                "align" => 87,
+                _ => 999,
+            };
+            let variables = extract_variables_from_clause(clause);
+            (kind_code, ClauseData { variables })
         }
         _ => (999, ClauseData { default: 0 }), // Unknown
     };

@@ -86,6 +86,7 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
     switch (roup_kind) {
         case 0: return OMPD_allocate;
         case 4: return OMPD_atomic;
+        // cases 5-9 (atomic variants) handled specially in parseOpenMP
         case 10: return OMPD_barrier;
         case 14: return OMPD_cancel;
         case 15: return OMPD_cancellation_point;
@@ -245,6 +246,23 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
         case 68: return OMPC_unified_address;
         case 69: return OMPC_unified_shared_memory;
         case 70: return OMPC_dynamic_allocators;
+        case 71: return OMPC_order;
+        case 72: return OMPC_bind;
+        case 73: return OMPC_dist_schedule;
+        case 74: return OMPC_defaultmap;
+        case 75: return OMPC_when;
+        case 76: return OMPC_match;
+        case 77: return OMPC_requires;
+        case 78: return OMPC_atomic_default_mem_order;
+        case 79: return OMPC_depobj_update;
+        case 80: return OMPC_device_type;
+        case 81: return OMPC_parallel;
+        case 82: return OMPC_sections;
+        case 83: return OMPC_for;
+        case 84: return OMPC_do;
+        case 85: return OMPC_taskgroup;
+        case 86: return OMPC_uses_allocators;
+        case 87: return OMPC_align;
         default: return OMPC_unknown;
     }
 }
@@ -298,9 +316,32 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     int32_t roup_kind = roup_directive_kind(roup_dir);
     OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
 
+    // Handle atomic variants - ROUP treats "atomic read" as separate directive,
+    // but ompparser treats it as atomic directive + read clause
+    OpenMPClauseKind atomic_op_clause = OMPC_unknown;
+    if (roup_kind >= 5 && roup_kind <= 9) {
+        // atomic capture (5), atomic compare capture (6), atomic read (7),
+        // atomic update (8), atomic write (9)
+        kind = OMPD_atomic;  // All become atomic directive
+
+        // Map to corresponding clause
+        switch (roup_kind) {
+            case 5: atomic_op_clause = OMPC_capture; break;  // atomic capture
+            case 6: atomic_op_clause = OMPC_capture; break;  // atomic compare capture -> capture
+            case 7: atomic_op_clause = OMPC_read; break;     // atomic read
+            case 8: atomic_op_clause = OMPC_update; break;   // atomic update
+            case 9: atomic_op_clause = OMPC_write; break;    // atomic write
+        }
+    }
+
     // Create ompparser-compatible directive
     // Use ompparser's actual constructor: OpenMPDirective(kind, lang, line, col)
     OpenMPDirective* dir = new OpenMPDirective(kind, current_lang, 0, 0);
+
+    // Add atomic operation clause if this was an atomic variant directive
+    if (atomic_op_clause != OMPC_unknown) {
+        dir->addOpenMPClause(static_cast<int>(atomic_op_clause));
+    }
 
     // Convert clauses using ompparser's addOpenMPClause method
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);
