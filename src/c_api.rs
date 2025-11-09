@@ -123,10 +123,15 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 ///
 /// Represents a parsed OpenMP directive with its clauses.
 /// C sees this as an opaque pointer - internal structure is hidden.
+///
+/// IMPORTANT: Field order matters for ABI compatibility!
+/// The `kind` field is at the end to preserve binary compatibility
+/// with existing code that may have been compiled against the old layout.
 #[repr(C)]
 pub struct OmpDirective {
     name: *const c_char,     // Directive name (e.g., "parallel")
     clauses: Vec<OmpClause>, // Associated clauses
+    kind: i32,               // Directive kind (DirectiveKind enum discriminant)
 }
 
 /// Opaque clause type (C-compatible)
@@ -235,6 +240,13 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
         Err(_) => return ptr::null_mut(), // Parse error
     };
 
+    // Convert directive name to DirectiveKind discriminant
+    use crate::ir::convert::parse_directive_kind;
+    let kind_value = match parse_directive_kind(directive.name.as_ref()) {
+        Ok(kind) => kind as i32,
+        Err(_) => 999,  // Unknown directive kind
+    };
+
     // Convert to C-compatible format
     let c_directive = OmpDirective {
         name: allocate_c_string(directive.name.as_ref()),
@@ -243,6 +255,7 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
             .into_iter()
             .map(|c| convert_clause(&c))
             .collect(),
+        kind: kind_value,
     };
 
     // UNSAFE BLOCK 2: Convert Box to raw pointer for C
@@ -355,6 +368,13 @@ pub extern "C" fn roup_parse_with_language(
         Err(_) => return ptr::null_mut(),
     };
 
+    // Convert directive name to DirectiveKind discriminant
+    use crate::ir::convert::parse_directive_kind;
+    let kind_value = match parse_directive_kind(directive.name.as_ref()) {
+        Ok(kind) => kind as i32,
+        Err(_) => 999,  // Unknown directive kind
+    };
+
     // Convert to C-compatible format
     let c_directive = OmpDirective {
         name: allocate_c_string(directive.name.as_ref()),
@@ -363,6 +383,7 @@ pub extern "C" fn roup_parse_with_language(
             .into_iter()
             .map(|c| convert_clause(&c))
             .collect(),
+        kind: kind_value,
     };
 
     Box::into_raw(Box::new(c_directive))
@@ -545,6 +566,7 @@ pub extern "C" fn roup_clause_free(clause: *mut OmpClause) {
 /// Get directive kind.
 ///
 /// Returns -1 if directive is NULL.
+/// Returns the DirectiveKind enum discriminant otherwise.
 #[no_mangle]
 pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
     if directive.is_null() {
@@ -555,7 +577,7 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
     // Safety: Caller guarantees valid pointer from roup_parse
     unsafe {
         let dir = &*directive;
-        directive_name_to_kind(dir.name)
+        dir.kind
     }
 }
 

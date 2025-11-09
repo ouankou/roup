@@ -134,27 +134,132 @@ static void addVariableList(OpenMPClause* clause, const char* content) {
 }
 
 static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
-    // ROUP directive kind mapping using named constants
-    // See roup_constants.h and src/c_api.rs:directive_name_to_kind()
+    // Map ROUP DirectiveKind enum values to ompparser OpenMPDirectiveKind
+    // ROUP uses DirectiveKind enum discriminants (src/ir/directive.rs)
+    // ompparser uses OMPD_* constants (ompparser/src/OpenMPKinds.h)
     switch (roup_kind) {
-        case ROUP_DIRECTIVE_PARALLEL:       return OMPD_parallel;
-        case ROUP_DIRECTIVE_FOR:            return OMPD_for;
-        case ROUP_DIRECTIVE_SECTIONS:       return OMPD_sections;
-        case ROUP_DIRECTIVE_SINGLE:         return OMPD_single;
-        case ROUP_DIRECTIVE_TASK:           return OMPD_task;
-        case ROUP_DIRECTIVE_MASTER:         return OMPD_master;
-        case ROUP_DIRECTIVE_CRITICAL:       return OMPD_critical;
-        case ROUP_DIRECTIVE_BARRIER:        return OMPD_barrier;
-        case ROUP_DIRECTIVE_TASKWAIT:       return OMPD_taskwait;
-        case ROUP_DIRECTIVE_TASKGROUP:      return OMPD_taskgroup;
-        case ROUP_DIRECTIVE_ATOMIC:         return OMPD_atomic;
-        case ROUP_DIRECTIVE_FLUSH:          return OMPD_flush;
-        case ROUP_DIRECTIVE_ORDERED:        return OMPD_ordered;
-        case ROUP_DIRECTIVE_TARGET:         return OMPD_target;
-        case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
-        case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
-        case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
-        default:                            return OMPD_unknown;
+        // Parallel constructs
+        case 0:   return OMPD_parallel;                                  // Parallel
+        case 1:   return OMPD_parallel_for;                              // ParallelFor
+        case 2:   return OMPD_parallel_for_simd;                         // ParallelForSimd
+        case 3:   return OMPD_parallel_sections;                         // ParallelSections
+        case 4:   return OMPD_parallel_workshare;                        // ParallelWorkshare
+        case 5:   return OMPD_parallel_loop;                             // ParallelLoop
+        case 6:   return OMPD_parallel_master;                           // ParallelMasked (map to master for ompparser)
+        case 7:   return OMPD_parallel_master;                           // ParallelMaster
+        case 8:   return OMPD_parallel_loop;                             // ParallelLoopSimd (no direct match, use loop)
+        case 9:   return OMPD_parallel_master_taskloop;                  // ParallelMaskedTaskloop
+        case 17:  return OMPD_parallel_master_taskloop_simd;             // ParallelMaskedTaskloopSimd
+        case 18:  return OMPD_parallel_master_taskloop;                  // ParallelMasterTaskloop
+        case 19:  return OMPD_parallel_master_taskloop_simd;             // ParallelMasterTaskloopSimd
+
+        // Work-sharing constructs
+        case 10:  return OMPD_for;                                       // For
+        case 11:  return OMPD_for_simd;                                  // ForSimd
+        case 12:  return OMPD_sections;                                  // Sections
+        case 13:  return OMPD_section;                                   // Section
+        case 14:  return OMPD_single;                                    // Single
+        case 15:  return OMPD_workshare;                                 // Workshare
+        case 16:  return OMPD_loop;                                      // Loop
+
+        // SIMD constructs
+        case 20:  return OMPD_simd;                                      // Simd
+        case 21:  return OMPD_declare_simd;                              // DeclareSimd
+
+        // Task constructs
+        case 30:  return OMPD_task;                                      // Task
+        case 31:  return OMPD_taskloop;                                  // Taskloop
+        case 32:  return OMPD_taskloop_simd;                             // TaskloopSimd
+        case 33:  return OMPD_taskyield;                                 // Taskyield
+        case 34:  return OMPD_taskwait;                                  // Taskwait
+        case 35:  return OMPD_taskgroup;                                 // Taskgroup
+        case 38:  return OMPD_master_taskloop;                           // MaskedTaskloop
+        case 39:  return OMPD_master_taskloop_simd;                      // MaskedTaskloopSimd
+
+        // Target constructs
+        case 40:  return OMPD_target;                                    // Target
+        case 41:  return OMPD_target_data;                               // TargetData
+        case 42:  return OMPD_target_enter_data;                         // TargetEnterData
+        case 43:  return OMPD_target_exit_data;                          // TargetExitData
+        case 44:  return OMPD_target_update;                             // TargetUpdate
+        case 45:  return OMPD_target_parallel;                           // TargetParallel
+        case 46:  return OMPD_target_parallel_for;                       // TargetParallelFor
+        case 47:  return OMPD_target_parallel_for_simd;                  // TargetParallelForSimd
+        case 48:  return OMPD_target_parallel_loop;                      // TargetParallelLoop
+        case 49:  return OMPD_target_simd;                               // TargetSimd
+        case 50:  return OMPD_target_teams;                              // TargetTeams
+        case 51:  return OMPD_target_teams_distribute;                   // TargetTeamsDistribute
+        case 52:  return OMPD_target_teams_distribute_simd;              // TargetTeamsDistributeSimd
+        case 53:  return OMPD_target_teams_distribute_parallel_for;      // TargetTeamsDistributeParallelFor
+        case 54:  return OMPD_target_teams_distribute_parallel_for_simd; // TargetTeamsDistributeParallelForSimd
+        case 55:  return OMPD_target_teams_loop;                         // TargetTeamsLoop
+
+        // Teams constructs
+        case 60:  return OMPD_teams;                                     // Teams
+        case 61:  return OMPD_teams_distribute;                          // TeamsDistribute
+        case 62:  return OMPD_teams_distribute_simd;                     // TeamsDistributeSimd
+        case 63:  return OMPD_teams_distribute_parallel_for;             // TeamsDistributeParallelFor
+        case 64:  return OMPD_teams_distribute_parallel_for_simd;        // TeamsDistributeParallelForSimd
+        case 65:  return OMPD_teams_loop;                                // TeamsLoop
+
+        // Synchronization constructs
+        case 70:  return OMPD_barrier;                                   // Barrier
+        case 71:  return OMPD_critical;                                  // Critical
+        case 72:  return OMPD_atomic;                                    // Atomic
+        case 77:  return OMPD_atomic;                                    // AtomicRead (map to atomic)
+        case 78:  return OMPD_atomic;                                    // AtomicWrite (map to atomic)
+        case 79:  return OMPD_atomic;                                    // AtomicUpdate (map to atomic)
+        case 86:  return OMPD_atomic;                                    // AtomicCapture (map to atomic)
+        case 87:  return OMPD_atomic;                                    // AtomicCompareCapture (map to atomic)
+        case 73:  return OMPD_flush;                                     // Flush
+        case 74:  return OMPD_ordered;                                   // Ordered
+        case 75:  return OMPD_master;                                    // Master
+        case 76:  return OMPD_masked;                                    // Masked
+
+        // Declare constructs
+        case 80:  return OMPD_declare_reduction;                         // DeclareReduction
+        case 81:  return OMPD_declare_mapper;                            // DeclareMapper
+        case 82:  return OMPD_declare_target;                            // DeclareTarget
+        case 83:  return OMPD_declare_variant;                           // DeclareVariant
+
+        // Distribute constructs
+        case 90:  return OMPD_distribute;                                // Distribute
+        case 91:  return OMPD_distribute_simd;                           // DistributeSimd
+        case 92:  return OMPD_distribute_parallel_for;                   // DistributeParallelFor
+        case 93:  return OMPD_distribute_parallel_for_simd;              // DistributeParallelForSimd
+
+        // Meta-directives
+        case 100: return OMPD_metadirective;                             // Metadirective
+        case 112: return OMPD_begin_declare_target;                      // BeginDeclareTarget
+        case 113: return OMPD_end_declare_target;                        // EndDeclareTarget
+        case 114: return OMPD_begin_declare_variant;                     // BeginDeclareVariant
+        case 115: return OMPD_end_declare_variant;                       // EndDeclareVariant
+
+        // Loop transformation (OpenMP 6.0)
+        case 105: return OMPD_tile;                                      // Tile
+        case 106: return OMPD_unroll;                                    // Unroll
+
+        // Other constructs
+        case 120: return OMPD_threadprivate;                             // Threadprivate
+        case 121: return OMPD_allocate;                                  // Allocate
+        case 123: return OMPD_requires;                                  // Requires
+        case 124: return OMPD_scan;                                      // Scan
+        case 125: return OMPD_depobj;                                    // Depobj
+        case 126: return OMPD_nothing;                                   // Nothing
+        case 127: return OMPD_error;                                     // Error
+        case 128: return OMPD_cancel;                                    // Cancel
+        case 129: return OMPD_cancellation_point;                        // CancellationPoint
+        case 132: return OMPD_scope;                                     // Scope
+
+        // Fortran do variants (map to their for equivalents)
+        case 135: return OMPD_do;                                        // Do
+        case 136: return OMPD_do_simd;                                   // DoSimd
+        case 137: return OMPD_parallel_do;                               // ParallelDo
+        case 138: return OMPD_parallel_do_simd;                          // ParallelDoSimd
+        case 139: return OMPD_distribute_parallel_do;                    // DistributeParallelDo
+        case 140: return OMPD_distribute_parallel_do_simd;               // DistributeParallelDoSimd
+
+        default:  return OMPD_unknown;
     }
 }
 
