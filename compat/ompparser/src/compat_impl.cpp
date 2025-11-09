@@ -10,6 +10,8 @@
 
 #include <OpenMPIR.h>
 #include <cstring>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -29,6 +31,7 @@ extern "C" {
 
     // Core parsing
     OmpDirective* roup_parse(const char* input);
+    OmpDirective* roup_parse_with_language(const char* input, int32_t language);
     void roup_directive_free(OmpDirective* directive);
 
     // Directive queries
@@ -53,6 +56,8 @@ extern "C" {
     int32_t roup_clause_proc_bind(const OmpClause* clause);
 }
 
+// Language constants are in roup_constants.h (ROUP_LANG_C, ROUP_LANG_FORTRAN_FREE, etc.)
+
 // ============================================================================
 // Global State
 // ============================================================================
@@ -76,35 +81,42 @@ void setLang(OpenMPBaseLang lang) {
 // Helper Functions
 // ============================================================================
 
-// Normalize spacing in clause expressions (add space after commas)
+// Normalize spacing in clause expressions (add space after commas and selective colons)
 static std::string normalizeClauseSpacing(const std::string& expr) {
     std::string result;
     result.reserve(expr.length() * 1.2); // Reserve extra space for added spaces
 
-    int bracket_depth = 0; // Track if we're inside brackets []
+    int bracket_depth = 0;  // Track if we're inside brackets []
+    int paren_depth = 0;     // Track if we're inside parentheses ()
 
     for (size_t i = 0; i < expr.length(); i++) {
         char c = expr[i];
         result += c;
 
-        // Track bracket depth
+        // Track bracket and parenthesis depth
         if (c == '[') {
             bracket_depth++;
         } else if (c == ']') {
             bracket_depth--;
+        } else if (c == '(') {
+            paren_depth++;
+        } else if (c == ')') {
+            paren_depth--;
         }
 
         // Add space after comma if not already present and not at end
         if (c == ',' && i + 1 < expr.length() && expr[i + 1] != ' ') {
             result += ' ';
         }
+
         // Add space after colon ONLY if:
         // - not inside brackets (array subscripts like a[1:10] should not have space)
         // - not already followed by space
         // - not at end
         // - not followed by another colon (for :: in Fortran)
+        // - NOT followed by a digit (for step values like :2, :10)
         if (c == ':' && bracket_depth == 0 && i + 1 < expr.length() &&
-            expr[i + 1] != ' ' && expr[i + 1] != ':') {
+            expr[i + 1] != ' ' && expr[i + 1] != ':' && !std::isdigit(expr[i + 1])) {
             result += ' ';
         }
     }
@@ -401,8 +413,13 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     }
 
-    // Call ROUP parser
-    OmpDirective* roup_dir = roup_parse(input_str.c_str());
+    // Call ROUP parser with language information
+    int32_t roup_lang = ROUP_LANG_C;
+    if (current_lang == Lang_Fortran) {
+        roup_lang = ROUP_LANG_FORTRAN_FREE;
+    }
+
+    OmpDirective* roup_dir = roup_parse_with_language(input_str.c_str(), roup_lang);
     if (!roup_dir) {
         return nullptr;
     }
@@ -515,6 +532,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     }
 
     // Convert clauses using ompparser's addOpenMPClause method
+    // Track added variables for clauses that need deduplication
+    std::map<OpenMPClauseKind, std::set<std::string>> added_vars;
+
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);
     if (iter) {
         const OmpClause* roup_clause;
@@ -529,7 +549,7 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             OpenMPClause* omp_clause = nullptr;
 
             if (clause_kind == OMPC_if) {
-                // For if clauses, use unspecified modifier to avoid adding unwanted "parallel:" prefix
+                // For if clauses, ALWAYS create separate clause (don't merge)
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), OMPC_IF_MODIFIER_unspecified);
             } else if (clause_kind == OMPC_default) {
                 // Use ROUP's parsed default kind
@@ -572,6 +592,19 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     default: omp_proc_bind_kind = OMPC_PROC_BIND_master; break;
                 }
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), omp_proc_bind_kind);
+            } else if (clause_kind == OMPC_allocate) {
+                // For allocate clauses, ALWAYS create separate clause (don't merge)
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+            } else if (clause_kind == OMPC_private || clause_kind == OMPC_shared ||
+                       clause_kind == OMPC_firstprivate || clause_kind == OMPC_lastprivate) {
+                // These clauses merge and deduplicate variables
+                // Check if we already have a clause of this kind
+                auto* existing_clauses = dir->getClauses(clause_kind);
+                if (existing_clauses && !existing_clauses->empty()) {
+                    omp_clause = (*existing_clauses)[0];
+                } else {
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+                }
             } else {
                 // Create basic clause for all other types
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
@@ -592,9 +625,49 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     // Normalize spacing (add spaces after commas and colons)
                     expr = normalizeClauseSpacing(expr);
 
-                    // Add the expression to the clause
-                    if (!expr.empty()) {
-                        omp_clause->addLangExpr(expr.c_str());
+                    // For clauses that need variable deduplication
+                    if (clause_kind == OMPC_private || clause_kind == OMPC_shared ||
+                        clause_kind == OMPC_firstprivate || clause_kind == OMPC_lastprivate) {
+                        // Parse individual variables, respecting parentheses depth
+                        std::vector<std::string> vars;
+                        std::string current_var;
+                        int paren_depth = 0;
+
+                        for (size_t i = 0; i < expr.length(); ++i) {
+                            char c = expr[i];
+                            if (c == '(') paren_depth++;
+                            else if (c == ')') paren_depth--;
+                            else if (c == ',' && paren_depth == 0) {
+                                // Trim spaces
+                                size_t start = current_var.find_first_not_of(" \t");
+                                size_t end = current_var.find_last_not_of(" \t");
+                                if (start != std::string::npos && end != std::string::npos) {
+                                    vars.push_back(current_var.substr(start, end - start + 1));
+                                }
+                                current_var.clear();
+                                continue;
+                            }
+                            current_var += c;
+                        }
+                        // Add last variable
+                        size_t start = current_var.find_first_not_of(" \t");
+                        size_t end = current_var.find_last_not_of(" \t");
+                        if (start != std::string::npos && end != std::string::npos) {
+                            vars.push_back(current_var.substr(start, end - start + 1));
+                        }
+
+                        // Add only unique variables
+                        for (const auto& var : vars) {
+                            if (added_vars[clause_kind].find(var) == added_vars[clause_kind].end()) {
+                                omp_clause->addLangExpr(var.c_str());
+                                added_vars[clause_kind].insert(var);
+                            }
+                        }
+                    } else {
+                        // Add the expression as-is for other clauses
+                        if (!expr.empty()) {
+                            omp_clause->addLangExpr(expr.c_str());
+                        }
                     }
                 }
             }
