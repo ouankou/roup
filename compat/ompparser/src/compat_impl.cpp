@@ -25,6 +25,7 @@ extern "C" {
     struct OmpDirective;
     struct OmpClause;
     struct OmpClauseIterator;
+    struct OmpStringList;
 
     // Core parsing
     OmpDirective* roup_parse(const char* input);
@@ -43,6 +44,12 @@ extern "C" {
 
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
+    OmpStringList* roup_clause_variables(const OmpClause* clause);
+
+    // String list operations
+    int32_t roup_string_list_len(const OmpStringList* list);
+    const char* roup_string_list_get(const OmpStringList* list, int32_t index);
+    void roup_string_list_free(OmpStringList* list);
 
     // String management
     void roup_string_free(char* s);
@@ -103,9 +110,42 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
         case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
         case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
         case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
+
+        // Additional directives from c_api.rs directive_name_to_kind()
+        case 17:                            return OMPD_allocate;
+        case 18:                            return OMPD_threadprivate;
+        case 19:                            return OMPD_simd;
+        case 20:                            return OMPD_declare_simd;
+        case 21:                            return OMPD_declare_reduction;
+        case 22:                            return OMPD_declare_mapper;
+        case 23:                            return OMPD_declare_target;
+        case 24:                            return OMPD_declare_variant;
+        case 25:                            return OMPD_taskyield;
+        case 26:                            return OMPD_taskloop;
+        case 27:                            return OMPD_target_data;
+        case 28:                            return OMPD_target_enter_data;
+        case 29:                            return OMPD_target_exit_data;
+        case 30:                            return OMPD_target_update;
+        case 31:                            return OMPD_scan;
+        case 32:                            return OMPD_section;
+        case 33:                            return OMPD_workshare;
+        case 34:                            return OMPD_masked;
+        case 35:                            return OMPD_scope;
+        case 36:                            return OMPD_loop;
+        case 37:                            return OMPD_requires;
+        case 38:                            return OMPD_depobj;
+        case 39:                            return OMPD_cancel;
+        case 40:                            return OMPD_cancellation_point;
+
+        // Atomic variants (will add read/write/update/capture clause after)
+        case 77:                            return OMPD_atomic;  // atomic read
+        case 78:                            return OMPD_atomic;  // atomic write
+        case 79:                            return OMPD_atomic;  // atomic update
+        case 86:                            return OMPD_atomic;  // atomic capture
+
         case 57:                            return OMPD_end;  // DirectiveKind::End (Fortran)
-        case 128:                           return OMPD_cancel;  // DirectiveKind::Cancel
-        case 129:                           return OMPD_cancellation_point;  // DirectiveKind::CancellationPoint
+        case 128:                           return OMPD_cancel;  // DirectiveKind::Cancel (legacy)
+        case 129:                           return OMPD_cancellation_point;  // DirectiveKind::CancellationPoint (legacy)
         default:                            return OMPD_unknown;
     }
 }
@@ -368,9 +408,34 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             int32_t roup_kind_clause = roup_clause_kind(roup_clause);
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
-            // Use public variadic version: addOpenMPClause(int kind, ...)
-            // Cast to int and pass just the kind for basic clause support
-            dir->addOpenMPClause(static_cast<int>(clause_kind));
+            // Get clause variable list if available
+            OmpStringList* vars = roup_clause_variables(roup_clause);
+            if (vars && roup_string_list_len(vars) > 0) {
+                // Build variable list
+                std::vector<const char*> var_list;
+                int32_t len = roup_string_list_len(vars);
+                for (int32_t i = 0; i < len; i++) {
+                    const char* var = roup_string_list_get(vars, i);
+                    if (var) {
+                        var_list.push_back(strdup(var));
+                    }
+                }
+
+                // Add clause with variable list
+                // Note: ompparser takes ownership of the strings, will free them
+                if (!var_list.empty()) {
+                    dir->addOpenMPClause(static_cast<int>(clause_kind), var_list);
+                } else {
+                    dir->addOpenMPClause(static_cast<int>(clause_kind));
+                }
+
+                // Do NOT free var_list strings - ompparser owns them now
+                roup_string_list_free(vars);
+            } else {
+                // No variables, just add the clause kind
+                dir->addOpenMPClause(static_cast<int>(clause_kind));
+                if (vars) roup_string_list_free(vars);
+            }
         }
         roup_clause_iterator_free(iter);
     }

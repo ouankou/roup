@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (18 directives + 27 clauses) + OpenACC (18 directives + 45 clauses) = 0x9A08E89B313D132E
+// Auto-generated checksum: FNV-1a hash of OpenMP (32 directives + 27 clauses) + OpenACC (18 directives + 45 clauses) = 0x4A7D9987A8C20B89
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x9A08E89B313D132E
+#define ROUP_CONSTANTS_CHECKSUM 0x4A7D9987A8C20B89
 
 // ============================================================================
 // Language Format Constants
@@ -59,6 +59,20 @@ extern "C" {
 #define ROUP_DIRECTIVE_TEAMS                14
 #define ROUP_DIRECTIVE_DISTRIBUTE           15
 #define ROUP_DIRECTIVE_METADIRECTIVE        16
+#define ROUP_DIRECTIVE_ALLOCATE             17
+#define ROUP_DIRECTIVE_THREADPRIVATE        18
+#define ROUP_DIRECTIVE_SIMD                 19
+#define ROUP_DIRECTIVE_TASKYIELD            25
+#define ROUP_DIRECTIVE_TASKLOOP             26
+#define ROUP_DIRECTIVE_SCAN                 31
+#define ROUP_DIRECTIVE_SECTION              32
+#define ROUP_DIRECTIVE_WORKSHARE            33
+#define ROUP_DIRECTIVE_MASKED               34
+#define ROUP_DIRECTIVE_SCOPE                35
+#define ROUP_DIRECTIVE_LOOP                 36
+#define ROUP_DIRECTIVE_REQUIRES             37
+#define ROUP_DIRECTIVE_DEPOBJ               38
+#define ROUP_DIRECTIVE_CANCEL               39
 #define ROUP_DIRECTIVE_END                  57
 #define ROUP_DIRECTIVE_UNKNOWN       999
 

@@ -794,20 +794,38 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
         return ptr::null_mut();
     }
 
-    // UNSAFE BLOCK 8: Dereference clause for variable check
+    // UNSAFE BLOCK 8: Dereference clause for variable extraction
     // Safety: Caller guarantees valid clause pointer
     unsafe {
         let c = &*clause;
 
-        // Check if this clause type has variables
-        // Kinds 2-5 are private/shared/firstprivate/lastprivate
-        if c.kind < 2 || c.kind > 6 {
-            return ptr::null_mut();
-        }
+        // Extract variables from the union
+        // The variables field is set for clauses that have variable lists
+        // (private, shared, firstprivate, lastprivate, reduction, etc.)
+        let var_ptr = c.data.variables;
 
-        // For now, return empty list (would need clause parsing enhancement)
-        let list = OmpStringList { items: Vec::new() };
-        Box::into_raw(Box::new(list))
+        // If we have a variables list, clone it and return
+        if !var_ptr.is_null() {
+            let var_list = &*var_ptr;
+            let cloned_items: Vec<*const c_char> = var_list
+                .items
+                .iter()
+                .map(|&ptr| {
+                    if ptr.is_null() {
+                        ptr::null()
+                    } else {
+                        let c_str = CStr::from_ptr(ptr);
+                        CString::new(c_str.to_bytes()).unwrap().into_raw() as *const c_char
+                    }
+                })
+                .collect();
+
+            let cloned_list = OmpStringList { items: cloned_items };
+            Box::into_raw(Box::new(cloned_list))
+        } else {
+            // No variables for this clause
+            ptr::null_mut()
+        }
     }
 }
 
@@ -943,25 +961,25 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "private" => (
             2,
             ClauseData {
-                variables: ptr::null_mut(),
+                variables: extract_clause_variables(clause),
             },
         ),
         "shared" => (
             3,
             ClauseData {
-                variables: ptr::null_mut(),
+                variables: extract_clause_variables(clause),
             },
         ),
         "firstprivate" => (
             4,
             ClauseData {
-                variables: ptr::null_mut(),
+                variables: extract_clause_variables(clause),
             },
         ),
         "lastprivate" => (
             5,
             ClauseData {
-                variables: ptr::null_mut(),
+                variables: extract_clause_variables(clause),
             },
         ),
         "reduction" => {
@@ -1063,6 +1081,34 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
         }
     }
     0 // Default to plus
+}
+
+/// Extract variable list from a clause.
+///
+/// Converts clause variables into C-compatible string list.
+/// Returns NULL if clause has no variables.
+fn extract_clause_variables(clause: &Clause) -> *mut OmpStringList {
+    use crate::parser::ClauseKind;
+
+    match &clause.kind {
+        ClauseKind::Parenthesized(ref args) => {
+            // Parse comma-separated variable list from parenthesized content
+            let args_str = args.as_ref();
+            let vars: Vec<*const c_char> = args_str
+                .split(',')
+                .map(|v| v.trim())
+                .filter(|v| !v.is_empty())
+                .map(|v| allocate_c_string(v))
+                .collect();
+
+            if vars.is_empty() {
+                ptr::null_mut()
+            } else {
+                Box::into_raw(Box::new(OmpStringList { items: vars }))
+            }
+        }
+        _ => ptr::null_mut(),
+    }
 }
 
 /// Parse schedule kind from clause arguments.
@@ -1213,6 +1259,38 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
 
             // Metadirective (kind 16)
             "metadirective" => 16,
+
+            // Additional critical directives
+            "allocate" => 17,
+            "threadprivate" => 18,
+            "simd" => 19,
+            "declare simd" => 20,
+            "declare reduction" => 21,
+            "declare mapper" => 22,
+            "declare target" => 23,
+            "declare variant" => 24,
+            "taskyield" => 25,
+            "taskloop" => 26,
+            "target data" => 27,
+            "target enter data" => 28,
+            "target exit data" => 29,
+            "target update" => 30,
+            "scan" => 31,
+            "section" => 32,
+            "workshare" => 33,
+            "masked" => 34,
+            "scope" => 35,
+            "loop" => 36,
+            "requires" => 37,
+            "depobj" => 38,
+            "cancel" => 39,
+            "cancellation point" => 40,
+
+            // Atomic variants (separate kinds for proper mapping)
+            "atomic read" => 77,
+            "atomic write" => 78,
+            "atomic update" => 79,
+            "atomic capture" => 86,
 
             // End directive (kind 57) - Generic Fortran end directive
             "end" => 57,
