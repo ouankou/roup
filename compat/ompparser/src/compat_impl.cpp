@@ -58,6 +58,9 @@ static constexpr const char C_PRAGMA_PREFIX[] = "#pragma";    // C/C++ pragma pr
 static constexpr size_t FORTRAN_PREFIX_LEN = sizeof(FORTRAN_PREFIX) - 1;
 static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
 
+// Global variable defined by original ompparser.yy
+bool normalize_clauses_global = true;
+
 // Provide setLang with both C and C++ linkage to match original ompparser
 // The header declares it as extern "C", but the original library exports C++ mangled symbol
 extern "C" void setLang(OpenMPBaseLang lang) {
@@ -228,15 +231,16 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
     // Handle atomic variants - ROUP parses "atomic read" as directive AtomicRead,
     // but ompparser expects directive atomic + clause read
-    if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_READ) {
+    // DirectiveKind enum values: AtomicRead=77, AtomicWrite=78, AtomicUpdate=79, AtomicCapture=86, AtomicCompareCapture=87
+    if (roup_kind == 77) { // AtomicRead
         dir->addOpenMPClause(OMPC_read);
-    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_WRITE) {
+    } else if (roup_kind == 78) { // AtomicWrite
         dir->addOpenMPClause(OMPC_write);
-    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_UPDATE) {
+    } else if (roup_kind == 79) { // AtomicUpdate
         dir->addOpenMPClause(OMPC_update);
-    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_CAPTURE) {
+    } else if (roup_kind == 86) { // AtomicCapture
         dir->addOpenMPClause(OMPC_capture);
-    } else if (roup_dir_kind == ROUP_DIRECTIVE_KIND_ATOMIC_COMPARE_CAPTURE) {
+    } else if (roup_kind == 87) { // AtomicCompareCapture
         dir->addOpenMPClause(OMPC_compare);
         dir->addOpenMPClause(OMPC_capture);
     }
