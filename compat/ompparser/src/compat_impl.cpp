@@ -69,7 +69,7 @@ static OpenMPBaseLang current_lang = Lang_C;
 // Language prefix constants - defined once to avoid manual synchronization
 static constexpr const char FORTRAN_PREFIX[] = "!$omp";       // Fortran prefix (lowercase)
 static constexpr const char FORTRAN_PREFIX_UPPER[] = "!$OMP"; // Fortran prefix (uppercase)
-static constexpr const char C_PRAGMA_PREFIX[] = "#pragma";    // C/C++ pragma prefix
+static constexpr const char C_PRAGMA_PREFIX[] = "#pragma omp";    // C/C++ pragma prefix
 // Compile-time string lengths: sizeof() includes null terminator, subtract 1 for actual length
 static constexpr size_t FORTRAN_PREFIX_LEN = sizeof(FORTRAN_PREFIX) - 1;
 static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
@@ -764,6 +764,60 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 }
 
                 omp_clause = OpenMPReductionClause::addReductionClause(dir, modifier, identifier, user_op);
+                if (!omp_clause) {
+                    // addReductionClause failed, skip this clause
+                    if (user_op) free(user_op);
+                    continue;
+                }
+
+                // Add variables to reduction clause
+                if (clause_text) {
+                    std::string text(clause_text);
+                    size_t open_paren = text.find('(');
+                    size_t close_paren = text.rfind(')');
+                    if (open_paren != std::string::npos && close_paren != std::string::npos) {
+                        std::string content = text.substr(open_paren + 1, close_paren - open_paren - 1);
+                        // Find colon that separates operator from variables
+                        size_t colon = content.find(':');
+                        if (colon != std::string::npos) {
+                            std::string vars_str = content.substr(colon + 1);
+                            vars_str = normalizeClauseSpacing(vars_str);
+
+                            // Parse variables
+                            std::vector<std::string> vars;
+                            std::string current_var;
+                            int paren_depth = 0;
+                            for (size_t i = 0; i < vars_str.length(); ++i) {
+                                char c = vars_str[i];
+                                if (c == '(') paren_depth++;
+                                else if (c == ')') paren_depth--;
+                                else if (c == ',' && paren_depth == 0) {
+                                    size_t start = current_var.find_first_not_of(" \t");
+                                    if (start != std::string::npos) {
+                                        size_t end = current_var.find_last_not_of(" \t");
+                                        vars.push_back(current_var.substr(start, end - start + 1));
+                                    }
+                                    current_var.clear();
+                                    continue;
+                                }
+                                current_var += c;
+                            }
+                            // Add last variable
+                            if (!current_var.empty()) {
+                                size_t start = current_var.find_first_not_of(" \t");
+                                if (start != std::string::npos) {
+                                    size_t end = current_var.find_last_not_of(" \t");
+                                    vars.push_back(current_var.substr(start, end - start + 1));
+                                }
+                            }
+
+                            // Add variables to clause
+                            for (const auto& var : vars) {
+                                omp_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                    }
+                }
             } else if (clause_kind == OMPC_private || clause_kind == OMPC_shared ||
                        clause_kind == OMPC_firstprivate || clause_kind == OMPC_lastprivate) {
                 // These clauses merge and deduplicate variables
