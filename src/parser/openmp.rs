@@ -258,6 +258,7 @@ openmp_directives! {
     ParallelMasterTaskloop => "parallel master taskloop",
     ParallelMasterTaskloopSimd => "parallel master taskloop simd",
     ParallelSections => "parallel sections",
+    ParallelWorkshare => "parallel workshare",
     Requires => "requires",
     Scope => "scope",
     Scan => "scan",
