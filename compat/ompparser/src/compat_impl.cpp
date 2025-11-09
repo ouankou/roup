@@ -141,6 +141,81 @@ static std::vector<std::string> parseCommaSeparatedList(const std::string& input
     return result;
 }
 
+// Helper to map reduction operator string to enum
+static OpenMPReductionClauseIdentifier mapReductionOperator(const std::string& op) {
+    if (op == "+" || op == "plus") return OMPC_REDUCTION_IDENTIFIER_plus;
+    if (op == "-" || op == "minus") return OMPC_REDUCTION_IDENTIFIER_minus;
+    if (op == "*" || op == "mul") return OMPC_REDUCTION_IDENTIFIER_mul;
+    if (op == "&" || op == "bitand") return OMPC_REDUCTION_IDENTIFIER_bitand;
+    if (op == "|" || op == "bitor") return OMPC_REDUCTION_IDENTIFIER_bitor;
+    if (op == "^" || op == "bitxor") return OMPC_REDUCTION_IDENTIFIER_bitxor;
+    if (op == "&&" || op == "logand") return OMPC_REDUCTION_IDENTIFIER_logand;
+    if (op == "||" || op == "logor") return OMPC_REDUCTION_IDENTIFIER_logor;
+    if (op == "max") return OMPC_REDUCTION_IDENTIFIER_max;
+    if (op == "min") return OMPC_REDUCTION_IDENTIFIER_min;
+    if (op == ".eqv." || op == "eqv") return OMPC_REDUCTION_IDENTIFIER_eqv;
+    if (op == ".neqv." || op == "neqv") return OMPC_REDUCTION_IDENTIFIER_neqv;
+    return OMPC_REDUCTION_IDENTIFIER_user;
+}
+
+// Helper to map reduction modifier string to enum
+static OpenMPReductionClauseModifier mapReductionModifier(const std::string& mod) {
+    if (mod == "inscan") return OMPC_REDUCTION_MODIFIER_inscan;
+    if (mod == "task") return OMPC_REDUCTION_MODIFIER_task;
+    if (mod == "default") return OMPC_REDUCTION_MODIFIER_default;
+    return OMPC_REDUCTION_MODIFIER_unspecified;
+}
+
+// Helper to map schedule kind string to enum
+static OpenMPScheduleClauseKind mapScheduleKind(const std::string& kind) {
+    if (kind == "static") return OMPC_SCHEDULE_KIND_static;
+    if (kind == "dynamic") return OMPC_SCHEDULE_KIND_dynamic;
+    if (kind == "guided") return OMPC_SCHEDULE_KIND_guided;
+    if (kind == "auto") return OMPC_SCHEDULE_KIND_auto;
+    if (kind == "runtime") return OMPC_SCHEDULE_KIND_runtime;
+    return OMPC_SCHEDULE_KIND_user;
+}
+
+// Helper to map schedule modifier string to enum
+static OpenMPScheduleClauseModifier mapScheduleModifier(const std::string& mod) {
+    if (mod == "monotonic") return OMPC_SCHEDULE_MODIFIER_monotonic;
+    if (mod == "nonmonotonic") return OMPC_SCHEDULE_MODIFIER_nonmonotonic;
+    if (mod == "simd") return OMPC_SCHEDULE_MODIFIER_simd;
+    return OMPC_SCHEDULE_MODIFIER_unspecified;
+}
+
+// Helper to map default clause kind string to enum
+static OpenMPDefaultClauseKind mapDefaultKind(const std::string& kind) {
+    if (kind == "private") return OMPC_DEFAULT_private;
+    if (kind == "firstprivate") return OMPC_DEFAULT_firstprivate;
+    if (kind == "shared") return OMPC_DEFAULT_shared;
+    if (kind == "none") return OMPC_DEFAULT_none;
+    if (kind == "variant") return OMPC_DEFAULT_variant;
+    return OMPC_DEFAULT_unknown;
+}
+
+// Helper to map linear modifier string to enum
+static OpenMPLinearClauseModifier mapLinearModifier(const std::string& mod) {
+    if (mod == "val") return OMPC_LINEAR_MODIFIER_val;
+    if (mod == "ref") return OMPC_LINEAR_MODIFIER_ref;
+    if (mod == "uval") return OMPC_LINEAR_MODIFIER_uval;
+    return OMPC_LINEAR_MODIFIER_unspecified;
+}
+
+// Helper to map allocator string to enum
+static OpenMPAllocateClauseAllocator mapAllocator(const std::string& alloc) {
+    if (alloc == "omp_default_mem_alloc") return OMPC_ALLOCATE_ALLOCATOR_default;
+    if (alloc == "omp_large_cap_mem_alloc") return OMPC_ALLOCATE_ALLOCATOR_large_cap;
+    if (alloc == "omp_const_mem_alloc") return OMPC_ALLOCATE_ALLOCATOR_cons_mem;
+    if (alloc == "omp_high_bw_mem_alloc") return OMPC_ALLOCATE_ALLOCATOR_high_bw;
+    if (alloc == "omp_low_lat_mem_alloc") return OMPC_ALLOCATE_ALLOCATOR_low_lat;
+    if (alloc == "omp_cgroup_mem_alloc") return OMPC_ALLOCATE_ALLOCATOR_cgroup;
+    if (alloc == "omp_pteam_mem_alloc") return OMPC_ALLOCATE_ALLOCATOR_pteam;
+    if (alloc == "omp_thread_mem_alloc") return OMPC_ALLOCATE_ALLOCATOR_thread;
+    if (alloc == "omp_allocator_handle_t") return OMPC_ALLOCATE_ALLOCATOR_user;
+    return OMPC_ALLOCATE_ALLOCATOR_user;
+}
+
 static OpenMPDirectiveKind mapRoupDirectiveNameToOmpparser(const char* name) {
     // Direct string-based mapping from directive name to ompparser kind
     // This bypasses ROUP's simplified directive kind system and uses the actual directive name
@@ -428,24 +503,253 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             // Extract parameters from clause source
             std::string params = extractClauseParameters(clause_source);
 
-            // Add clause with parameters
-            if (params.empty()) {
-                // No parameters - just add the clause kind
-                dir->addOpenMPClause(static_cast<int>(clause_kind));
-            } else {
-                // Has parameters - add clause and then add expressions
-                OpenMPClause* omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+            // Handle specialized clauses with custom parameters
+            OpenMPClause* omp_clause = nullptr;
 
-                if (omp_clause) {
-                    // For clauses that take variable lists or expressions
-                    // Split by commas (respecting parentheses and brackets)
-                    std::vector<std::string> expr_list = parseCommaSeparatedList(params);
+            switch (clause_kind) {
+                case OMPC_reduction: {
+                    // Format: reduction(modifier,operator:list) or reduction(operator:list)
+                    // Example: reduction(task,max:a,b,c)
+                    OpenMPReductionClauseModifier modifier = OMPC_REDUCTION_MODIFIER_unspecified;
+                    OpenMPReductionClauseIdentifier identifier = OMPC_REDUCTION_IDENTIFIER_plus;
+                    std::string var_list;
+                    std::string operator_str;
 
-                    for (const std::string& expr : expr_list) {
-                        if (!expr.empty()) {
-                            omp_clause->addLangExpr(expr.c_str());
+                    size_t colon_pos = params.find(':');
+                    if (colon_pos != std::string::npos) {
+                        std::string before_colon = params.substr(0, colon_pos);
+                        var_list = params.substr(colon_pos + 1);
+
+                        // Parse modifier and operator before colon
+                        std::vector<std::string> parts = parseCommaSeparatedList(before_colon);
+                        if (parts.size() == 2) {
+                            // Both modifier and operator present
+                            modifier = mapReductionModifier(parts[0]);
+                            operator_str = parts[1];
+                            identifier = mapReductionOperator(operator_str);
+                        } else if (parts.size() == 1) {
+                            // Only operator present
+                            operator_str = parts[0];
+                            identifier = mapReductionOperator(operator_str);
                         }
                     }
+
+                    char* user_defined = nullptr;
+                    if (identifier == OMPC_REDUCTION_IDENTIFIER_user && !operator_str.empty()) {
+                        user_defined = strdup(operator_str.c_str());
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_reduction, modifier, identifier, user_defined);
+                    if (omp_clause && !var_list.empty()) {
+                        std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                        for (const std::string& var : vars) {
+                            if (!var.empty()) {
+                                omp_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case OMPC_schedule: {
+                    // Format: schedule(modifier1,modifier2:kind,chunk) or schedule(kind,chunk)
+                    // Example: schedule(monotonic,simd:runtime,2) or schedule(runtime,2)
+                    OpenMPScheduleClauseModifier modifier1 = OMPC_SCHEDULE_MODIFIER_unspecified;
+                    OpenMPScheduleClauseModifier modifier2 = OMPC_SCHEDULE_MODIFIER_unspecified;
+                    OpenMPScheduleClauseKind kind = OMPC_SCHEDULE_KIND_static;
+                    std::string chunk_expr;
+
+                    size_t colon_pos = params.find(':');
+                    std::string schedule_part;
+                    std::string remaining;
+
+                    if (colon_pos != std::string::npos) {
+                        // Modifiers present before colon
+                        std::string modifiers_str = params.substr(0, colon_pos);
+                        remaining = params.substr(colon_pos + 1);
+
+                        std::vector<std::string> modifiers = parseCommaSeparatedList(modifiers_str);
+                        if (modifiers.size() >= 1) {
+                            modifier1 = mapScheduleModifier(modifiers[0]);
+                        }
+                        if (modifiers.size() >= 2) {
+                            modifier2 = mapScheduleModifier(modifiers[1]);
+                        }
+                    } else {
+                        remaining = params;
+                    }
+
+                    // Parse kind and chunk from remaining
+                    std::vector<std::string> kind_chunk = parseCommaSeparatedList(remaining);
+                    if (kind_chunk.size() >= 1) {
+                        kind = mapScheduleKind(kind_chunk[0]);
+                    }
+                    if (kind_chunk.size() >= 2) {
+                        chunk_expr = kind_chunk[1];
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_schedule, modifier1, modifier2, kind, nullptr);
+                    if (omp_clause && !chunk_expr.empty()) {
+                        OpenMPScheduleClause* schedule_clause = dynamic_cast<OpenMPScheduleClause*>(omp_clause);
+                        if (schedule_clause) {
+                            schedule_clause->setChunkSize(chunk_expr.c_str());
+                        }
+                    }
+                    break;
+                }
+
+                case OMPC_default: {
+                    // Format: default(kind)
+                    // Example: default(none)
+                    OpenMPDefaultClauseKind kind = mapDefaultKind(params);
+                    omp_clause = dir->addOpenMPClause(OMPC_default, kind);
+                    break;
+                }
+
+                case OMPC_linear: {
+                    // Format: linear(modifier(list):step) or linear(list:step) or linear(list)
+                    // Example: linear(val(a,b,c):2)
+                    OpenMPLinearClauseModifier modifier = OMPC_LINEAR_MODIFIER_unspecified;
+                    std::string var_list;
+                    std::string step_expr;
+
+                    // Check for modifier(list) pattern
+                    size_t open_paren = params.find('(');
+                    if (open_paren != std::string::npos && open_paren < 10) {
+                        // Likely has modifier
+                        std::string potential_modifier = params.substr(0, open_paren);
+                        OpenMPLinearClauseModifier test_mod = mapLinearModifier(potential_modifier);
+                        if (test_mod != OMPC_LINEAR_MODIFIER_unspecified) {
+                            modifier = test_mod;
+                            // Extract variable list from inside modifier parentheses
+                            size_t close_paren = params.find(')', open_paren);
+                            if (close_paren != std::string::npos) {
+                                var_list = params.substr(open_paren + 1, close_paren - open_paren - 1);
+                                // Check for step after closing paren
+                                if (close_paren + 1 < params.length() && params[close_paren + 1] == ':') {
+                                    step_expr = params.substr(close_paren + 2);
+                                }
+                            }
+                        }
+                    }
+
+                    if (modifier == OMPC_LINEAR_MODIFIER_unspecified) {
+                        // No modifier, parse as list:step
+                        size_t colon_pos = params.find(':');
+                        if (colon_pos != std::string::npos) {
+                            var_list = params.substr(0, colon_pos);
+                            step_expr = params.substr(colon_pos + 1);
+                        } else {
+                            var_list = params;
+                        }
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_linear, modifier);
+                    if (omp_clause && !var_list.empty()) {
+                        std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                        for (const std::string& var : vars) {
+                            if (!var.empty()) {
+                                omp_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                        if (!step_expr.empty()) {
+                            OpenMPLinearClause* linear_clause = dynamic_cast<OpenMPLinearClause*>(omp_clause);
+                            if (linear_clause) {
+                                linear_clause->setUserDefinedStep(step_expr.c_str());
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case OMPC_lastprivate: {
+                    // Format: lastprivate(conditional:list) or lastprivate(list)
+                    // Example: lastprivate(conditional:a,b,c)
+                    OpenMPLastprivateClauseModifier modifier = OMPC_LASTPRIVATE_MODIFIER_unspecified;
+                    std::string var_list = params;
+
+                    size_t colon_pos = params.find(':');
+                    if (colon_pos != std::string::npos) {
+                        std::string potential_modifier = params.substr(0, colon_pos);
+                        if (potential_modifier == "conditional") {
+                            modifier = OMPC_LASTPRIVATE_MODIFIER_conditional;
+                            var_list = params.substr(colon_pos + 1);
+                        }
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_lastprivate, modifier);
+                    if (omp_clause && !var_list.empty()) {
+                        std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                        for (const std::string& var : vars) {
+                            if (!var.empty()) {
+                                omp_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case OMPC_order: {
+                    // Format: order(kind)
+                    // Example: order(concurrent)
+                    OpenMPOrderClauseKind kind = OMPC_ORDER_concurrent;
+                    if (params == "concurrent") {
+                        kind = OMPC_ORDER_concurrent;
+                    }
+                    omp_clause = dir->addOpenMPClause(OMPC_order, kind);
+                    break;
+                }
+
+                case OMPC_allocate: {
+                    // Format: allocate(allocator:list) or allocate(list)
+                    // Example: allocate(omp_default_mem_alloc:a,b,c)
+                    OpenMPAllocateClauseAllocator allocator = OMPC_ALLOCATE_ALLOCATOR_unspecified;
+                    std::string var_list = params;
+                    std::string alloc_str;
+
+                    size_t colon_pos = params.find(':');
+                    if (colon_pos != std::string::npos) {
+                        alloc_str = params.substr(0, colon_pos);
+                        allocator = mapAllocator(alloc_str);
+                        var_list = params.substr(colon_pos + 1);
+                    }
+
+                    char* user_alloc = nullptr;
+                    if (allocator == OMPC_ALLOCATE_ALLOCATOR_user && !alloc_str.empty()) {
+                        user_alloc = strdup(alloc_str.c_str());
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_allocate, allocator, user_alloc);
+                    if (omp_clause && !var_list.empty()) {
+                        std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                        for (const std::string& var : vars) {
+                            if (!var.empty()) {
+                                omp_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                default: {
+                    // Standard clause handling for all other clause types
+                    if (params.empty()) {
+                        // No parameters - just add the clause kind
+                        omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+                    } else {
+                        // Has parameters - add clause and then add expressions
+                        omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+                        if (omp_clause) {
+                            // Split by commas (respecting parentheses and brackets)
+                            std::vector<std::string> expr_list = parseCommaSeparatedList(params);
+                            for (const std::string& expr : expr_list) {
+                                if (!expr.empty()) {
+                                    omp_clause->addLangExpr(expr.c_str());
+                                }
+                            }
+                        }
+                    }
+                    break;
                 }
             }
         }
