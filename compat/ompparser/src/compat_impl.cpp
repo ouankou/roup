@@ -95,6 +95,7 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
         case 19: return OMPD_declare_reduction;
         case 20: return OMPD_declare_simd;
         case 21: return OMPD_declare_target;
+        case 22: return OMPD_declare_variant;
         case 23: return OMPD_depobj;
         case 25: return OMPD_distribute;
         case 26: return OMPD_distribute_parallel_for;
