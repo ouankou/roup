@@ -1167,15 +1167,21 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
 fn parse_default_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
-        // Case-insensitive keyword matching without String allocation
-        // Check common case variants (lowercase, uppercase, title case)
-        if args.contains("shared") || args.contains("SHARED") || args.contains("Shared") {
-            return 0;
+        // Case-insensitive keyword matching
+        // Mapping to ompparser's OpenMPDefaultClauseKind enum:
+        // 0=private, 1=firstprivate, 2=shared, 3=none, 4=variant, 5=unknown
+        if args.contains("private") || args.contains("PRIVATE") || args.contains("Private") {
+            if args.contains("firstprivate") || args.contains("FIRSTPRIVATE") || args.contains("Firstprivate") {
+                return 1; // firstprivate
+            }
+            return 0; // private
+        } else if args.contains("shared") || args.contains("SHARED") || args.contains("Shared") {
+            return 2; // shared
         } else if args.contains("none") || args.contains("NONE") || args.contains("None") {
-            return 1;
+            return 3; // none
         }
     }
-    0 // Default to shared
+    2 // Default to shared
 }
 
 /// Convert directive name to kind enum code.
