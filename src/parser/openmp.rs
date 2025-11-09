@@ -640,6 +640,75 @@ fn parse_scan_directive<'a>(
     Ok((rest, Directive::new(name, None, clauses)))
 }
 
+// Custom parser for atomic directive to handle variants like "atomic read", "atomic write", etc.
+// Also handles comma-separated clauses like "atomic read,seq_cst,hint(abc)"
+//
+// Note: The directive registry may match either "atomic" or "atomic read" (or other variants)
+// depending on greedy matching. The `name` parameter contains what was matched.
+// The `input` contains everything after the matched directive name.
+fn parse_atomic_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+    use crate::lexer::lex_identifier_token;
+
+    let input_trimmed = input.trim_start();
+
+    // Check if the name already includes an operation (e.g., "atomic read")
+    let has_operation = name.contains(' ');
+
+    // Try to parse an operation type from input if not already in name
+    let (clause_input, final_name) = if !has_operation {
+        if let Ok((after_op, op_type)) = lex_identifier_token(input_trimmed) {
+            let op_lower = op_type.to_ascii_lowercase();
+            if matches!(op_lower.as_str(), "read" | "write" | "update" | "capture" | "compare") {
+                // Found an operation type in the input
+                // Check if there's a comma immediately after
+                let after_op_trimmed = after_op.trim_start();
+                let clause_start = if after_op_trimmed.starts_with(',') {
+                    // Skip the leading comma: "read,seq_cst" -> "seq_cst"
+                    &after_op_trimmed[1..]
+                } else {
+                    // Normal whitespace separation
+                    after_op
+                };
+                let full_name = format!("{} {}", name, op_type);
+                (clause_start, std::borrow::Cow::Owned(full_name))
+            } else {
+                // Not an operation type, use name as-is
+                (input_trimmed, name)
+            }
+        } else {
+            // No identifier found, use name as-is
+            (input_trimmed, name)
+        }
+    } else {
+        // Name already includes operation like "atomic read"
+        // Check if input starts with a comma that needs to be skipped
+        if input_trimmed.starts_with(',') {
+            (&input_trimmed[1..], name)
+        } else {
+            (input_trimmed, name)
+        }
+    };
+
+    // Parse remaining clauses
+    let (rest, clauses) = clause_registry.parse_sequence(clause_input)?;
+
+    Ok((
+        rest,
+        Directive {
+            name: final_name,
+            parameter: None,
+            clauses,
+            wait_data: None,
+            cache_data: None,
+        },
+    ))
+}
+
 // Custom parser for cancel directive: cancel construct-type-clause or bare cancel
 fn parse_cancel_directive<'a>(
     name: std::borrow::Cow<'a, str>,
@@ -766,6 +835,13 @@ const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
     "cancel",
     "cancellation point",
     "groupprivate",
+    "atomic",
+    "atomic read",
+    "atomic write",
+    "atomic update",
+    "atomic capture",
+    "atomic compare",
+    "atomic compare capture",
 ];
 
 pub fn directive_registry() -> DirectiveRegistry {
@@ -782,6 +858,15 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("cancel", parse_cancel_directive);
     builder = builder.register_custom("cancellation point", parse_cancellation_point_directive);
     builder = builder.register_custom("groupprivate", parse_groupprivate_directive);
+
+    // Register atomic and all its variants to use the same custom parser
+    builder = builder.register_custom("atomic", parse_atomic_directive);
+    builder = builder.register_custom("atomic read", parse_atomic_directive);
+    builder = builder.register_custom("atomic write", parse_atomic_directive);
+    builder = builder.register_custom("atomic update", parse_atomic_directive);
+    builder = builder.register_custom("atomic capture", parse_atomic_directive);
+    builder = builder.register_custom("atomic compare", parse_atomic_directive);
+    builder = builder.register_custom("atomic compare capture", parse_atomic_directive);
 
     // Handle underscore variant of "target data"
     builder = builder.register_custom("target_data", parse_target_data_directive);
