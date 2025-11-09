@@ -125,8 +125,9 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 /// C sees this as an opaque pointer - internal structure is hidden.
 #[repr(C)]
 pub struct OmpDirective {
-    name: *const c_char,     // Directive name (e.g., "parallel")
-    clauses: Vec<OmpClause>, // Associated clauses
+    name: *const c_char,      // Directive name (e.g., "parallel")
+    parameter: *const c_char, // Optional parameter (e.g., "(a,b,c)" for threadprivate)
+    clauses: Vec<OmpClause>,  // Associated clauses
 }
 
 /// Opaque clause type (C-compatible)
@@ -137,6 +138,7 @@ pub struct OmpDirective {
 pub struct OmpClause {
     kind: i32,        // Clause type (num_threads=0, schedule=7, etc.)
     data: ClauseData, // Clause-specific data (union)
+    text: *const c_char, // Full clause text (e.g., "num_threads(4)")
 }
 
 /// Clause-specific data stored in a C union
@@ -237,6 +239,11 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
     // Convert to C-compatible format
     let c_directive = OmpDirective {
         name: allocate_c_string(directive.name.as_ref()),
+        parameter: directive
+            .parameter
+            .as_ref()
+            .map(|p| allocate_c_string(p.as_ref()))
+            .unwrap_or(ptr::null()),
         clauses: directive
             .clauses
             .into_iter()
@@ -269,6 +276,11 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
         // Free the name string (was allocated with CString::into_raw)
         if !boxed.name.is_null() {
             drop(CString::from_raw(boxed.name as *mut c_char));
+        }
+
+        // Free the parameter string if it exists
+        if !boxed.parameter.is_null() {
+            drop(CString::from_raw(boxed.parameter as *mut c_char));
         }
 
         // Free clause data
@@ -357,6 +369,11 @@ pub extern "C" fn roup_parse_with_language(
     // Convert to C-compatible format
     let c_directive = OmpDirective {
         name: allocate_c_string(directive.name.as_ref()),
+        parameter: directive
+            .parameter
+            .as_ref()
+            .map(|p| allocate_c_string(p.as_ref()))
+            .unwrap_or(ptr::null()),
         clauses: directive
             .clauses
             .into_iter()
@@ -574,6 +591,22 @@ pub extern "C" fn roup_directive_name(directive: *const OmpDirective) -> *const 
     }
 }
 
+/// Get directive parameter (e.g., variable list for threadprivate, allocate).
+///
+/// Returns NULL if directive is NULL or has no parameter.
+/// The returned string is owned by the directive and must not be freed.
+#[no_mangle]
+pub extern "C" fn roup_directive_parameter(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let dir = &*directive;
+        dir.parameter
+    }
+}
+
 /// Get number of clauses in a directive.
 ///
 /// Returns 0 if directive is NULL.
@@ -743,6 +776,26 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
     }
 }
 
+/// Get proc_bind kind from proc_bind clause.
+///
+/// Returns -1 if clause is NULL or not a proc_bind clause.
+/// Return values: 0=master, 1=close, 2=spread, 3=primary
+#[no_mangle]
+pub extern "C" fn roup_clause_proc_bind(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != 14 {
+            // Not a proc_bind clause
+            return -1;
+        }
+        c.data.default
+    }
+}
+
 // ============================================================================
 // Variable List Functions (UNSAFE BLOCKS 9-11)
 // ============================================================================
@@ -771,6 +824,34 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
         // For now, return empty list (would need clause parsing enhancement)
         let list = OmpStringList { items: Vec::new() };
         Box::into_raw(Box::new(list))
+    }
+}
+
+/// Get the full text representation of a clause.
+///
+/// Returns the clause as it would appear in source code (e.g., "num_threads(4)").
+///
+/// ## Parameters
+/// - `clause`: Pointer to the clause
+///
+/// ## Returns
+/// - Pointer to null-terminated C string containing the clause text
+/// - NULL if clause is NULL
+///
+/// ## Safety
+/// - Returned string is owned by the clause and should NOT be freed
+/// - Valid until the directive containing this clause is freed
+#[no_mangle]
+pub extern "C" fn roup_clause_text(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    // UNSAFE BLOCK: Dereference clause for text access
+    // Safety: Caller guarantees valid clause pointer
+    unsafe {
+        let c = &*clause;
+        c.text
     }
 }
 
@@ -884,13 +965,37 @@ fn allocate_c_string(s: &str) -> *const c_char {
 /// Maps clause names to integer kind codes (C doesn't have Rust enums).
 /// Each clause type gets a unique ID and appropriate data representation.
 ///
-/// ## Clause Kind Mapping:
-/// - 0 = num_threads    - 6 = reduction
-/// - 1 = if             - 7 = schedule
-/// - 2 = private        - 8 = collapse
-/// - 3 = shared         - 9 = ordered
-/// - 4 = firstprivate   - 10 = nowait
-/// - 5 = lastprivate    - 11 = default
+/// ## Clause Kind Mapping (aligned with ompparser OpenMPKinds.h):
+/// - 0 = num_threads    - 30 = bind            - 60 = device
+/// - 1 = if             - 31 = inclusive       - 61 = map
+/// - 2 = private        - 32 = exclusive       - 62 = use_device_ptr
+/// - 3 = shared         - 33 = copyprivate     - 63 = sizes
+/// - 4 = firstprivate   - 34 = parallel        - 64 = use_device_addr
+/// - 5 = lastprivate    - 35 = sections        - 65 = is_device_ptr
+/// - 6 = reduction      - 36 = for             - 66 = has_device_addr
+/// - 7 = schedule       - 37 = do              - 67 = defaultmap
+/// - 8 = collapse       - 38 = taskgroup       - 68 = to
+/// - 9 = ordered        - 39 = allocator       - 69 = from
+/// - 10 = nowait        - 40 = initializer     - 70 = uses_allocators
+/// - 11 = default       - 41 = final           - 71 = when
+/// - 12 = copyin        - 42 = untied          - 72 = match
+/// - 13 = align         - 43 = requires        - 73 = link
+/// - 14 = proc_bind     - 44 = mergeable       - 74 = device_type
+/// - 15 = allocate      - 45 = in_reduction    - 75 = task_reduction
+/// - 16 = num_teams     - 46 = depend          - 76 = acq_rel
+/// - 17 = thread_limit  - 47 = priority        - 77 = release
+/// - 18 = partial       - 48 = affinity        - 78 = acquire
+/// - 19 = full          - 49 = detach          - 79 = read
+/// - 20 = order         - 50 = grainsize       - 80 = write
+/// - 21 = linear        - 51 = num_tasks       - 81 = update
+/// - 22 = safelen       - 52 = nogroup         - 82 = capture
+/// - 23 = simdlen       - 53 = reverse_offload - 83 = seq_cst
+/// - 24 = aligned       - 54 = unified_address - 84 = relaxed
+/// - 25 = nontemporal   - 55 = unified_shared_memory - 85 = hint
+/// - 26 = uniform       - 56 = atomic_default_mem_order - 86 = destroy
+/// - 27 = inbranch      - 57 = dynamic_allocators - 87 = depobj_update
+/// - 28 = notinbranch   - 58 = ext_implementation_defined_requirement - 88 = threads
+/// - 29 = dist_schedule - 59 = (reserved)      - 89 = simd
 /// - 999 = unknown
 fn convert_clause(clause: &Clause) -> OmpClause {
     // Normalize clause name to lowercase for case-insensitive matching
@@ -903,66 +1008,114 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     let (kind, data) = match normalized_name.as_str() {
         "num_threads" => (0, ClauseData { default: 0 }),
         "if" => (1, ClauseData { default: 0 }),
-        "private" => (
-            2,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "shared" => (
-            3,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "firstprivate" => (
-            4,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        "lastprivate" => (
-            5,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
+        "private" => (2, ClauseData { variables: ptr::null_mut() }),
+        "shared" => (3, ClauseData { variables: ptr::null_mut() }),
+        "firstprivate" => (4, ClauseData { variables: ptr::null_mut() }),
+        "lastprivate" => (5, ClauseData { variables: ptr::null_mut() }),
         "reduction" => {
             let operator = parse_reduction_operator(clause);
-            (
-                6,
-                ClauseData {
-                    reduction: ManuallyDrop::new(ReductionData { operator }),
-                },
-            )
+            (6, ClauseData { reduction: ManuallyDrop::new(ReductionData { operator }) })
         }
         "schedule" => {
             let schedule_kind = parse_schedule_kind(clause);
-            (
-                7,
-                ClauseData {
-                    schedule: ManuallyDrop::new(ScheduleData {
-                        kind: schedule_kind,
-                    }),
-                },
-            )
+            (7, ClauseData { schedule: ManuallyDrop::new(ScheduleData { kind: schedule_kind }) })
         }
         "collapse" => (8, ClauseData { default: 0 }),
         "ordered" => (9, ClauseData { default: 0 }),
         "nowait" => (10, ClauseData { default: 0 }),
         "default" => {
             let default_kind = parse_default_kind(clause);
-            (
-                11,
-                ClauseData {
-                    default: default_kind,
-                },
-            )
+            (11, ClauseData { default: default_kind })
         }
+        "copyin" => (12, ClauseData { variables: ptr::null_mut() }),
+        "align" => (13, ClauseData { default: 0 }),
+        "proc_bind" => {
+            let proc_bind_kind = parse_proc_bind_kind(clause);
+            (14, ClauseData { default: proc_bind_kind })
+        }
+        "allocate" => (15, ClauseData { variables: ptr::null_mut() }),
+        "num_teams" => (16, ClauseData { default: 0 }),
+        "thread_limit" => (17, ClauseData { default: 0 }),
+        "partial" => (18, ClauseData { default: 0 }),
+        "full" => (19, ClauseData { default: 0 }),
+        "order" => (20, ClauseData { default: 0 }),
+        "linear" => (21, ClauseData { variables: ptr::null_mut() }),
+        "safelen" => (22, ClauseData { default: 0 }),
+        "simdlen" => (23, ClauseData { default: 0 }),
+        "aligned" => (24, ClauseData { variables: ptr::null_mut() }),
+        "nontemporal" => (25, ClauseData { variables: ptr::null_mut() }),
+        "uniform" => (26, ClauseData { variables: ptr::null_mut() }),
+        "inbranch" => (27, ClauseData { default: 0 }),
+        "notinbranch" => (28, ClauseData { default: 0 }),
+        "dist_schedule" => (29, ClauseData { default: 0 }),
+        "bind" => (30, ClauseData { default: 0 }),
+        "inclusive" => (31, ClauseData { variables: ptr::null_mut() }),
+        "exclusive" => (32, ClauseData { variables: ptr::null_mut() }),
+        "copyprivate" => (33, ClauseData { variables: ptr::null_mut() }),
+        "parallel" => (34, ClauseData { default: 0 }),
+        "sections" => (35, ClauseData { default: 0 }),
+        "for" => (36, ClauseData { default: 0 }),
+        "do" => (37, ClauseData { default: 0 }),
+        "taskgroup" => (38, ClauseData { default: 0 }),
+        "allocator" => (39, ClauseData { default: 0 }),
+        "initializer" => (40, ClauseData { default: 0 }),
+        "final" => (41, ClauseData { default: 0 }),
+        "untied" => (42, ClauseData { default: 0 }),
+        "requires" => (43, ClauseData { default: 0 }),
+        "mergeable" => (44, ClauseData { default: 0 }),
+        "in_reduction" => (45, ClauseData { reduction: ManuallyDrop::new(ReductionData { operator: 0 }) }),
+        "depend" => (46, ClauseData { default: 0 }),
+        "priority" => (47, ClauseData { default: 0 }),
+        "affinity" => (48, ClauseData { variables: ptr::null_mut() }),
+        "detach" => (49, ClauseData { default: 0 }),
+        "grainsize" => (50, ClauseData { default: 0 }),
+        "num_tasks" => (51, ClauseData { default: 0 }),
+        "nogroup" => (52, ClauseData { default: 0 }),
+        "reverse_offload" => (53, ClauseData { default: 0 }),
+        "unified_address" => (54, ClauseData { default: 0 }),
+        "unified_shared_memory" => (55, ClauseData { default: 0 }),
+        "atomic_default_mem_order" => (56, ClauseData { default: 0 }),
+        "dynamic_allocators" => (57, ClauseData { default: 0 }),
+        "ext_implementation_defined_requirement" => (58, ClauseData { default: 0 }),
+        "device" => (60, ClauseData { default: 0 }),
+        "map" => (61, ClauseData { variables: ptr::null_mut() }),
+        "use_device_ptr" => (62, ClauseData { variables: ptr::null_mut() }),
+        "sizes" => (63, ClauseData { default: 0 }),
+        "use_device_addr" => (64, ClauseData { variables: ptr::null_mut() }),
+        "is_device_ptr" => (65, ClauseData { variables: ptr::null_mut() }),
+        "has_device_addr" => (66, ClauseData { variables: ptr::null_mut() }),
+        "defaultmap" => (67, ClauseData { default: 0 }),
+        "to" => (68, ClauseData { variables: ptr::null_mut() }),
+        "from" => (69, ClauseData { variables: ptr::null_mut() }),
+        "uses_allocators" => (70, ClauseData { default: 0 }),
+        "when" => (71, ClauseData { default: 0 }),
+        "match" => (72, ClauseData { default: 0 }),
+        "link" => (73, ClauseData { variables: ptr::null_mut() }),
+        "device_type" => (74, ClauseData { default: 0 }),
+        "task_reduction" => (75, ClauseData { reduction: ManuallyDrop::new(ReductionData { operator: 0 }) }),
+        "acq_rel" => (76, ClauseData { default: 0 }),
+        "release" => (77, ClauseData { default: 0 }),
+        "acquire" => (78, ClauseData { default: 0 }),
+        "read" => (79, ClauseData { default: 0 }),
+        "write" => (80, ClauseData { default: 0 }),
+        "update" => (81, ClauseData { default: 0 }),
+        "capture" => (82, ClauseData { default: 0 }),
+        "seq_cst" => (83, ClauseData { default: 0 }),
+        "relaxed" => (84, ClauseData { default: 0 }),
+        "hint" => (85, ClauseData { default: 0 }),
+        "destroy" => (86, ClauseData { default: 0 }),
+        "depobj_update" => (87, ClauseData { default: 0 }),
+        "threads" => (88, ClauseData { default: 0 }),
+        "simd" => (89, ClauseData { default: 0 }),
         _ => (999, ClauseData { default: 0 }), // Unknown
     };
 
-    OmpClause { kind, data }
+    // Get the full clause text representation
+    let clause_text = clause.to_source_string();
+    let text_cstring = CString::new(clause_text).unwrap_or_else(|_| CString::new("").unwrap());
+    let text = text_cstring.into_raw();
+
+    OmpClause { kind, data, text }
 }
 
 /// Parse reduction operator from clause arguments.
@@ -1041,6 +1194,32 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
     0 // Default to static
 }
 
+/// Parse proc_bind clause affinity policy.
+///
+/// Extracts the proc_bind kind from clause like "proc_bind(master)".
+/// Returns integer code for the proc_bind policy.
+///
+/// ## Proc_bind Codes:
+/// - 0 = master
+/// - 1 = close
+/// - 2 = spread
+/// - 3 = primary
+fn parse_proc_bind_kind(clause: &Clause) -> i32 {
+    if let ClauseKind::Parenthesized(ref args) = clause.kind {
+        let args = args.as_ref();
+        if args.contains("master") || args.contains("MASTER") || args.contains("Master") {
+            return 0;
+        } else if args.contains("close") || args.contains("CLOSE") || args.contains("Close") {
+            return 1;
+        } else if args.contains("spread") || args.contains("SPREAD") || args.contains("Spread") {
+            return 2;
+        } else if args.contains("primary") || args.contains("PRIMARY") || args.contains("Primary") {
+            return 3;
+        }
+    }
+    0 // Default to master
+}
+
 /// Parse default clause data-sharing attribute.
 ///
 /// Extracts the default sharing from clause like "default(shared)".
@@ -1068,14 +1247,38 @@ fn parse_default_kind(clause: &Clause) -> i32 {
 /// Maps directive names (parallel, for, task, etc.) to integer codes
 /// so C code can use switch statements instead of string comparisons.
 ///
-/// ## Directive Codes:
-/// - 0 = parallel     - 5 = critical
-/// - 1 = for          - 6 = atomic
-/// - 2 = sections     - 7 = barrier
-/// - 3 = single       - 8 = master
-/// - 4 = task         - 9 = teams
-/// - 10 = target      - 11 = distribute
-/// - -1 = NULL/unknown
+/// ## Directive Codes (aligned with ompparser OpenMPKinds.h):
+/// - 0 = parallel variants     - 30 = parallel_loop       - 60 = target_teams_loop
+/// - 1 = for/do variants       - 31 = parallel_workshare  - 61 = target_update
+/// - 2 = sections              - 32 = parallel_master     - 62 = declare_target
+/// - 3 = single                - 33 = master_taskloop     - 63 = end_declare_target
+/// - 4 = task                  - 34 = master_taskloop_simd - 64 = end
+/// - 5 = master                - 35 = parallel_master_taskloop - 65 = unroll
+/// - 6 = critical              - 36 = parallel_master_taskloop_simd - 66 = tile
+/// - 7 = barrier               - 37 = taskloop            - 67 = depobj
+/// - 8 = taskwait              - 38 = taskloop_simd       - 68 = scan
+/// - 9 = taskgroup             - 39 = taskyield           - 69 = section
+/// - 10 = atomic               - 40 = requires            - 70 = declare_reduction
+/// - 11 = flush                - 41 = target_data         - 71 = declare_mapper
+/// - 12 = ordered              - 42 = target_enter_data   - 72 = declare_variant
+/// - 13 = target variants      - 43 = target_exit_data    - 73 = allocate
+/// - 14 = teams variants       - 44 = target_simd         - 74 = threadprivate
+/// - 15 = distribute variants  - 45 = target_loop         - 75 = workshare
+/// - 16 = metadirective        - 46 = target_loop_simd    - 76 = cancel
+/// - 17 = simd                 - 47 = target_teams_loop   - 77 = cancellation_point
+/// - 18 = loop                 - 48 = teams_loop          - 78 = declare_simd
+/// - 19 = parallel_loop_simd   - 49 = teams_loop_simd     - 79 = begin_declare_target
+/// - 20 = teams_distribute_simd - 50 = distribute_parallel_loop - 80 = begin_declares
+/// - 21 = target_teams_distribute_simd - 51 = distribute_parallel_loop_simd - 81 = end_declares
+/// - 22 = target_parallel_loop  - 52 = target_parallel_loop_simd - 82 = parallel_masked
+/// - 23 = target_parallel_simd  - 53 = target_teams_distribute_parallel_loop - 83 = masked
+/// - 24 = parallel_for_loop     - 54 = target_teams_distribute_parallel_loop_simd - 84 = masked_taskloop
+/// - 25 = parallel_do_loop      - 55 = teams_distribute_parallel_loop - 85 = masked_taskloop_simd
+/// - 26 = target_parallel_for_loop - 56 = teams_distribute_parallel_loop_simd - 86 = parallel_masked_taskloop
+/// - 27 = target_parallel_do_loop - 57 = parallel_master_masked_taskloop - 87 = parallel_masked_taskloop_simd
+/// - 28 = teams_distribute_parallel_for_loop - 58 = parallel_master_masked_taskloop_simd
+/// - 29 = teams_distribute_parallel_do_loop - 59 = begin_declare_variant
+/// - 999 = unknown
 fn directive_name_to_kind(name: *const c_char) -> i32 {
     if name.is_null() {
         return -1;
@@ -1092,28 +1295,23 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
         // the build system's constant parser requires a match expression with string literals.
         // The performance impact is negligible for the C API boundary.
         //
-        // Fortran DO variants map to same codes as their C FOR equivalents:
-        // - "do" -> 1 (same as "for")
-        // - "parallel do" -> 0 (same as "parallel for")
-        // - "distribute parallel do" -> 15 (same as "distribute parallel for")
-        // - "target parallel do" -> 13 (same as "target parallel for")
-        // etc.
+        // Fortran DO variants map to same codes as their C FOR equivalents
         match name_str.to_lowercase().as_str() {
-            // Parallel directives (kind 0)
+            // Kind 0: Parallel directives
             "parallel" => 0,
             "parallel for" => 0,
-            "parallel do" => 0, // Fortran variant
+            "parallel do" => 0,
             "parallel for simd" => 0,
-            "parallel do simd" => 0, // Fortran variant
+            "parallel do simd" => 0,
             "parallel sections" => 0,
 
-            // For/Do directives (kind 1)
+            // Kind 1: For/Do directives
             "for" => 1,
-            "do" => 1, // Fortran variant
+            "do" => 1,
             "for simd" => 1,
-            "do simd" => 1, // Fortran variant
+            "do simd" => 1,
 
-            // Other basic directives
+            // Basic directives
             "sections" => 2,
             "single" => 3,
             "task" => 4,
@@ -1126,38 +1324,110 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
             "flush" => 11,
             "ordered" => 12,
 
-            // Target directives (kind 13)
+            // Kind 13: Target directives
             "target" => 13,
             "target teams" => 13,
             "target parallel" => 13,
             "target parallel for" => 13,
-            "target parallel do" => 13, // Fortran variant
+            "target parallel do" => 13,
             "target parallel for simd" => 13,
-            "target parallel do simd" => 13, // Fortran variant
+            "target parallel do simd" => 13,
             "target teams distribute" => 13,
             "target teams distribute parallel for" => 13,
-            "target teams distribute parallel do" => 13, // Fortran variant
+            "target teams distribute parallel do" => 13,
             "target teams distribute parallel for simd" => 13,
-            "target teams distribute parallel do simd" => 13, // Fortran variant
+            "target teams distribute parallel do simd" => 13,
 
-            // Teams directives (kind 14)
+            // Kind 14: Teams directives
             "teams" => 14,
             "teams distribute" => 14,
             "teams distribute parallel for" => 14,
-            "teams distribute parallel do" => 14, // Fortran variant
+            "teams distribute parallel do" => 14,
             "teams distribute parallel for simd" => 14,
-            "teams distribute parallel do simd" => 14, // Fortran variant
+            "teams distribute parallel do simd" => 14,
 
-            // Distribute directives (kind 15)
+            // Kind 15: Distribute directives
             "distribute" => 15,
             "distribute parallel for" => 15,
-            "distribute parallel do" => 15, // Fortran variant
+            "distribute parallel do" => 15,
             "distribute parallel for simd" => 15,
-            "distribute parallel do simd" => 15, // Fortran variant
+            "distribute parallel do simd" => 15,
             "distribute simd" => 15,
 
-            // Metadirective (kind 16)
+            // Additional directives starting from kind 16
             "metadirective" => 16,
+            "simd" => 17,
+            "loop" => 18,
+            "parallel loop simd" => 19,
+            "teams distribute simd" => 20,
+            "target teams distribute simd" => 21,
+            "target parallel loop" => 22,
+            "target parallel simd" => 23,
+            "parallel for loop" => 24,
+            "parallel do loop" => 25,
+            "target parallel for loop" => 26,
+            "target parallel do loop" => 27,
+            "teams distribute parallel for loop" => 28,
+            "teams distribute parallel do loop" => 29,
+            "parallel loop" => 30,
+            "parallel workshare" => 31,
+            "parallel master" => 32,
+            "master taskloop" => 33,
+            "master taskloop simd" => 34,
+            "parallel master taskloop" => 35,
+            "parallel master taskloop simd" => 36,
+            "taskloop" => 37,
+            "taskloop simd" => 38,
+            "taskyield" => 39,
+            "requires" => 40,
+            "target data" => 41,
+            "target_data" => 41,  // underscore variant
+            "target enter data" => 42,
+            "target exit data" => 43,
+            "target simd" => 44,
+            "target loop" => 45,
+            "target loop simd" => 46,
+            "target teams loop" => 47,
+            "teams loop" => 48,
+            "teams loop simd" => 49,
+            "distribute parallel loop" => 50,
+            "distribute parallel loop simd" => 51,
+            "target parallel loop simd" => 52,
+            "target teams distribute parallel loop" => 53,
+            "target teams distribute parallel loop simd" => 54,
+            "teams distribute parallel loop" => 55,
+            "teams distribute parallel loop simd" => 56,
+            "parallel master masked taskloop" => 57,
+            "parallel master masked taskloop simd" => 58,
+            "begin declare variant" => 59,
+            "target teams loop simd" => 60,
+            "target update" => 61,
+            "declare target" => 62,
+            "end declare target" => 63,
+            "end" => 64,
+            "unroll" => 65,
+            "tile" => 66,
+            "depobj" => 67,
+            "scan" => 68,
+            "section" => 69,
+            "declare reduction" => 70,
+            "declare mapper" => 71,
+            "declare variant" => 72,
+            "allocate" => 73,
+            "threadprivate" => 74,
+            "workshare" => 75,
+            "cancel" => 76,
+            "cancellation point" => 77,
+            "declare simd" => 78,
+            "begin declare target" => 79,
+            "begin assumes" => 80,
+            "end assumes" => 81,
+            "parallel masked" => 82,
+            "masked" => 83,
+            "masked taskloop" => 84,
+            "masked taskloop simd" => 85,
+            "parallel masked taskloop" => 86,
+            "parallel masked taskloop simd" => 87,
 
             // Unknown directive
             _ => 999,
@@ -1187,6 +1457,11 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
 /// wrong union variant (the bytes of ReductionData::operator interpreted as a pointer).
 fn free_clause_data(clause: &OmpClause) {
     unsafe {
+        // Free clause text string
+        if !clause.text.is_null() {
+            drop(CString::from_raw(clause.text as *mut c_char));
+        }
+
         // Free variable lists if present
         // Clause kinds with variable lists (see convert_clause):
         //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
