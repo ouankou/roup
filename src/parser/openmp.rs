@@ -221,6 +221,7 @@ openmp_directives! {
     DistributeParallelDoSimd => "distribute parallel do simd",  // Fortran variant
     Do => "do",  // Fortran equivalent of FOR
     DoSimd => "do simd",  // Fortran equivalent of FOR SIMD
+    End => "end",  // Generic end directive for Fortran (end parallel, end do, etc.)
     EndAssumes => "end assumes",
     EndDeclareTarget => "end declare target",
     EndDeclareVariant => "end declare variant",
@@ -754,6 +755,50 @@ fn parse_target_data_directive<'a>(
     ))
 }
 
+// Custom parser for end directive: end <directive_name>
+// Used in Fortran to mark the end of directive regions
+fn parse_end_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+    use crate::lexer;
+
+    let (mut rest, _) = lexer::skip_space_and_comments(input)?;
+
+    // Read full multi-word directive name (e.g., "parallel do", "target teams")
+    // Keep reading identifiers until we hit a non-identifier
+    let mut directive_parts = Vec::new();
+    while let Ok((new_rest, token)) = lexer::lex_identifier_token(rest) {
+        let collapsed = lexer::collapse_line_continuations(token);
+        directive_parts.push(collapsed.as_ref().to_string());
+        rest = new_rest;
+
+        // Skip whitespace and try again
+        if let Ok((new_rest, _)) = lexer::skip_space_and_comments(rest) {
+            rest = new_rest;
+        }
+    }
+
+    // Store the directive being ended as a parameter
+    let directive = directive_parts.join(" ");
+    let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+    // Store the directive token without presentation spacing; rendering should add spaces.
+    let parameter = directive.to_string();
+
+    Ok((
+        rest,
+        Directive {
+            name,
+            parameter: Some(std::borrow::Cow::Owned(parameter)),
+            clauses,
+            wait_data: None,
+            cache_data: None,
+        },
+    ))
+}
+
 // Directive names that have custom parsers (excluding target_data underscore variant)
 const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
     "allocate",
@@ -766,6 +811,7 @@ const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
     "cancel",
     "cancellation point",
     "groupprivate",
+    "end",
 ];
 
 pub fn directive_registry() -> DirectiveRegistry {
@@ -782,6 +828,7 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("cancel", parse_cancel_directive);
     builder = builder.register_custom("cancellation point", parse_cancellation_point_directive);
     builder = builder.register_custom("groupprivate", parse_groupprivate_directive);
+    builder = builder.register_custom("end", parse_end_directive);
 
     // Handle underscore variant of "target data"
     builder = builder.register_custom("target_data", parse_target_data_directive);

@@ -103,6 +103,7 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
         case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
         case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
         case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
+        case 57:                            return OMPD_end;  // DirectiveKind::End (Fortran)
         case 128:                           return OMPD_cancel;  // DirectiveKind::Cancel
         case 129:                           return OMPD_cancellation_point;  // DirectiveKind::CancellationPoint
         default:                            return OMPD_unknown;

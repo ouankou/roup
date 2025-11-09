@@ -1208,6 +1208,9 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
             // Metadirective (kind 16)
             "metadirective" => 16,
 
+            // End directive (kind 57) - Generic Fortran end directive
+            "end" => 57,
+
             // Unknown directive
             _ => 999,
         }
