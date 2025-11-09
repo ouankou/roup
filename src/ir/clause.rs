@@ -1087,6 +1087,7 @@ pub enum ClauseData {
     // ========================================================================
     /// `reduction([modifier,]operator: list)` - Reduction operation
     Reduction {
+        modifier: Option<ReductionModifier>,
         operator: ReductionOperator,
         items: Vec<ClauseItem>,
     },
@@ -1339,8 +1340,14 @@ impl fmt::Display for ClauseData {
                 write!(f, ")")
             }
             ClauseData::Default(kind) => write!(f, "default({kind})"),
-            ClauseData::Reduction { operator, items } => {
-                write!(f, "reduction({operator}: ")?;
+            ClauseData::Reduction { modifier, operator, items } => {
+                write!(f, "reduction(")?;
+                if let Some(m) = modifier {
+                    if !matches!(m, ReductionModifier::Unspecified) {
+                        write!(f, "{m}, ")?;
+                    }
+                }
+                write!(f, "{operator}: ")?;
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;

@@ -47,7 +47,7 @@
 pub use builder::DirectiveBuilder;
 pub use clause::{
     AtomicOp, ClauseData, ClauseItem, DefaultKind, DependType, DeviceType, LastprivateModifier,
-    LinearModifier, MapType, MemoryOrder, OrderKind, ProcBind, ReductionOperator, ScheduleKind,
+    LinearModifier, MapType, MemoryOrder, OrderKind, ProcBind, ReductionModifier, ReductionOperator, ScheduleKind,
     ScheduleModifier,
 };
 pub use convert::convert_directive;

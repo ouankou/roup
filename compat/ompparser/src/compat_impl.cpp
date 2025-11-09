@@ -53,6 +53,7 @@ extern "C" {
     int32_t roup_clause_schedule_kind(const OmpClause* clause);
     const char* roup_clause_schedule_chunk_size(const OmpClause* clause);
     int32_t roup_clause_reduction_operator(const OmpClause* clause);
+    int32_t roup_clause_reduction_modifier(const OmpClause* clause);
     int32_t roup_clause_default_data_sharing(const OmpClause* clause);
     int32_t roup_clause_proc_bind_kind(const OmpClause* clause);
 
@@ -313,6 +314,7 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
         case ROUP_CLAUSE_KIND_RELEASE:       return OMPC_release;
         case ROUP_CLAUSE_KIND_ACQUIRE:       return OMPC_acquire;
         case ROUP_CLAUSE_KIND_RELAXED:       return OMPC_relaxed;
+        case ROUP_CLAUSE_KIND_AFFINITY:      return OMPC_affinity;
         default:                             return OMPC_unknown;
     }
 }
@@ -482,6 +484,60 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 else if (proc_bind_kind == ROUP_PROC_BIND_KIND_PRIMARY) omp_proc_bind_kind = OMPC_PROC_BIND_primary;
                 dir->addOpenMPClause(OMPC_proc_bind, omp_proc_bind_kind);
                 continue;
+            }
+
+            // Special handling for reduction clause - handle modifiers (inscan, task, default)
+            if (clause_kind == OMPC_reduction) {
+                int32_t mod = roup_clause_reduction_modifier(roup_clause);
+                int32_t op = roup_clause_reduction_operator(roup_clause);
+
+                // Map ROUP modifier to ompparser modifier
+                // ROUP returns: 0=inscan, 1=task, 2=default, -1=none
+                OpenMPReductionClauseModifier modifier = OMPC_REDUCTION_MODIFIER_unspecified;
+                if (mod == 0) modifier = OMPC_REDUCTION_MODIFIER_inscan;
+                else if (mod == 1) modifier = OMPC_REDUCTION_MODIFIER_task;
+                else if (mod == 2) modifier = OMPC_REDUCTION_MODIFIER_default;
+
+                // Map ROUP operator to ompparser identifier
+                // ROUP enum values: Add=0, Multiply=1, Subtract=2, BitwiseAnd=10, BitwiseOr=11,
+                // BitwiseXor=12, LogicalAnd=20, LogicalOr=21, Min=30, Max=31
+                OpenMPReductionClauseIdentifier identifier = OMPC_REDUCTION_IDENTIFIER_unknown;
+                if (op == 0) identifier = OMPC_REDUCTION_IDENTIFIER_plus;       // Add
+                else if (op == 1) identifier = OMPC_REDUCTION_IDENTIFIER_mul;   // Multiply
+                else if (op == 2) identifier = OMPC_REDUCTION_IDENTIFIER_minus; // Subtract
+                else if (op == 10) identifier = OMPC_REDUCTION_IDENTIFIER_bitand; // BitwiseAnd
+                else if (op == 11) identifier = OMPC_REDUCTION_IDENTIFIER_bitor;  // BitwiseOr
+                else if (op == 12) identifier = OMPC_REDUCTION_IDENTIFIER_bitxor; // BitwiseXor
+                else if (op == 20) identifier = OMPC_REDUCTION_IDENTIFIER_logand; // LogicalAnd
+                else if (op == 21) identifier = OMPC_REDUCTION_IDENTIFIER_logor;  // LogicalOr
+                else if (op == 30) identifier = OMPC_REDUCTION_IDENTIFIER_min;    // Min
+                else if (op == 31) identifier = OMPC_REDUCTION_IDENTIFIER_max;    // Max
+
+                // Use the static addReductionClause method which properly sets modifier and identifier
+                OpenMPClause* reduction_clause = OpenMPReductionClause::addReductionClause(
+                    dir, modifier, identifier, nullptr, nullptr
+                );
+
+                if (!reduction_clause) continue;
+
+                // Add variables to reduction clause
+                int32_t var_count = roup_clause_items_count(roup_clause);
+                for (int32_t i = 0; i < var_count; ++i) {
+                    char* var = const_cast<char*>(roup_clause_item_to_string(roup_clause, i));
+                    if (var) {
+                        reduction_clause->addLangExpr(var);
+                        roup_string_free(var);
+                    }
+                }
+
+                // FIX: ompparser bug - addReductionClause doesn't add to clauses_in_original_order
+                // We need to manually add it so it appears in generatePragmaString output
+                if (reduction_clause != nullptr && reduction_clause->getClausePosition() == -1) {
+                    dir->getClausesInOriginalOrder()->push_back(reduction_clause);
+                    reduction_clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
+                }
+
+                continue; // Skip generic handling
             }
 
             // Create the clause

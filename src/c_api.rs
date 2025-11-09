@@ -66,7 +66,7 @@ use std::ptr;
 
 use crate::ir::{
     convert_directive, ClauseData as IrClauseData, DefaultKind, Language as IrLanguage,
-    ParserConfig, ProcBind, ReductionOperator, ScheduleKind, SourceLocation,
+    ParserConfig, ProcBind, ReductionModifier, ReductionOperator, ScheduleKind, SourceLocation,
 };
 use crate::lexer::Language;
 use crate::parser::{openmp, parse_omp_directive};
@@ -203,9 +203,10 @@ struct ScheduleData {
     chunk_size: *const crate::ir::Expression,  // Optional chunk size expression
 }
 
-/// Reduction clause data (operator and variables)
+/// Reduction clause data (modifier, operator and variables)
 #[repr(C)]
 struct ReductionData {
+    modifier: i32,                             // Reduction modifier: 0=inscan, 1=task, 2=default, -1=none
     operator: i32,                             // Reduction operator enum value
     items: *const Vec<crate::ir::ClauseItem>,  // Pointer to IR clause items (NO string conversion!)
 }
@@ -880,6 +881,26 @@ pub extern "C" fn roup_clause_schedule_chunk_size(clause: *const OmpClause) -> *
     }
 }
 
+/// Get reduction modifier from reduction clause.
+///
+/// Returns: 0=inscan, 1=task, 2=default, -1=none/unspecified
+/// Returns -1 if clause is NULL or not a reduction clause.
+#[no_mangle]
+pub extern "C" fn roup_clause_reduction_modifier(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != clause_kind::REDUCTION {
+            // Not a reduction clause
+            return -1;
+        }
+        c.data.reduction.modifier
+    }
+}
+
 /// Get reduction operator from reduction clause.
 ///
 /// Returns -1 if clause is NULL or not a reduction clause.
@@ -1373,13 +1394,15 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
             },
         },
 
-        // Reduction: operator + variable list - store enum code + pointer to IR ClauseItem Vec
-        Reduction { operator, items } => {
+        // Reduction: modifier + operator + variable list - store modifier code + enum code + pointer to IR ClauseItem Vec
+        Reduction { modifier, operator, items } => {
+            let mod_code = map_reduction_modifier(modifier);
             let op_code = map_reduction_operator(operator);
             OmpClause {
                 kind: clause_kind::REDUCTION,
                 data: ClauseData {
                     reduction: ManuallyDrop::new(ReductionData {
+                        modifier: mod_code,
                         operator: op_code,
                         items: items as *const Vec<crate::ir::ClauseItem>,
                     }),
@@ -1591,6 +1614,227 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
             },
         },
 
+        // InReduction: operator + variable list (like Reduction)
+        InReduction { operator, items } => {
+            let op_code = map_reduction_operator(operator);
+            OmpClause {
+                kind: clause_kind::REDUCTION,  // Map to REDUCTION for now, compat layer will handle
+                data: ClauseData {
+                    reduction: ManuallyDrop::new(ReductionData {
+                        modifier: -1,  // InReduction doesn't have modifier in IR
+                        operator: op_code,
+                        items: items as *const Vec<crate::ir::ClauseItem>,
+                    }),
+                },
+            }
+        }
+
+        // TaskReduction: operator + variable list (like Reduction)
+        TaskReduction { operator, items } => {
+            let op_code = map_reduction_operator(operator);
+            OmpClause {
+                kind: clause_kind::REDUCTION,  // Map to REDUCTION for now, compat layer will handle
+                data: ClauseData {
+                    reduction: ManuallyDrop::new(ReductionData {
+                        modifier: -1,  // TaskReduction doesn't have modifier in IR
+                        operator: op_code,
+                        items: items as *const Vec<crate::ir::ClauseItem>,
+                    }),
+                },
+            }
+        }
+
+        // Map: map type + variable list
+        Map { items, .. } => OmpClause {
+            kind: clause_kind::MAP,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // UseDevicePtr: variable list
+        UseDevicePtr { items } => OmpClause {
+            kind: clause_kind::USE_DEVICE_PTR,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // UseDeviceAddr: variable list
+        UseDeviceAddr { items } => OmpClause {
+            kind: clause_kind::USE_DEVICE_ADDR,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // IsDevicePtr: variable list
+        IsDevicePtr { items } => OmpClause {
+            kind: clause_kind::IS_DEVICE_PTR,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // HasDeviceAddr: variable list
+        HasDeviceAddr { items } => OmpClause {
+            kind: clause_kind::HAS_DEVICE_ADDR,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // Depend: depend type + variable list
+        Depend { items, .. } => OmpClause {
+            kind: clause_kind::DEPEND,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // Priority: expression clause
+        Priority { priority } => OmpClause {
+            kind: clause_kind::PRIORITY,
+            data: ClauseData {
+                expression: priority as *const crate::ir::Expression,
+            },
+        },
+
+        // Affinity: variable list
+        Affinity { items } => OmpClause {
+            kind: clause_kind::AFFINITY,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // DistSchedule: kind + optional chunk size
+        DistSchedule { kind: sched_kind, chunk_size } => {
+            let kind_code = map_schedule_kind(sched_kind);
+            let chunk_ptr = chunk_size.as_ref().map_or(ptr::null(), |e| e as *const _);
+            OmpClause {
+                kind: clause_kind::DIST_SCHEDULE,
+                data: ClauseData {
+                    schedule: ManuallyDrop::new(ScheduleData {
+                        kind: kind_code,
+                        chunk_size: chunk_ptr,
+                    }),
+                },
+            }
+        }
+
+        // Grainsize: expression clause
+        Grainsize { grain } => OmpClause {
+            kind: clause_kind::GRAINSIZE,
+            data: ClauseData {
+                expression: grain as *const crate::ir::Expression,
+            },
+        },
+
+        // NumTasks: expression clause
+        NumTasks { num } => OmpClause {
+            kind: clause_kind::NUM_TASKS,
+            data: ClauseData {
+                expression: num as *const crate::ir::Expression,
+            },
+        },
+
+        // Filter: expression clause
+        Filter { thread_num } => OmpClause {
+            kind: clause_kind::FILTER,
+            data: ClauseData {
+                expression: thread_num as *const crate::ir::Expression,
+            },
+        },
+
+        // Device: expression clause
+        Device { device_num } => OmpClause {
+            kind: clause_kind::DEVICE,
+            data: ClauseData {
+                expression: device_num as *const crate::ir::Expression,
+            },
+        },
+
+        // NumTeams: expression clause
+        NumTeams { num } => OmpClause {
+            kind: clause_kind::NUM_TEAMS,
+            data: ClauseData {
+                expression: num as *const crate::ir::Expression,
+            },
+        },
+
+        // ThreadLimit: expression clause
+        ThreadLimit { limit } => OmpClause {
+            kind: clause_kind::THREAD_LIMIT,
+            data: ClauseData {
+                expression: limit as *const crate::ir::Expression,
+            },
+        },
+
+        // Safelen: expression clause
+        Safelen { length } => OmpClause {
+            kind: clause_kind::SAFELEN,
+            data: ClauseData {
+                expression: length as *const crate::ir::Expression,
+            },
+        },
+
+        // Simdlen: expression clause
+        Simdlen { length } => OmpClause {
+            kind: clause_kind::SIMDLEN,
+            data: ClauseData {
+                expression: length as *const crate::ir::Expression,
+            },
+        },
+
+        // Copyprivate: variable list
+        Copyprivate { items } => OmpClause {
+            kind: clause_kind::COPYPRIVATE,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // Allocate: variable list with optional allocator
+        Allocate { items, .. } => OmpClause {
+            kind: clause_kind::ALLOCATE,
+            data: ClauseData {
+                items: items as *const Vec<crate::ir::ClauseItem>,
+            },
+        },
+
+        // Order: order kind
+        Order(_order_kind) => OmpClause {
+            kind: clause_kind::ORDER,
+            data: ClauseData { default: 0 },
+        },
+
+        // DeviceType: device type
+        DeviceType(_device_type) => OmpClause {
+            kind: clause_kind::GENERIC,  // No specific constant for DeviceType yet
+            data: ClauseData { default: 0 },
+        },
+
+        // AtomicDefaultMemOrder: memory order
+        AtomicDefaultMemOrder(_mem_order) => OmpClause {
+            kind: clause_kind::GENERIC,
+            data: ClauseData { default: 0 },
+        },
+
+        // AtomicOperation: atomic op + memory order
+        AtomicOperation { .. } => OmpClause {
+            kind: clause_kind::ATOMIC_OPERATION,
+            data: ClauseData { default: 0 },
+        },
+
+        // Expression: generic expression clause
+        Expression(expr) => OmpClause {
+            kind: clause_kind::GENERIC,
+            data: ClauseData {
+                expression: expr as *const crate::ir::Expression,
+            },
+        },
+
         // Generic bare clauses (nogroup, untied, mergeable, etc.) - use GENERIC kind
         // NO STRING COMPARISON - handled as generic bare clause
         Bare(_identifier) => {
@@ -1598,6 +1842,12 @@ fn convert_clause_from_ir(clause: &IrClauseData) -> OmpClause {
                 kind: clause_kind::GENERIC,
                 data: ClauseData { default: 0 },
             }
+        },
+
+        // Generic clause with data
+        Generic { .. } => OmpClause {
+            kind: clause_kind::GENERIC,
+            data: ClauseData { default: 0 },
         },
 
         // Unknown/unsupported clauses
@@ -1622,6 +1872,17 @@ fn map_reduction_operator(op: &ReductionOperator) -> i32 {
         ReductionOperator::Min => reduction_op::MIN,
         ReductionOperator::Max => reduction_op::MAX,
         _ => reduction_op::UNKNOWN,
+    }
+}
+
+/// Map IR ReductionModifier to integer code
+fn map_reduction_modifier(modifier: &Option<ReductionModifier>) -> i32 {
+    match modifier {
+        Some(ReductionModifier::Inscan) => 0,
+        Some(ReductionModifier::Task) => 1,
+        Some(ReductionModifier::Default) => 2,
+        Some(ReductionModifier::Unspecified) => -1,
+        None => -1,
     }
 }
 

@@ -194,7 +194,7 @@ impl<'a> DirectiveBuilder {
             .iter()
             .map(|&v| ClauseItem::Identifier(Identifier::new(v)))
             .collect();
-        self.clauses.push(ClauseData::Reduction { operator, items });
+        self.clauses.push(ClauseData::Reduction { modifier: None, operator, items });
         self
     }
 
