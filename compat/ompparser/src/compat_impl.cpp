@@ -857,9 +857,10 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
             // If clause has content, parse and add variables individually
             // This enables ompparser's duplicate detection to work correctly
-            // Skip for reduction/schedule/linear - they handle their own variables
+            // Skip for clauses that handle their own parameters/variables
             if (omp_clause && content && content[0] != '\0' &&
-                clause_kind != OMPC_reduction && clause_kind != OMPC_schedule && clause_kind != OMPC_linear) {
+                clause_kind != OMPC_reduction && clause_kind != OMPC_schedule && clause_kind != OMPC_linear &&
+                clause_kind != OMPC_default && clause_kind != OMPC_proc_bind && clause_kind != OMPC_order) {
                 std::string content_str(content);
 
                 // Special handling for lastprivate clause: strip conditional modifier prefix
