@@ -83,6 +83,56 @@ extern "C" void setNormalizeClauses(bool normalize) {
 // Helper Functions
 // ============================================================================
 
+// Parse variable list and add each variable to the clause
+static void addVariableList(OpenMPClause* clause, const char* content) {
+    if (!clause || !content) return;
+
+    std::string str(content);
+    std::vector<std::string> variables;
+    std::string current;
+    int paren_depth = 0;
+    int bracket_depth = 0;
+
+    for (size_t i = 0; i < str.length(); ++i) {
+        char c = str[i];
+
+        if (c == '(') paren_depth++;
+        else if (c == ')') paren_depth--;
+        else if (c == '[') bracket_depth++;
+        else if (c == ']') bracket_depth--;
+        else if (c == ',' && paren_depth == 0 && bracket_depth == 0) {
+            // Found variable separator
+            std::string var = current;
+            // Trim leading/trailing whitespace
+            size_t start = var.find_first_not_of(" \t");
+            size_t end = var.find_last_not_of(" \t");
+            if (start != std::string::npos) {
+                var = var.substr(start, end - start + 1);
+            }
+            if (!var.empty()) {
+                clause->addLangExpr(var.c_str());
+            }
+            current.clear();
+            continue;
+        }
+
+        current += c;
+    }
+
+    // Add last variable
+    if (!current.empty()) {
+        std::string var = current;
+        size_t start = var.find_first_not_of(" \t");
+        size_t end = var.find_last_not_of(" \t");
+        if (start != std::string::npos) {
+            var = var.substr(start, end - start + 1);
+        }
+        if (!var.empty()) {
+            clause->addLangExpr(var.c_str());
+        }
+    }
+}
+
 static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
     // ROUP directive kind mapping using named constants
     // See roup_constants.h and src/c_api.rs:directive_name_to_kind()
@@ -199,7 +249,23 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             // If the clause has content (parenthesized expression), add it
             const char* content = roup_clause_get_content(roup_clause);
             if (content != nullptr && omp_clause != nullptr) {
-                omp_clause->addLangExpr(content);
+                // Check if this is a variable list clause
+                // These need to be split and added as individual variables
+                bool is_var_list_clause = (
+                    clause_kind == OMPC_private ||
+                    clause_kind == OMPC_shared ||
+                    clause_kind == OMPC_firstprivate ||
+                    clause_kind == OMPC_lastprivate ||
+                    clause_kind == OMPC_copyin ||
+                    clause_kind == OMPC_linear ||
+                    clause_kind == OMPC_aligned
+                );
+
+                if (is_var_list_clause) {
+                    addVariableList(omp_clause, content);
+                } else {
+                    omp_clause->addLangExpr(content);
+                }
             }
         }
         roup_clause_iterator_free(iter);
