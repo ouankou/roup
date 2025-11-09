@@ -762,10 +762,10 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
     unsafe {
         let c = &*clause;
 
-        // Check if this clause type has variables
-        // Kinds 2-5 are private/shared/firstprivate/lastprivate, 6 is reduction
-        if c.kind >= 2 && c.kind <= 5 {
-            // Variable list clauses - return pointer to existing list
+        // Check if this clause type has variables or expressions
+        // Kinds: 0=num_threads, 1=if, 2-5=variable lists, 6=reduction, 8=collapse, 9=ordered
+        if c.kind >= 2 && c.kind <= 5 || c.kind == 0 || c.kind == 1 || c.kind == 8 || c.kind == 9 {
+            // Variable list or expression clauses - return pointer to existing list
             let vars_ptr = c.data.variables;
             if !vars_ptr.is_null() {
                 // Clone the list so caller can own it
@@ -928,7 +928,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 
     let (kind, data) = match normalized_name.as_str() {
         "num_threads" | "if" | "collapse" | "ordered" => {
-            // Expression clauses - extract the expression from Parenthesized
+            // Expression clauses - extract the expression from Parenthesized (don't split on comma)
             let kind_code = match normalized_name.as_str() {
                 "num_threads" => 0,
                 "if" => 1,
@@ -936,7 +936,8 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 "ordered" => 9,
                 _ => 999,
             };
-            (kind_code, ClauseData { default: 0 })
+            let variables = extract_expression_from_clause(clause);
+            (kind_code, ClauseData { variables })
         }
         "private" | "shared" | "firstprivate" | "lastprivate" => {
             // Variable list clauses - extract variables
@@ -1020,6 +1021,26 @@ fn extract_variables_from_clause(clause: &Clause) -> *mut OmpStringList {
                 items.push(c_string.into_raw() as *const c_char);
             }
             Box::into_raw(Box::new(OmpStringList { items }))
+        }
+        _ => ptr::null_mut(),
+    }
+}
+
+/// Extract expression from clause (for num_threads, if, etc.) without splitting on commas
+fn extract_expression_from_clause(clause: &Clause) -> *mut OmpStringList {
+    use crate::parser::ClauseKind;
+
+    match &clause.kind {
+        ClauseKind::Parenthesized(expr_str) => {
+            // Return expression as single item (don't split on comma)
+            let trimmed = expr_str.trim();
+            if trimmed.is_empty() {
+                ptr::null_mut()
+            } else {
+                let c_string = CString::new(trimmed).unwrap();
+                let items = vec![c_string.into_raw() as *const c_char];
+                Box::into_raw(Box::new(OmpStringList { items }))
+            }
         }
         _ => ptr::null_mut(),
     }
