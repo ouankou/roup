@@ -591,11 +591,31 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
 
     // Get directive name and map to ompparser kind
     const char* directive_name = roup_directive_name(roup_dir);
+
+    // Handle atomic directive special case where ROUP combines directive and clause
+    // e.g., "atomic read" should be directive="atomic" + clause="read"
+    std::string directive_name_str(directive_name);
+    std::string atomic_clause_name;
+    if (directive_name_str.find("atomic ") == 0) {
+        // Extract clause type after "atomic "
+        atomic_clause_name = directive_name_str.substr(7); // length of "atomic "
+        directive_name_str = "atomic";
+        directive_name = directive_name_str.c_str();
+    }
+
     OpenMPDirectiveKind kind = mapRoupDirectiveNameToOmpparser(directive_name);
 
     // Create ompparser-compatible directive
     // Use ompparser's actual constructor: OpenMPDirective(kind, lang, line, col)
     OpenMPDirective* dir = new OpenMPDirective(kind, current_lang, 0, 0);
+
+    // Add atomic clause if it was extracted from directive name
+    if (!atomic_clause_name.empty()) {
+        OpenMPClauseKind atomic_clause_kind = mapRoupClauseNameToOmpparser(atomic_clause_name.c_str());
+        if (atomic_clause_kind != OMPC_unknown) {
+            dir->addOpenMPClause(atomic_clause_kind);
+        }
+    }
 
     // Convert clauses using ompparser's addOpenMPClause method
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);
@@ -1232,10 +1252,10 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                             // Extract iterator content
                             iterator_content = params.substr(open_paren + 1, close_paren - open_paren - 2);
 
-                            // Now find the comma after iterator
-                            size_t comma_pos = params.find(',', close_paren);
-                            if (comma_pos != std::string::npos) {
-                                var_list = params.substr(comma_pos + 1);
+                            // Now find the colon after iterator
+                            size_t colon_pos = params.find(':', close_paren);
+                            if (colon_pos != std::string::npos) {
+                                var_list = params.substr(colon_pos + 1);
                             }
                         }
                     } else {
