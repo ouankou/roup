@@ -9,6 +9,7 @@
  */
 
 #include <OpenMPIR.h>
+#include <algorithm>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -34,6 +35,7 @@ extern "C" {
     int32_t roup_directive_kind(const OmpDirective* directive);
     int32_t roup_directive_clause_count(const OmpDirective* directive);
     OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
+    const char* roup_directive_name(const OmpDirective* directive);
 
     // Iterator operations (updated API with out parameter)
     int32_t roup_clause_iterator_next(OmpClauseIterator* iter, const OmpClause** out);
@@ -41,6 +43,7 @@ extern "C" {
 
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
+    const char* roup_clause_name(const OmpClause* clause);
 }
 
 // ============================================================================
@@ -57,7 +60,8 @@ static constexpr const char C_PRAGMA_PREFIX[] = "#pragma";    // C/C++ pragma pr
 static constexpr size_t FORTRAN_PREFIX_LEN = sizeof(FORTRAN_PREFIX) - 1;
 static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
 
-extern "C" void setLang(OpenMPBaseLang lang) {
+// Note: Uses C++ linkage to match original ompparser API
+void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
 }
 
@@ -65,49 +69,225 @@ extern "C" void setLang(OpenMPBaseLang lang) {
 // Helper Functions
 // ============================================================================
 
-static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
-    // ROUP directive kind mapping using named constants
-    // See roup_constants.h and src/c_api.rs:directive_name_to_kind()
-    switch (roup_kind) {
-        case ROUP_DIRECTIVE_PARALLEL:       return OMPD_parallel;
-        case ROUP_DIRECTIVE_FOR:            return OMPD_for;
-        case ROUP_DIRECTIVE_SECTIONS:       return OMPD_sections;
-        case ROUP_DIRECTIVE_SINGLE:         return OMPD_single;
-        case ROUP_DIRECTIVE_TASK:           return OMPD_task;
-        case ROUP_DIRECTIVE_MASTER:         return OMPD_master;
-        case ROUP_DIRECTIVE_CRITICAL:       return OMPD_critical;
-        case ROUP_DIRECTIVE_BARRIER:        return OMPD_barrier;
-        case ROUP_DIRECTIVE_TASKWAIT:       return OMPD_taskwait;
-        case ROUP_DIRECTIVE_TASKGROUP:      return OMPD_taskgroup;
-        case ROUP_DIRECTIVE_ATOMIC:         return OMPD_atomic;
-        case ROUP_DIRECTIVE_FLUSH:          return OMPD_flush;
-        case ROUP_DIRECTIVE_ORDERED:        return OMPD_ordered;
-        case ROUP_DIRECTIVE_TARGET:         return OMPD_target;
-        case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
-        case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
-        case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
-        default:                            return OMPD_unknown;
-    }
+static OpenMPDirectiveKind mapRoupDirectiveNameToOmpparser(const char* name) {
+    // Direct string-based mapping from directive name to ompparser kind
+    // This bypasses ROUP's simplified directive kind system and uses the actual directive name
+    if (!name) return OMPD_unknown;
+
+    std::string directive_name(name);
+    // Convert to lowercase for case-insensitive comparison
+    std::transform(directive_name.begin(), directive_name.end(), directive_name.begin(), ::tolower);
+
+    // Map directive names to ompparser kinds
+    // Note: Using if-else chain for clarity and maintainability
+
+    // Basic directives
+    if (directive_name == "parallel") return OMPD_parallel;
+    if (directive_name == "for") return OMPD_for;
+    if (directive_name == "do") return OMPD_do;
+    if (directive_name == "simd") return OMPD_simd;
+    if (directive_name == "for simd" || directive_name == "for_simd") return OMPD_for_simd;
+    if (directive_name == "do simd" || directive_name == "do_simd") return OMPD_do_simd;
+    if (directive_name == "sections") return OMPD_sections;
+    if (directive_name == "section") return OMPD_section;
+    if (directive_name == "single") return OMPD_single;
+    if (directive_name == "workshare") return OMPD_workshare;
+    if (directive_name == "master") return OMPD_master;
+    if (directive_name == "critical") return OMPD_critical;
+    if (directive_name == "barrier") return OMPD_barrier;
+    if (directive_name == "taskwait") return OMPD_taskwait;
+    if (directive_name == "taskgroup") return OMPD_taskgroup;
+    if (directive_name == "atomic") return OMPD_atomic;
+    if (directive_name == "flush") return OMPD_flush;
+    if (directive_name == "ordered") return OMPD_ordered;
+    if (directive_name == "end") return OMPD_end;
+
+    // Parallel combined directives
+    if (directive_name == "parallel for" || directive_name == "parallel_for") return OMPD_parallel_for;
+    if (directive_name == "parallel do" || directive_name == "parallel_do") return OMPD_parallel_do;
+    if (directive_name == "parallel for simd" || directive_name == "parallel_for_simd") return OMPD_parallel_for_simd;
+    if (directive_name == "parallel do simd" || directive_name == "parallel_do_simd") return OMPD_parallel_do_simd;
+    if (directive_name == "parallel sections" || directive_name == "parallel_sections") return OMPD_parallel_sections;
+    if (directive_name == "parallel workshare" || directive_name == "parallel_workshare") return OMPD_parallel_workshare;
+    if (directive_name == "parallel master" || directive_name == "parallel_master") return OMPD_parallel_master;
+    if (directive_name == "parallel loop" || directive_name == "parallel_loop") return OMPD_parallel_loop;
+
+    // Loop directives
+    if (directive_name == "loop") return OMPD_loop;
+    if (directive_name == "scan") return OMPD_scan;
+
+    // Task directives
+    if (directive_name == "task") return OMPD_task;
+    if (directive_name == "taskyield") return OMPD_taskyield;
+    if (directive_name == "taskloop") return OMPD_taskloop;
+    if (directive_name == "taskloop simd" || directive_name == "taskloop_simd") return OMPD_taskloop_simd;
+    if (directive_name == "master taskloop" || directive_name == "master_taskloop") return OMPD_master_taskloop;
+    if (directive_name == "master taskloop simd" || directive_name == "master_taskloop_simd") return OMPD_master_taskloop_simd;
+    if (directive_name == "parallel master taskloop" || directive_name == "parallel_master_taskloop") return OMPD_parallel_master_taskloop;
+    if (directive_name == "parallel master taskloop simd" || directive_name == "parallel_master_taskloop_simd") return OMPD_parallel_master_taskloop_simd;
+
+    // Teams directives
+    if (directive_name == "teams") return OMPD_teams;
+    if (directive_name == "teams distribute" || directive_name == "teams_distribute") return OMPD_teams_distribute;
+    if (directive_name == "teams distribute simd" || directive_name == "teams_distribute_simd") return OMPD_teams_distribute_simd;
+    if (directive_name == "teams distribute parallel for" || directive_name == "teams_distribute_parallel_for") return OMPD_teams_distribute_parallel_for;
+    if (directive_name == "teams distribute parallel do" || directive_name == "teams_distribute_parallel_do") return OMPD_teams_distribute_parallel_do;
+    if (directive_name == "teams distribute parallel for simd" || directive_name == "teams_distribute_parallel_for_simd") return OMPD_teams_distribute_parallel_for_simd;
+    if (directive_name == "teams distribute parallel do simd" || directive_name == "teams_distribute_parallel_do_simd") return OMPD_teams_distribute_parallel_do_simd;
+    if (directive_name == "teams loop" || directive_name == "teams_loop") return OMPD_teams_loop;
+
+    // Distribute directives
+    if (directive_name == "distribute") return OMPD_distribute;
+    if (directive_name == "distribute simd" || directive_name == "distribute_simd") return OMPD_distribute_simd;
+    if (directive_name == "distribute parallel for" || directive_name == "distribute_parallel_for") return OMPD_distribute_parallel_for;
+    if (directive_name == "distribute parallel do" || directive_name == "distribute_parallel_do") return OMPD_distribute_parallel_do;
+    if (directive_name == "distribute parallel for simd" || directive_name == "distribute_parallel_for_simd") return OMPD_distribute_parallel_for_simd;
+    if (directive_name == "distribute parallel do simd" || directive_name == "distribute_parallel_do_simd") return OMPD_distribute_parallel_do_simd;
+
+    // Target directives
+    if (directive_name == "target") return OMPD_target;
+    if (directive_name == "target data" || directive_name == "target_data") return OMPD_target_data;
+    if (directive_name == "target enter data" || directive_name == "target_enter_data") return OMPD_target_enter_data;
+    if (directive_name == "target exit data" || directive_name == "target_exit_data") return OMPD_target_exit_data;
+    if (directive_name == "target update" || directive_name == "target_update") return OMPD_target_update;
+    if (directive_name == "target parallel" || directive_name == "target_parallel") return OMPD_target_parallel;
+    if (directive_name == "target parallel for" || directive_name == "target_parallel_for") return OMPD_target_parallel_for;
+    if (directive_name == "target parallel do" || directive_name == "target_parallel_do") return OMPD_target_parallel_do;
+    if (directive_name == "target parallel for simd" || directive_name == "target_parallel_for_simd") return OMPD_target_parallel_for_simd;
+    if (directive_name == "target parallel do simd" || directive_name == "target_parallel_do_simd") return OMPD_target_parallel_do_simd;
+    if (directive_name == "target parallel loop" || directive_name == "target_parallel_loop") return OMPD_target_parallel_loop;
+    if (directive_name == "target simd" || directive_name == "target_simd") return OMPD_target_simd;
+    if (directive_name == "target teams" || directive_name == "target_teams") return OMPD_target_teams;
+    if (directive_name == "target teams distribute" || directive_name == "target_teams_distribute") return OMPD_target_teams_distribute;
+    if (directive_name == "target teams distribute simd" || directive_name == "target_teams_distribute_simd") return OMPD_target_teams_distribute_simd;
+    if (directive_name == "target teams distribute parallel for" || directive_name == "target_teams_distribute_parallel_for") return OMPD_target_teams_distribute_parallel_for;
+    if (directive_name == "target teams distribute parallel do" || directive_name == "target_teams_distribute_parallel_do") return OMPD_target_teams_distribute_parallel_do;
+    if (directive_name == "target teams distribute parallel for simd" || directive_name == "target_teams_distribute_parallel_for_simd") return OMPD_target_teams_distribute_parallel_for_simd;
+    if (directive_name == "target teams distribute parallel do simd" || directive_name == "target_teams_distribute_parallel_do_simd") return OMPD_target_teams_distribute_parallel_do_simd;
+    if (directive_name == "target teams loop" || directive_name == "target_teams_loop") return OMPD_target_teams_loop;
+
+    // Declare directives
+    if (directive_name == "declare simd" || directive_name == "declare_simd") return OMPD_declare_simd;
+    if (directive_name == "declare target" || directive_name == "declare_target") return OMPD_declare_target;
+    if (directive_name == "end declare target" || directive_name == "end_declare_target") return OMPD_end_declare_target;
+    if (directive_name == "declare reduction" || directive_name == "declare_reduction") return OMPD_declare_reduction;
+    if (directive_name == "declare mapper" || directive_name == "declare_mapper") return OMPD_declare_mapper;
+    if (directive_name == "declare variant" || directive_name == "declare_variant") return OMPD_declare_variant;
+
+    // Other directives
+    if (directive_name == "threadprivate") return OMPD_threadprivate;
+    if (directive_name == "allocate") return OMPD_allocate;
+    if (directive_name == "cancel") return OMPD_cancel;
+    if (directive_name == "cancellation point" || directive_name == "cancellation_point") return OMPD_cancellation_point;
+    if (directive_name == "requires") return OMPD_requires;
+    if (directive_name == "metadirective") return OMPD_metadirective;
+    if (directive_name == "depobj") return OMPD_depobj;
+    if (directive_name == "unroll") return OMPD_unroll;
+    if (directive_name == "tile") return OMPD_tile;
+
+    return OMPD_unknown;
 }
 
-static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
-    // ROUP clause kind mapping using named constants from roup_constants.h
-    // Single source of truth: src/c_api.rs:convert_clause()
-    switch (roup_kind) {
-        case ROUP_CLAUSE_NUM_THREADS:   return OMPC_num_threads;
-        case ROUP_CLAUSE_IF:            return OMPC_if;
-        case ROUP_CLAUSE_PRIVATE:       return OMPC_private;
-        case ROUP_CLAUSE_SHARED:        return OMPC_shared;
-        case ROUP_CLAUSE_FIRSTPRIVATE:  return OMPC_firstprivate;
-        case ROUP_CLAUSE_LASTPRIVATE:   return OMPC_lastprivate;
-        case ROUP_CLAUSE_REDUCTION:     return OMPC_reduction;
-        case ROUP_CLAUSE_SCHEDULE:      return OMPC_schedule;
-        case ROUP_CLAUSE_COLLAPSE:      return OMPC_collapse;
-        case ROUP_CLAUSE_ORDERED:       return OMPC_ordered;
-        case ROUP_CLAUSE_NOWAIT:        return OMPC_nowait;
-        case ROUP_CLAUSE_DEFAULT:       return OMPC_default;
-        default:                        return OMPC_unknown;
-    }
+static OpenMPClauseKind mapRoupClauseNameToOmpparser(const char* name) {
+    // Direct string-based mapping from clause name to ompparser kind
+    if (!name) return OMPC_unknown;
+
+    std::string clause_name(name);
+    // Convert to lowercase for case-insensitive comparison
+    std::transform(clause_name.begin(), clause_name.end(), clause_name.begin(), ::tolower);
+
+    // Map all clause names to ompparser kinds
+    if (clause_name == "if") return OMPC_if;
+    if (clause_name == "num_threads") return OMPC_num_threads;
+    if (clause_name == "default") return OMPC_default;
+    if (clause_name == "private") return OMPC_private;
+    if (clause_name == "firstprivate") return OMPC_firstprivate;
+    if (clause_name == "shared") return OMPC_shared;
+    if (clause_name == "copyin") return OMPC_copyin;
+    if (clause_name == "align") return OMPC_align;
+    if (clause_name == "reduction") return OMPC_reduction;
+    if (clause_name == "proc_bind") return OMPC_proc_bind;
+    if (clause_name == "allocate") return OMPC_allocate;
+    if (clause_name == "num_teams") return OMPC_num_teams;
+    if (clause_name == "thread_limit") return OMPC_thread_limit;
+    if (clause_name == "lastprivate") return OMPC_lastprivate;
+    if (clause_name == "collapse") return OMPC_collapse;
+    if (clause_name == "ordered") return OMPC_ordered;
+    if (clause_name == "partial") return OMPC_partial;
+    if (clause_name == "nowait") return OMPC_nowait;
+    if (clause_name == "full") return OMPC_full;
+    if (clause_name == "order") return OMPC_order;
+    if (clause_name == "linear") return OMPC_linear;
+    if (clause_name == "schedule") return OMPC_schedule;
+    if (clause_name == "safelen") return OMPC_safelen;
+    if (clause_name == "simdlen") return OMPC_simdlen;
+    if (clause_name == "aligned") return OMPC_aligned;
+    if (clause_name == "nontemporal") return OMPC_nontemporal;
+    if (clause_name == "uniform") return OMPC_uniform;
+    if (clause_name == "inbranch") return OMPC_inbranch;
+    if (clause_name == "notinbranch") return OMPC_notinbranch;
+    if (clause_name == "dist_schedule") return OMPC_dist_schedule;
+    if (clause_name == "bind") return OMPC_bind;
+    if (clause_name == "inclusive") return OMPC_inclusive;
+    if (clause_name == "exclusive") return OMPC_exclusive;
+    if (clause_name == "copyprivate") return OMPC_copyprivate;
+    if (clause_name == "parallel") return OMPC_parallel;
+    if (clause_name == "sections") return OMPC_sections;
+    if (clause_name == "for") return OMPC_for;
+    if (clause_name == "do") return OMPC_do;
+    if (clause_name == "taskgroup") return OMPC_taskgroup;
+    if (clause_name == "allocator") return OMPC_allocator;
+    if (clause_name == "initializer") return OMPC_initializer;
+    if (clause_name == "final") return OMPC_final;
+    if (clause_name == "untied") return OMPC_untied;
+    if (clause_name == "requires") return OMPC_requires;
+    if (clause_name == "mergeable") return OMPC_mergeable;
+    if (clause_name == "in_reduction") return OMPC_in_reduction;
+    if (clause_name == "depend") return OMPC_depend;
+    if (clause_name == "priority") return OMPC_priority;
+    if (clause_name == "affinity") return OMPC_affinity;
+    if (clause_name == "detach") return OMPC_detach;
+    if (clause_name == "grainsize") return OMPC_grainsize;
+    if (clause_name == "num_tasks") return OMPC_num_tasks;
+    if (clause_name == "nogroup") return OMPC_nogroup;
+    if (clause_name == "reverse_offload") return OMPC_reverse_offload;
+    if (clause_name == "unified_address") return OMPC_unified_address;
+    if (clause_name == "unified_shared_memory") return OMPC_unified_shared_memory;
+    if (clause_name == "atomic_default_mem_order") return OMPC_atomic_default_mem_order;
+    if (clause_name == "dynamic_allocators") return OMPC_dynamic_allocators;
+    if (clause_name == "ext_implementation_defined_requirement") return OMPC_ext_implementation_defined_requirement;
+    if (clause_name == "device") return OMPC_device;
+    if (clause_name == "map") return OMPC_map;
+    if (clause_name == "use_device_ptr") return OMPC_use_device_ptr;
+    if (clause_name == "sizes") return OMPC_sizes;
+    if (clause_name == "use_device_addr") return OMPC_use_device_addr;
+    if (clause_name == "is_device_ptr") return OMPC_is_device_ptr;
+    if (clause_name == "has_device_addr") return OMPC_has_device_addr;
+    if (clause_name == "defaultmap") return OMPC_defaultmap;
+    if (clause_name == "to") return OMPC_to;
+    if (clause_name == "from") return OMPC_from;
+    if (clause_name == "uses_allocators") return OMPC_uses_allocators;
+    if (clause_name == "when") return OMPC_when;
+    if (clause_name == "match") return OMPC_match;
+    if (clause_name == "link") return OMPC_link;
+    if (clause_name == "device_type") return OMPC_device_type;
+    if (clause_name == "task_reduction") return OMPC_task_reduction;
+    if (clause_name == "acq_rel") return OMPC_acq_rel;
+    if (clause_name == "release") return OMPC_release;
+    if (clause_name == "acquire") return OMPC_acquire;
+    if (clause_name == "read") return OMPC_read;
+    if (clause_name == "write") return OMPC_write;
+    if (clause_name == "update") return OMPC_update;
+    if (clause_name == "capture") return OMPC_capture;
+    if (clause_name == "seq_cst") return OMPC_seq_cst;
+    if (clause_name == "relaxed") return OMPC_relaxed;
+    if (clause_name == "hint") return OMPC_hint;
+    if (clause_name == "destroy") return OMPC_destroy;
+    if (clause_name == "depobj_update") return OMPC_depobj_update;
+    if (clause_name == "threads") return OMPC_threads;
+    if (clause_name == "simd") return OMPC_simd;
+
+    return OMPC_unknown;
 }
 
 // ============================================================================
@@ -155,9 +335,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         return nullptr;
     }
 
-    // Get directive kind from ROUP
-    int32_t roup_kind = roup_directive_kind(roup_dir);
-    OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
+    // Get directive name and map to ompparser kind
+    const char* directive_name = roup_directive_name(roup_dir);
+    OpenMPDirectiveKind kind = mapRoupDirectiveNameToOmpparser(directive_name);
 
     // Create ompparser-compatible directive
     // Use ompparser's actual constructor: OpenMPDirective(kind, lang, line, col)
@@ -168,8 +348,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     if (iter) {
         const OmpClause* roup_clause;
         while (roup_clause_iterator_next(iter, &roup_clause) == 1) {
-            int32_t roup_kind_clause = roup_clause_kind(roup_clause);
-            OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
+            // Get clause name and map to ompparser kind
+            const char* clause_name = roup_clause_name(roup_clause);
+            OpenMPClauseKind clause_kind = mapRoupClauseNameToOmpparser(clause_name);
 
             // Use public variadic version: addOpenMPClause(int kind, ...)
             // Cast to int and pass just the kind for basic clause support

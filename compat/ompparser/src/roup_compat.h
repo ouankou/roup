@@ -13,14 +13,11 @@
 #include <OpenMPIR.h>
 
 #ifdef __cplusplus
-extern "C" {
-#endif
 
 /* Set the base language for parsing (C, C++, Fortran) */
+/* Note: Uses C++ linkage to match original ompparser API */
 void setLang(OpenMPBaseLang lang);
 
-#ifdef __cplusplus
-}
 #endif
 
 #endif /* ROUP_COMPAT_H */

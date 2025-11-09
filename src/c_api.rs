@@ -135,8 +135,10 @@ pub struct OmpDirective {
 /// Uses tagged union pattern for clause-specific data.
 #[repr(C)]
 pub struct OmpClause {
-    kind: i32,        // Clause type (num_threads=0, schedule=7, etc.)
-    data: ClauseData, // Clause-specific data (union)
+    name: *const c_char,   // Clause name (e.g., "num_threads", "private")
+    source: *const c_char, // Full clause source (e.g., "num_threads(4)", "private(a,b)")
+    kind: i32,             // Clause type (num_threads=0, schedule=7, etc.)
+    data: ClauseData,      // Clause-specific data (union)
 }
 
 /// Clause-specific data stored in a C union
@@ -574,6 +576,45 @@ pub extern "C" fn roup_directive_name(directive: *const OmpDirective) -> *const 
     }
 }
 
+/// Get clause name as C string.
+///
+/// Returns NULL if clause is NULL.
+/// The returned string is valid until the owning directive is freed.
+#[no_mangle]
+pub extern "C" fn roup_clause_name(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        c.name
+    }
+}
+
+/// Get the full source text of a clause (including name and parameters).
+///
+/// For example, for a num_threads clause, this returns "num_threads(4)".
+/// For a private clause, this returns "private(a, b, c)".
+/// For a nowait clause, this returns "nowait".
+///
+/// Returns:
+/// - C string containing the full clause source
+/// - NULL if clause is NULL
+///
+/// The returned string is valid until the owning directive is freed.
+#[no_mangle]
+pub extern "C" fn roup_clause_source(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        c.source
+    }
+}
+
 /// Get number of clauses in a directive.
 ///
 /// Returns 0 if directive is NULL.
@@ -900,6 +941,10 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     // to parse if-else chains instead of match expressions.
     let normalized_name = clause.name.to_ascii_lowercase();
 
+    // Allocate C strings for clause name and full source (will be freed in roup_directive_free)
+    let clause_name = allocate_c_string(&clause.name);
+    let clause_source = allocate_c_string(&clause.to_source_string());
+
     let (kind, data) = match normalized_name.as_str() {
         "num_threads" => (0, ClauseData { default: 0 }),
         "if" => (1, ClauseData { default: 0 }),
@@ -962,7 +1007,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         _ => (999, ClauseData { default: 0 }), // Unknown
     };
 
-    OmpClause { kind, data }
+    OmpClause { name: clause_name, source: clause_source, kind, data }
 }
 
 /// Parse reduction operator from clause arguments.
@@ -1187,6 +1232,16 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
 /// wrong union variant (the bytes of ReductionData::operator interpreted as a pointer).
 fn free_clause_data(clause: &OmpClause) {
     unsafe {
+        // Free clause name
+        if !clause.name.is_null() {
+            drop(CString::from_raw(clause.name as *mut c_char));
+        }
+
+        // Free clause source
+        if !clause.source.is_null() {
+            drop(CString::from_raw(clause.source as *mut c_char));
+        }
+
         // Free variable lists if present
         // Clause kinds with variable lists (see convert_clause):
         //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
