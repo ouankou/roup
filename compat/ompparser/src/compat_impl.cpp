@@ -279,6 +279,12 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
         case ROUP_CLAUSE_ORDERED:       return OMPC_ordered;
         case ROUP_CLAUSE_NOWAIT:        return OMPC_nowait;
         case ROUP_CLAUSE_DEFAULT:       return OMPC_default;
+        case ROUP_CLAUSE_HINT:          return OMPC_hint;
+        case ROUP_CLAUSE_SEQ_CST:       return OMPC_seq_cst;
+        case ROUP_CLAUSE_ACQ_REL:       return OMPC_acq_rel;
+        case ROUP_CLAUSE_RELEASE:       return OMPC_release;
+        case ROUP_CLAUSE_ACQUIRE:       return OMPC_acquire;
+        case ROUP_CLAUSE_RELAXED:       return OMPC_relaxed;
         default:                        return OMPC_unknown;
     }
 }
@@ -339,6 +345,22 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     // Create ompparser-compatible directive
     // Use ompparser's actual constructor: OpenMPDirective(kind, lang, line, col)
     OpenMPDirective* dir = new OpenMPDirective(kind, current_lang, 0, 0);
+
+    // Handle atomic variants by adding the appropriate clause
+    // ROUP parses "atomic read" as AtomicRead directive with no clauses
+    // ompparser expects "atomic" directive with "read" clause
+    if (roup_kind == 77) {  // AtomicRead
+        dir->addOpenMPClause(static_cast<int>(OMPC_read));
+    } else if (roup_kind == 78) {  // AtomicWrite
+        dir->addOpenMPClause(static_cast<int>(OMPC_write));
+    } else if (roup_kind == 79) {  // AtomicUpdate
+        dir->addOpenMPClause(static_cast<int>(OMPC_update));
+    } else if (roup_kind == 86) {  // AtomicCapture
+        dir->addOpenMPClause(static_cast<int>(OMPC_capture));
+    } else if (roup_kind == 87) {  // AtomicCompareCapture
+        dir->addOpenMPClause(static_cast<int>(OMPC_compare));
+        dir->addOpenMPClause(static_cast<int>(OMPC_capture));
+    }
 
     // Convert clauses using ompparser's addOpenMPClause method
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);

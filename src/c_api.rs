@@ -1049,6 +1049,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "update" => (49, ClauseData { default: 0 }),
         "capture" => (50, ClauseData { default: 0 }),
         "compare" => (51, ClauseData { default: 0 }),
+        "hint" => (52, ClauseData { default: 0 }),
         _ => (900, ClauseData { default: 0 }), // Generic/Unknown
     };
 
