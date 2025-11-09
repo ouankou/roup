@@ -267,6 +267,7 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     const char* roup_name = roup_directive_name(roup_dir);
     OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
 
+
     // Create ompparser-compatible directive
     // Use OpenMPAtomicDirective for atomic directives
     OpenMPDirective* dir = nullptr;
@@ -288,6 +289,38 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     } else {
         dir = new OpenMPDirective(kind, current_lang, 0, 0);
+
+        // WORKAROUND: ROUP parser bug - cancel/cancellation_point don't parse construct type
+        // Manually extract construct type from input and add as clause
+        if (kind == OMPD_cancel || kind == OMPD_cancellation_point) {
+            // Parse construct type from input: parallel, sections, for/do, taskgroup
+            std::string search_str = input_str;
+            size_t pos = search_str.find(roup_name);
+            if (pos != std::string::npos) {
+                std::string after = search_str.substr(pos + strlen(roup_name));
+                // Skip whitespace
+                size_t start = after.find_first_not_of(" \t");
+                if (start != std::string::npos) {
+                    std::string first_token = after.substr(start);
+                    size_t end = first_token.find_first_of(" \t(");
+                    if (end != std::string::npos) {
+                        first_token = first_token.substr(0, end);
+                    }
+                    // Convert to lowercase for comparison
+                    std::transform(first_token.begin(), first_token.end(), first_token.begin(), ::tolower);
+
+                    if (first_token == "parallel") {
+                        dir->addOpenMPClause(OMPC_parallel);
+                    } else if (first_token == "sections") {
+                        dir->addOpenMPClause(OMPC_sections);
+                    } else if (first_token == "for" || first_token == "do") {
+                        dir->addOpenMPClause(current_lang == Lang_Fortran ? OMPC_do : OMPC_for);
+                    } else if (first_token == "taskgroup") {
+                        dir->addOpenMPClause(OMPC_taskgroup);
+                    }
+                }
+            }
+        }
     }
 
     // Convert clauses using ompparser's addOpenMPClause method
