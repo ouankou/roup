@@ -1017,12 +1017,37 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "update" => (19, ClauseData { default: 0 }),
         "capture" => (20, ClauseData { default: 0 }),
         "compare" => (21, ClauseData { default: 0 }),
-        // Other common clauses
-        "hint" => (22, ClauseData { default: 0 }),
-        "allocate" => (23, ClauseData { default: 0 }),
-        "allocator" => (24, ClauseData { default: 0 }),
-        "align" => (25, ClauseData { default: 0 }),
-        "proc_bind" => (26, ClauseData { default: 0 }),
+        // Clauses with parameters that need extraction
+        "hint" => (
+            22,
+            ClauseData {
+                variables: extract_clause_variables(clause),
+            },
+        ),
+        "allocate" => (
+            23,
+            ClauseData {
+                variables: extract_clause_variables(clause),
+            },
+        ),
+        "allocator" => (
+            24,
+            ClauseData {
+                variables: extract_clause_variables(clause),
+            },
+        ),
+        "align" => (
+            25,
+            ClauseData {
+                variables: extract_clause_variables(clause),
+            },
+        ),
+        "proc_bind" => (
+            26,
+            ClauseData {
+                variables: extract_clause_variables(clause),
+            },
+        ),
         "default" => {
             let default_kind = parse_default_kind(clause);
             (
@@ -1092,19 +1117,28 @@ fn extract_clause_variables(clause: &Clause) -> *mut OmpStringList {
 
     match &clause.kind {
         ClauseKind::Parenthesized(ref args) => {
-            // Parse comma-separated variable list from parenthesized content
-            let args_str = args.as_ref();
-            let vars: Vec<*const c_char> = args_str
-                .split(',')
-                .map(|v| v.trim())
-                .filter(|v| !v.is_empty())
-                .map(|v| allocate_c_string(v))
-                .collect();
-
-            if vars.is_empty() {
+            // Return the ENTIRE parenthesized content as a single item
+            // Don't split by comma - let ompparser handle parsing
+            // This fixes: hint(abc) → ["abc"], not split incorrectly
+            let args_str = args.as_ref().trim();
+            if args_str.is_empty() {
                 ptr::null_mut()
             } else {
+                let vars = vec![allocate_c_string(args_str)];
                 Box::into_raw(Box::new(OmpStringList { items: vars }))
+            }
+        }
+        ClauseKind::VariableList(ref vars) => {
+            // For actual variable lists, return each variable separately
+            let var_ptrs: Vec<*const c_char> = vars
+                .iter()
+                .map(|v| allocate_c_string(v.as_ref()))
+                .collect();
+
+            if var_ptrs.is_empty() {
+                ptr::null_mut()
+            } else {
+                Box::into_raw(Box::new(OmpStringList { items: var_ptrs }))
             }
         }
         _ => ptr::null_mut(),
