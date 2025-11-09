@@ -380,6 +380,69 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), proc_bind_kind);
                     break;
                 }
+                case 19: {  // depend - requires special handling for dependency type
+                    // ROUP includes depend type in first variable like "inout:m"
+                    // We need to extract type and strip it from variable
+                    OmpStringList* vars = roup_clause_variables(roup_clause);
+
+                    // Default to unknown type
+                    int depend_type = 7; // OMPC_DEPENDENCE_TYPE_unknown
+
+                    if (vars && roup_string_list_len(vars) > 0) {
+                        const char* first_var = roup_string_list_get(vars, 0);
+                        if (first_var) {
+                            std::string first_str(first_var);
+                            size_t colon_pos = first_str.find(':');
+
+                            if (colon_pos != std::string::npos) {
+                                std::string type_str = first_str.substr(0, colon_pos);
+
+                                // Map to OpenMPDependClauseType enum
+                                if (type_str == "in") depend_type = 0;
+                                else if (type_str == "out") depend_type = 1;
+                                else if (type_str == "inout") depend_type = 2;
+                                else if (type_str == "mutexinoutset") depend_type = 3;
+                                else if (type_str == "depobj") depend_type = 4;
+                                else if (type_str == "source") depend_type = 5;
+                                else if (type_str == "sink") depend_type = 6;
+                            }
+                        }
+                    }
+
+                    // Create depend clause with modifier=unspecified(2) and parsed type
+                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                        2,  // OMPC_DEPEND_MODIFIER_unspecified
+                        depend_type);
+
+                    // Add variables, stripping type prefix from first variable
+                    if (omp_clause && vars) {
+                        int32_t var_count = roup_string_list_len(vars);
+                        for (int32_t i = 0; i < var_count; ++i) {
+                            const char* var = roup_string_list_get(vars, i);
+                            if (var) {
+                                std::string var_str(var);
+                                size_t colon_pos = var_str.find(':');
+
+                                // For first variable, strip type prefix
+                                if (i == 0 && colon_pos != std::string::npos) {
+                                    var_str = var_str.substr(colon_pos + 1);
+                                    // Trim leading whitespace
+                                    size_t start = var_str.find_first_not_of(" \t");
+                                    if (start != std::string::npos) {
+                                        var_str = var_str.substr(start);
+                                    }
+                                }
+
+                                if (!var_str.empty()) {
+                                    omp_clause->addLangExpr(var_str.c_str());
+                                }
+                            }
+                        }
+                        roup_string_list_free(vars);
+                        vars = nullptr;  // Mark as handled
+                    }
+                    break;
+                }
                 default: {  // Simple variable list or parameter-less clauses
                     omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
                     break;
@@ -387,7 +450,8 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             }
 
             // Extract and add variables/expressions to the clause
-            if (omp_clause) {
+            // (Skip for depend clauses - already handled in switch)
+            if (omp_clause && roup_kind_clause != 19) {
                 OmpStringList* vars = roup_clause_variables(roup_clause);
                 if (vars) {
                     int32_t var_count = roup_string_list_len(vars);
