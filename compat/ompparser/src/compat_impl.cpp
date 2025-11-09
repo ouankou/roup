@@ -967,6 +967,114 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
                     static_cast<int>(behavior), static_cast<int>(category));
                 skip_std_args = true;
+            } else if (clause_kind == OMPC_depend) {
+                // depend clause: parse type (in/out/inout/source/sink) and variables
+                const char* args = roup_clause_arguments(roup_clause);
+                OpenMPDependClauseModifier modifier = OMPC_DEPEND_MODIFIER_unspecified;
+                OpenMPDependClauseType dep_type = OMPC_DEPENDENCE_TYPE_unknown;
+
+                if (args && args[0] != '\0') {
+                    std::string args_str(args);
+                    std::string args_lower = args_str;
+                    std::transform(args_lower.begin(), args_lower.end(), args_lower.begin(), ::tolower);
+
+                    // Check for source/sink (for ordered directives)
+                    if (args_lower == "source") {
+                        dep_type = OMPC_DEPENDENCE_TYPE_source;
+                    } else if (args_lower.find("sink") == 0) {
+                        dep_type = OMPC_DEPENDENCE_TYPE_sink;
+                    } else {
+                        // Check for iterator modifier
+                        if (args_lower.find("iterator") != std::string::npos) {
+                            modifier = OMPC_DEPEND_MODIFIER_iterator;
+                        }
+
+                        // Parse depend type from "type: vars" format
+                        size_t colon_pos = args_str.find(':');
+                        if (colon_pos != std::string::npos) {
+                            std::string type_str = args_str.substr(0, colon_pos);
+                            // Trim whitespace
+                            size_t first = type_str.find_first_not_of(" \t");
+                            size_t last = type_str.find_last_not_of(" \t");
+                            if (first != std::string::npos && last != std::string::npos) {
+                                type_str = type_str.substr(first, last - first + 1);
+                            }
+
+                            // Skip iterator(...) part if present
+                            if (type_str.find("iterator") != std::string::npos) {
+                                size_t close_paren = type_str.rfind(')');
+                                if (close_paren != std::string::npos) {
+                                    // Skip past iterator(...), find next token
+                                    size_t comma = type_str.find(',', close_paren);
+                                    if (comma != std::string::npos) {
+                                        type_str = type_str.substr(comma + 1);
+                                        first = type_str.find_first_not_of(" \t");
+                                        if (first != std::string::npos) {
+                                            type_str = type_str.substr(first);
+                                        }
+                                    }
+                                }
+                            }
+
+                            std::string type_lower = type_str;
+                            std::transform(type_lower.begin(), type_lower.end(), type_lower.begin(), ::tolower);
+
+                            if (type_lower == "in") dep_type = OMPC_DEPENDENCE_TYPE_in;
+                            else if (type_lower == "out") dep_type = OMPC_DEPENDENCE_TYPE_out;
+                            else if (type_lower == "inout") dep_type = OMPC_DEPENDENCE_TYPE_inout;
+                            else if (type_lower == "mutexinoutset") dep_type = OMPC_DEPENDENCE_TYPE_mutexinoutset;
+                            else if (type_lower == "depobj") dep_type = OMPC_DEPENDENCE_TYPE_depobj;
+                        }
+                    }
+                }
+
+                omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                    static_cast<int>(modifier), static_cast<int>(dep_type));
+
+                // Add arguments for sink:vars or regular depend types
+                if (omp_clause && args && args[0] != '\0') {
+                    std::string args_str(args);
+
+                    if (dep_type == OMPC_DEPENDENCE_TYPE_sink) {
+                        // sink:x -> extract "x" part
+                        size_t colon_pos = args_str.find(':');
+                        if (colon_pos != std::string::npos && colon_pos + 1 < args_str.length()) {
+                            std::string vars = args_str.substr(colon_pos + 1);
+                            // Trim leading space
+                            size_t first = vars.find_first_not_of(" \t");
+                            if (first != std::string::npos) {
+                                vars = vars.substr(first);
+                            }
+                            if (!vars.empty()) {
+                                omp_clause->addLangExpr(vars.c_str());
+                            }
+                        }
+                    } else if (dep_type != OMPC_DEPENDENCE_TYPE_source) {
+                        // For regular depend types (in/out/inout/etc), extract vars after colon
+                        size_t colon_pos = args_str.find(':');
+                        if (colon_pos != std::string::npos && colon_pos + 1 < args_str.length()) {
+                            std::string vars = args_str.substr(colon_pos + 1);
+                            // Trim leading/trailing whitespace
+                            size_t first = vars.find_first_not_of(" \t");
+                            size_t last = vars.find_last_not_of(" \t");
+                            if (first != std::string::npos && last != std::string::npos) {
+                                vars = vars.substr(first, last - first + 1);
+                            }
+                            if (!vars.empty()) {
+                                std::vector<std::string> var_list = parseClauseArguments(vars.c_str());
+                                for (const auto& v : var_list) {
+                                    omp_clause->addLangExpr(v.c_str());
+                                }
+                            }
+                        } else {
+                            // No colon - just add the full args (shouldn't happen for well-formed depend)
+                            omp_clause->addLangExpr(args);
+                        }
+                    }
+                    // For source, no args to add
+                }
+
+                skip_std_args = true;
             } else if (clause_kind == OMPC_uses_allocators) {
                 // uses_allocators clause: uses_allocators(alloc1(traits), alloc2, ...)
                 const char* args = roup_clause_arguments(roup_clause);
@@ -1076,7 +1184,13 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                             // depend clause with iterator needs special spacing
                             // iterator(int x=1:10) -> iterator ( int x=1:10 )
                             // But NOT space after colons in ranges: keep 1:10 not 1: 10
+                            // SPECIAL: For "ordered" directive (kind 74), depend uses source/sink:
+                            //   depend(source) -> depend (source)
+                            //   depend(sink:x) -> depend (sink : x)
                             fixed_arg = arg;
+
+                            // Check if this is an ordered directive (kind 74)
+                            bool is_ordered = (roup_kind == 74);
 
                             // Find and fix iterator(...) if present
                             size_t iter_pos = fixed_arg.find("iterator");
@@ -1200,6 +1314,23 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                                         fixed_arg = fixed_arg.substr(0, iter_end) + rest;
                                     }
                                 }
+                            } else if (is_ordered) {
+                                // For ordered directives: source (no colon) or sink:x -> sink : x
+                                // Check if it's "source" (no colon needed) or "sink:..." (add spaces around colon)
+                                if (fixed_arg != "source") {
+                                    size_t colon_pos = fixed_arg.find(':');
+                                    if (colon_pos != std::string::npos) {
+                                        // Add space after colon if not present (sink:x -> sink: x)
+                                        if (colon_pos + 1 < fixed_arg.length() && fixed_arg[colon_pos + 1] != ' ') {
+                                            fixed_arg.insert(colon_pos + 1, " ");
+                                        }
+                                        // Add space before colon if not present (sink:x -> sink : x)
+                                        if (colon_pos > 0 && fixed_arg[colon_pos - 1] != ' ') {
+                                            fixed_arg.insert(colon_pos, " ");
+                                        }
+                                    }
+                                }
+                                // If it's "source", leave it as-is (no colon)
                             } else {
                                 // No iterator - apply spacing for depend type: "in:x" -> "in : x"
                                 size_t colon_pos = fixed_arg.find(':');
