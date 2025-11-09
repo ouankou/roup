@@ -140,6 +140,43 @@ add_test(NAME ompparser_drop_in COMMAND ompparser_example)
 add_test(NAME comprehensive COMMAND comprehensive_test)
 
 # ============================================================================
+# ompparser Test Suite (136 .txt files + 1 allocator test)
+# ============================================================================
+
+# Build tester executable using ROUP compat library
+add_executable(tester
+    ompparser/tests/tester.cpp
+)
+
+target_link_libraries(tester
+    ompparser  # Use ROUP-powered drop-in replacement
+)
+
+# Build allocator_clause_token_test executable
+add_executable(allocator_clause_token_test
+    ompparser/tests/allocator_clause_token_test.cpp
+)
+
+target_link_libraries(allocator_clause_token_test
+    ompparser  # Use ROUP-powered drop-in replacement
+)
+
+# Add all .txt test files from ompparser
+file(GLOB TEST_SUITE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/ompparser/tests/*.txt")
+list(SORT TEST_SUITE_FILES)
+foreach(TEST_FILE IN LISTS TEST_SUITE_FILES)
+    get_filename_component(TEST_NAME "${TEST_FILE}" NAME_WE)
+    add_test(NAME ompparser_${TEST_NAME}
+             COMMAND $<TARGET_FILE:tester> "${TEST_FILE}"
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+endforeach()
+
+# Add allocator test
+add_test(NAME allocator_clause_token
+         COMMAND $<TARGET_FILE:allocator_clause_token_test>
+         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+
+# ============================================================================
 # Installation
 # ============================================================================
 

@@ -57,7 +57,7 @@ static constexpr const char C_PRAGMA_PREFIX[] = "#pragma";    // C/C++ pragma pr
 static constexpr size_t FORTRAN_PREFIX_LEN = sizeof(FORTRAN_PREFIX) - 1;
 static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
 
-extern "C" void setLang(OpenMPBaseLang lang) {
+void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
 }
 
@@ -66,27 +66,98 @@ extern "C" void setLang(OpenMPBaseLang lang) {
 // ============================================================================
 
 static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
-    // ROUP directive kind mapping using named constants
-    // See roup_constants.h and src/c_api.rs:directive_name_to_kind()
+    // ROUP directive kind mapping to ompparser OpenMPDirectiveKind enum
+    // Based on enum order in compat/ompparser/ompparser/src/OpenMPKinds.h
+    // Each ROUP kind (0-86) maps directly to corresponding OMPD_* enum value
     switch (roup_kind) {
-        case ROUP_DIRECTIVE_PARALLEL:       return OMPD_parallel;
-        case ROUP_DIRECTIVE_FOR:            return OMPD_for;
-        case ROUP_DIRECTIVE_SECTIONS:       return OMPD_sections;
-        case ROUP_DIRECTIVE_SINGLE:         return OMPD_single;
-        case ROUP_DIRECTIVE_TASK:           return OMPD_task;
-        case ROUP_DIRECTIVE_MASTER:         return OMPD_master;
-        case ROUP_DIRECTIVE_CRITICAL:       return OMPD_critical;
-        case ROUP_DIRECTIVE_BARRIER:        return OMPD_barrier;
-        case ROUP_DIRECTIVE_TASKWAIT:       return OMPD_taskwait;
-        case ROUP_DIRECTIVE_TASKGROUP:      return OMPD_taskgroup;
-        case ROUP_DIRECTIVE_ATOMIC:         return OMPD_atomic;
-        case ROUP_DIRECTIVE_FLUSH:          return OMPD_flush;
-        case ROUP_DIRECTIVE_ORDERED:        return OMPD_ordered;
-        case ROUP_DIRECTIVE_TARGET:         return OMPD_target;
-        case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
-        case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
-        case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
-        default:                            return OMPD_unknown;
+        case 0:  return OMPD_parallel;
+        case 1:  return OMPD_for;
+        case 2:  return OMPD_do;
+        case 3:  return OMPD_simd;
+        case 4:  return OMPD_for_simd;
+        case 5:  return OMPD_do_simd;
+        case 6:  return OMPD_parallel_for_simd;
+        case 7:  return OMPD_parallel_do_simd;
+        case 8:  return OMPD_declare_simd;
+        case 9:  return OMPD_distribute;
+        case 10: return OMPD_distribute_simd;
+        case 11: return OMPD_distribute_parallel_for;
+        case 12: return OMPD_distribute_parallel_do;
+        case 13: return OMPD_distribute_parallel_for_simd;
+        case 14: return OMPD_distribute_parallel_do_simd;
+        case 15: return OMPD_loop;
+        case 16: return OMPD_scan;
+        case 17: return OMPD_sections;
+        case 18: return OMPD_section;
+        case 19: return OMPD_single;
+        case 20: return OMPD_workshare;
+        case 21: return OMPD_cancel;
+        case 22: return OMPD_cancellation_point;
+        case 23: return OMPD_allocate;
+        case 24: return OMPD_threadprivate;
+        case 25: return OMPD_declare_reduction;
+        case 26: return OMPD_declare_mapper;
+        case 27: return OMPD_parallel_for;
+        case 28: return OMPD_parallel_do;
+        case 29: return OMPD_parallel_loop;
+        case 30: return OMPD_parallel_sections;
+        case 31: return OMPD_parallel_workshare;
+        case 32: return OMPD_parallel_master;
+        case 33: return OMPD_master_taskloop;
+        case 34: return OMPD_master_taskloop_simd;
+        case 35: return OMPD_parallel_master_taskloop;
+        case 36: return OMPD_parallel_master_taskloop_simd;
+        case 37: return OMPD_teams;
+        case 38: return OMPD_metadirective;
+        case 39: return OMPD_declare_variant;
+        case 40: return OMPD_task;
+        case 41: return OMPD_taskloop;
+        case 42: return OMPD_taskloop_simd;
+        case 43: return OMPD_taskyield;
+        case 44: return OMPD_requires;
+        case 45: return OMPD_target_data;
+        case 46: return OMPD_target_enter_data;
+        case 47: return OMPD_target_update;
+        case 48: return OMPD_target_exit_data;
+        case 49: return OMPD_target;
+        case 50: return OMPD_declare_target;
+        case 51: return OMPD_end_declare_target;
+        case 52: return OMPD_master;
+        case 53: return OMPD_end;
+        case 54: return OMPD_barrier;
+        case 55: return OMPD_taskwait;
+        case 56: return OMPD_unroll;
+        case 57: return OMPD_tile;
+        case 58: return OMPD_taskgroup;
+        case 59: return OMPD_flush;
+        case 60: return OMPD_atomic;
+        case 61: return OMPD_critical;
+        case 62: return OMPD_depobj;
+        case 63: return OMPD_ordered;
+        case 64: return OMPD_teams_distribute;
+        case 65: return OMPD_teams_distribute_simd;
+        case 66: return OMPD_teams_distribute_parallel_for;
+        case 67: return OMPD_teams_distribute_parallel_for_simd;
+        case 68: return OMPD_teams_loop;
+        case 69: return OMPD_target_parallel;
+        case 70: return OMPD_target_parallel_for;
+        case 71: return OMPD_target_parallel_for_simd;
+        case 72: return OMPD_target_parallel_loop;
+        case 73: return OMPD_target_simd;
+        case 74: return OMPD_target_teams;
+        case 75: return OMPD_target_teams_distribute;
+        case 76: return OMPD_target_teams_distribute_simd;
+        case 77: return OMPD_target_teams_loop;
+        case 78: return OMPD_target_teams_distribute_parallel_for;
+        case 79: return OMPD_target_teams_distribute_parallel_for_simd;
+        case 80: return OMPD_teams_distribute_parallel_do;
+        case 81: return OMPD_teams_distribute_parallel_do_simd;
+        case 82: return OMPD_target_parallel_do;
+        case 83: return OMPD_target_parallel_do_simd;
+        case 84: return OMPD_target_teams_distribute_parallel_do;
+        case 85: return OMPD_target_teams_distribute_parallel_do_simd;
+        case 86: return OMPD_unknown;
+        default: return OMPD_unknown;
     }
 }
 

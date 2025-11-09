@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 12 clauses) + OpenACC (18 directives + 45 clauses) = 0x377190AEB0C04C97
+// Auto-generated checksum: FNV-1a hash of OpenMP (33 directives + 12 clauses) + OpenACC (18 directives + 45 clauses) = 0x006C690361BE962B
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x377190AEB0C04C97
+#define ROUP_CONSTANTS_CHECKSUM 0x006C690361BE962B
 
 // ============================================================================
 // Language Format Constants
@@ -44,21 +44,37 @@ extern "C" {
 
 #define ROUP_DIRECTIVE_PARALLEL             0
 #define ROUP_DIRECTIVE_FOR                  1
-#define ROUP_DIRECTIVE_SECTIONS             2
-#define ROUP_DIRECTIVE_SINGLE               3
-#define ROUP_DIRECTIVE_TASK                 4
-#define ROUP_DIRECTIVE_MASTER               5
-#define ROUP_DIRECTIVE_CRITICAL             6
-#define ROUP_DIRECTIVE_BARRIER              7
-#define ROUP_DIRECTIVE_TASKWAIT             8
-#define ROUP_DIRECTIVE_TASKGROUP            9
-#define ROUP_DIRECTIVE_ATOMIC               10
-#define ROUP_DIRECTIVE_FLUSH                11
-#define ROUP_DIRECTIVE_ORDERED              12
-#define ROUP_DIRECTIVE_TARGET               13
-#define ROUP_DIRECTIVE_TEAMS                14
-#define ROUP_DIRECTIVE_DISTRIBUTE           15
-#define ROUP_DIRECTIVE_METADIRECTIVE        16
+#define ROUP_DIRECTIVE_DO                   2
+#define ROUP_DIRECTIVE_SIMD                 3
+#define ROUP_DIRECTIVE_DISTRIBUTE           9
+#define ROUP_DIRECTIVE_LOOP                 15
+#define ROUP_DIRECTIVE_SCAN                 16
+#define ROUP_DIRECTIVE_SECTIONS             17
+#define ROUP_DIRECTIVE_SECTION              18
+#define ROUP_DIRECTIVE_SINGLE               19
+#define ROUP_DIRECTIVE_WORKSHARE            20
+#define ROUP_DIRECTIVE_CANCEL               21
+#define ROUP_DIRECTIVE_ALLOCATE             23
+#define ROUP_DIRECTIVE_THREADPRIVATE        24
+#define ROUP_DIRECTIVE_TEAMS                37
+#define ROUP_DIRECTIVE_METADIRECTIVE        38
+#define ROUP_DIRECTIVE_TASK                 40
+#define ROUP_DIRECTIVE_TASKLOOP             41
+#define ROUP_DIRECTIVE_TASKYIELD            43
+#define ROUP_DIRECTIVE_REQUIRES             44
+#define ROUP_DIRECTIVE_TARGET               49
+#define ROUP_DIRECTIVE_MASTER               52
+#define ROUP_DIRECTIVE_END                  53
+#define ROUP_DIRECTIVE_BARRIER              54
+#define ROUP_DIRECTIVE_TASKWAIT             55
+#define ROUP_DIRECTIVE_UNROLL               56
+#define ROUP_DIRECTIVE_TILE                 57
+#define ROUP_DIRECTIVE_TASKGROUP            58
+#define ROUP_DIRECTIVE_FLUSH                59
+#define ROUP_DIRECTIVE_ATOMIC               60
+#define ROUP_DIRECTIVE_CRITICAL             61
+#define ROUP_DIRECTIVE_DEPOBJ               62
+#define ROUP_DIRECTIVE_ORDERED              63
 #define ROUP_DIRECTIVE_UNKNOWN       999
 
 

@@ -1092,75 +1092,270 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
         // the build system's constant parser requires a match expression with string literals.
         // The performance impact is negligible for the C API boundary.
         //
-        // Fortran DO variants map to same codes as their C FOR equivalents:
-        // - "do" -> 1 (same as "for")
-        // - "parallel do" -> 0 (same as "parallel for")
-        // - "distribute parallel do" -> 15 (same as "distribute parallel for")
-        // - "target parallel do" -> 13 (same as "target parallel for")
-        // etc.
+        // Map directive names to ompparser OpenMPDirectiveKind enum indices (0-86)
+        // Based on enum order in compat/ompparser/ompparser/src/OpenMPKinds.h
+        // Fortran DO variants map to same indices as their C FOR equivalents
         match name_str.to_lowercase().as_str() {
-            // Parallel directives (kind 0)
+            // 0: OMPD_parallel
             "parallel" => 0,
-            "parallel for" => 0,
-            "parallel do" => 0, // Fortran variant
-            "parallel for simd" => 0,
-            "parallel do simd" => 0, // Fortran variant
-            "parallel sections" => 0,
 
-            // For/Do directives (kind 1)
+            // 1: OMPD_for
             "for" => 1,
-            "do" => 1, // Fortran variant
-            "for simd" => 1,
-            "do simd" => 1, // Fortran variant
 
-            // Other basic directives
-            "sections" => 2,
-            "single" => 3,
-            "task" => 4,
-            "master" => 5,
-            "critical" => 6,
-            "barrier" => 7,
-            "taskwait" => 8,
-            "taskgroup" => 9,
-            "atomic" => 10,
-            "flush" => 11,
-            "ordered" => 12,
+            // 2: OMPD_do
+            "do" => 2,
 
-            // Target directives (kind 13)
-            "target" => 13,
-            "target teams" => 13,
-            "target parallel" => 13,
-            "target parallel for" => 13,
-            "target parallel do" => 13, // Fortran variant
-            "target parallel for simd" => 13,
-            "target parallel do simd" => 13, // Fortran variant
-            "target teams distribute" => 13,
-            "target teams distribute parallel for" => 13,
-            "target teams distribute parallel do" => 13, // Fortran variant
-            "target teams distribute parallel for simd" => 13,
-            "target teams distribute parallel do simd" => 13, // Fortran variant
+            // 3: OMPD_simd
+            "simd" => 3,
 
-            // Teams directives (kind 14)
-            "teams" => 14,
-            "teams distribute" => 14,
-            "teams distribute parallel for" => 14,
-            "teams distribute parallel do" => 14, // Fortran variant
-            "teams distribute parallel for simd" => 14,
-            "teams distribute parallel do simd" => 14, // Fortran variant
+            // 4: OMPD_for_simd
+            "for simd" => 4,
 
-            // Distribute directives (kind 15)
-            "distribute" => 15,
-            "distribute parallel for" => 15,
-            "distribute parallel do" => 15, // Fortran variant
-            "distribute parallel for simd" => 15,
-            "distribute parallel do simd" => 15, // Fortran variant
-            "distribute simd" => 15,
+            // 5: OMPD_do_simd
+            "do simd" => 5,
 
-            // Metadirective (kind 16)
-            "metadirective" => 16,
+            // 6: OMPD_parallel_for_simd
+            "parallel for simd" => 6,
 
-            // Unknown directive
-            _ => 999,
+            // 7: OMPD_parallel_do_simd
+            "parallel do simd" => 7,
+
+            // 8: OMPD_declare_simd
+            "declare simd" => 8,
+
+            // 9: OMPD_distribute
+            "distribute" => 9,
+
+            // 10: OMPD_distribute_simd
+            "distribute simd" => 10,
+
+            // 11: OMPD_distribute_parallel_for
+            "distribute parallel for" => 11,
+
+            // 12: OMPD_distribute_parallel_do
+            "distribute parallel do" => 12,
+
+            // 13: OMPD_distribute_parallel_for_simd
+            "distribute parallel for simd" => 13,
+
+            // 14: OMPD_distribute_parallel_do_simd
+            "distribute parallel do simd" => 14,
+
+            // 15: OMPD_loop
+            "loop" => 15,
+
+            // 16: OMPD_scan
+            "scan" => 16,
+
+            // 17: OMPD_sections
+            "sections" => 17,
+
+            // 18: OMPD_section
+            "section" => 18,
+
+            // 19: OMPD_single
+            "single" => 19,
+
+            // 20: OMPD_workshare
+            "workshare" => 20,
+
+            // 21: OMPD_cancel
+            "cancel" => 21,
+
+            // 22: OMPD_cancellation_point
+            "cancellation point" => 22,
+
+            // 23: OMPD_allocate
+            "allocate" => 23,
+
+            // 24: OMPD_threadprivate
+            "threadprivate" => 24,
+
+            // 25: OMPD_declare_reduction
+            "declare reduction" => 25,
+
+            // 26: OMPD_declare_mapper
+            "declare mapper" => 26,
+
+            // 27: OMPD_parallel_for
+            "parallel for" => 27,
+
+            // 28: OMPD_parallel_do
+            "parallel do" => 28,
+
+            // 29: OMPD_parallel_loop
+            "parallel loop" => 29,
+
+            // 30: OMPD_parallel_sections
+            "parallel sections" => 30,
+
+            // 31: OMPD_parallel_workshare
+            "parallel workshare" => 31,
+
+            // 32: OMPD_parallel_master
+            "parallel master" => 32,
+
+            // 33: OMPD_master_taskloop
+            "master taskloop" => 33,
+
+            // 34: OMPD_master_taskloop_simd
+            "master taskloop simd" => 34,
+
+            // 35: OMPD_parallel_master_taskloop
+            "parallel master taskloop" => 35,
+
+            // 36: OMPD_parallel_master_taskloop_simd
+            "parallel master taskloop simd" => 36,
+
+            // 37: OMPD_teams
+            "teams" => 37,
+
+            // 38: OMPD_metadirective
+            "metadirective" => 38,
+
+            // 39: OMPD_declare_variant
+            "declare variant" => 39,
+
+            // 40: OMPD_task
+            "task" => 40,
+
+            // 41: OMPD_taskloop
+            "taskloop" => 41,
+
+            // 42: OMPD_taskloop_simd
+            "taskloop simd" => 42,
+
+            // 43: OMPD_taskyield
+            "taskyield" => 43,
+
+            // 44: OMPD_requires
+            "requires" => 44,
+
+            // 45: OMPD_target_data
+            "target data" => 45,
+
+            // 46: OMPD_target_enter_data
+            "target enter data" => 46,
+
+            // 47: OMPD_target_update
+            "target update" => 47,
+
+            // 48: OMPD_target_exit_data
+            "target exit data" => 48,
+
+            // 49: OMPD_target
+            "target" => 49,
+
+            // 50: OMPD_declare_target
+            "declare target" => 50,
+
+            // 51: OMPD_end_declare_target
+            "end declare target" => 51,
+
+            // 52: OMPD_master
+            "master" => 52,
+
+            // 53: OMPD_end
+            "end" => 53,
+
+            // 54: OMPD_barrier
+            "barrier" => 54,
+
+            // 55: OMPD_taskwait
+            "taskwait" => 55,
+
+            // 56: OMPD_unroll
+            "unroll" => 56,
+
+            // 57: OMPD_tile
+            "tile" => 57,
+
+            // 58: OMPD_taskgroup
+            "taskgroup" => 58,
+
+            // 59: OMPD_flush
+            "flush" => 59,
+
+            // 60: OMPD_atomic
+            "atomic" => 60,
+
+            // 61: OMPD_critical
+            "critical" => 61,
+
+            // 62: OMPD_depobj
+            "depobj" => 62,
+
+            // 63: OMPD_ordered
+            "ordered" => 63,
+
+            // 64: OMPD_teams_distribute
+            "teams distribute" => 64,
+
+            // 65: OMPD_teams_distribute_simd
+            "teams distribute simd" => 65,
+
+            // 66: OMPD_teams_distribute_parallel_for
+            "teams distribute parallel for" => 66,
+
+            // 67: OMPD_teams_distribute_parallel_for_simd
+            "teams distribute parallel for simd" => 67,
+
+            // 68: OMPD_teams_loop
+            "teams loop" => 68,
+
+            // 69: OMPD_target_parallel
+            "target parallel" => 69,
+
+            // 70: OMPD_target_parallel_for
+            "target parallel for" => 70,
+
+            // 71: OMPD_target_parallel_for_simd
+            "target parallel for simd" => 71,
+
+            // 72: OMPD_target_parallel_loop
+            "target parallel loop" => 72,
+
+            // 73: OMPD_target_simd
+            "target simd" => 73,
+
+            // 74: OMPD_target_teams
+            "target teams" => 74,
+
+            // 75: OMPD_target_teams_distribute
+            "target teams distribute" => 75,
+
+            // 76: OMPD_target_teams_distribute_simd
+            "target teams distribute simd" => 76,
+
+            // 77: OMPD_target_teams_loop
+            "target teams loop" => 77,
+
+            // 78: OMPD_target_teams_distribute_parallel_for
+            "target teams distribute parallel for" => 78,
+
+            // 79: OMPD_target_teams_distribute_parallel_for_simd
+            "target teams distribute parallel for simd" => 79,
+
+            // 80: OMPD_teams_distribute_parallel_do
+            "teams distribute parallel do" => 80,
+
+            // 81: OMPD_teams_distribute_parallel_do_simd
+            "teams distribute parallel do simd" => 81,
+
+            // 82: OMPD_target_parallel_do
+            "target parallel do" => 82,
+
+            // 83: OMPD_target_parallel_do_simd
+            "target parallel do simd" => 83,
+
+            // 84: OMPD_target_teams_distribute_parallel_do
+            "target teams distribute parallel do" => 84,
+
+            // 85: OMPD_target_teams_distribute_parallel_do_simd
+            "target teams distribute parallel do simd" => 85,
+
+            // 86: OMPD_unknown
+            _ => 86,
         }
     }
 }
