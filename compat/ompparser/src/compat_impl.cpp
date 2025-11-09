@@ -48,6 +48,10 @@ extern "C" {
 
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
+    const char* roup_clause_get_content(const OmpClause* clause);
+
+    // Directive parameter (e.g., critical(name))
+    const char* roup_directive_parameter(const OmpDirective* directive);
 }
 
 // ============================================================================
@@ -66,6 +70,10 @@ static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
 
 extern "C" void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
+}
+
+extern "C" void setNormalizeClauses(bool normalize) {
+    normalize_clauses_global = normalize;
 }
 
 // ============================================================================
@@ -178,9 +186,14 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             int32_t roup_kind_clause = roup_clause_kind(roup_clause);
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
-            // Use public variadic version: addOpenMPClause(int kind, ...)
-            // Cast to int and pass just the kind for basic clause support
-            dir->addOpenMPClause(static_cast<int>(clause_kind));
+            // Create the clause and get a pointer to it
+            OpenMPClause* omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+
+            // If the clause has content (parenthesized expression), add it
+            const char* content = roup_clause_get_content(roup_clause);
+            if (content != nullptr && omp_clause != nullptr) {
+                omp_clause->addLangExpr(content);
+            }
         }
         roup_clause_iterator_free(iter);
     }

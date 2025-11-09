@@ -139,6 +139,9 @@ add_test(NAME compat_basic COMMAND compat_example)
 add_test(NAME ompparser_drop_in COMMAND ompparser_example)
 add_test(NAME comprehensive COMMAND comprehensive_test)
 
+# Add ompparser test suite (1524 tests)
+add_subdirectory(ompparser/tests)
+
 # ============================================================================
 # Installation
 # ============================================================================

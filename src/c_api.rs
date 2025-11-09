@@ -137,6 +137,7 @@ pub struct OmpDirective {
 pub struct OmpClause {
     kind: i32,        // Clause type (num_threads=0, schedule=7, etc.)
     data: ClauseData, // Clause-specific data (union)
+    content: *const c_char, // Raw clause content for expressions (allocated, must be freed)
 }
 
 /// Clause-specific data stored in a C union
@@ -836,6 +837,27 @@ pub extern "C" fn roup_string_list_free(list: *mut OmpStringList) {
     }
 }
 
+/// Get clause content string (expression or parameter).
+///
+/// Returns the raw content of parenthesized clauses.
+/// For example, "num_threads(4)" returns "4", "if(x > 0)" returns "x > 0".
+///
+/// Returns NULL if clause is NULL or is a bare clause.
+/// Caller must NOT free the returned pointer - it's valid until directive is freed.
+#[no_mangle]
+pub extern "C" fn roup_clause_get_content(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        // Return the content pointer stored in the clause
+        // This was set during convert_clause() from the parsed content
+        c.content
+    }
+}
+
 // ============================================================================
 // Helper Functions (Internal - Not Exported to C)
 // ============================================================================
@@ -899,6 +921,15 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     // Alternative (build-time constant map) requires updating constants_gen.rs
     // to parse if-else chains instead of match expressions.
     let normalized_name = clause.name.to_ascii_lowercase();
+
+    // Extract content if this is a parenthesized clause
+    let content_ptr = match &clause.kind {
+        ClauseKind::Parenthesized(ref content) => {
+            let c_string = CString::new(content.as_ref()).unwrap_or_else(|_| CString::new("").unwrap());
+            c_string.into_raw() as *const c_char
+        },
+        _ => ptr::null()
+    };
 
     let (kind, data) = match normalized_name.as_str() {
         "num_threads" => (0, ClauseData { default: 0 }),
@@ -999,7 +1030,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         _ => (900, ClauseData { default: 0 }), // Generic/Unknown
     };
 
-    OmpClause { kind, data }
+    OmpClause { kind, data, content: content_ptr }
 }
 
 /// Parse reduction operator from clause arguments.
@@ -1235,6 +1266,11 @@ fn free_clause_data(clause: &OmpClause) {
             if !vars_ptr.is_null() {
                 roup_string_list_free(vars_ptr);
             }
+        }
+
+        // Free content string if present
+        if !clause.content.is_null() {
+            let _ = CString::from_raw(clause.content as *mut c_char);
         }
     }
 }
