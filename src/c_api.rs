@@ -781,8 +781,8 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
         let c = &*clause;
 
         // Check if this clause type has variables or expressions
-        // Kinds: 0=num_threads, 1=if, 2-5=variable lists, 6=reduction, 8=collapse, 9=ordered, 12=copyin
-        if c.kind >= 2 && c.kind <= 5 || c.kind == 0 || c.kind == 1 || c.kind == 8 || c.kind == 9 || c.kind == 12 {
+        // Kinds: 0=num_threads, 1=if, 2-5=variable lists, 6=reduction, 8=collapse, 9=ordered, 12=copyin, 14-41=various clauses
+        if c.kind >= 2 && c.kind <= 5 || c.kind == 0 || c.kind == 1 || c.kind == 8 || c.kind == 9 || c.kind == 12 || (c.kind >= 14 && c.kind <= 41) {
             // Variable list or expression clauses - return pointer to existing list
             let vars_ptr = c.data.variables;
             if !vars_ptr.is_null() {
@@ -1002,6 +1002,51 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "proc_bind" => {
             let proc_bind_kind = parse_proc_bind_kind(clause);
             (13, ClauseData { default: proc_bind_kind })
+        }
+        "linear" | "aligned" | "allocate" | "safelen" | "simdlen" | "depend" | "to" | "from" | "map" | "use_device_ptr" |
+        "priority" | "affinity" | "detach" | "in_reduction" | "task_reduction" | "update" | "capture" | "read" | "write" | "seq_cst" => {
+            // Clauses with variable/expression lists
+            let kind_code = match normalized_name.as_str() {
+                "linear" => 14,
+                "aligned" => 15,
+                "allocate" => 16,
+                "safelen" => 17,
+                "simdlen" => 18,
+                "depend" => 19,
+                "to" => 20,
+                "from" => 21,
+                "map" => 22,
+                "use_device_ptr" => 23,
+                "priority" => 24,
+                "affinity" => 25,
+                "detach" => 26,
+                "in_reduction" => 27,
+                "task_reduction" => 28,
+                "update" => 29,
+                "capture" => 30,
+                "read" => 31,
+                "write" => 32,
+                "seq_cst" => 33,
+                _ => 999,
+            };
+            let variables = extract_variables_from_clause(clause);
+            (kind_code, ClauseData { variables })
+        }
+        "final" | "untied" | "mergeable" | "threads" | "simd" | "nogroup" | "grainsize" | "num_tasks" => {
+            // Simple parameter or flag clauses
+            let kind_code = match normalized_name.as_str() {
+                "final" => 34,
+                "untied" => 35,
+                "mergeable" => 36,
+                "threads" => 37,
+                "simd" => 38,
+                "nogroup" => 39,
+                "grainsize" => 40,
+                "num_tasks" => 41,
+                _ => 999,
+            };
+            let variables = extract_expression_from_clause(clause);
+            (kind_code, ClauseData { variables })
         }
         _ => (999, ClauseData { default: 0 }), // Unknown
     };

@@ -173,9 +173,6 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
 
 static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
     // ROUP clause kind mapping from src/c_api.rs:convert_clause()
-    // Clause codes: 0=num_threads, 1=if, 2=private, 3=shared, 4=firstprivate,
-    //               5=lastprivate, 6=reduction, 7=schedule, 8=collapse,
-    //               9=ordered, 10=nowait, 11=default, 12=copyin, 13=proc_bind, 999=unknown
     switch (roup_kind) {
         case 0:  return OMPC_num_threads;
         case 1:  return OMPC_if;
@@ -191,6 +188,34 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
         case 11: return OMPC_default;
         case 12: return OMPC_copyin;
         case 13: return OMPC_proc_bind;
+        case 14: return OMPC_linear;
+        case 15: return OMPC_aligned;
+        case 16: return OMPC_allocate;
+        case 17: return OMPC_safelen;
+        case 18: return OMPC_simdlen;
+        case 19: return OMPC_depend;
+        case 20: return OMPC_to;
+        case 21: return OMPC_from;
+        case 22: return OMPC_map;
+        case 23: return OMPC_use_device_ptr;
+        case 24: return OMPC_priority;
+        case 25: return OMPC_affinity;
+        case 26: return OMPC_detach;
+        case 27: return OMPC_in_reduction;
+        case 28: return OMPC_task_reduction;
+        case 29: return OMPC_update;
+        case 30: return OMPC_capture;
+        case 31: return OMPC_read;
+        case 32: return OMPC_write;
+        case 33: return OMPC_seq_cst;
+        case 34: return OMPC_final;
+        case 35: return OMPC_untied;
+        case 36: return OMPC_mergeable;
+        case 37: return OMPC_threads;
+        case 38: return OMPC_simd;
+        case 39: return OMPC_nogroup;
+        case 40: return OMPC_grainsize;
+        case 41: return OMPC_num_tasks;
         default: return OMPC_unknown;
     }
 }
