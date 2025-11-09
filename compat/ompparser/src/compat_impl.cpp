@@ -408,33 +408,25 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             int32_t roup_kind_clause = roup_clause_kind(roup_clause);
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
-            // Get clause variable list if available
-            OmpStringList* vars = roup_clause_variables(roup_clause);
-            if (vars && roup_string_list_len(vars) > 0) {
-                // Build variable list
-                std::vector<const char*> var_list;
-                int32_t len = roup_string_list_len(vars);
-                for (int32_t i = 0; i < len; i++) {
-                    const char* var = roup_string_list_get(vars, i);
-                    if (var) {
-                        var_list.push_back(strdup(var));
+            // Create the clause (without variables) - addOpenMPClause just creates empty clause
+            OpenMPClause* new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+
+            // Now add variables/expressions if present using addLangExpr
+            if (new_clause) {
+                OmpStringList* vars = roup_clause_variables(roup_clause);
+                if (vars && roup_string_list_len(vars) > 0) {
+                    int32_t len = roup_string_list_len(vars);
+                    for (int32_t i = 0; i < len; i++) {
+                        const char* var = roup_string_list_get(vars, i);
+                        if (var) {
+                            // ompparser takes ownership of the string via addLangExpr
+                            new_clause->addLangExpr(strdup(var));
+                        }
                     }
+                    roup_string_list_free(vars);
+                } else if (vars) {
+                    roup_string_list_free(vars);
                 }
-
-                // Add clause with variable list
-                // Note: ompparser takes ownership of the strings, will free them
-                if (!var_list.empty()) {
-                    dir->addOpenMPClause(static_cast<int>(clause_kind), var_list);
-                } else {
-                    dir->addOpenMPClause(static_cast<int>(clause_kind));
-                }
-
-                // Do NOT free var_list strings - ompparser owns them now
-                roup_string_list_free(vars);
-            } else {
-                // No variables, just add the clause kind
-                dir->addOpenMPClause(static_cast<int>(clause_kind));
-                if (vars) roup_string_list_free(vars);
             }
         }
         roup_clause_iterator_free(iter);
