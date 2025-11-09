@@ -52,6 +52,8 @@ extern "C" {
     // Clause parameter queries
     int32_t roup_clause_schedule_kind(const OmpClause* clause);
     int32_t roup_clause_reduction_operator(const OmpClause* clause);
+    int32_t roup_clause_reduction_modifier(const OmpClause* clause);
+    const char* roup_clause_reduction_user_operator(const OmpClause* clause);
     int32_t roup_clause_default_data_sharing(const OmpClause* clause);
     int32_t roup_clause_proc_bind(const OmpClause* clause);
 }
@@ -718,75 +720,50 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
             } else if (clause_kind == OMPC_reduction || clause_kind == OMPC_task_reduction ||
                        clause_kind == OMPC_in_reduction) {
-                // Parse reduction clause to extract modifier and operator
-                std::string modifier_str, op_str, vars_str;
-                if (clause_text && parseReductionClause(std::string(clause_text), modifier_str, op_str, vars_str)) {
-                    OpenMPReductionClauseModifier modifier = mapReductionModifier(modifier_str);
-                    OpenMPReductionClauseIdentifier identifier = mapReductionOperator(op_str);
+                // Use ROUP's parsed reduction data directly from C API
+                int32_t op = roup_clause_reduction_operator(roup_clause);
+                int32_t mod = roup_clause_reduction_modifier(roup_clause);
+                const char* user_op_str = roup_clause_reduction_user_operator(roup_clause);
 
-                    // For user-defined operators, store the operator name
-                    char* user_op = nullptr;
-                    if (identifier == OMPC_REDUCTION_IDENTIFIER_user && !op_str.empty()) {
-                        user_op = strdup(op_str.c_str());
-                    }
-
-                    try {
-                        omp_clause = OpenMPReductionClause::addReductionClause(dir, modifier, identifier, user_op);
-                    } catch (...) {
-                        // If addReductionClause fails, skip this clause
-                        if (user_op) free(user_op);
-                        continue;
-                    }
-
-                    // Add variables directly here since we've already parsed them
-                    if (omp_clause && !vars_str.empty()) {
-                        // Normalize spacing in variables
-                        vars_str = normalizeClauseSpacing(vars_str);
-
-                        // Split variables by comma
-                        std::vector<std::string> vars;
-                        std::string current_var;
-                        int paren_depth = 0;
-
-                        for (size_t i = 0; i < vars_str.length(); ++i) {
-                            char c = vars_str[i];
-                            if (c == '(') paren_depth++;
-                            else if (c == ')') paren_depth--;
-
-                            if (c == ',' && paren_depth == 0) {
-                                // Trim and add variable
-                                size_t start = current_var.find_first_not_of(" \t");
-                                if (start != std::string::npos) {
-                                    size_t end = current_var.find_last_not_of(" \t");
-                                    vars.push_back(current_var.substr(start, end - start + 1));
-                                }
-                                current_var.clear();
-                            } else {
-                                current_var += c;
-                            }
+                // Map operator code to enum
+                OpenMPReductionClauseIdentifier identifier;
+                char* user_op = nullptr;
+                switch (op) {
+                    case 0: identifier = OMPC_REDUCTION_IDENTIFIER_plus; break;
+                    case 1: identifier = OMPC_REDUCTION_IDENTIFIER_minus; break;
+                    case 2: identifier = OMPC_REDUCTION_IDENTIFIER_mul; break;
+                    case 3: identifier = OMPC_REDUCTION_IDENTIFIER_bitand; break;
+                    case 4: identifier = OMPC_REDUCTION_IDENTIFIER_bitor; break;
+                    case 5: identifier = OMPC_REDUCTION_IDENTIFIER_bitxor; break;
+                    case 6: identifier = OMPC_REDUCTION_IDENTIFIER_logand; break;
+                    case 7: identifier = OMPC_REDUCTION_IDENTIFIER_logor; break;
+                    case 8: identifier = OMPC_REDUCTION_IDENTIFIER_min; break;
+                    case 9: identifier = OMPC_REDUCTION_IDENTIFIER_max; break;
+                    case 10: // .and.
+                    case 11: // .or.
+                        identifier = OMPC_REDUCTION_IDENTIFIER_user;
+                        break;
+                    case 12: identifier = OMPC_REDUCTION_IDENTIFIER_eqv; break;
+                    case 13: identifier = OMPC_REDUCTION_IDENTIFIER_neqv; break;
+                    case 19: // User-defined
+                        identifier = OMPC_REDUCTION_IDENTIFIER_user;
+                        if (user_op_str) {
+                            user_op = strdup(user_op_str);
                         }
-
-                        // Add the last variable
-                        if (!current_var.empty()) {
-                            size_t start = current_var.find_first_not_of(" \t");
-                            if (start != std::string::npos) {
-                                size_t end = current_var.find_last_not_of(" \t");
-                                vars.push_back(current_var.substr(start, end - start + 1));
-                            }
-                        }
-
-                        // Add each variable to the clause
-                        for (const auto& var : vars) {
-                            omp_clause->addLangExpr(var.c_str());
-                        }
-                    }
-
-                    // Skip the normal expression parsing for reduction clauses
-                    continue;
-                } else {
-                    // Fallback to basic clause if parsing fails
-                    omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+                        break;
+                    default: identifier = OMPC_REDUCTION_IDENTIFIER_plus; break;
                 }
+
+                // Map modifier code to enum
+                OpenMPReductionClauseModifier modifier;
+                switch (mod) {
+                    case 0: modifier = OMPC_REDUCTION_MODIFIER_inscan; break;
+                    case 1: modifier = OMPC_REDUCTION_MODIFIER_task; break;
+                    case 2: modifier = OMPC_REDUCTION_MODIFIER_default; break;
+                    default: modifier = OMPC_REDUCTION_MODIFIER_unspecified; break;
+                }
+
+                omp_clause = OpenMPReductionClause::addReductionClause(dir, modifier, identifier, user_op);
             } else if (clause_kind == OMPC_private || clause_kind == OMPC_shared ||
                        clause_kind == OMPC_firstprivate || clause_kind == OMPC_lastprivate) {
                 // These clauses merge and deduplicate variables
