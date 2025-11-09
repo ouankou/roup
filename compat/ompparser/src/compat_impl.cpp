@@ -216,6 +216,40 @@ static OpenMPAllocateClauseAllocator mapAllocator(const std::string& alloc) {
     return OMPC_ALLOCATE_ALLOCATOR_user;
 }
 
+// Helper to map if clause modifier string to enum
+static OpenMPIfClauseModifier mapIfModifier(const std::string& mod) {
+    if (mod == "parallel") return OMPC_IF_MODIFIER_parallel;
+    if (mod == "simd") return OMPC_IF_MODIFIER_simd;
+    if (mod == "task") return OMPC_IF_MODIFIER_task;
+    if (mod == "taskloop") return OMPC_IF_MODIFIER_taskloop;
+    if (mod == "target") return OMPC_IF_MODIFIER_target;
+    if (mod == "target_data") return OMPC_IF_MODIFIER_target_data;
+    if (mod == "target_enter_data") return OMPC_IF_MODIFIER_target_enter_data;
+    if (mod == "target_exit_data") return OMPC_IF_MODIFIER_target_exit_data;
+    if (mod == "target_update") return OMPC_IF_MODIFIER_target_update;
+    if (mod == "cancel") return OMPC_IF_MODIFIER_cancel;
+    return OMPC_IF_MODIFIER_unspecified;
+}
+
+// Helper to map device clause modifier string to enum
+static OpenMPDeviceClauseModifier mapDeviceModifier(const std::string& mod) {
+    if (mod == "ancestor") return OMPC_DEVICE_MODIFIER_ancestor;
+    if (mod == "device_num") return OMPC_DEVICE_MODIFIER_device_num;
+    return OMPC_DEVICE_MODIFIER_unspecified;
+}
+
+// Helper to map depend clause type string to enum
+static OpenMPDependClauseType mapDependType(const std::string& type) {
+    if (type == "in") return OMPC_DEPENDENCE_TYPE_in;
+    if (type == "out") return OMPC_DEPENDENCE_TYPE_out;
+    if (type == "inout") return OMPC_DEPENDENCE_TYPE_inout;
+    if (type == "mutexinoutset") return OMPC_DEPENDENCE_TYPE_mutexinoutset;
+    if (type == "depobj") return OMPC_DEPENDENCE_TYPE_depobj;
+    if (type == "source") return OMPC_DEPENDENCE_TYPE_source;
+    if (type == "sink") return OMPC_DEPENDENCE_TYPE_sink;
+    return OMPC_DEPENDENCE_TYPE_unknown;
+}
+
 static OpenMPDirectiveKind mapRoupDirectiveNameToOmpparser(const char* name) {
     // Direct string-based mapping from directive name to ompparser kind
     // This bypasses ROUP's simplified directive kind system and uses the actual directive name
@@ -720,6 +754,138 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     }
 
                     omp_clause = dir->addOpenMPClause(OMPC_allocate, allocator, user_alloc);
+                    if (omp_clause && !var_list.empty()) {
+                        std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                        for (const std::string& var : vars) {
+                            if (!var.empty()) {
+                                omp_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case OMPC_if: {
+                    // Format: if(modifier:expr) or if(expr)
+                    // Example: if(target:3456)
+                    OpenMPIfClauseModifier modifier = OMPC_IF_MODIFIER_unspecified;
+                    std::string expr;
+
+                    size_t colon_pos = params.find(':');
+                    if (colon_pos != std::string::npos) {
+                        std::string potential_modifier = params.substr(0, colon_pos);
+                        // Trim whitespace
+                        size_t start = potential_modifier.find_first_not_of(" \t");
+                        size_t end = potential_modifier.find_last_not_of(" \t");
+                        if (start != std::string::npos) {
+                            potential_modifier = potential_modifier.substr(start, end - start + 1);
+                        }
+                        modifier = mapIfModifier(potential_modifier);
+                        expr = params.substr(colon_pos + 1);
+                        // Trim whitespace from expression
+                        start = expr.find_first_not_of(" \t");
+                        if (start != std::string::npos) {
+                            expr = expr.substr(start);
+                        }
+                    } else {
+                        expr = params;
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_if, modifier, nullptr);
+                    if (omp_clause && !expr.empty()) {
+                        omp_clause->addLangExpr(expr.c_str());
+                    }
+                    break;
+                }
+
+                case OMPC_device: {
+                    // Format: device(modifier:expr) or device(expr)
+                    // Example: device(ancestor:5)
+                    OpenMPDeviceClauseModifier modifier = OMPC_DEVICE_MODIFIER_unspecified;
+                    std::string expr;
+
+                    size_t colon_pos = params.find(':');
+                    if (colon_pos != std::string::npos) {
+                        std::string potential_modifier = params.substr(0, colon_pos);
+                        // Trim whitespace
+                        size_t start = potential_modifier.find_first_not_of(" \t");
+                        size_t end = potential_modifier.find_last_not_of(" \t");
+                        if (start != std::string::npos) {
+                            potential_modifier = potential_modifier.substr(start, end - start + 1);
+                        }
+                        modifier = mapDeviceModifier(potential_modifier);
+                        expr = params.substr(colon_pos + 1);
+                        // Trim whitespace from expression
+                        start = expr.find_first_not_of(" \t");
+                        if (start != std::string::npos) {
+                            expr = expr.substr(start);
+                        }
+                    } else {
+                        expr = params;
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_device, modifier);
+                    if (omp_clause && !expr.empty()) {
+                        omp_clause->addLangExpr(expr.c_str());
+                    }
+                    break;
+                }
+
+                case OMPC_depend: {
+                    // Format: depend(iterator(...),type:list) or depend(type:list)
+                    // Example: depend(in:m,n) or depend(iterator(int i=0:10),in:m,n)
+                    OpenMPDependClauseModifier modifier = OMPC_DEPEND_MODIFIER_unspecified;
+                    OpenMPDependClauseType type = OMPC_DEPENDENCE_TYPE_unknown;
+                    std::string var_list;
+
+                    // Check if it starts with iterator
+                    if (params.find("iterator") == 0) {
+                        modifier = OMPC_DEPEND_MODIFIER_iterator;
+                        // Find the matching closing paren for iterator
+                        size_t open_paren = params.find('(');
+                        if (open_paren != std::string::npos) {
+                            int paren_depth = 1;
+                            size_t close_paren = open_paren + 1;
+                            while (close_paren < params.length() && paren_depth > 0) {
+                                if (params[close_paren] == '(') paren_depth++;
+                                else if (params[close_paren] == ')') paren_depth--;
+                                close_paren++;
+                            }
+                            // Now find the comma and dependence type after iterator
+                            size_t comma_pos = params.find(',', close_paren);
+                            if (comma_pos != std::string::npos) {
+                                // Parse dependence type after comma
+                                size_t colon_pos = params.find(':', comma_pos);
+                                if (colon_pos != std::string::npos) {
+                                    std::string type_str = params.substr(comma_pos + 1, colon_pos - comma_pos - 1);
+                                    // Trim whitespace
+                                    size_t start = type_str.find_first_not_of(" \t");
+                                    size_t end = type_str.find_last_not_of(" \t");
+                                    if (start != std::string::npos) {
+                                        type_str = type_str.substr(start, end - start + 1);
+                                    }
+                                    type = mapDependType(type_str);
+                                    var_list = params.substr(colon_pos + 1);
+                                }
+                            }
+                        }
+                    } else {
+                        // Simple depend without iterator
+                        size_t colon_pos = params.find(':');
+                        if (colon_pos != std::string::npos) {
+                            std::string type_str = params.substr(0, colon_pos);
+                            // Trim whitespace
+                            size_t start = type_str.find_first_not_of(" \t");
+                            size_t end = type_str.find_last_not_of(" \t");
+                            if (start != std::string::npos) {
+                                type_str = type_str.substr(start, end - start + 1);
+                            }
+                            type = mapDependType(type_str);
+                            var_list = params.substr(colon_pos + 1);
+                        }
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_depend, modifier, type);
                     if (omp_clause && !var_list.empty()) {
                         std::vector<std::string> vars = parseCommaSeparatedList(var_list);
                         for (const std::string& var : vars) {
