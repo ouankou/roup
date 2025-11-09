@@ -34,6 +34,7 @@ extern "C" {
     // Directive queries
     int32_t roup_directive_kind(const OmpDirective* directive);
     int32_t roup_directive_clause_count(const OmpDirective* directive);
+    char* roup_directive_parameter(const OmpDirective* directive);
     OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
 
     // Iterator operations (updated API with out parameter)
@@ -42,6 +43,9 @@ extern "C" {
 
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
+
+    // String management
+    void roup_string_free(char* s);
 }
 
 // ============================================================================
@@ -99,6 +103,8 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
         case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
         case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
         case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
+        case 128:                           return OMPD_cancel;  // DirectiveKind::Cancel
+        case 129:                           return OMPD_cancellation_point;  // DirectiveKind::CancellationPoint
         default:                            return OMPD_unknown;
     }
 }
@@ -227,6 +233,68 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     // Set base language for all directive types (generic constructor sets it, but specialized types need it)
     if (dir) {
         dir->setBaseLang(current_lang);
+    }
+
+    // Get directive parameter (for allocate variable lists, cancel construct types, etc.)
+    char* param_str = roup_directive_parameter(roup_dir);
+    if (param_str) {
+        std::string param(param_str);
+        roup_string_free(param_str);
+
+        // Handle allocate directive - parse (a,b,c) into individual variables
+        if (kind == OMPD_allocate) {
+            // Remove parentheses and split by comma
+            if (param.size() >= 2 && param.front() == '(' && param.back() == ')') {
+                std::string list_content = param.substr(1, param.size() - 2);
+                std::istringstream ss(list_content);
+                std::string var;
+                while (std::getline(ss, var, ',')) {
+                    // Trim whitespace
+                    var.erase(0, var.find_first_not_of(" \t"));
+                    var.erase(var.find_last_not_of(" \t") + 1);
+                    if (!var.empty()) {
+                        static_cast<OpenMPAllocateDirective*>(dir)->addAllocateList(strdup(var.c_str()));
+                    }
+                }
+            }
+        }
+        // Handle threadprivate directive
+        else if (kind == OMPD_threadprivate) {
+            if (param.size() >= 2 && param.front() == '(' && param.back() == ')') {
+                std::string list_content = param.substr(1, param.size() - 2);
+                std::istringstream ss(list_content);
+                std::string var;
+                while (std::getline(ss, var, ',')) {
+                    var.erase(0, var.find_first_not_of(" \t"));
+                    var.erase(var.find_last_not_of(" \t") + 1);
+                    if (!var.empty()) {
+                        static_cast<OpenMPThreadprivateDirective*>(dir)->addThreadprivateList(strdup(var.c_str()));
+                    }
+                }
+            }
+        }
+        // Handle groupprivate directive
+        else if (kind == OMPD_groupprivate) {
+            if (param.size() >= 2 && param.front() == '(' && param.back() == ')') {
+                std::string list_content = param.substr(1, param.size() - 2);
+                std::istringstream ss(list_content);
+                std::string var;
+                while (std::getline(ss, var, ',')) {
+                    var.erase(0, var.find_first_not_of(" \t"));
+                    var.erase(var.find_last_not_of(" \t") + 1);
+                    if (!var.empty()) {
+                        static_cast<OpenMPGroupprivateDirective*>(dir)->addGroupprivateList(strdup(var.c_str()));
+                    }
+                }
+            }
+        }
+        // Handle cancel/cancellation_point - add construct type as a special clause
+        else if (kind == OMPD_cancel || kind == OMPD_cancellation_point) {
+            // The parameter is the construct type (parallel, sections, for, taskgroup)
+            // Convert to appropriate clause - this needs to be added as a special marker
+            // For now, create a cancel clause with the construct type
+            // TODO: May need OpenMPCancelDirective class to properly store construct type
+        }
     }
 
     // Handle atomic variants - ROUP parses "atomic read" as directive AtomicRead,
