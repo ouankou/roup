@@ -630,6 +630,18 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     }
 
+    // Handle cancellation_point directive where ROUP stores construct type in parameter
+    // e.g., ROUP: directive="cancellation point" param="parallel" -> add OMPC_parallel clause
+    if (kind == OMPD_cancellation_point) {
+        const char* param = roup_directive_parameter(roup_dir);
+        if (param && strlen(param) > 0) {
+            OpenMPClauseKind construct_clause = mapRoupClauseNameToOmpparser(param);
+            if (construct_clause != OMPC_unknown) {
+                dir->addOpenMPClause(construct_clause);
+            }
+        }
+    }
+
     // Handle scan directive where ROUP stores inclusive/exclusive in parameter
     if (kind == OMPD_scan) {
         const char* param = roup_directive_parameter(roup_dir);

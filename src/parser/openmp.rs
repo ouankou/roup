@@ -675,6 +675,39 @@ fn parse_cancel_directive<'a>(
     }
 }
 
+// Custom parser for cancellation point directive
+fn parse_cancellation_point_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+    use crate::lexer::lex_identifier_token;
+
+    let input_trimmed = input.trim_start();
+
+    // Try to parse the construct type (parallel, sections, for, taskgroup)
+    if let Ok((rest, construct_type)) = lex_identifier_token(input_trimmed) {
+        // Parse any additional clauses (though cancellation_point typically doesn't have clauses)
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        Ok((
+            rest,
+            Directive {
+                name: std::borrow::Cow::Borrowed("cancellation point"),
+                parameter: Some(std::borrow::Cow::Owned(construct_type.to_string())),
+                clauses,
+                wait_data: None,
+                cache_data: None,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive::new(name, None, clauses)))
+    }
+}
+
 // Custom parser for groupprivate directive: groupprivate(list) [clauses] or bare groupprivate
 fn parse_groupprivate_directive<'a>(
     name: std::borrow::Cow<'a, str>,
@@ -731,6 +764,7 @@ const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
     "depobj",
     "scan",
     "cancel",
+    "cancellation point",
     "groupprivate",
 ];
 
@@ -746,6 +780,7 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("depobj", parse_depobj_directive);
     builder = builder.register_custom("scan", parse_scan_directive);
     builder = builder.register_custom("cancel", parse_cancel_directive);
+    builder = builder.register_custom("cancellation point", parse_cancellation_point_directive);
     builder = builder.register_custom("groupprivate", parse_groupprivate_directive);
 
     // Handle underscore variant of "target data"
