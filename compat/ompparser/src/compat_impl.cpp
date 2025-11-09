@@ -37,6 +37,7 @@ extern "C" {
     int32_t roup_directive_clause_count(const OmpDirective* directive);
     OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
     const char* roup_directive_name(const OmpDirective* directive);
+    const char* roup_directive_parameter(const OmpDirective* directive);
 
     // Iterator operations (updated API with out parameter)
     int32_t roup_clause_iterator_next(OmpClauseIterator* iter, const OmpClause** out);

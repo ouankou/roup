@@ -126,6 +126,7 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 #[repr(C)]
 pub struct OmpDirective {
     name: *const c_char,     // Directive name (e.g., "parallel")
+    parameter: *const c_char, // Optional parameter (e.g., "parallel" for "cancel parallel")
     clauses: Vec<OmpClause>, // Associated clauses
 }
 
@@ -239,6 +240,7 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
     // Convert to C-compatible format
     let c_directive = OmpDirective {
         name: allocate_c_string(directive.name.as_ref()),
+        parameter: directive.parameter.as_ref().map_or(ptr::null(), |p| allocate_c_string(p.as_ref())),
         clauses: directive
             .clauses
             .into_iter()
@@ -271,6 +273,11 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
         // Free the name string (was allocated with CString::into_raw)
         if !boxed.name.is_null() {
             drop(CString::from_raw(boxed.name as *mut c_char));
+        }
+
+        // Free the parameter string if present
+        if !boxed.parameter.is_null() {
+            drop(CString::from_raw(boxed.parameter as *mut c_char));
         }
 
         // Free clause data
@@ -359,6 +366,7 @@ pub extern "C" fn roup_parse_with_language(
     // Convert to C-compatible format
     let c_directive = OmpDirective {
         name: allocate_c_string(directive.name.as_ref()),
+        parameter: directive.parameter.as_ref().map_or(ptr::null(), |p| allocate_c_string(p.as_ref())),
         clauses: directive
             .clauses
             .into_iter()
@@ -573,6 +581,26 @@ pub extern "C" fn roup_directive_name(directive: *const OmpDirective) -> *const 
     unsafe {
         let dir = &*directive;
         dir.name
+    }
+}
+
+/// Get directive parameter as C string.
+///
+/// Returns NULL if directive is NULL or has no parameter.
+/// The returned string is valid until the directive is freed.
+///
+/// Examples of directives with parameters:
+/// - "cancel parallel" - parameter is "parallel"
+/// - "scan inclusive(a,b)" - parameter is "inclusive(a,b)"
+#[no_mangle]
+pub extern "C" fn roup_directive_parameter(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let dir = &*directive;
+        dir.parameter
     }
 }
 
