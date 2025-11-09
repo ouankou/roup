@@ -455,12 +455,16 @@ fn parse_reduction_clause<'a>(
         "ior" => ReductionOperator::FortIor,
         "ieor" => ReductionOperator::FortIeor,
         _ => {
-            // Unknown operator - could be user-defined
-            // Fall back to Parenthesized for now
-            return Err(nom::Err::Error(nom::error::Error::new(
-                input,
-                nom::error::ErrorKind::Tag,
-            )))
+            // Unknown operator - user-defined reduction identifier
+            // Fall back to default Parenthesized parsing to preserve the full clause content
+            // Use the original content (which includes modifier if present)
+            return Ok((
+                &input[end_idx + 1..],
+                super::Clause {
+                    name,
+                    kind: ClauseKind::Parenthesized(std::borrow::Cow::Owned(content.to_string())),
+                },
+            ));
         }
     };
 
