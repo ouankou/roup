@@ -302,6 +302,27 @@ static OpenMPTaskReductionClauseIdentifier mapTaskReductionIdentifier(const std:
     return OMPC_TASK_REDUCTION_IDENTIFIER_user;
 }
 
+// Helper to map defaultmap behavior string to enum
+static OpenMPDefaultmapClauseBehavior mapDefaultmapBehavior(const std::string& behavior) {
+    if (behavior == "alloc") return OMPC_DEFAULTMAP_BEHAVIOR_alloc;
+    if (behavior == "to") return OMPC_DEFAULTMAP_BEHAVIOR_to;
+    if (behavior == "from") return OMPC_DEFAULTMAP_BEHAVIOR_from;
+    if (behavior == "tofrom") return OMPC_DEFAULTMAP_BEHAVIOR_tofrom;
+    if (behavior == "firstprivate") return OMPC_DEFAULTMAP_BEHAVIOR_firstprivate;
+    if (behavior == "none") return OMPC_DEFAULTMAP_BEHAVIOR_none;
+    if (behavior == "default") return OMPC_DEFAULTMAP_BEHAVIOR_default;
+    return OMPC_DEFAULTMAP_BEHAVIOR_unspecified;
+}
+
+// Helper to map defaultmap category string to enum
+static OpenMPDefaultmapClauseCategory mapDefaultmapCategory(const std::string& category) {
+    if (category == "scalar") return OMPC_DEFAULTMAP_CATEGORY_scalar;
+    if (category == "aggregate") return OMPC_DEFAULTMAP_CATEGORY_aggregate;
+    if (category == "pointer") return OMPC_DEFAULTMAP_CATEGORY_pointer;
+    if (category == "allocatable") return OMPC_DEFAULTMAP_CATEGORY_allocatable;
+    return OMPC_DEFAULTMAP_CATEGORY_unspecified;
+}
+
 static OpenMPDirectiveKind mapRoupDirectiveNameToOmpparser(const char* name) {
     // Direct string-based mapping from directive name to ompparser kind
     // This bypasses ROUP's simplified directive kind system and uses the actual directive name
@@ -889,6 +910,7 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     OpenMPDependClauseModifier modifier = OMPC_DEPEND_MODIFIER_unspecified;
                     OpenMPDependClauseType type = OMPC_DEPENDENCE_TYPE_unknown;
                     std::string var_list;
+                    std::string iterator_content;
 
                     // Check if it starts with iterator
                     if (params.find("iterator") == 0) {
@@ -903,6 +925,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                                 else if (params[close_paren] == ')') paren_depth--;
                                 close_paren++;
                             }
+                            // Extract iterator content
+                            iterator_content = params.substr(open_paren + 1, close_paren - open_paren - 2);
+
                             // Now find the comma and dependence type after iterator
                             size_t comma_pos = params.find(',', close_paren);
                             if (comma_pos != std::string::npos) {
@@ -938,11 +963,98 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     }
 
                     omp_clause = dir->addOpenMPClause(OMPC_depend, modifier, type);
-                    if (omp_clause && !var_list.empty()) {
-                        std::vector<std::string> vars = parseCommaSeparatedList(var_list);
-                        for (const std::string& var : vars) {
-                            if (!var.empty()) {
-                                omp_clause->addLangExpr(var.c_str());
+                    if (omp_clause) {
+                        // Parse and set iterator content if present
+                        if (!iterator_content.empty() && modifier == OMPC_DEPEND_MODIFIER_iterator) {
+                            OpenMPDependClause* depend_clause = dynamic_cast<OpenMPDependClause*>(omp_clause);
+                            if (depend_clause) {
+                                // Parse iterator content: "int i=0:10" or "int i=0:10:2,char j=1:20"
+                                std::vector<std::vector<const char*>*> iterators;
+                                std::vector<std::string> iter_specs = parseCommaSeparatedList(iterator_content);
+
+                                for (const std::string& spec : iter_specs) {
+                                    // Parse each iterator: "int i=0:10:2"
+                                    std::vector<const char*>* iter_def = new std::vector<const char*>();
+
+                                    // Find '=' to separate declaration from range
+                                    size_t eq_pos = spec.find('=');
+                                    if (eq_pos != std::string::npos) {
+                                        std::string decl = spec.substr(0, eq_pos);
+                                        std::string range = spec.substr(eq_pos + 1);
+
+                                        // Parse declaration: "int i" or just "i"
+                                        size_t space_pos = decl.find_last_of(" \t");
+                                        std::string type_name;
+                                        std::string var_name;
+                                        if (space_pos != std::string::npos) {
+                                            type_name = decl.substr(0, space_pos);
+                                            var_name = decl.substr(space_pos + 1);
+                                            // Trim
+                                            size_t start = type_name.find_first_not_of(" \t");
+                                            size_t end = type_name.find_last_not_of(" \t");
+                                            if (start != std::string::npos) {
+                                                type_name = type_name.substr(start, end - start + 1);
+                                            }
+                                            start = var_name.find_first_not_of(" \t");
+                                            end = var_name.find_last_not_of(" \t");
+                                            if (start != std::string::npos) {
+                                                var_name = var_name.substr(start, end - start + 1);
+                                            }
+                                        } else {
+                                            type_name = "";
+                                            var_name = decl;
+                                            // Trim
+                                            size_t start = var_name.find_first_not_of(" \t");
+                                            size_t end = var_name.find_last_not_of(" \t");
+                                            if (start != std::string::npos) {
+                                                var_name = var_name.substr(start, end - start + 1);
+                                            }
+                                        }
+
+                                        // Parse range: "0:10" or "0:10:2"
+                                        std::vector<std::string> range_parts;
+                                        size_t pos = 0;
+                                        while (pos < range.length()) {
+                                            size_t colon = range.find(':', pos);
+                                            if (colon == std::string::npos) {
+                                                range_parts.push_back(range.substr(pos));
+                                                break;
+                                            } else {
+                                                range_parts.push_back(range.substr(pos, colon - pos));
+                                                pos = colon + 1;
+                                            }
+                                        }
+
+                                        // Trim range parts
+                                        for (std::string& part : range_parts) {
+                                            size_t start = part.find_first_not_of(" \t");
+                                            size_t end = part.find_last_not_of(" \t");
+                                            if (start != std::string::npos) {
+                                                part = part.substr(start, end - start + 1);
+                                            }
+                                        }
+
+                                        // Build iterator definition vector: [type, var, start, end, step]
+                                        iter_def->push_back(strdup(type_name.c_str()));
+                                        iter_def->push_back(strdup(var_name.c_str()));
+                                        iter_def->push_back(range_parts.size() > 0 ? strdup(range_parts[0].c_str()) : strdup(""));
+                                        iter_def->push_back(range_parts.size() > 1 ? strdup(range_parts[1].c_str()) : strdup(""));
+                                        iter_def->push_back(range_parts.size() > 2 ? strdup(range_parts[2].c_str()) : strdup(""));
+
+                                        iterators.push_back(iter_def);
+                                    }
+                                }
+
+                                depend_clause->setDependIteratorsDefinitionClass(&iterators);
+                            }
+                        }
+                        // Add variable list
+                        if (!var_list.empty()) {
+                            std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                            for (const std::string& var : vars) {
+                                if (!var.empty()) {
+                                    omp_clause->addLangExpr(var.c_str());
+                                }
                             }
                         }
                     }
@@ -1045,6 +1157,182 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                         for (const std::string& var : vars) {
                             if (!var.empty()) {
                                 omp_clause->addLangExpr(var.c_str());
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case OMPC_defaultmap: {
+                    // Format: defaultmap(behavior:category) or defaultmap(behavior)
+                    // Example: defaultmap(alloc:pointer)
+                    OpenMPDefaultmapClauseBehavior behavior = OMPC_DEFAULTMAP_BEHAVIOR_unspecified;
+                    OpenMPDefaultmapClauseCategory category = OMPC_DEFAULTMAP_CATEGORY_unspecified;
+
+                    size_t colon_pos = params.find(':');
+                    if (colon_pos != std::string::npos) {
+                        std::string behavior_str = params.substr(0, colon_pos);
+                        std::string category_str = params.substr(colon_pos + 1);
+                        // Trim whitespace
+                        size_t start = behavior_str.find_first_not_of(" \t");
+                        size_t end = behavior_str.find_last_not_of(" \t");
+                        if (start != std::string::npos) {
+                            behavior_str = behavior_str.substr(start, end - start + 1);
+                        }
+                        start = category_str.find_first_not_of(" \t");
+                        end = category_str.find_last_not_of(" \t");
+                        if (start != std::string::npos) {
+                            category_str = category_str.substr(start, end - start + 1);
+                        }
+                        behavior = mapDefaultmapBehavior(behavior_str);
+                        category = mapDefaultmapCategory(category_str);
+                    } else {
+                        behavior = mapDefaultmapBehavior(params);
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_defaultmap, behavior, category);
+                    break;
+                }
+
+                case OMPC_uses_allocators: {
+                    // Format: uses_allocators(allocator(traits), ...)
+                    // No enum parameters, just expression list
+                    omp_clause = dir->addOpenMPClause(OMPC_uses_allocators);
+                    if (omp_clause && !params.empty()) {
+                        std::vector<std::string> expr_list = parseCommaSeparatedList(params);
+                        for (const std::string& expr : expr_list) {
+                            if (!expr.empty()) {
+                                omp_clause->addLangExpr(expr.c_str());
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case OMPC_affinity: {
+                    // Format: affinity(iterator(...),list) or affinity(list)
+                    // Similar to depend with iterator modifier
+                    OpenMPAffinityClauseModifier modifier = OMPC_AFFINITY_MODIFIER_unspecified;
+                    std::string var_list;
+                    std::string iterator_content;
+
+                    // Check if it starts with iterator
+                    if (params.find("iterator") == 0) {
+                        modifier = OMPC_AFFINITY_MODIFIER_iterator;
+                        // Find the matching closing paren for iterator
+                        size_t open_paren = params.find('(');
+                        if (open_paren != std::string::npos) {
+                            int paren_depth = 1;
+                            size_t close_paren = open_paren + 1;
+                            while (close_paren < params.length() && paren_depth > 0) {
+                                if (params[close_paren] == '(') paren_depth++;
+                                else if (params[close_paren] == ')') paren_depth--;
+                                close_paren++;
+                            }
+                            // Extract iterator content
+                            iterator_content = params.substr(open_paren + 1, close_paren - open_paren - 2);
+
+                            // Now find the comma after iterator
+                            size_t comma_pos = params.find(',', close_paren);
+                            if (comma_pos != std::string::npos) {
+                                var_list = params.substr(comma_pos + 1);
+                            }
+                        }
+                    } else {
+                        // Simple affinity without iterator
+                        var_list = params;
+                    }
+
+                    omp_clause = dir->addOpenMPClause(OMPC_affinity, modifier);
+                    if (omp_clause) {
+                        // Parse and set iterator content if present
+                        if (!iterator_content.empty() && modifier == OMPC_AFFINITY_MODIFIER_iterator) {
+                            OpenMPAffinityClause* affinity_clause = dynamic_cast<OpenMPAffinityClause*>(omp_clause);
+                            if (affinity_clause) {
+                                // Parse iterator content: "int i=0:10" or "int i=0:10:2,char j=1:20"
+                                std::vector<std::string> iter_specs = parseCommaSeparatedList(iterator_content);
+
+                                for (const std::string& spec : iter_specs) {
+                                    // Parse each iterator: "int i=0:10:2"
+                                    std::vector<const char*>* iter_def = new std::vector<const char*>();
+
+                                    // Find '=' to separate declaration from range
+                                    size_t eq_pos = spec.find('=');
+                                    if (eq_pos != std::string::npos) {
+                                        std::string decl = spec.substr(0, eq_pos);
+                                        std::string range = spec.substr(eq_pos + 1);
+
+                                        // Parse declaration: "int i" or just "i"
+                                        size_t space_pos = decl.find_last_of(" \t");
+                                        std::string type_name;
+                                        std::string var_name;
+                                        if (space_pos != std::string::npos) {
+                                            type_name = decl.substr(0, space_pos);
+                                            var_name = decl.substr(space_pos + 1);
+                                            // Trim
+                                            size_t start = type_name.find_first_not_of(" \t");
+                                            size_t end = type_name.find_last_not_of(" \t");
+                                            if (start != std::string::npos) {
+                                                type_name = type_name.substr(start, end - start + 1);
+                                            }
+                                            start = var_name.find_first_not_of(" \t");
+                                            end = var_name.find_last_not_of(" \t");
+                                            if (start != std::string::npos) {
+                                                var_name = var_name.substr(start, end - start + 1);
+                                            }
+                                        } else {
+                                            type_name = "";
+                                            var_name = decl;
+                                            // Trim
+                                            size_t start = var_name.find_first_not_of(" \t");
+                                            size_t end = var_name.find_last_not_of(" \t");
+                                            if (start != std::string::npos) {
+                                                var_name = var_name.substr(start, end - start + 1);
+                                            }
+                                        }
+
+                                        // Parse range: "0:10" or "0:10:2"
+                                        std::vector<std::string> range_parts;
+                                        size_t pos = 0;
+                                        while (pos < range.length()) {
+                                            size_t colon = range.find(':', pos);
+                                            if (colon == std::string::npos) {
+                                                range_parts.push_back(range.substr(pos));
+                                                break;
+                                            } else {
+                                                range_parts.push_back(range.substr(pos, colon - pos));
+                                                pos = colon + 1;
+                                            }
+                                        }
+
+                                        // Trim range parts
+                                        for (std::string& part : range_parts) {
+                                            size_t start = part.find_first_not_of(" \t");
+                                            size_t end = part.find_last_not_of(" \t");
+                                            if (start != std::string::npos) {
+                                                part = part.substr(start, end - start + 1);
+                                            }
+                                        }
+
+                                        // Build iterator definition vector: [type, var, start, end, step]
+                                        iter_def->push_back(strdup(type_name.c_str()));
+                                        iter_def->push_back(strdup(var_name.c_str()));
+                                        iter_def->push_back(range_parts.size() > 0 ? strdup(range_parts[0].c_str()) : strdup(""));
+                                        iter_def->push_back(range_parts.size() > 1 ? strdup(range_parts[1].c_str()) : strdup(""));
+                                        iter_def->push_back(range_parts.size() > 2 ? strdup(range_parts[2].c_str()) : strdup(""));
+
+                                        affinity_clause->addIteratorsDefinitionClass(iter_def);
+                                    }
+                                }
+                            }
+                        }
+                        // Add variable list
+                        if (!var_list.empty()) {
+                            std::vector<std::string> vars = parseCommaSeparatedList(var_list);
+                            for (const std::string& var : vars) {
+                                if (!var.empty()) {
+                                    omp_clause->addLangExpr(var.c_str());
+                                }
                             }
                         }
                     }
