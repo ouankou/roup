@@ -72,7 +72,7 @@ static constexpr const char C_PRAGMA_PREFIX[] = "#pragma";    // C/C++ pragma pr
 static constexpr size_t FORTRAN_PREFIX_LEN = sizeof(FORTRAN_PREFIX) - 1;
 static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
 
-// setLang function with C++ linkage to match ompparser test expectations
+// setLang function with C++ linkage (ompparser.yy is C++ code)
 void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
 }
@@ -197,6 +197,11 @@ static OpenMPDirectiveKind mapDirectiveNameToKind(const char* name) {
     if (strcmp(name, "taskgroup") == 0) return OMPD_taskgroup;
     if (strcmp(name, "flush") == 0) return OMPD_flush;
     if (strcmp(name, "atomic") == 0) return OMPD_atomic;
+    // Atomic variants - ROUP might parse them as combined directive names
+    if (strcmp(name, "atomic read") == 0) return OMPD_atomic;
+    if (strcmp(name, "atomic write") == 0) return OMPD_atomic;
+    if (strcmp(name, "atomic update") == 0) return OMPD_atomic;
+    if (strcmp(name, "atomic capture") == 0) return OMPD_atomic;
     if (strcmp(name, "critical") == 0) return OMPD_critical;
     if (strcmp(name, "depobj") == 0) return OMPD_depobj;
     if (strcmp(name, "ordered") == 0) return OMPD_ordered;
@@ -395,6 +400,21 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     // Determine input format based on current language mode
     std::string input_str(input, input_len);
 
+    // Normalize comma-separated clauses to space-separated (OpenMP standard uses spaces)
+    // Replace commas outside of parentheses with spaces
+    {
+        int paren_depth = 0;
+        for (size_t i = 0; i < input_str.length(); i++) {
+            if (input_str[i] == '(') {
+                paren_depth++;
+            } else if (input_str[i] == ')') {
+                paren_depth--;
+            } else if (input_str[i] == ',' && paren_depth == 0) {
+                input_str[i] = ' ';
+            }
+        }
+    }
+
     // Handle different language pragmas
     if (current_lang == Lang_Fortran) {
         // Fortran uses !$omp prefix - add if missing (case-insensitive check)
@@ -467,9 +487,23 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         case OMPD_depobj:
             dir = new OpenMPDepobjDirective();
             break;
-        case OMPD_atomic:
+        case OMPD_atomic: {
             dir = new OpenMPAtomicDirective();
+            // If directive name contains operation type (read/write/update/capture),
+            // add it as a clause since ROUP parses "atomic read" as a combined name
+            if (directive_name) {
+                if (strstr(directive_name, "read")) {
+                    dir->addOpenMPClause(OMPC_read);
+                } else if (strstr(directive_name, "write")) {
+                    dir->addOpenMPClause(OMPC_write);
+                } else if (strstr(directive_name, "update")) {
+                    dir->addOpenMPClause(OMPC_update);
+                } else if (strstr(directive_name, "capture")) {
+                    dir->addOpenMPClause(OMPC_capture);
+                }
+            }
             break;
+        }
         case OMPD_ordered:
             dir = new OpenMPOrderedDirective();
             break;
