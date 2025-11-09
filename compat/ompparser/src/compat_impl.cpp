@@ -395,18 +395,47 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 }
                 case 19: {  // depend - requires special handling for dependency type
                     // ROUP includes depend type in first variable like "inout:m"
-                    // We need to extract type and strip it from variable
+                    // Format: "inout:m, n" OR "iterator(...),inout:m, n"
                     OmpStringList* vars = roup_clause_variables(roup_clause);
 
                     // Default to unknown type
                     int depend_type = 7; // OMPC_DEPENDENCE_TYPE_unknown
+                    bool has_iterator = false;
+                    std::string iterator_expr;
 
                     if (vars && roup_string_list_len(vars) > 0) {
                         const char* first_var = roup_string_list_get(vars, 0);
                         if (first_var) {
                             std::string first_str(first_var);
-                            size_t colon_pos = first_str.find(':');
 
+                            // Check if this starts with iterator(...) modifier
+                            if (first_str.find("iterator(") == 0 || first_str.find("iterator (") == 0) {
+                                has_iterator = true;
+                                // Find the matching closing paren for iterator
+                                size_t iter_start = first_str.find('(');
+                                int depth = 1;
+                                size_t iter_end = iter_start + 1;
+                                while (iter_end < first_str.length() && depth > 0) {
+                                    if (first_str[iter_end] == '(') depth++;
+                                    else if (first_str[iter_end] == ')') depth--;
+                                    iter_end++;
+                                }
+                                // iterator_expr includes "iterator(...)"
+                                iterator_expr = first_str.substr(0, iter_end);
+
+                                // The rest after iterator(...) should be ",type:vars"
+                                if (iter_end < first_str.length()) {
+                                    first_str = first_str.substr(iter_end);
+                                    // Skip optional comma and whitespace
+                                    size_t type_start = first_str.find_first_not_of(", \t");
+                                    if (type_start != std::string::npos) {
+                                        first_str = first_str.substr(type_start);
+                                    }
+                                }
+                            }
+
+                            // Now extract dependency type from "type:vars"
+                            size_t colon_pos = first_str.find(':');
                             if (colon_pos != std::string::npos) {
                                 std::string type_str = first_str.substr(0, colon_pos);
 
@@ -422,27 +451,37 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                         }
                     }
 
-                    // Create depend clause with modifier=unspecified(2) and parsed type
+                    // Create depend clause with modifier (iterator=0, unspecified=2)
+                    int modifier = has_iterator ? 0 : 2;  // OMPC_DEPEND_MODIFIER_iterator or unspecified
                     omp_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
-                        2,  // OMPC_DEPEND_MODIFIER_unspecified
+                        modifier,
                         depend_type);
 
-                    // Add variables, stripping type prefix from first variable
+                    // Add iterator expression if present
+                    if (omp_clause && has_iterator && !iterator_expr.empty()) {
+                        omp_clause->addLangExpr(iterator_expr.c_str());
+                    }
+
+                    // Add variables (skip first if it's iterator, strip type from appropriate var)
                     if (omp_clause && vars) {
                         int32_t var_count = roup_string_list_len(vars);
-                        for (int32_t i = 0; i < var_count; ++i) {
+                        int start_idx = has_iterator ? 1 : 0;  // Skip first var if it's iterator
+
+                        for (int32_t i = start_idx; i < var_count; ++i) {
                             const char* var = roup_string_list_get(vars, i);
                             if (var) {
                                 std::string var_str(var);
-                                size_t colon_pos = var_str.find(':');
 
-                                // For first variable, strip type prefix
-                                if (i == 0 && colon_pos != std::string::npos) {
-                                    var_str = var_str.substr(colon_pos + 1);
-                                    // Trim leading whitespace
-                                    size_t start = var_str.find_first_not_of(" \t");
-                                    if (start != std::string::npos) {
-                                        var_str = var_str.substr(start);
+                                // For first variable after iterator (or first var if no iterator)
+                                if (i == start_idx) {
+                                    // Strip type prefix "in:", "inout:", etc.
+                                    size_t colon_pos = var_str.find(':');
+                                    if (colon_pos != std::string::npos) {
+                                        var_str = var_str.substr(colon_pos + 1);
+                                        size_t start = var_str.find_first_not_of(" \t");
+                                        if (start != std::string::npos) {
+                                            var_str = var_str.substr(start);
+                                        }
                                     }
                                 }
 

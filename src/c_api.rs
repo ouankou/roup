@@ -1155,6 +1155,41 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     OmpClause { kind, data }
 }
 
+/// Helper to split on commas while respecting nested parens/brackets
+fn split_respecting_parens(input: &str) -> Vec<String> {
+    let mut items = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0;
+
+    for ch in input.chars() {
+        match ch {
+            '(' | '[' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' | ']' => {
+                depth -= 1;
+                current.push(ch);
+            }
+            ',' if depth == 0 => {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    items.push(trimmed.to_string());
+                }
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        items.push(trimmed.to_string());
+    }
+
+    items
+}
+
 /// Extract variables from clause kind as OmpStringList
 fn extract_variables_from_clause(clause: &Clause) -> *mut OmpStringList {
     use crate::parser::ClauseKind;
@@ -1170,20 +1205,18 @@ fn extract_variables_from_clause(clause: &Clause) -> *mut OmpStringList {
             Box::into_raw(Box::new(OmpStringList { items }))
         }
         ClauseKind::Parenthesized(vars_str) => {
-            // Parse comma-separated variable list from parenthesized string
+            // Parse comma-separated list respecting nested parens/brackets
+            let parsed_vars = split_respecting_parens(vars_str);
+            if parsed_vars.is_empty() {
+                return ptr::null_mut();
+            }
+
             let mut items = Vec::new();
-            for var in vars_str.split(',') {
-                let trimmed = var.trim();
-                if !trimmed.is_empty() {
-                    let c_string = CString::new(trimmed).unwrap();
-                    items.push(c_string.into_raw() as *const c_char);
-                }
+            for var in parsed_vars {
+                let c_string = CString::new(var).unwrap();
+                items.push(c_string.into_raw() as *const c_char);
             }
-            if items.is_empty() {
-                ptr::null_mut()
-            } else {
-                Box::into_raw(Box::new(OmpStringList { items }))
-            }
+            Box::into_raw(Box::new(OmpStringList { items }))
         }
         ClauseKind::ReductionClause { variables, .. } => {
             // Reduction clause also has variables
