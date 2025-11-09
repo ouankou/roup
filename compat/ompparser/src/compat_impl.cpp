@@ -979,6 +979,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                             }
                             type = mapDependType(type_str);
                             var_list = params.substr(colon_pos + 1);
+                        } else {
+                            // No colon - must be source or similar
+                            type = mapDependType(params);
                         }
                     }
 
