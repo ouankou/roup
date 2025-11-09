@@ -348,6 +348,37 @@ pub fn parse_schedule_clause(
     })
 }
 
+/// Parse a dist_schedule clause: dist_schedule(kind[, chunk_size])
+pub fn parse_dist_schedule_clause(
+    content: &str,
+    config: &ParserConfig,
+) -> Result<ClauseData, ConversionError> {
+    // Parse kind and optional chunk size (comma-separated)
+    let parts: Vec<&str> = content.split(',').map(|s| s.trim()).collect();
+
+    let kind = match parts.first() {
+        Some(&"static") => ScheduleKind::Static,
+        Some(&"dynamic") => ScheduleKind::Dynamic,
+        Some(&"guided") => ScheduleKind::Guided,
+        Some(&"auto") => ScheduleKind::Auto,
+        Some(&"runtime") => ScheduleKind::Runtime,
+        Some(s) => {
+            return Err(ConversionError::InvalidClauseSyntax(format!(
+                "Unknown dist_schedule kind: {s}"
+            )))
+        }
+        None => {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "dist_schedule clause requires a kind".to_string(),
+            ))
+        }
+    };
+
+    let chunk_size = parts.get(1).map(|s| Expression::new(*s, config));
+
+    Ok(ClauseData::DistSchedule { kind, chunk_size })
+}
+
 /// Parse a map clause
 ///
 /// Format: `map([[mapper(mapper-identifier),] map-type:] list)`
@@ -744,6 +775,250 @@ pub fn parse_clause_data<'a>(
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
                     "proc_bind clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // allocator(allocator-handle)
+        "allocator" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Allocator {
+                    allocator: Identifier::new(content.trim()),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "allocator requires identifier".to_string(),
+                ))
+            }
+        }
+
+        // allocate([allocator:] list)
+        "allocate" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                // Check for allocator: list format
+                if let Some((alloc_str, items_str)) = lang::split_once_top_level(content, ':') {
+                    let allocator = Some(Identifier::new(alloc_str.trim()));
+                    let items = parse_identifier_list(items_str.trim(), config)?;
+                    Ok(ClauseData::Allocate { allocator, items })
+                } else {
+                    // Just a list without allocator
+                    let items = parse_identifier_list(content.trim(), config)?;
+                    Ok(ClauseData::Allocate {
+                        allocator: None,
+                        items,
+                    })
+                }
+            } else {
+                Ok(ClauseData::Allocate {
+                    allocator: None,
+                    items: vec![],
+                })
+            }
+        }
+
+        // device(expression)
+        "device" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Device {
+                    device_num: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "device requires expression".to_string(),
+                ))
+            }
+        }
+
+        // safelen(length)
+        "safelen" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Safelen {
+                    length: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "safelen requires expression".to_string(),
+                ))
+            }
+        }
+
+        // simdlen(length)
+        "simdlen" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Simdlen {
+                    length: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "simdlen requires expression".to_string(),
+                ))
+            }
+        }
+
+        // num_teams(expression)
+        "num_teams" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::NumTeams {
+                    num: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "num_teams requires expression".to_string(),
+                ))
+            }
+        }
+
+        // thread_limit(expression)
+        "thread_limit" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::ThreadLimit {
+                    limit: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "thread_limit requires expression".to_string(),
+                ))
+            }
+        }
+
+        // priority(expression)
+        "priority" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Priority {
+                    priority: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "priority requires expression".to_string(),
+                ))
+            }
+        }
+
+        // grainsize(expression)
+        "grainsize" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Grainsize {
+                    grain: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "grainsize requires expression".to_string(),
+                ))
+            }
+        }
+
+        // num_tasks(expression)
+        "num_tasks" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::NumTasks {
+                    num: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "num_tasks requires expression".to_string(),
+                ))
+            }
+        }
+
+        // filter(thread-num)
+        "filter" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                Ok(ClauseData::Filter {
+                    thread_num: Expression::new(content.trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "filter requires expression".to_string(),
+                ))
+            }
+        }
+
+        // copyprivate(list)
+        "copyprivate" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::Copyprivate { items })
+            } else {
+                Ok(ClauseData::Copyprivate { items: vec![] })
+            }
+        }
+
+        // use_device_ptr(list)
+        "use_device_ptr" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::UseDevicePtr { items })
+            } else {
+                Ok(ClauseData::UseDevicePtr { items: vec![] })
+            }
+        }
+
+        // use_device_addr(list)
+        "use_device_addr" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::UseDeviceAddr { items })
+            } else {
+                Ok(ClauseData::UseDeviceAddr { items: vec![] })
+            }
+        }
+
+        // is_device_ptr(list)
+        "is_device_ptr" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::IsDevicePtr { items })
+            } else {
+                Ok(ClauseData::IsDevicePtr { items: vec![] })
+            }
+        }
+
+        // has_device_addr(list)
+        "has_device_addr" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let items = parse_identifier_list(content, config)?;
+                Ok(ClauseData::HasDeviceAddr { items })
+            } else {
+                Ok(ClauseData::HasDeviceAddr { items: vec![] })
+            }
+        }
+
+        // affinity([modifier:] list)
+        "affinity" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                // For now, parse as simple list - modifiers will be added later
+                let items = parse_identifier_list(content.trim(), config)?;
+                Ok(ClauseData::Affinity { items })
+            } else {
+                Ok(ClauseData::Affinity { items: vec![] })
+            }
+        }
+
+        // dist_schedule(kind[, chunk_size])
+        "dist_schedule" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                parse_dist_schedule_clause(content, config)
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "dist_schedule requires parenthesized content".to_string(),
                 ))
             }
         }

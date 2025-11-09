@@ -17,6 +17,13 @@
 #include <roup_constants.h>
 
 // ============================================================================
+// Global Variables (for ompparser compatibility)
+// ============================================================================
+
+// Define normalize_clauses_global (required by ompparser library)
+bool normalize_clauses_global = true;
+
+// ============================================================================
 // ROUP C API Forward Declarations
 // ============================================================================
 
