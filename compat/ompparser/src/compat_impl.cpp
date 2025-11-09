@@ -408,6 +408,17 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             int32_t roup_kind_clause = roup_clause_kind(roup_clause);
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
+            // Skip clauses that need special va_args parameters - they require parsing
+            // OMPC_reduction, OMPC_schedule, OMPC_proc_bind, OMPC_lastprivate with modifiers, etc.
+            // For now, only handle simple clauses that just take a list of variables/expressions
+            if (clause_kind == OMPC_reduction ||
+                clause_kind == OMPC_schedule ||
+                clause_kind == OMPC_proc_bind ||
+                clause_kind == OMPC_unknown) {
+                // Skip complex clauses for now
+                continue;
+            }
+
             // Create the clause (without variables) - addOpenMPClause just creates empty clause
             OpenMPClause* new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
 
