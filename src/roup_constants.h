@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 12 clauses) + OpenACC (18 directives + 45 clauses) = 0x377190AEB0C04C97
+// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 27 clauses) + OpenACC (18 directives + 45 clauses) = 0x076FAFBF81C982AE
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x377190AEB0C04C97
+#define ROUP_CONSTANTS_CHECKSUM 0x076FAFBF81C982AE
 
 // ============================================================================
 // Language Format Constants
@@ -79,6 +79,21 @@ extern "C" {
 #define ROUP_CLAUSE_ORDERED         9
 #define ROUP_CLAUSE_NOWAIT          10
 #define ROUP_CLAUSE_DEFAULT         11
+#define ROUP_CLAUSE_SEQ_CST         12
+#define ROUP_CLAUSE_RELEASE         13
+#define ROUP_CLAUSE_ACQUIRE         14
+#define ROUP_CLAUSE_ACQ_REL         15
+#define ROUP_CLAUSE_RELAXED         16
+#define ROUP_CLAUSE_READ            17
+#define ROUP_CLAUSE_WRITE           18
+#define ROUP_CLAUSE_UPDATE          19
+#define ROUP_CLAUSE_CAPTURE         20
+#define ROUP_CLAUSE_COMPARE         21
+#define ROUP_CLAUSE_HINT            22
+#define ROUP_CLAUSE_ALLOCATE        23
+#define ROUP_CLAUSE_ALLOCATOR       24
+#define ROUP_CLAUSE_ALIGN           25
+#define ROUP_CLAUSE_PROC_BIND       26
 #define ROUP_CLAUSE_UNKNOWN      999
 
 

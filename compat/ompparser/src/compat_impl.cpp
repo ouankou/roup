@@ -125,6 +125,24 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
         case ROUP_CLAUSE_ORDERED:       return OMPC_ordered;
         case ROUP_CLAUSE_NOWAIT:        return OMPC_nowait;
         case ROUP_CLAUSE_DEFAULT:       return OMPC_default;
+        // Memory order clauses (values from c_api.rs)
+        case 12:                        return OMPC_seq_cst;
+        case 13:                        return OMPC_release;
+        case 14:                        return OMPC_acquire;
+        case 15:                        return OMPC_acq_rel;
+        case 16:                        return OMPC_relaxed;
+        // Atomic operation clauses
+        case 17:                        return OMPC_read;
+        case 18:                        return OMPC_write;
+        case 19:                        return OMPC_update;
+        case 20:                        return OMPC_capture;
+        case 21:                        return OMPC_compare;
+        // Other common clauses
+        case 22:                        return OMPC_hint;
+        case 23:                        return OMPC_allocate;
+        case 24:                        return OMPC_allocator;
+        case 25:                        return OMPC_align;
+        case 26:                        return OMPC_proc_bind;
         default:                        return OMPC_unknown;
     }
 }

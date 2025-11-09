@@ -981,6 +981,24 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "collapse" => (8, ClauseData { default: 0 }),
         "ordered" => (9, ClauseData { default: 0 }),
         "nowait" => (10, ClauseData { default: 0 }),
+        // Memory order clauses (for atomic)
+        "seq_cst" => (12, ClauseData { default: 0 }),
+        "release" => (13, ClauseData { default: 0 }),
+        "acquire" => (14, ClauseData { default: 0 }),
+        "acq_rel" => (15, ClauseData { default: 0 }),
+        "relaxed" => (16, ClauseData { default: 0 }),
+        // Atomic operation clauses
+        "read" => (17, ClauseData { default: 0 }),
+        "write" => (18, ClauseData { default: 0 }),
+        "update" => (19, ClauseData { default: 0 }),
+        "capture" => (20, ClauseData { default: 0 }),
+        "compare" => (21, ClauseData { default: 0 }),
+        // Other common clauses
+        "hint" => (22, ClauseData { default: 0 }),
+        "allocate" => (23, ClauseData { default: 0 }),
+        "allocator" => (24, ClauseData { default: 0 }),
+        "align" => (25, ClauseData { default: 0 }),
+        "proc_bind" => (26, ClauseData { default: 0 }),
         "default" => {
             let default_kind = parse_default_kind(clause);
             (
