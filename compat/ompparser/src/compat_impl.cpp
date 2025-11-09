@@ -36,6 +36,7 @@ extern "C" {
 
     // Directive queries
     int32_t roup_directive_kind(const OmpDirective* directive);
+    const char* roup_directive_name(const OmpDirective* directive);
     int32_t roup_directive_clause_count(const OmpDirective* directive);
     OmpClauseIterator* roup_directive_clauses_iter(const OmpDirective* directive);
 
@@ -261,12 +262,33 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         return nullptr;
     }
 
-    // Get directive kind from ROUP
+    // Get directive kind and name from ROUP
     int32_t roup_kind = roup_directive_kind(roup_dir);
+    const char* roup_name = roup_directive_name(roup_dir);
     OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
 
     // Create ompparser-compatible directive
-    OpenMPDirective* dir = new OpenMPDirective(kind, current_lang, 0, 0);
+    // Use OpenMPAtomicDirective for atomic directives
+    OpenMPDirective* dir = nullptr;
+    if (kind == OMPD_atomic) {
+        OpenMPAtomicDirective* atomic_dir = new OpenMPAtomicDirective();
+        atomic_dir->setBaseLang(current_lang);
+        dir = atomic_dir;
+
+        // Add atomic operation clause if present (read/write/update/capture)
+        std::string name_str(roup_name);
+        if (name_str.find("read") != std::string::npos) {
+            atomic_dir->addOpenMPClause(OMPC_read);
+        } else if (name_str.find("write") != std::string::npos) {
+            atomic_dir->addOpenMPClause(OMPC_write);
+        } else if (name_str.find("capture") != std::string::npos) {
+            atomic_dir->addOpenMPClause(OMPC_capture);
+        } else if (name_str.find("update") != std::string::npos) {
+            atomic_dir->addOpenMPClause(OMPC_update);
+        }
+    } else {
+        dir = new OpenMPDirective(kind, current_lang, 0, 0);
+    }
 
     // Convert clauses using ompparser's addOpenMPClause method
     OmpClauseIterator* iter = roup_directive_clauses_iter(roup_dir);

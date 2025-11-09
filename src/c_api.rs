@@ -1233,6 +1233,11 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
             "taskgroup" => 58,
             "flush" => 59,
             "atomic" => 60,
+            "atomic read" => 60,  // ompparser uses OMPD_atomic + OMPC_read clause
+            "atomic write" => 60,  // ompparser uses OMPD_atomic + OMPC_write clause
+            "atomic update" => 60,  // ompparser uses OMPD_atomic + OMPC_update clause
+            "atomic capture" => 60,  // ompparser uses OMPD_atomic + OMPC_capture clause
+            "atomic compare capture" => 60,  // ompparser uses OMPD_atomic + clauses
             "critical" => 61,
             "depobj" => 62,
             "ordered" => 63,
