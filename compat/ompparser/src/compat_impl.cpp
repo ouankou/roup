@@ -58,10 +58,19 @@ static constexpr const char C_PRAGMA_PREFIX[] = "#pragma";    // C/C++ pragma pr
 static constexpr size_t FORTRAN_PREFIX_LEN = sizeof(FORTRAN_PREFIX) - 1;
 static constexpr size_t C_PRAGMA_PREFIX_LEN = sizeof(C_PRAGMA_PREFIX) - 1;
 
+// Provide setLang with both C and C++ linkage to match original ompparser
+// The header declares it as extern "C", but the original library exports C++ mangled symbol
 extern "C" void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
 }
 
+// Create an alias with C++ mangled name for compatibility with test binaries
+// that were built against the original ompparser
+extern "C" void _Z7setLang14OpenMPBaseLang(OpenMPBaseLang lang) __attribute__((alias("setLang")));
+
+extern "C" void setNormalizeClauses(bool normalize) {
+    normalize_clauses_global = normalize;
+}
 // ============================================================================
 // Helper Functions
 // ============================================================================
