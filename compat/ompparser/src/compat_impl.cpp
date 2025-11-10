@@ -279,6 +279,10 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
     // Map ROUP DirectiveKind enum (src/ir/directive.rs) to ompparser OpenMPDirectiveKind
     // Each directive has a unique enum value - NO MORE COLLAPSING!
     switch (roup_kind) {
+        // Special case: -1 means parse_directive_kind couldn't map the name to an enum
+        // This happens for generic "end" directives in Fortran
+        case -1:  return OMPD_end;
+
         // Parallel constructs
         case 0:   return OMPD_parallel;
         case 1:   return OMPD_parallel_for;
