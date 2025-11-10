@@ -85,24 +85,166 @@ pub const ROUP_LANG_FORTRAN_FREE: i32 = 1;
 pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 
 // ============================================================================
+// Directive and Clause Kind Enums
+// ============================================================================
+
+/// OpenMP directive kinds for C API
+///
+/// These enums replace raw integer codes to provide type safety and clarity.
+/// The integer discriminants are preserved for C API compatibility.
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DirectiveKindC {
+    /// Parallel directives: parallel, parallel for, parallel do, parallel for simd, parallel sections
+    Parallel = 0,
+    /// For/Do directives: for, do, for simd, do simd
+    For = 1,
+    /// Sections directive
+    Sections = 2,
+    /// Single directive
+    Single = 3,
+    /// Task directive
+    Task = 4,
+    /// Master directive
+    Master = 5,
+    /// Critical directive
+    Critical = 6,
+    /// Barrier directive
+    Barrier = 7,
+    /// Taskwait directive
+    Taskwait = 8,
+    /// Taskgroup directive
+    Taskgroup = 9,
+    /// Atomic directive
+    Atomic = 10,
+    /// Flush directive
+    Flush = 11,
+    /// Ordered directive
+    Ordered = 12,
+    /// Target directives: target, target teams, target parallel, etc.
+    Target = 13,
+    /// Teams directives: teams, teams distribute, etc.
+    Teams = 14,
+    /// Distribute directives: distribute, distribute parallel for, etc.
+    Distribute = 15,
+    /// Metadirective
+    Metadirective = 16,
+    /// Unknown directive
+    Unknown = 999,
+}
+
+/// OpenMP clause kinds for C API
+///
+/// These enums replace raw integer codes to provide type safety and clarity.
+/// The integer discriminants are preserved for C API compatibility.
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClauseKindC {
+    /// num_threads clause
+    NumThreads = 0,
+    /// if clause
+    If = 1,
+    /// private clause
+    Private = 2,
+    /// shared clause
+    Shared = 3,
+    /// firstprivate clause
+    Firstprivate = 4,
+    /// lastprivate clause
+    Lastprivate = 5,
+    /// reduction clause
+    Reduction = 6,
+    /// schedule clause
+    Schedule = 7,
+    /// collapse clause
+    Collapse = 8,
+    /// ordered clause
+    OrderedClause = 9,
+    /// nowait clause
+    Nowait = 10,
+    /// default clause
+    Default = 11,
+    /// Unknown clause
+    Unknown = 999,
+}
+
+/// Reduction operator kinds for C API
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReductionOperatorC {
+    /// Addition (+)
+    Plus = 0,
+    /// Subtraction (-)
+    Minus = 1,
+    /// Multiplication (*)
+    Times = 2,
+    /// Bitwise AND (&)
+    BitwiseAnd = 3,
+    /// Bitwise OR (|)
+    BitwiseOr = 4,
+    /// Bitwise XOR (^)
+    BitwiseXor = 5,
+    /// Logical AND (&&)
+    LogicalAnd = 6,
+    /// Logical OR (||)
+    LogicalOr = 7,
+    /// Minimum (min)
+    Min = 8,
+    /// Maximum (max)
+    Max = 9,
+}
+
+/// Schedule kinds for C API
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScheduleKindC {
+    /// Static schedule
+    Static = 0,
+    /// Dynamic schedule
+    Dynamic = 1,
+    /// Guided schedule
+    Guided = 2,
+    /// Auto schedule
+    Auto = 3,
+    /// Runtime schedule
+    Runtime = 4,
+}
+
+/// Default clause kinds for C API
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultKindC {
+    /// Shared default
+    Shared = 0,
+    /// None default
+    None = 1,
+}
+
+// ============================================================================
 // Constants Documentation
 // ============================================================================
 //
-// SINGLE SOURCE OF TRUTH: This file defines all directive and clause kind codes.
+// SINGLE SOURCE OF TRUTH: This file defines all directive and clause kinds via enums.
 //
-// The constants are defined in:
-// - directive_name_to_kind() function (directive codes 0-16)
-// - convert_clause() function (clause codes 0-11)
+// The type-safe enums are defined above:
+// - DirectiveKindC, ClauseKindC, ReductionOperatorC, ScheduleKindC, DefaultKindC
+// - Each enum uses #[repr(i32)] for C API compatibility
+// - Enum variants have explicit discriminant values (e.g., Parallel = 0)
+//
+// String-to-enum mappings are in:
+// - directive_name_to_kind() function - returns DirectiveKindC
+// - convert_clause() function - returns ClauseKindC
 //
 // For C/C++ usage:
-// - build.rs auto-generates src/roup_constants.h with #define macros
+// - build.rs auto-generates src/roup_constants.h with #define macros from the enums
 // - The header provides compile-time constants for switch/case statements
-// - Never modify roup_constants.h directly - edit this file instead
+// - Never modify roup_constants.h directly - it's regenerated from the enums
 //
 // Maintenance: When adding new directives/clauses:
-// 1. Update directive_name_to_kind() or convert_clause() in this file
-// 2. Run `cargo build` to regenerate roup_constants.h
-// 3. The header will automatically include your new constants
+// 1. Add new enum variant to DirectiveKindC or ClauseKindC with explicit discriminant
+// 2. Update directive_name_to_kind() or convert_clause() to return the new variant
+// 3. Run `cargo build` to regenerate roup_constants.h
+// 4. The header will automatically include your new constants
 
 // ============================================================================
 // C-Compatible Types
@@ -554,7 +696,7 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
     // Safety: Caller guarantees valid pointer from roup_parse
     unsafe {
         let dir = &*directive;
-        directive_name_to_kind(dir.name)
+        directive_name_to_kind(dir.name) as i32
     }
 }
 
@@ -881,17 +1023,10 @@ fn allocate_c_string(s: &str) -> *const c_char {
 
 /// Convert Rust Clause to C-compatible OmpClause.
 ///
-/// Maps clause names to integer kind codes (C doesn't have Rust enums).
-/// Each clause type gets a unique ID and appropriate data representation.
+/// Maps clause names to ClauseKindC enum values, which are then converted to integers for C API compatibility.
+/// Each clause type gets a unique enum variant and appropriate data representation.
 ///
-/// ## Clause Kind Mapping:
-/// - 0 = num_threads    - 6 = reduction
-/// - 1 = if             - 7 = schedule
-/// - 2 = private        - 8 = collapse
-/// - 3 = shared         - 9 = ordered
-/// - 4 = firstprivate   - 10 = nowait
-/// - 5 = lastprivate    - 11 = default
-/// - 999 = unknown
+/// Returns ClauseKindC::Unknown for unrecognized clauses.
 fn convert_clause(clause: &Clause) -> OmpClause {
     // Normalize clause name to lowercase for case-insensitive matching
     // (Fortran clauses are uppercase, C clauses are lowercase)
@@ -901,28 +1036,28 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     let normalized_name = clause.name.to_ascii_lowercase();
 
     let (kind, data) = match normalized_name.as_str() {
-        "num_threads" => (0, ClauseData { default: 0 }),
-        "if" => (1, ClauseData { default: 0 }),
+        "num_threads" => (ClauseKindC::NumThreads, ClauseData { default: 0 }),
+        "if" => (ClauseKindC::If, ClauseData { default: 0 }),
         "private" => (
-            2,
+            ClauseKindC::Private,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
         "shared" => (
-            3,
+            ClauseKindC::Shared,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
         "firstprivate" => (
-            4,
+            ClauseKindC::Firstprivate,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
         "lastprivate" => (
-            5,
+            ClauseKindC::Lastprivate,
             ClauseData {
                 variables: ptr::null_mut(),
             },
@@ -930,137 +1065,119 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "reduction" => {
             let operator = parse_reduction_operator(clause);
             (
-                6,
+                ClauseKindC::Reduction,
                 ClauseData {
-                    reduction: ManuallyDrop::new(ReductionData { operator }),
+                    reduction: ManuallyDrop::new(ReductionData { operator: operator as i32 }),
                 },
             )
         }
         "schedule" => {
             let schedule_kind = parse_schedule_kind(clause);
             (
-                7,
+                ClauseKindC::Schedule,
                 ClauseData {
                     schedule: ManuallyDrop::new(ScheduleData {
-                        kind: schedule_kind,
+                        kind: schedule_kind as i32,
                     }),
                 },
             )
         }
-        "collapse" => (8, ClauseData { default: 0 }),
-        "ordered" => (9, ClauseData { default: 0 }),
-        "nowait" => (10, ClauseData { default: 0 }),
+        "collapse" => (ClauseKindC::Collapse, ClauseData { default: 0 }),
+        "ordered" => (ClauseKindC::OrderedClause, ClauseData { default: 0 }),
+        "nowait" => (ClauseKindC::Nowait, ClauseData { default: 0 }),
         "default" => {
             let default_kind = parse_default_kind(clause);
             (
-                11,
+                ClauseKindC::Default,
                 ClauseData {
-                    default: default_kind,
+                    default: default_kind as i32,
                 },
             )
         }
-        _ => (999, ClauseData { default: 0 }), // Unknown
+        _ => (ClauseKindC::Unknown, ClauseData { default: 0 }), // Unknown
     };
 
-    OmpClause { kind, data }
+    OmpClause { kind: kind as i32, data }
 }
 
 /// Parse reduction operator from clause arguments.
 ///
 /// Extracts the operator from reduction clause like "reduction(+: sum)".
-/// Returns integer code for the operator type.
-///
-/// ## Operator Codes:
-/// - 0 = +  (addition)      - 5 = ^  (bitwise XOR)
-/// - 1 = -  (subtraction)   - 6 = && (logical AND)
-/// - 2 = *  (multiplication) - 7 = || (logical OR)
-/// - 3 = &  (bitwise AND)   - 8 = min
-/// - 4 = |  (bitwise OR)    - 9 = max
-fn parse_reduction_operator(clause: &Clause) -> i32 {
+/// Returns ReductionOperatorC enum value.
+fn parse_reduction_operator(clause: &Clause) -> ReductionOperatorC {
     // Look for operator in clause kind
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
         // Operators (+, -, *, etc.) are ASCII symbols - no case conversion needed
         if args.contains('+') && !args.contains("++") {
-            return 0; // Plus
+            return ReductionOperatorC::Plus;
         } else if args.contains('-') && !args.contains("--") {
-            return 1; // Minus
+            return ReductionOperatorC::Minus;
         } else if args.contains('*') {
-            return 2; // Times
+            return ReductionOperatorC::Times;
         } else if args.contains('&') && !args.contains("&&") {
-            return 3; // BitwiseAnd
+            return ReductionOperatorC::BitwiseAnd;
         } else if args.contains('|') && !args.contains("||") {
-            return 4; // BitwiseOr
+            return ReductionOperatorC::BitwiseOr;
         } else if args.contains('^') {
-            return 5; // BitwiseXor
+            return ReductionOperatorC::BitwiseXor;
         } else if args.contains("&&") {
-            return 6; // LogicalAnd
+            return ReductionOperatorC::LogicalAnd;
         } else if args.contains("||") {
-            return 7; // LogicalOr
+            return ReductionOperatorC::LogicalOr;
         }
 
         // For text keywords (min, max), normalize once for case-insensitive comparison
         let args_lower = args.to_ascii_lowercase();
         if args_lower.contains("min") {
-            return 8; // Min
+            return ReductionOperatorC::Min;
         } else if args_lower.contains("max") {
-            return 9; // Max
+            return ReductionOperatorC::Max;
         }
     }
-    0 // Default to plus
+    ReductionOperatorC::Plus // Default to plus
 }
 
 /// Parse schedule kind from clause arguments.
 ///
 /// Extracts schedule type from clause like "schedule(dynamic, 4)".
-/// Returns integer code for the schedule policy.
-///
-/// ## Schedule Codes:
-/// - 0 = static   (default, divide iterations evenly)
-/// - 1 = dynamic  (distribute at runtime)
-/// - 2 = guided   (decreasing chunk sizes)
-/// - 3 = auto     (compiler decides)
-/// - 4 = runtime  (OMP_SCHEDULE environment variable)
-fn parse_schedule_kind(clause: &Clause) -> i32 {
+/// Returns ScheduleKindC enum value.
+fn parse_schedule_kind(clause: &Clause) -> ScheduleKindC {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
         // Case-insensitive keyword matching without String allocation
         // Check common case variants (lowercase, uppercase, title case)
         if args.contains("static") || args.contains("STATIC") || args.contains("Static") {
-            return 0;
+            return ScheduleKindC::Static;
         } else if args.contains("dynamic") || args.contains("DYNAMIC") || args.contains("Dynamic") {
-            return 1;
+            return ScheduleKindC::Dynamic;
         } else if args.contains("guided") || args.contains("GUIDED") || args.contains("Guided") {
-            return 2;
+            return ScheduleKindC::Guided;
         } else if args.contains("auto") || args.contains("AUTO") || args.contains("Auto") {
-            return 3;
+            return ScheduleKindC::Auto;
         } else if args.contains("runtime") || args.contains("RUNTIME") || args.contains("Runtime") {
-            return 4;
+            return ScheduleKindC::Runtime;
         }
     }
-    0 // Default to static
+    ScheduleKindC::Static // Default to static
 }
 
 /// Parse default clause data-sharing attribute.
 ///
 /// Extracts the default sharing from clause like "default(shared)".
-/// Returns integer code for the default policy.
-///
-/// ## Default Codes:
-/// - 0 = shared (all variables shared by default)
-/// - 1 = none   (must explicitly declare all variables)
-fn parse_default_kind(clause: &Clause) -> i32 {
+/// Returns DefaultKindC enum value.
+fn parse_default_kind(clause: &Clause) -> DefaultKindC {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
         // Case-insensitive keyword matching without String allocation
         // Check common case variants (lowercase, uppercase, title case)
         if args.contains("shared") || args.contains("SHARED") || args.contains("Shared") {
-            return 0;
+            return DefaultKindC::Shared;
         } else if args.contains("none") || args.contains("NONE") || args.contains("None") {
-            return 1;
+            return DefaultKindC::None;
         }
     }
-    0 // Default to shared
+    DefaultKindC::Shared // Default to shared
 }
 
 /// Convert directive name to kind enum code.
@@ -1068,17 +1185,11 @@ fn parse_default_kind(clause: &Clause) -> i32 {
 /// Maps directive names (parallel, for, task, etc.) to integer codes
 /// so C code can use switch statements instead of string comparisons.
 ///
-/// ## Directive Codes:
-/// - 0 = parallel     - 5 = critical
-/// - 1 = for          - 6 = atomic
-/// - 2 = sections     - 7 = barrier
-/// - 3 = single       - 8 = master
-/// - 4 = task         - 9 = teams
-/// - 10 = target      - 11 = distribute
-/// - -1 = NULL/unknown
-fn directive_name_to_kind(name: *const c_char) -> i32 {
+/// Converts directive name string to DirectiveKindC enum.
+/// Returns DirectiveKindC::Unknown for NULL or unrecognized directives.
+fn directive_name_to_kind(name: *const c_char) -> DirectiveKindC {
     if name.is_null() {
-        return -1;
+        return DirectiveKindC::Unknown;
     }
 
     // UNSAFE BLOCK 11: Read directive name
@@ -1093,74 +1204,74 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
         // The performance impact is negligible for the C API boundary.
         //
         // Fortran DO variants map to same codes as their C FOR equivalents:
-        // - "do" -> 1 (same as "for")
-        // - "parallel do" -> 0 (same as "parallel for")
-        // - "distribute parallel do" -> 15 (same as "distribute parallel for")
-        // - "target parallel do" -> 13 (same as "target parallel for")
+        // - "do" -> For (same as "for")
+        // - "parallel do" -> Parallel (same as "parallel for")
+        // - "distribute parallel do" -> Distribute (same as "distribute parallel for")
+        // - "target parallel do" -> Target (same as "target parallel for")
         // etc.
         match name_str.to_lowercase().as_str() {
-            // Parallel directives (kind 0)
-            "parallel" => 0,
-            "parallel for" => 0,
-            "parallel do" => 0, // Fortran variant
-            "parallel for simd" => 0,
-            "parallel do simd" => 0, // Fortran variant
-            "parallel sections" => 0,
+            // Parallel directives
+            "parallel" => DirectiveKindC::Parallel,
+            "parallel for" => DirectiveKindC::Parallel,
+            "parallel do" => DirectiveKindC::Parallel, // Fortran variant
+            "parallel for simd" => DirectiveKindC::Parallel,
+            "parallel do simd" => DirectiveKindC::Parallel, // Fortran variant
+            "parallel sections" => DirectiveKindC::Parallel,
 
-            // For/Do directives (kind 1)
-            "for" => 1,
-            "do" => 1, // Fortran variant
-            "for simd" => 1,
-            "do simd" => 1, // Fortran variant
+            // For/Do directives
+            "for" => DirectiveKindC::For,
+            "do" => DirectiveKindC::For, // Fortran variant
+            "for simd" => DirectiveKindC::For,
+            "do simd" => DirectiveKindC::For, // Fortran variant
 
             // Other basic directives
-            "sections" => 2,
-            "single" => 3,
-            "task" => 4,
-            "master" => 5,
-            "critical" => 6,
-            "barrier" => 7,
-            "taskwait" => 8,
-            "taskgroup" => 9,
-            "atomic" => 10,
-            "flush" => 11,
-            "ordered" => 12,
+            "sections" => DirectiveKindC::Sections,
+            "single" => DirectiveKindC::Single,
+            "task" => DirectiveKindC::Task,
+            "master" => DirectiveKindC::Master,
+            "critical" => DirectiveKindC::Critical,
+            "barrier" => DirectiveKindC::Barrier,
+            "taskwait" => DirectiveKindC::Taskwait,
+            "taskgroup" => DirectiveKindC::Taskgroup,
+            "atomic" => DirectiveKindC::Atomic,
+            "flush" => DirectiveKindC::Flush,
+            "ordered" => DirectiveKindC::Ordered,
 
-            // Target directives (kind 13)
-            "target" => 13,
-            "target teams" => 13,
-            "target parallel" => 13,
-            "target parallel for" => 13,
-            "target parallel do" => 13, // Fortran variant
-            "target parallel for simd" => 13,
-            "target parallel do simd" => 13, // Fortran variant
-            "target teams distribute" => 13,
-            "target teams distribute parallel for" => 13,
-            "target teams distribute parallel do" => 13, // Fortran variant
-            "target teams distribute parallel for simd" => 13,
-            "target teams distribute parallel do simd" => 13, // Fortran variant
+            // Target directives
+            "target" => DirectiveKindC::Target,
+            "target teams" => DirectiveKindC::Target,
+            "target parallel" => DirectiveKindC::Target,
+            "target parallel for" => DirectiveKindC::Target,
+            "target parallel do" => DirectiveKindC::Target, // Fortran variant
+            "target parallel for simd" => DirectiveKindC::Target,
+            "target parallel do simd" => DirectiveKindC::Target, // Fortran variant
+            "target teams distribute" => DirectiveKindC::Target,
+            "target teams distribute parallel for" => DirectiveKindC::Target,
+            "target teams distribute parallel do" => DirectiveKindC::Target, // Fortran variant
+            "target teams distribute parallel for simd" => DirectiveKindC::Target,
+            "target teams distribute parallel do simd" => DirectiveKindC::Target, // Fortran variant
 
-            // Teams directives (kind 14)
-            "teams" => 14,
-            "teams distribute" => 14,
-            "teams distribute parallel for" => 14,
-            "teams distribute parallel do" => 14, // Fortran variant
-            "teams distribute parallel for simd" => 14,
-            "teams distribute parallel do simd" => 14, // Fortran variant
+            // Teams directives
+            "teams" => DirectiveKindC::Teams,
+            "teams distribute" => DirectiveKindC::Teams,
+            "teams distribute parallel for" => DirectiveKindC::Teams,
+            "teams distribute parallel do" => DirectiveKindC::Teams, // Fortran variant
+            "teams distribute parallel for simd" => DirectiveKindC::Teams,
+            "teams distribute parallel do simd" => DirectiveKindC::Teams, // Fortran variant
 
-            // Distribute directives (kind 15)
-            "distribute" => 15,
-            "distribute parallel for" => 15,
-            "distribute parallel do" => 15, // Fortran variant
-            "distribute parallel for simd" => 15,
-            "distribute parallel do simd" => 15, // Fortran variant
-            "distribute simd" => 15,
+            // Distribute directives
+            "distribute" => DirectiveKindC::Distribute,
+            "distribute parallel for" => DirectiveKindC::Distribute,
+            "distribute parallel do" => DirectiveKindC::Distribute, // Fortran variant
+            "distribute parallel for simd" => DirectiveKindC::Distribute,
+            "distribute parallel do simd" => DirectiveKindC::Distribute, // Fortran variant
+            "distribute simd" => DirectiveKindC::Distribute,
 
-            // Metadirective (kind 16)
-            "metadirective" => 16,
+            // Metadirective
+            "metadirective" => DirectiveKindC::Metadirective,
 
             // Unknown directive
-            _ => 999,
+            _ => DirectiveKindC::Unknown,
         }
     }
 }
@@ -1189,11 +1300,16 @@ fn free_clause_data(clause: &OmpClause) {
     unsafe {
         // Free variable lists if present
         // Clause kinds with variable lists (see convert_clause):
-        //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
+        //   Private, Shared, Firstprivate, Lastprivate
         // Other kinds use different union fields:
-        //   6 = reduction (uses .reduction field, NOT .variables)
-        //   7 = schedule (uses .schedule field, NOT .variables)
-        if clause.kind >= 2 && clause.kind <= 5 {
+        //   Reduction (uses .reduction field, NOT .variables)
+        //   Schedule (uses .schedule field, NOT .variables)
+        let kind_matches = clause.kind == ClauseKindC::Private as i32
+            || clause.kind == ClauseKindC::Shared as i32
+            || clause.kind == ClauseKindC::Firstprivate as i32
+            || clause.kind == ClauseKindC::Lastprivate as i32;
+
+        if kind_matches {
             let vars_ptr = clause.data.variables;
             if !vars_ptr.is_null() {
                 roup_string_list_free(vars_ptr);

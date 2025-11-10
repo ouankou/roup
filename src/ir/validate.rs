@@ -120,7 +120,7 @@ impl ValidationContext {
 
         match clause {
             // nowait is only for worksharing, not parallel
-            ClauseData::Bare(name) if name.to_string() == "nowait" => {
+            ClauseData::Bare(name) if name.as_str() == "nowait" => {
                 if self.directive.is_worksharing() || self.directive == DirectiveKind::Target {
                     Ok(())
                 } else {
