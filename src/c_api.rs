@@ -1067,7 +1067,9 @@ fn convert_clause(clause: &Clause) -> OmpClause {
             (
                 ClauseKindC::Reduction,
                 ClauseData {
-                    reduction: ManuallyDrop::new(ReductionData { operator: operator as i32 }),
+                    reduction: ManuallyDrop::new(ReductionData {
+                        operator: operator as i32,
+                    }),
                 },
             )
         }
@@ -1097,7 +1099,10 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         _ => (ClauseKindC::Unknown, ClauseData { default: 0 }), // Unknown
     };
 
-    OmpClause { kind: kind as i32, data }
+    OmpClause {
+        kind: kind as i32,
+        data,
+    }
 }
 
 /// Parse reduction operator from clause arguments.

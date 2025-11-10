@@ -24,10 +24,13 @@
 //!
 //! See: <https://github.com/rust-lang/rust/blob/master/compiler/rustc_span/src/symbol.rs>
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 
-use syn::{Arm, Expr, ExprLit, ExprMatch, ExprTuple, File, Item, ItemFn, Lit, Pat, PatLit};
+use syn::{
+    Arm, Expr, ExprCast, ExprLit, ExprMatch, ExprPath, ExprTuple, Fields, File, Item, ItemEnum,
+    ItemFn, Lit, Pat, PatLit, PatOr, Variant,
+};
 
 /// Special value for unknown directive/clause kinds
 pub const UNKNOWN_KIND: i32 = 999;
@@ -41,10 +44,52 @@ fn normalize_constant_name(name: &str) -> String {
     name.to_uppercase().replace('-', "_")
 }
 
+/// Parse enum definition and extract variant name -> discriminant mapping
+fn parse_enum_discriminants(ast: &File, enum_name: &str) -> HashMap<String, i32> {
+    let mut map = HashMap::new();
+
+    for item in &ast.items {
+        if let Item::Enum(ItemEnum {
+            ident, variants, ..
+        }) = item
+        {
+            if ident == enum_name {
+                for variant in variants {
+                    if let Some(discriminant) = extract_discriminant(variant) {
+                        map.insert(variant.ident.to_string(), discriminant);
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    map
+}
+
+/// Extract discriminant value from an enum variant
+fn extract_discriminant(variant: &Variant) -> Option<i32> {
+    if let Fields::Unit = &variant.fields {
+        if let Some((_, expr)) = &variant.discriminant {
+            if let Expr::Lit(ExprLit {
+                lit: Lit::Int(lit_int),
+                ..
+            }) = expr
+            {
+                return lit_int.base10_parse::<i32>().ok();
+            }
+        }
+    }
+    None
+}
+
 /// Parse directive mappings from c_api.rs directive_name_to_kind() using AST
 pub fn parse_directive_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
+
+    // Parse DirectiveKindC enum to get variant -> discriminant mapping
+    let enum_map = parse_enum_discriminants(&ast, "DirectiveKindC");
 
     let mut mappings = Vec::new();
     let mut seen_numbers = HashSet::new();
@@ -56,7 +101,7 @@ pub fn parse_directive_mappings() -> Vec<(String, i32)> {
                 // Recursively find match expressions in the function body
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        if let Some((name, num)) = parse_directive_arm(arm) {
+                        if let Some((name, num)) = parse_directive_arm(arm, &enum_map) {
                             // Filter out: (1) composite directives with spaces, (2) UNKNOWN_KIND, (3) duplicates
                             // Note: OpenMP spec defines composite directives as having spaces
                             // (e.g., "parallel for", "target teams"). Single-word directives
@@ -86,6 +131,9 @@ pub fn parse_clause_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
 
+    // Parse ClauseKindC enum to get variant -> discriminant mapping
+    let enum_map = parse_enum_discriminants(&ast, "ClauseKindC");
+
     let mut mappings = Vec::new();
     let mut seen_numbers = HashSet::new();
 
@@ -96,7 +144,7 @@ pub fn parse_clause_mappings() -> Vec<(String, i32)> {
                 // Recursively find match expressions in the function body
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        if let Some((name, num)) = parse_clause_arm(arm) {
+                        if let Some((name, num)) = parse_clause_arm(arm, &enum_map) {
                             // Skip unknown and duplicates
                             if num != UNKNOWN_KIND && seen_numbers.insert(num) {
                                 mappings.push((normalize_constant_name(&name), num));
@@ -118,6 +166,9 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
         fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read src/c_api/openacc.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
 
+    // Parse AccDirectiveKindC enum to get variant -> discriminant mapping
+    let enum_map = parse_enum_discriminants(&ast, "AccDirectiveKindC");
+
     let mut mappings = Vec::new();
     let mut seen_numbers = HashSet::new();
 
@@ -128,7 +179,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
                 // Recursively find match expressions in the function body
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        if let Some((name, num)) = parse_directive_arm(arm) {
+                        if let Some((name, num)) = parse_directive_arm(arm, &enum_map) {
                             // Filter out: (1) composite directives with spaces, (2) UNKNOWN_KIND, (3) duplicates
                             let is_simple_directive = name.split_whitespace().count() == 1;
                             let is_known_kind = num != UNKNOWN_KIND;
@@ -150,47 +201,31 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
 
 /// Parse OpenACC clause mappings from c_api.rs convert_acc_clause() using AST
 pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
-    let source =
+    let c_api =
         fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read src/c_api/openacc.rs");
+    let ast: File = syn::parse_file(&c_api).expect("Failed to parse openacc.rs");
 
-    // Extract the body of clause_name_to_kind()
-    let fn_pos = source
-        .find("fn clause_name_to_kind")
-        .expect("clause_name_to_kind() not found in openacc module");
-    let body_start = source[fn_pos..]
-        .find('{')
-        .map(|idx| fn_pos + idx + 1)
-        .expect("Failed to locate clause_name_to_kind body");
-
-    let mut depth = 1usize;
-    let mut idx = body_start;
-    let bytes = source.as_bytes();
-    while idx < bytes.len() && depth > 0 {
-        match bytes[idx] as char {
-            '{' => depth += 1,
-            '}' => depth -= 1,
-            _ => {}
-        }
-        idx += 1;
-    }
-    let body = &source[body_start..idx.saturating_sub(1)];
+    // Parse AccClauseKindC enum to get variant -> discriminant mapping
+    let enum_map = parse_enum_discriminants(&ast, "AccClauseKindC");
 
     let mut mappings = Vec::new();
-    for line in body.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with('"') {
-            continue;
-        }
+    let mut seen_numbers = HashSet::new();
 
-        if let Some((name_part, rest)) = trimmed[1..].split_once('"') {
-            if let Some((_, value_part)) = rest.split_once("=>") {
-                if let Some(num_str) = value_part.split(',').next() {
-                    if let Ok(value) = num_str.trim().parse::<i32>() {
-                        if value != UNKNOWN_KIND {
-                            mappings.push((normalize_constant_name(name_part), value));
+    // Find the clause_name_to_kind function
+    for item in &ast.items {
+        if let Item::Fn(ItemFn { sig, block, .. }) = item {
+            if sig.ident == "clause_name_to_kind" {
+                // Recursively find match expressions in the function body
+                find_matches_in_stmts(&block.stmts, &mut |arms| {
+                    for arm in arms {
+                        if let Some((name, num)) = parse_directive_arm(arm, &enum_map) {
+                            // Skip unknown and duplicates
+                            if num != UNKNOWN_KIND && seen_numbers.insert(num) {
+                                mappings.push((normalize_constant_name(&name), num));
+                            }
                         }
                     }
-                }
+                });
             }
         }
     }
@@ -353,71 +388,106 @@ where
     }
 }
 
-/// Extract (name, number) from a match arm like: "directive-name" => number,
-fn parse_directive_arm(arm: &Arm) -> Option<(String, i32)> {
+/// Extract (name, number) from a match arm like: "directive-name" => DirectiveKindC::Parallel,
+/// Also handles multi-pattern matches like: "copy" | "pcopy" => AccClauseKindC::Copy
+fn parse_directive_arm(arm: &Arm, enum_map: &HashMap<String, i32>) -> Option<(String, i32)> {
     // Extract pattern (the "directive-name" part)
-    let name = if let Pat::Lit(PatLit {
-        lit: Lit::Str(lit_str),
-        ..
-    }) = &arm.pat
-    {
-        lit_str.value()
-    } else {
-        return None;
+    // Handle both single patterns and multi-pattern OR matches
+    let name = match &arm.pat {
+        // Single string literal: "directive-name"
+        Pat::Lit(PatLit {
+            lit: Lit::Str(lit_str),
+            ..
+        }) => lit_str.value(),
+
+        // Multi-pattern OR: "copy" | "pcopy" | "present_or_copy"
+        // We take the first pattern as the canonical name
+        Pat::Or(PatOr { cases, .. }) => {
+            if let Some(Pat::Lit(PatLit {
+                lit: Lit::Str(lit_str),
+                ..
+            })) = cases.first()
+            {
+                lit_str.value()
+            } else {
+                return None;
+            }
+        }
+
+        _ => return None,
     };
 
-    // Extract number from body (the number part after =>)
-    let num = if let Expr::Lit(ExprLit {
-        lit: Lit::Int(lit_int),
-        ..
-    }) = &*arm.body
-    {
-        lit_int.base10_parse::<i32>().ok()?
-    } else {
-        return None;
+    // Extract number from body - now handles enum paths like DirectiveKindC::Parallel
+    let num = match &*arm.body {
+        // Direct integer literal: => 0 (old style, for backwards compatibility)
+        Expr::Lit(ExprLit {
+            lit: Lit::Int(lit_int),
+            ..
+        }) => lit_int.base10_parse::<i32>().ok()?,
+
+        // Enum path: => DirectiveKindC::Parallel
+        Expr::Path(ExprPath { path, .. }) => {
+            // Get the last segment (variant name) from the path
+            if let Some(segment) = path.segments.last() {
+                let variant_name = segment.ident.to_string();
+                *enum_map.get(&variant_name)?
+            } else {
+                return None;
+            }
+        }
+
+        _ => return None,
     };
 
     Some((name, num))
 }
 
-/// Extract (name, number) from a match arm like: "clause-name" => (number, ClauseData)
-fn parse_clause_arm(arm: &Arm) -> Option<(String, i32)> {
+/// Extract (name, number) from a match arm like: "clause-name" => (ClauseKindC::NumThreads, ClauseData)
+/// Also handles multi-pattern matches like: "copy" | "pcopy" => (AccClauseKindC::Copy, ...)
+fn parse_clause_arm(arm: &Arm, enum_map: &HashMap<String, i32>) -> Option<(String, i32)> {
     // Extract pattern (the "clause-name" part)
-    let name = if let Pat::Lit(PatLit {
-        lit: Lit::Str(lit_str),
-        ..
-    }) = &arm.pat
-    {
-        lit_str.value()
-    } else {
-        return None;
-    };
+    // Handle both single patterns and multi-pattern OR matches
+    let name = match &arm.pat {
+        // Single string literal: "clause-name"
+        Pat::Lit(PatLit {
+            lit: Lit::Str(lit_str),
+            ..
+        }) => lit_str.value(),
 
-    // Extract number from tuple body: (number, ClauseData)
-    // The body could be a tuple directly, or a block containing a tuple
-    let num = match &*arm.body {
-        // Direct tuple: => (6, ClauseData::...)
-        Expr::Tuple(ExprTuple { elems, .. }) => {
-            if let Some(Expr::Lit(ExprLit {
-                lit: Lit::Int(lit_int),
+        // Multi-pattern OR: "copy" | "pcopy" | "present_or_copy"
+        // We take the first pattern as the canonical name
+        Pat::Or(PatOr { cases, .. }) => {
+            if let Some(Pat::Lit(PatLit {
+                lit: Lit::Str(lit_str),
                 ..
-            })) = elems.first()
+            })) = cases.first()
             {
-                lit_int.base10_parse::<i32>().ok()?
+                lit_str.value()
             } else {
                 return None;
             }
         }
-        // Block containing tuple: => { ... (6, ClauseData::...) }
+
+        _ => return None,
+    };
+
+    // Extract number from tuple body: (ClauseKindC::NumThreads, ClauseData) or (6, ClauseData)
+    // The body could be a tuple directly, or a block containing a tuple
+    let num = match &*arm.body {
+        // Direct tuple: => (ClauseKindC::NumThreads, ClauseData::...)
+        Expr::Tuple(ExprTuple { elems, .. }) => {
+            if let Some(first_elem) = elems.first() {
+                extract_number_from_expr(first_elem, enum_map)?
+            } else {
+                return None;
+            }
+        }
+        // Block containing tuple: => { ... (ClauseKindC::NumThreads, ClauseData::...) }
         Expr::Block(block) => {
             for stmt in &block.block.stmts {
                 if let syn::Stmt::Expr(Expr::Tuple(ExprTuple { elems, .. }), _) = stmt {
-                    if let Some(Expr::Lit(ExprLit {
-                        lit: Lit::Int(lit_int),
-                        ..
-                    })) = elems.first()
-                    {
-                        return Some((name, lit_int.base10_parse::<i32>().ok()?));
+                    if let Some(first_elem) = elems.first() {
+                        return Some((name, extract_number_from_expr(first_elem, enum_map)?));
                     }
                 }
             }
@@ -427,4 +497,30 @@ fn parse_clause_arm(arm: &Arm) -> Option<(String, i32)> {
     };
 
     Some((name, num))
+}
+
+/// Helper to extract integer from either a literal or an enum path
+fn extract_number_from_expr(expr: &Expr, enum_map: &HashMap<String, i32>) -> Option<i32> {
+    match expr {
+        // Direct integer literal: 6
+        Expr::Lit(ExprLit {
+            lit: Lit::Int(lit_int),
+            ..
+        }) => lit_int.base10_parse::<i32>().ok(),
+
+        // Enum path: ClauseKindC::NumThreads
+        Expr::Path(ExprPath { path, .. }) => {
+            if let Some(segment) = path.segments.last() {
+                let variant_name = segment.ident.to_string();
+                enum_map.get(&variant_name).copied()
+            } else {
+                None
+            }
+        }
+
+        // Cast expression: ClauseKindC::NumThreads as i32
+        Expr::Cast(ExprCast { expr, .. }) => extract_number_from_expr(expr, enum_map),
+
+        _ => None,
+    }
 }
