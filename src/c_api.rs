@@ -117,17 +117,18 @@ const CLAUSE_KIND_UNKNOWN: i32 = 999;
 // Reduction Operator Constants
 // ============================================================================
 // Used by parse_reduction_operator() for clause data values
+// CRITICAL: These values MUST match ReductionOperator enum discriminants in src/ir/clause.rs
 
-const REDUCTION_OP_ADD: i32 = 0; // +
-const REDUCTION_OP_SUBTRACT: i32 = 1; // -
-const REDUCTION_OP_MULTIPLY: i32 = 2; // *
-const REDUCTION_OP_BITWISE_AND: i32 = 3; // &
-const REDUCTION_OP_BITWISE_OR: i32 = 4; // |
-const REDUCTION_OP_BITWISE_XOR: i32 = 5; // ^
-const REDUCTION_OP_LOGICAL_AND: i32 = 6; // &&
-const REDUCTION_OP_LOGICAL_OR: i32 = 7; // ||
-const REDUCTION_OP_MIN: i32 = 8; // min
-const REDUCTION_OP_MAX: i32 = 9; // max
+const REDUCTION_OP_ADD: i32 = 0; // + (ReductionOperator::Add)
+const REDUCTION_OP_MULTIPLY: i32 = 1; // * (ReductionOperator::Multiply)
+const REDUCTION_OP_SUBTRACT: i32 = 2; // - (ReductionOperator::Subtract)
+const REDUCTION_OP_BITWISE_AND: i32 = 10; // & (ReductionOperator::BitwiseAnd)
+const REDUCTION_OP_BITWISE_OR: i32 = 11; // | (ReductionOperator::BitwiseOr)
+const REDUCTION_OP_BITWISE_XOR: i32 = 12; // ^ (ReductionOperator::BitwiseXor)
+const REDUCTION_OP_LOGICAL_AND: i32 = 20; // && (ReductionOperator::LogicalAnd)
+const REDUCTION_OP_LOGICAL_OR: i32 = 21; // || (ReductionOperator::LogicalOr)
+const REDUCTION_OP_MIN: i32 = 30; // min (ReductionOperator::Min)
+const REDUCTION_OP_MAX: i32 = 31; // max (ReductionOperator::Max)
 
 // ============================================================================
 // Schedule Kind Constants
@@ -144,9 +145,11 @@ const SCHEDULE_KIND_RUNTIME: i32 = 4;
 // Default Clause Constants
 // ============================================================================
 // Used by parse_default_kind() for clause data values
+// NOTE: C API currently only supports subset of DefaultKind enum (Shared, None)
+// Full enum in src/ir/clause.rs includes: Shared=0, None=1, Private=2, Firstprivate=3
 
-const DEFAULT_KIND_SHARED: i32 = 0;
-const DEFAULT_KIND_NONE: i32 = 1;
+const DEFAULT_KIND_SHARED: i32 = 0; // DefaultKind::Shared
+const DEFAULT_KIND_NONE: i32 = 1; // DefaultKind::None
 
 // ============================================================================
 // Constants Documentation
@@ -1032,14 +1035,13 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 /// Parse reduction operator from clause arguments.
 ///
 /// Extracts the operator from reduction clause like "reduction(+: sum)".
-/// Returns integer code for the operator type.
+/// Returns integer code matching ReductionOperator enum discriminants.
 ///
-/// ## Operator Codes (see REDUCTION_OP_* constants):
-/// - REDUCTION_OP_ADD (+)        - REDUCTION_OP_BITWISE_XOR (^)
-/// - REDUCTION_OP_SUBTRACT (-)   - REDUCTION_OP_LOGICAL_AND (&&)
-/// - REDUCTION_OP_MULTIPLY (*)   - REDUCTION_OP_LOGICAL_OR (||)
-/// - REDUCTION_OP_BITWISE_AND (&)- REDUCTION_OP_MIN (min)
-/// - REDUCTION_OP_BITWISE_OR (|) - REDUCTION_OP_MAX (max)
+/// ## Operator Codes (must match ReductionOperator enum in src/ir/clause.rs):
+/// - 0 = + (Add)          - 11 = | (BitwiseOr)    - 30 = min (Min)
+/// - 1 = * (Multiply)     - 12 = ^ (BitwiseXor)   - 31 = max (Max)
+/// - 2 = - (Subtract)     - 20 = && (LogicalAnd)
+/// - 10 = & (BitwiseAnd)  - 21 = || (LogicalOr)
 fn parse_reduction_operator(clause: &Clause) -> i32 {
     // Look for operator in clause kind
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
