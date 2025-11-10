@@ -46,6 +46,8 @@ extern "C" {
     // Clause queries
     int32_t roup_clause_kind(const OmpClause* clause);
     OmpStringList* roup_clause_variables(const OmpClause* clause);
+    int32_t roup_clause_reduction_operator(const OmpClause* clause);
+    int32_t roup_clause_schedule_kind(const OmpClause* clause);
 
     // String list operations
     int32_t roup_string_list_len(const OmpStringList* list);
