@@ -321,10 +321,31 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     }
 
-    // WORKAROUND: ROUP cannot parse "cancellation point" directive at all
-    // Detect and handle manually
+    // Normalize input: fix duplicate "omp" (e.g., "!$omp omp teams" -> "!$omp teams")
     std::string search_lower = input_str;
     std::transform(search_lower.begin(), search_lower.end(), search_lower.begin(), ::tolower);
+
+    if (current_lang == Lang_Fortran) {
+        size_t omp_omp_pos = search_lower.find("!$omp omp ");
+        if (omp_omp_pos != std::string::npos) {
+            // Remove the duplicate "omp " (positions 6-10 in "!$omp omp ")
+            input_str.erase(6, 4); // Remove "omp " (4 chars)
+            search_lower.erase(6, 4);
+        }
+    } else {
+        size_t omp_omp_pos = search_lower.find("#pragma omp omp ");
+        if (omp_omp_pos != std::string::npos) {
+            // Remove the duplicate "omp "
+            size_t duplicate_pos = search_lower.find(" omp ", 11); // Start after "#pragma omp"
+            if (duplicate_pos != std::string::npos) {
+                input_str.erase(duplicate_pos + 1, 4); // Remove "omp " (4 chars including space)
+                search_lower.erase(duplicate_pos + 1, 4);
+            }
+        }
+    }
+
+    // WORKAROUND: ROUP cannot parse "cancellation point" directive at all
+    // Detect and handle manually
     if (search_lower.find("cancellation") != std::string::npos && search_lower.find("point") != std::string::npos) {
         // This is a "cancellation point" directive
         OpenMPDirective* dir = new OpenMPDirective(OMPD_cancellation_point, current_lang, 0, 0);
@@ -372,14 +393,37 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             full_name = after.substr(start, last - start + 1);
         }
 
-        // Check for nowait clause at the end
+        // Check for clauses (nowait, copyprivate)
         bool has_nowait = false;
+        std::string copyprivate_args;
+
+        // Extract nowait clause
         size_t nowait_pos = full_name.rfind("nowait");
         if (nowait_pos != std::string::npos) {
             has_nowait = true;
             // Remove "nowait" from the directive name
             full_name = full_name.substr(0, nowait_pos);
             // Trim trailing whitespace after removing nowait
+            last = full_name.find_last_not_of(" \t");
+            if (last != std::string::npos) {
+                full_name = full_name.substr(0, last + 1);
+            }
+        }
+
+        // Extract copyprivate clause (for end single)
+        size_t copyprivate_pos = full_name.find("copyprivate");
+        if (copyprivate_pos != std::string::npos) {
+            // Extract everything after copyprivate
+            std::string clause_part = full_name.substr(copyprivate_pos + 11); // Skip "copyprivate"
+            // Find the parenthesized list
+            size_t paren_start = clause_part.find('(');
+            size_t paren_end = clause_part.rfind(')');
+            if (paren_start != std::string::npos && paren_end != std::string::npos) {
+                copyprivate_args = clause_part.substr(paren_start + 1, paren_end - paren_start - 1);
+            }
+            // Remove copyprivate clause from directive name
+            full_name = full_name.substr(0, copyprivate_pos);
+            // Trim trailing whitespace
             last = full_name.find_last_not_of(" \t");
             if (last != std::string::npos) {
                 full_name = full_name.substr(0, last + 1);
@@ -417,13 +461,17 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         else if (full_name == "target teams distribute parallel for") paired_kind = OMPD_target_teams_distribute_parallel_for;
         else if (full_name == "target teams distribute simd") paired_kind = OMPD_target_teams_distribute_simd;
         else if (full_name == "target teams distribute") paired_kind = OMPD_target_teams_distribute;
+        else if (full_name == "target teams loop") paired_kind = OMPD_target_teams_loop;
         else if (full_name == "target teams") paired_kind = OMPD_target_teams;
+        else if (full_name == "target parallel loop") paired_kind = OMPD_target_parallel_loop;
         else if (full_name == "teams distribute parallel do simd") paired_kind = OMPD_teams_distribute_parallel_do_simd;
         else if (full_name == "teams distribute parallel do") paired_kind = OMPD_teams_distribute_parallel_do;
         else if (full_name == "teams distribute parallel for simd") paired_kind = OMPD_teams_distribute_parallel_for_simd;
         else if (full_name == "teams distribute parallel for") paired_kind = OMPD_teams_distribute_parallel_for;
         else if (full_name == "teams distribute simd") paired_kind = OMPD_teams_distribute_simd;
         else if (full_name == "teams distribute") paired_kind = OMPD_teams_distribute;
+        else if (full_name == "teams loop") paired_kind = OMPD_teams_loop;
+        else if (full_name == "taskloop simd") paired_kind = OMPD_taskloop_simd;
         // Single-word directives
         else if (full_name == "do") paired_kind = OMPD_do;
         else if (full_name == "simd") paired_kind = OMPD_simd;
@@ -438,6 +486,10 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         else if (full_name == "target") paired_kind = OMPD_target;
         else if (full_name == "teams") paired_kind = OMPD_teams;
         else if (full_name == "taskloop") paired_kind = OMPD_taskloop;
+        else if (full_name == "task") paired_kind = OMPD_task;
+        else if (full_name == "taskgroup") paired_kind = OMPD_taskgroup;
+        else if (full_name == "section") paired_kind = OMPD_section;
+        else if (full_name == "unroll") paired_kind = OMPD_unroll;
         else if (full_name == "master") paired_kind = OMPD_master;
         else if (full_name == "workshare") paired_kind = OMPD_workshare;
 
@@ -447,6 +499,14 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             end_dir->setBaseLang(current_lang);
             OpenMPDirective* paired = new OpenMPDirective(paired_kind, current_lang, 0, 0);
             end_dir->setPairedDirective(paired);
+
+            // Add copyprivate clause if present
+            if (!copyprivate_args.empty()) {
+                OpenMPClause* copyprivate_clause = end_dir->addOpenMPClause(OMPC_copyprivate);
+                if (copyprivate_clause) {
+                    copyprivate_clause->addLangExpr(copyprivate_args.c_str());
+                }
+            }
 
             // Add nowait clause if present
             if (has_nowait) {

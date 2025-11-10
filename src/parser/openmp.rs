@@ -67,7 +67,8 @@ openmp_clauses! {
     Doacross => { name: "doacross", rule: ClauseRule::Parenthesized },
     DynamicAllocators => { name: "dynamic_allocators", rule: ClauseRule::Bare },
     Enter => { name: "enter", rule: ClauseRule::Parenthesized },
-    Exclusive => { name: "exclusive", rule: ClauseRule::Bare },
+    Exclusive => { name: "exclusive", rule: ClauseRule::Parenthesized },
+    ExtUserTest => { name: "ext_user_test", rule: ClauseRule::Bare },
     Fail => { name: "fail", rule: ClauseRule::Flexible },
     Final => { name: "final", rule: ClauseRule::Parenthesized },
     Filter => { name: "filter", rule: ClauseRule::Parenthesized },
@@ -85,7 +86,7 @@ openmp_clauses! {
     Induction => { name: "induction", rule: ClauseRule::Parenthesized },
     Inductor => { name: "inductor", rule: ClauseRule::Parenthesized },
     Inbranch => { name: "inbranch", rule: ClauseRule::Bare },
-    Inclusive => { name: "inclusive", rule: ClauseRule::Bare },
+    Inclusive => { name: "inclusive", rule: ClauseRule::Parenthesized },
     Init => { name: "init", rule: ClauseRule::Parenthesized },
     InitComplete => { name: "init_complete", rule: ClauseRule::Flexible },
     Initializer => { name: "initializer", rule: ClauseRule::Parenthesized },
@@ -547,7 +548,7 @@ fn parse_scan_directive<'a>(
     input: &'a str,
     clause_registry: &ClauseRegistry,
 ) -> nom::IResult<&'a str, super::Directive<'a>> {
-    use super::Directive;
+    use super::{Clause, ClauseKind, Directive};
     use nom::bytes::complete::tag;
 
     // Trim leading whitespace for reliable token matching
@@ -558,8 +559,14 @@ fn parse_scan_directive<'a>(
         tag::<_, _, nom::error::Error<&str>>("exclusive")(input_trimmed)
     {
         if let Ok((rest_after_paren, list_content)) = parse_parenthesized_content(rest_after_tag) {
-            // After the parenthesized list we may have clauses. Parse them from the remaining input.
-            let (rest, clauses) = match clause_registry.parse_sequence(rest_after_paren) {
+            // Create an exclusive clause with the variable list as arguments
+            let exclusive_clause = Clause {
+                name: std::borrow::Cow::Borrowed("exclusive"),
+                kind: ClauseKind::Parenthesized(std::borrow::Cow::Owned(list_content)),
+            };
+
+            // After the parenthesized list we may have additional clauses. Parse them from the remaining input.
+            let (rest, mut clauses) = match clause_registry.parse_sequence(rest_after_paren) {
                 Ok((r, c)) => (r, c),
                 Err(e) => {
                     // Distinguish between: (A) Truly no clauses (only whitespace/comments remaining)
@@ -580,16 +587,14 @@ fn parse_scan_directive<'a>(
                 }
             };
 
+            // Insert the exclusive clause at the beginning
+            clauses.insert(0, exclusive_clause);
+
             return Ok((
                 rest,
                 Directive {
                     name: std::borrow::Cow::Borrowed("scan"),
-                    // Store the parameter without a leading space; the display/formatting layer
-                    // is responsible for spacing when rendering the directive.
-                    parameter: Some(std::borrow::Cow::Owned(format!(
-                        "exclusive({})",
-                        list_content
-                    ))),
+                    parameter: None,
                     clauses,
                     wait_data: None,
                     cache_data: None,
@@ -603,7 +608,13 @@ fn parse_scan_directive<'a>(
         tag::<_, _, nom::error::Error<&str>>("inclusive")(input_trimmed)
     {
         if let Ok((rest_after_paren, list_content)) = parse_parenthesized_content(rest_after_tag) {
-            let (rest, clauses) = match clause_registry.parse_sequence(rest_after_paren) {
+            // Create an inclusive clause with the variable list as arguments
+            let inclusive_clause = Clause {
+                name: std::borrow::Cow::Borrowed("inclusive"),
+                kind: ClauseKind::Parenthesized(std::borrow::Cow::Owned(list_content)),
+            };
+
+            let (rest, mut clauses) = match clause_registry.parse_sequence(rest_after_paren) {
                 Ok((r, c)) => (r, c),
                 Err(e) => {
                     if let Ok((remaining_after_skipping, _)) =
@@ -620,14 +631,14 @@ fn parse_scan_directive<'a>(
                 }
             };
 
+            // Insert the inclusive clause at the beginning
+            clauses.insert(0, inclusive_clause);
+
             return Ok((
                 rest,
                 Directive {
                     name: std::borrow::Cow::Borrowed("scan"),
-                    parameter: Some(std::borrow::Cow::Owned(format!(
-                        "inclusive({})",
-                        list_content
-                    ))),
+                    parameter: None,
                     clauses,
                     wait_data: None,
                     cache_data: None,
