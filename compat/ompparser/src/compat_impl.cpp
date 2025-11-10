@@ -74,27 +74,141 @@ extern "C" void setLang(OpenMPBaseLang lang) {
 // ============================================================================
 
 static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
-    // ROUP directive kind mapping using named constants
-    // See roup_constants.h and src/c_api.rs:directive_name_to_kind()
+    // Complete mapping for all 132 OpenMP 5.2 directives
     switch (roup_kind) {
-        case ROUP_DIRECTIVE_PARALLEL:       return OMPD_parallel;
-        case ROUP_DIRECTIVE_FOR:            return OMPD_for;
-        case ROUP_DIRECTIVE_SECTIONS:       return OMPD_sections;
-        case ROUP_DIRECTIVE_SINGLE:         return OMPD_single;
-        case ROUP_DIRECTIVE_TASK:           return OMPD_task;
-        case ROUP_DIRECTIVE_MASTER:         return OMPD_master;
-        case ROUP_DIRECTIVE_CRITICAL:       return OMPD_critical;
-        case ROUP_DIRECTIVE_BARRIER:        return OMPD_barrier;
-        case ROUP_DIRECTIVE_TASKWAIT:       return OMPD_taskwait;
-        case ROUP_DIRECTIVE_TASKGROUP:      return OMPD_taskgroup;
-        case ROUP_DIRECTIVE_ATOMIC:         return OMPD_atomic;
-        case ROUP_DIRECTIVE_FLUSH:          return OMPD_flush;
-        case ROUP_DIRECTIVE_ORDERED:        return OMPD_ordered;
-        case ROUP_DIRECTIVE_TARGET:         return OMPD_target;
-        case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
-        case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
-        case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
-        default:                            return OMPD_unknown;
+        case ROUP_DIRECTIVE_ALLOCATE:                            return OMPD_allocate;
+        case ROUP_DIRECTIVE_ALLOCATORS:                          return OMPD_allocators;
+        case ROUP_DIRECTIVE_ASSUME:                              return OMPD_assume;
+        case ROUP_DIRECTIVE_ASSUMES:                             return OMPD_assumes;
+        case ROUP_DIRECTIVE_ATOMIC:                              return OMPD_atomic;
+        case ROUP_DIRECTIVE_ATOMIC_CAPTURE:                      return OMPD_atomic; // ompparser doesn't have separate enum
+        case ROUP_DIRECTIVE_ATOMIC_COMPARE_CAPTURE:              return OMPD_atomic; // ompparser doesn't have separate enum
+        case ROUP_DIRECTIVE_ATOMIC_READ:                         return OMPD_atomic; // ompparser doesn't have separate enum
+        case ROUP_DIRECTIVE_ATOMIC_UPDATE:                       return OMPD_atomic; // ompparser doesn't have separate enum
+        case ROUP_DIRECTIVE_ATOMIC_WRITE:                        return OMPD_atomic; // ompparser doesn't have separate enum
+        case ROUP_DIRECTIVE_BARRIER:                             return OMPD_barrier;
+        case ROUP_DIRECTIVE_BEGIN_ASSUMES:                       return OMPD_begin_assumes;
+        case ROUP_DIRECTIVE_BEGIN_DECLARE_TARGET:                return OMPD_begin_declare_target;
+        case ROUP_DIRECTIVE_BEGIN_DECLARE_VARIANT:               return OMPD_begin_declare_variant;
+        case ROUP_DIRECTIVE_CANCEL:                              return OMPD_cancel;
+        case ROUP_DIRECTIVE_CANCELLATION_POINT:                  return OMPD_cancellation_point;
+        case ROUP_DIRECTIVE_CRITICAL:                            return OMPD_critical;
+        case ROUP_DIRECTIVE_DECLARE_INDUCTION:                   return OMPD_declare_induction;
+        case ROUP_DIRECTIVE_DECLARE_MAPPER:                      return OMPD_declare_mapper;
+        case ROUP_DIRECTIVE_DECLARE_REDUCTION:                   return OMPD_declare_reduction;
+        case ROUP_DIRECTIVE_DECLARE_SIMD:                        return OMPD_declare_simd;
+        case ROUP_DIRECTIVE_DECLARE_TARGET:                      return OMPD_declare_target;
+        case ROUP_DIRECTIVE_DECLARE_VARIANT:                     return OMPD_declare_variant;
+        case ROUP_DIRECTIVE_DEPOBJ:                              return OMPD_depobj;
+        case ROUP_DIRECTIVE_DISPATCH:                            return OMPD_dispatch;
+        case ROUP_DIRECTIVE_DISTRIBUTE:                          return OMPD_distribute;
+        case ROUP_DIRECTIVE_DISTRIBUTE_PARALLEL_FOR:             return OMPD_distribute_parallel_for;
+        case ROUP_DIRECTIVE_DISTRIBUTE_PARALLEL_FOR_SIMD:        return OMPD_distribute_parallel_for_simd;
+        case ROUP_DIRECTIVE_DISTRIBUTE_PARALLEL_LOOP:            return OMPD_distribute_parallel_loop;
+        case ROUP_DIRECTIVE_DISTRIBUTE_PARALLEL_LOOP_SIMD:       return OMPD_distribute_parallel_loop_simd;
+        case ROUP_DIRECTIVE_DISTRIBUTE_SIMD:                     return OMPD_distribute_simd;
+        case ROUP_DIRECTIVE_DISTRIBUTE_PARALLEL_DO:              return OMPD_distribute_parallel_do;
+        case ROUP_DIRECTIVE_DISTRIBUTE_PARALLEL_DO_SIMD:         return OMPD_distribute_parallel_do_simd;
+        case ROUP_DIRECTIVE_DO:                                  return OMPD_do;
+        case ROUP_DIRECTIVE_DO_SIMD:                             return OMPD_do_simd;
+        case ROUP_DIRECTIVE_END_ASSUMES:                         return OMPD_end_assumes;
+        case ROUP_DIRECTIVE_END_DECLARE_TARGET:                  return OMPD_end_declare_target;
+        case ROUP_DIRECTIVE_END_DECLARE_VARIANT:                 return OMPD_end_declare_variant;
+        case ROUP_DIRECTIVE_ERROR:                               return OMPD_error;
+        case ROUP_DIRECTIVE_FLUSH:                               return OMPD_flush;
+        case ROUP_DIRECTIVE_FUSE:                                return OMPD_fuse;
+        case ROUP_DIRECTIVE_GROUPPRIVATE:                        return OMPD_groupprivate;
+        case ROUP_DIRECTIVE_FOR:                                 return OMPD_for;
+        case ROUP_DIRECTIVE_FOR_SIMD:                            return OMPD_for_simd;
+        case ROUP_DIRECTIVE_INTERCHANGE:                         return OMPD_interchange;
+        case ROUP_DIRECTIVE_INTEROP:                             return OMPD_interop;
+        case ROUP_DIRECTIVE_LOOP:                                return OMPD_loop;
+        case ROUP_DIRECTIVE_REVERSE:                             return OMPD_reverse;
+        case ROUP_DIRECTIVE_MASKED:                              return OMPD_masked;
+        case ROUP_DIRECTIVE_MASKED_TASKLOOP:                     return OMPD_masked_taskloop;
+        case ROUP_DIRECTIVE_MASKED_TASKLOOP_SIMD:                return OMPD_masked_taskloop_simd;
+        case ROUP_DIRECTIVE_MASTER:                              return OMPD_master;
+        case ROUP_DIRECTIVE_MASTER_TASKLOOP:                     return OMPD_master_taskloop;
+        case ROUP_DIRECTIVE_MASTER_TASKLOOP_SIMD:                return OMPD_master_taskloop_simd;
+        case ROUP_DIRECTIVE_METADIRECTIVE:                       return OMPD_metadirective;
+        case ROUP_DIRECTIVE_BEGIN_METADIRECTIVE:                 return OMPD_begin_metadirective;
+        case ROUP_DIRECTIVE_NOTHING:                             return OMPD_nothing;
+        case ROUP_DIRECTIVE_ORDERED:                             return OMPD_ordered;
+        case ROUP_DIRECTIVE_PARALLEL:                            return OMPD_parallel;
+        case ROUP_DIRECTIVE_PARALLEL_DO:                         return OMPD_parallel_do;
+        case ROUP_DIRECTIVE_PARALLEL_DO_SIMD:                    return OMPD_parallel_do_simd;
+        case ROUP_DIRECTIVE_PARALLEL_FOR:                        return OMPD_parallel_for;
+        case ROUP_DIRECTIVE_PARALLEL_FOR_SIMD:                   return OMPD_parallel_for_simd;
+        case ROUP_DIRECTIVE_PARALLEL_LOOP:                       return OMPD_parallel_loop;
+        case ROUP_DIRECTIVE_PARALLEL_LOOP_SIMD:                  return OMPD_parallel_loop_simd;
+        case ROUP_DIRECTIVE_PARALLEL_MASKED:                     return OMPD_parallel_masked;
+        case ROUP_DIRECTIVE_PARALLEL_MASKED_TASKLOOP:            return OMPD_parallel_masked_taskloop;
+        case ROUP_DIRECTIVE_PARALLEL_MASKED_TASKLOOP_SIMD:       return OMPD_parallel_masked_taskloop_simd;
+        case ROUP_DIRECTIVE_PARALLEL_MASTER:                     return OMPD_parallel_master;
+        case ROUP_DIRECTIVE_PARALLEL_MASTER_TASKLOOP:            return OMPD_parallel_master_taskloop;
+        case ROUP_DIRECTIVE_PARALLEL_MASTER_TASKLOOP_SIMD:       return OMPD_parallel_master_taskloop_simd;
+        case ROUP_DIRECTIVE_PARALLEL_SECTIONS:                   return OMPD_parallel_sections;
+        case ROUP_DIRECTIVE_REQUIRES:                            return OMPD_requires;
+        case ROUP_DIRECTIVE_SCOPE:                               return OMPD_scope;
+        case ROUP_DIRECTIVE_SCAN:                                return OMPD_scan;
+        case ROUP_DIRECTIVE_SECTION:                             return OMPD_section;
+        case ROUP_DIRECTIVE_SECTIONS:                            return OMPD_sections;
+        case ROUP_DIRECTIVE_SIMD:                                return OMPD_simd;
+        case ROUP_DIRECTIVE_SINGLE:                              return OMPD_single;
+        case ROUP_DIRECTIVE_SPLIT:                               return OMPD_split;
+        case ROUP_DIRECTIVE_STRIPE:                              return OMPD_stripe;
+        case ROUP_DIRECTIVE_TARGET:                              return OMPD_target;
+        case ROUP_DIRECTIVE_TARGET_DATA:                         return OMPD_target_data;
+        case ROUP_DIRECTIVE_TARGET_ENTER_DATA:                   return OMPD_target_enter_data;
+        case ROUP_DIRECTIVE_TARGET_EXIT_DATA:                    return OMPD_target_exit_data;
+        case ROUP_DIRECTIVE_END_TARGET:                          return OMPD_end_declare_target; // closest match in ompparser
+        case ROUP_DIRECTIVE_TARGET_LOOP:                         return OMPD_target_loop;
+        case ROUP_DIRECTIVE_TARGET_LOOP_SIMD:                    return OMPD_target_loop_simd;
+        case ROUP_DIRECTIVE_TARGET_PARALLEL:                     return OMPD_target_parallel;
+        case ROUP_DIRECTIVE_TARGET_PARALLEL_DO:                  return OMPD_target_parallel_do;
+        case ROUP_DIRECTIVE_TARGET_PARALLEL_DO_SIMD:             return OMPD_target_parallel_do_simd;
+        case ROUP_DIRECTIVE_TARGET_PARALLEL_FOR:                 return OMPD_target_parallel_for;
+        case ROUP_DIRECTIVE_TARGET_PARALLEL_FOR_SIMD:            return OMPD_target_parallel_for_simd;
+        case ROUP_DIRECTIVE_TARGET_PARALLEL_LOOP:                return OMPD_target_parallel_loop;
+        case ROUP_DIRECTIVE_TARGET_PARALLEL_LOOP_SIMD:           return OMPD_target_parallel_loop_simd;
+        case ROUP_DIRECTIVE_TARGET_SIMD:                         return OMPD_target_simd;
+        case ROUP_DIRECTIVE_TARGET_TEAMS:                        return OMPD_target_teams;
+        case ROUP_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE:             return OMPD_target_teams_distribute;
+        case ROUP_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_DO: return OMPD_target_teams_distribute_parallel_do;
+        case ROUP_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_DO_SIMD: return OMPD_target_teams_distribute_parallel_do_simd;
+        case ROUP_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR: return OMPD_target_teams_distribute_parallel_for;
+        case ROUP_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR_SIMD: return OMPD_target_teams_distribute_parallel_for_simd;
+        case ROUP_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_LOOP: return OMPD_target_teams_distribute_parallel_loop;
+        case ROUP_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_LOOP_SIMD: return OMPD_target_teams_distribute_parallel_loop_simd;
+        case ROUP_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_SIMD:        return OMPD_target_teams_distribute_simd;
+        case ROUP_DIRECTIVE_TARGET_TEAMS_LOOP:                   return OMPD_target_teams_loop;
+        case ROUP_DIRECTIVE_TARGET_TEAMS_LOOP_SIMD:              return OMPD_target_teams_loop_simd;
+        case ROUP_DIRECTIVE_TARGET_UPDATE:                       return OMPD_target_update;
+        case ROUP_DIRECTIVE_TASK:                                return OMPD_task;
+        case ROUP_DIRECTIVE_TASK_ITERATION:                      return OMPD_task_iteration;
+        case ROUP_DIRECTIVE_TASKGROUP:                           return OMPD_taskgroup;
+        case ROUP_DIRECTIVE_TASKGRAPH:                           return OMPD_taskgraph;
+        case ROUP_DIRECTIVE_TASKLOOP:                            return OMPD_taskloop;
+        case ROUP_DIRECTIVE_TASKLOOP_SIMD:                       return OMPD_taskloop_simd;
+        case ROUP_DIRECTIVE_TASKWAIT:                            return OMPD_taskwait;
+        case ROUP_DIRECTIVE_TASKYIELD:                           return OMPD_taskyield;
+        case ROUP_DIRECTIVE_TEAMS:                               return OMPD_teams;
+        case ROUP_DIRECTIVE_TEAMS_DISTRIBUTE:                    return OMPD_teams_distribute;
+        case ROUP_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_DO:        return OMPD_teams_distribute_parallel_do;
+        case ROUP_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_DO_SIMD:   return OMPD_teams_distribute_parallel_do_simd;
+        case ROUP_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_FOR:       return OMPD_teams_distribute_parallel_for;
+        case ROUP_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_FOR_SIMD:  return OMPD_teams_distribute_parallel_for_simd;
+        case ROUP_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_LOOP:      return OMPD_teams_distribute_parallel_loop;
+        case ROUP_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_LOOP_SIMD: return OMPD_teams_distribute_parallel_loop_simd;
+        case ROUP_DIRECTIVE_TEAMS_DISTRIBUTE_SIMD:               return OMPD_teams_distribute_simd;
+        case ROUP_DIRECTIVE_TEAMS_LOOP:                          return OMPD_teams_loop;
+        case ROUP_DIRECTIVE_TEAMS_LOOP_SIMD:                     return OMPD_teams_loop_simd;
+        case ROUP_DIRECTIVE_THREADPRIVATE:                       return OMPD_threadprivate;
+        case ROUP_DIRECTIVE_TILE:                                return OMPD_tile;
+        case ROUP_DIRECTIVE_UNROLL:                              return OMPD_unroll;
+        case ROUP_DIRECTIVE_WORKDISTRIBUTE:                      return OMPD_workdistribute;
+        case ROUP_DIRECTIVE_WORKSHARE:                           return OMPD_workshare;
+        default:                                                 return OMPD_unknown;
     }
 }
 
