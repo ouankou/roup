@@ -29,7 +29,7 @@ use std::fs;
 
 use syn::{
     Arm, Expr, ExprLit, ExprMatch, ExprPath, ExprTuple, File, Item, ItemConst, ItemFn, Lit, Pat,
-    PatLit,
+    PatLit, PatOr,
 };
 
 /// Special value for unknown directive/clause kinds
@@ -190,13 +190,15 @@ pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
     let mut seen_numbers = HashSet::new();
 
     // Find the clause_name_to_kind function
+    // Note: OpenACC uses a simpler pattern "name" => constant (not tuples)
     for item in &ast.items {
         if let Item::Fn(ItemFn { sig, block, .. }) = item {
             if sig.ident == "clause_name_to_kind" {
                 // Recursively find match expressions in the function body
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        if let Some((name, num)) = parse_clause_arm(arm, &constants) {
+                        // OpenACC clauses use the same pattern as directives: "name" => constant
+                        if let Some((name, num)) = parse_directive_arm(arm, &constants) {
                             // Skip unknown and duplicates
                             if num != UNKNOWN_KIND && seen_numbers.insert(num) {
                                 mappings.push((normalize_constant_name(&name), num));
@@ -367,16 +369,30 @@ where
 }
 
 /// Extract (name, number) from a match arm like: "directive-name" => number,
+/// Also handles patterns with alternatives: "name1" | "name2" => number
 fn parse_directive_arm(arm: &Arm, constants: &HashMap<String, i32>) -> Option<(String, i32)> {
     // Extract pattern (the "directive-name" part)
-    let name = if let Pat::Lit(PatLit {
-        lit: Lit::Str(lit_str),
-        ..
-    }) = &arm.pat
-    {
-        lit_str.value()
-    } else {
-        return None;
+    // Handle both simple patterns and patterns with alternatives (|)
+    let name = match &arm.pat {
+        // Simple pattern: "name"
+        Pat::Lit(PatLit {
+            lit: Lit::Str(lit_str),
+            ..
+        }) => lit_str.value(),
+        // Pattern with alternatives: "name1" | "name2" | ...
+        // Use the first alternative as the canonical name
+        Pat::Or(PatOr { cases, .. }) => {
+            if let Some(Pat::Lit(PatLit {
+                lit: Lit::Str(lit_str),
+                ..
+            })) = cases.first()
+            {
+                lit_str.value()
+            } else {
+                return None;
+            }
+        }
+        _ => return None,
     };
 
     // Extract number from body (the number part after =>)
