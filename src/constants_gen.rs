@@ -5,14 +5,12 @@
 //! - build.rs (to generate the header during compilation)
 //! - Standalone mode (to verify header is up-to-date in CI)
 //!
-//! # Current Limitations
+//! # Composite Directive Support
 //!
 //! **Composite Directives**: Directives with spaces (e.g., "parallel for", "target teams")
-//! are currently excluded from the constant mapping. In the ompparser compatibility layer,
-//! these have dedicated enum values (e.g., OMPD_parallel_for, OMPD_target_teams in
-//! OpenMPDirectiveKind), but mapping composite directives from ROUP to these ompparser
-//! enums is not yet implemented. Only simple, single-word directive names are currently
-//! supported in the generated constants.
+//! are now fully supported in the constant mapping. These directives are normalized by
+//! converting spaces to underscores (e.g., ROUP_DIRECTIVE_PARALLEL_FOR,
+//! ROUP_DIRECTIVE_TARGET_TEAMS) in the generated header file.
 //!
 //! # Hash Function Choice
 //!
@@ -36,9 +34,9 @@ pub const UNKNOWN_KIND: i32 = 999;
 const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
 
-/// Normalize constant name: uppercase and replace hyphens with underscores
+/// Normalize constant name: uppercase and replace hyphens/spaces with underscores
 fn normalize_constant_name(name: &str) -> String {
-    name.to_uppercase().replace('-', "_")
+    name.to_uppercase().replace('-', "_").replace(' ', "_")
 }
 
 /// Parse directive mappings from c_api.rs directive_name_to_kind() using AST
@@ -57,17 +55,12 @@ pub fn parse_directive_mappings() -> Vec<(String, i32)> {
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
                         if let Some((name, num)) = parse_directive_arm(arm) {
-                            // Filter out: (1) composite directives with spaces, (2) UNKNOWN_KIND, (3) duplicates
-                            // Note: OpenMP spec defines composite directives as having spaces
-                            // (e.g., "parallel for", "target teams"). Single-word directives
-                            // like "parallel", "for", "target" never contain spaces by definition.
-                            // Exclude composite directives with spaces - these require special mapping logic
-                            // not yet implemented in the compatibility layer (see module docs).
-                            let is_simple_directive = name.split_whitespace().count() == 1;
+                            // Filter out: (1) UNKNOWN_KIND, (2) duplicates
+                            // Now supporting composite directives with spaces (e.g., "parallel for", "target teams")
                             let is_known_kind = num != UNKNOWN_KIND; // Exclude unknown sentinel
                             let is_first_occurrence = seen_numbers.insert(num); // Deduplicate
 
-                            if is_simple_directive && is_known_kind && is_first_occurrence {
+                            if is_known_kind && is_first_occurrence {
                                 mappings.push((normalize_constant_name(&name), num));
                             }
                         }
