@@ -291,6 +291,10 @@ impl ClauseRegistry {
 
     pub fn parse_sequence<'a>(&self, input: &'a str) -> IResult<&'a str, Vec<Clause<'a>>> {
         let (input, _) = crate::lexer::skip_space_and_comments(input)?;
+        // Skip optional leading comma (for directives like "atomic read,seq_cst")
+        let (input, _) = nom::combinator::opt(nom::character::complete::char(',')).parse(input)?;
+        let (input, _) = crate::lexer::skip_space_and_comments(input)?;
+
         let parse_clause = |input| self.parse_clause(input);
         let separator = |i| {
             let original = i;
