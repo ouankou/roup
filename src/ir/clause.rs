@@ -33,6 +33,8 @@
 
 use std::fmt;
 
+use strum::EnumString;
+
 use super::{Expression, Identifier, Variable};
 
 // ============================================================================
@@ -60,31 +62,43 @@ use super::{Expression, Identifier, Variable};
 /// The `repr(C)` attribute ensures this enum has the same memory layout
 /// as a C enum, making it safe to pass across FFI boundaries.
 /// Explicit discriminants ensure stable values across versions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum ReductionOperator {
     // Arithmetic operators
-    Add = 0,      // +
+    #[strum(serialize = "+")]
+    Add = 0, // +
+    #[strum(serialize = "*")]
     Multiply = 1, // *
+    #[strum(serialize = "-")]
     Subtract = 2, // -
 
     // Bitwise operators
+    #[strum(serialize = "&")]
     BitwiseAnd = 10, // &
-    BitwiseOr = 11,  // |
+    #[strum(serialize = "|")]
+    BitwiseOr = 11, // |
+    #[strum(serialize = "^")]
     BitwiseXor = 12, // ^
 
     // Logical operators
+    #[strum(serialize = "&&")]
     LogicalAnd = 20, // &&
-    LogicalOr = 21,  // ||
+    #[strum(serialize = "||")]
+    LogicalOr = 21, // ||
 
     // Min/Max operators
+    #[strum(serialize = "min")]
     Min = 30,
+    #[strum(serialize = "max")]
     Max = 31,
 
     // C++ specific operators (OpenMP 5.2 supports these)
+    #[strum(serialize = "-=")]
     MinusEqual = 40, // -= (non-commutative)
 
     // User-defined reduction operator
+    #[strum(serialize = "custom")]
     Custom = 100,
 }
 
@@ -125,20 +139,26 @@ impl fmt::Display for ReductionOperator {
 /// let mt = MapType::ToFrom;
 /// assert_eq!(mt.to_string(), "tofrom");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum MapType {
     /// Map data to device (host → device)
+    #[strum(serialize = "to")]
     To = 0,
     /// Map data from device (device → host)
+    #[strum(serialize = "from")]
     From = 1,
     /// Map data to and from device (bidirectional)
+    #[strum(serialize = "tofrom")]
     ToFrom = 2,
     /// Allocate device memory without transfer
+    #[strum(serialize = "alloc")]
     Alloc = 3,
     /// Release device memory
+    #[strum(serialize = "release")]
     Release = 4,
     /// Delete device memory
+    #[strum(serialize = "delete")]
     Delete = 5,
 }
 
@@ -173,18 +193,23 @@ impl fmt::Display for MapType {
 /// let sk = ScheduleKind::Dynamic;
 /// assert_eq!(sk.to_string(), "dynamic");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum ScheduleKind {
     /// Iterations divided into chunks of specified size, assigned statically
+    #[strum(serialize = "static")]
     Static = 0,
     /// Iterations divided into chunks, assigned dynamically at runtime
+    #[strum(serialize = "dynamic")]
     Dynamic = 1,
     /// Similar to dynamic but chunk size decreases exponentially
+    #[strum(serialize = "guided")]
     Guided = 2,
     /// Implementation-defined scheduling
+    #[strum(serialize = "auto")]
     Auto = 3,
     /// Runtime determines schedule via environment variable
+    #[strum(serialize = "runtime")]
     Runtime = 4,
 }
 
@@ -215,14 +240,17 @@ impl fmt::Display for ScheduleKind {
 /// let sm = ScheduleModifier::Monotonic;
 /// assert_eq!(sm.to_string(), "monotonic");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum ScheduleModifier {
     /// Iterations assigned in monotonically increasing order
+    #[strum(serialize = "monotonic")]
     Monotonic = 0,
     /// No ordering guarantee (allows optimizations)
+    #[strum(serialize = "nonmonotonic")]
     Nonmonotonic = 1,
     /// SIMD execution of iterations
+    #[strum(serialize = "simd")]
     Simd = 2,
 }
 
@@ -254,22 +282,29 @@ impl fmt::Display for ScheduleModifier {
 /// let dt = DependType::Inout;
 /// assert_eq!(dt.to_string(), "inout");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum DependType {
     /// Read dependency
+    #[strum(serialize = "in")]
     In = 0,
     /// Write dependency
+    #[strum(serialize = "out")]
     Out = 1,
     /// Read-write dependency
+    #[strum(serialize = "inout")]
     Inout = 2,
     /// Mutual exclusion with inout
+    #[strum(serialize = "mutexinoutset")]
     Mutexinoutset = 3,
     /// Dependency on task completion
+    #[strum(serialize = "depobj")]
     Depobj = 4,
     /// Source dependency (OpenMP 5.0)
+    #[strum(serialize = "source")]
     Source = 5,
     /// Sink dependency (OpenMP 5.0)
+    #[strum(serialize = "sink")]
     Sink = 6,
 }
 
@@ -305,16 +340,20 @@ impl fmt::Display for DependType {
 /// let dk = DefaultKind::None;
 /// assert_eq!(dk.to_string(), "none");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum DefaultKind {
     /// Variables are shared by default
+    #[strum(serialize = "shared")]
     Shared = 0,
     /// No default (must specify for each variable)
+    #[strum(serialize = "none")]
     None = 1,
     /// Variables are private by default (Fortran only)
+    #[strum(serialize = "private")]
     Private = 2,
     /// Variables are firstprivate by default
+    #[strum(serialize = "firstprivate")]
     Firstprivate = 3,
 }
 
@@ -344,16 +383,20 @@ impl fmt::Display for DefaultKind {
 /// let pb = ProcBind::Close;
 /// assert_eq!(pb.to_string(), "close");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum ProcBind {
     /// Threads execute close to the master thread
+    #[strum(serialize = "master")]
     Master = 0,
     /// Threads execute close to the master thread (OpenMP 5.1 deprecates 'master')
+    #[strum(serialize = "close")]
     Close = 1,
     /// Threads spread out across available processors
+    #[strum(serialize = "spread")]
     Spread = 2,
     /// Implementation-defined binding
+    #[strum(serialize = "primary")]
     Primary = 3,
 }
 
@@ -383,18 +426,23 @@ impl fmt::Display for ProcBind {
 /// let mo = MemoryOrder::SeqCst;
 /// assert_eq!(mo.to_string(), "seq_cst");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum MemoryOrder {
     /// Sequential consistency (strongest)
+    #[strum(serialize = "seq_cst")]
     SeqCst = 0,
     /// Acquire-release ordering
+    #[strum(serialize = "acq_rel")]
     AcqRel = 1,
     /// Release ordering
+    #[strum(serialize = "release")]
     Release = 2,
     /// Acquire ordering
+    #[strum(serialize = "acquire")]
     Acquire = 3,
     /// Relaxed ordering (weakest)
+    #[strum(serialize = "relaxed")]
     Relaxed = 4,
 }
 
@@ -425,16 +473,20 @@ impl fmt::Display for MemoryOrder {
 /// let ao = AtomicOp::Read;
 /// assert_eq!(ao.to_string(), "read");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum AtomicOp {
     /// Atomic read
+    #[strum(serialize = "read")]
     Read = 0,
     /// Atomic write
+    #[strum(serialize = "write")]
     Write = 1,
     /// Atomic update
+    #[strum(serialize = "update")]
     Update = 2,
     /// Atomic capture
+    #[strum(serialize = "capture")]
     Capture = 3,
 }
 
@@ -467,14 +519,17 @@ impl fmt::Display for AtomicOp {
 /// let dt = DeviceType::Nohost;
 /// assert_eq!(dt.to_string(), "nohost");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum DeviceType {
     /// Host device
+    #[strum(serialize = "host")]
     Host = 0,
     /// Non-host device (accelerator)
+    #[strum(serialize = "nohost")]
     Nohost = 1,
     /// Any device
+    #[strum(serialize = "any")]
     Any = 2,
 }
 
@@ -503,14 +558,17 @@ impl fmt::Display for DeviceType {
 /// let lm = LinearModifier::Val;
 /// assert_eq!(lm.to_string(), "val");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum LinearModifier {
     /// Linear variable value
+    #[strum(serialize = "val")]
     Val = 0,
     /// Reference to linear variable
+    #[strum(serialize = "ref")]
     Ref = 1,
     /// Uniform across SIMD lanes
+    #[strum(serialize = "uval")]
     Uval = 2,
 }
 
@@ -539,10 +597,11 @@ impl fmt::Display for LinearModifier {
 /// let lm = LastprivateModifier::Conditional;
 /// assert_eq!(lm.to_string(), "conditional");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum LastprivateModifier {
     /// Update only if condition is true
+    #[strum(serialize = "conditional")]
     Conditional = 0,
 }
 
@@ -569,10 +628,11 @@ impl fmt::Display for LastprivateModifier {
 /// let ok = OrderKind::Concurrent;
 /// assert_eq!(ok.to_string(), "concurrent");
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString)]
 #[repr(C)]
 pub enum OrderKind {
     /// Iterations may execute concurrently
+    #[strum(serialize = "concurrent")]
     Concurrent = 0,
 }
 
