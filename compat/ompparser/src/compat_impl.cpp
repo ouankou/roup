@@ -767,6 +767,66 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                                                  OMPC_SCHEDULE_MODIFIER_unspecified,
                                                  omp_sched);
             }
+            // Handle if clause - needs modifier extraction from "if(modifier: expr)" or "if(expr)"
+            else if (clause_kind == OMPC_if) {
+                OmpStringList* vars = roup_clause_variables(roup_clause);
+                OpenMPIfClauseModifier modifier = OMPC_IF_MODIFIER_unspecified;
+                char* user_modifier = nullptr;
+
+                if (vars && roup_string_list_len(vars) > 0) {
+                    const char* content = roup_string_list_get(vars, 0);
+                    if (content) {
+                        std::string if_content(content);
+                        // Check for modifier format "modifier: expr"
+                        size_t colon_pos = if_content.find(':');
+                        if (colon_pos != std::string::npos) {
+                            std::string mod_str = if_content.substr(0, colon_pos);
+                            // Trim whitespace
+                            mod_str.erase(0, mod_str.find_first_not_of(" \t"));
+                            mod_str.erase(mod_str.find_last_not_of(" \t") + 1);
+
+                            // Map modifier string to enum
+                            if (mod_str == "parallel") modifier = OMPC_IF_MODIFIER_parallel;
+                            else if (mod_str == "simd") modifier = OMPC_IF_MODIFIER_simd;
+                            else if (mod_str == "task") modifier = OMPC_IF_MODIFIER_task;
+                            else if (mod_str == "cancel") modifier = OMPC_IF_MODIFIER_cancel;
+                            else if (mod_str == "target") modifier = OMPC_IF_MODIFIER_target;
+                            else if (mod_str == "target data") modifier = OMPC_IF_MODIFIER_target_data;
+                            else if (mod_str == "target enter data") modifier = OMPC_IF_MODIFIER_target_enter_data;
+                            else if (mod_str == "target exit data") modifier = OMPC_IF_MODIFIER_target_exit_data;
+                            else if (mod_str == "target update") modifier = OMPC_IF_MODIFIER_target_update;
+                            else if (mod_str == "taskloop") modifier = OMPC_IF_MODIFIER_taskloop;
+                            else {
+                                modifier = OMPC_IF_MODIFIER_user;
+                                user_modifier = strdup(mod_str.c_str());
+                            }
+
+                            // Extract expression after colon
+                            std::string expr = if_content.substr(colon_pos + 1);
+                            expr.erase(0, expr.find_first_not_of(" \t"));
+                            expr.erase(expr.find_last_not_of(" \t") + 1);
+
+                            new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), modifier, user_modifier);
+                            if (new_clause && !expr.empty()) {
+                                new_clause->addLangExpr(strdup(expr.c_str()));
+                            }
+                        } else {
+                            // No modifier, just expression
+                            new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), OMPC_IF_MODIFIER_unspecified, (char*)nullptr);
+                            if (new_clause) {
+                                new_clause->addLangExpr(strdup(content));
+                            }
+                        }
+                    }
+                    roup_string_list_free(vars);
+                } else {
+                    // No content
+                    new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), OMPC_IF_MODIFIER_unspecified, (char*)nullptr);
+                    if (vars) roup_string_list_free(vars);
+                }
+                // Skip the variable adding loop for if clauses
+                continue;
+            }
             // Skip unknown clauses
             else if (clause_kind == OMPC_unknown) {
                 continue;

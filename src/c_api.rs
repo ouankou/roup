@@ -980,7 +980,12 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 
     let (kind, data) = match normalized_name.as_str() {
         "num_threads" => (0, ClauseData { default: 0 }),
-        "if" => (1, ClauseData { default: 0 }),
+        "if" => (
+            1,
+            ClauseData {
+                variables: extract_clause_variables(clause),
+            },
+        ),
         "private" => (
             2,
             ClauseData {
