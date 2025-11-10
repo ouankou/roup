@@ -64,28 +64,28 @@ use super::{Expression, Identifier, Variable};
 #[repr(C)]
 pub enum ReductionOperator {
     // Arithmetic operators
-    Add,      // +
-    Multiply, // *
-    Subtract, // -
+    Add = 0,      // +
+    Multiply = 1, // *
+    Subtract = 2, // -
 
     // Bitwise operators
-    BitwiseAnd, // &
-    BitwiseOr,  // |
-    BitwiseXor, // ^
+    BitwiseAnd = 10, // &
+    BitwiseOr = 11,  // |
+    BitwiseXor = 12, // ^
 
     // Logical operators
-    LogicalAnd, // &&
-    LogicalOr,  // ||
+    LogicalAnd = 20, // &&
+    LogicalOr = 21,  // ||
 
     // Min/Max operators
-    Min,
-    Max,
+    Min = 30,
+    Max = 31,
 
     // C++ specific operators (OpenMP 5.2 supports these)
-    MinusEqual, // -= (non-commutative)
+    MinusEqual = 40, // -= (non-commutative)
 
     // User-defined reduction operator
-    Custom,
+    Custom = 100,
 }
 
 impl fmt::Display for ReductionOperator {
@@ -150,17 +150,17 @@ impl std::str::FromStr for ReductionOperator {
 #[repr(C)]
 pub enum MapType {
     /// Map data to device (host → device)
-    To,
+    To = 0,
     /// Map data from device (device → host)
-    From,
+    From = 1,
     /// Map data to and from device (bidirectional)
-    ToFrom,
+    ToFrom = 2,
     /// Allocate device memory without transfer
-    Alloc,
+    Alloc = 3,
     /// Release device memory
-    Release,
+    Release = 4,
     /// Delete device memory
-    Delete,
+    Delete = 5,
 }
 
 impl fmt::Display for MapType {
@@ -214,15 +214,15 @@ impl std::str::FromStr for MapType {
 #[repr(C)]
 pub enum ScheduleKind {
     /// Iterations divided into chunks of specified size, assigned statically
-    Static,
+    Static = 0,
     /// Iterations divided into chunks, assigned dynamically at runtime
-    Dynamic,
+    Dynamic = 1,
     /// Similar to dynamic but chunk size decreases exponentially
-    Guided,
+    Guided = 2,
     /// Implementation-defined scheduling
-    Auto,
+    Auto = 3,
     /// Runtime determines schedule via environment variable
-    Runtime,
+    Runtime = 4,
 }
 
 impl fmt::Display for ScheduleKind {
@@ -271,11 +271,11 @@ impl std::str::FromStr for ScheduleKind {
 #[repr(C)]
 pub enum ScheduleModifier {
     /// Iterations assigned in monotonically increasing order
-    Monotonic,
+    Monotonic = 0,
     /// No ordering guarantee (allows optimizations)
-    Nonmonotonic,
+    Nonmonotonic = 1,
     /// SIMD execution of iterations
-    Simd,
+    Simd = 2,
 }
 
 impl fmt::Display for ScheduleModifier {
@@ -323,19 +323,19 @@ impl std::str::FromStr for ScheduleModifier {
 #[repr(C)]
 pub enum DependType {
     /// Read dependency
-    In,
+    In = 0,
     /// Write dependency
-    Out,
+    Out = 1,
     /// Read-write dependency
-    Inout,
+    Inout = 2,
     /// Mutual exclusion with inout
-    Mutexinoutset,
+    Mutexinoutset = 3,
     /// Dependency on task completion
-    Depobj,
+    Depobj = 4,
     /// Source dependency (OpenMP 5.0)
-    Source,
+    Source = 5,
     /// Sink dependency (OpenMP 5.0)
-    Sink,
+    Sink = 6,
 }
 
 impl fmt::Display for DependType {
@@ -391,13 +391,13 @@ impl std::str::FromStr for DependType {
 #[repr(C)]
 pub enum DefaultKind {
     /// Variables are shared by default
-    Shared,
+    Shared = 0,
     /// No default (must specify for each variable)
-    None,
+    None = 1,
     /// Variables are private by default (Fortran only)
-    Private,
+    Private = 2,
     /// Variables are firstprivate by default
-    Firstprivate,
+    Firstprivate = 3,
 }
 
 impl fmt::Display for DefaultKind {
@@ -444,13 +444,13 @@ impl std::str::FromStr for DefaultKind {
 #[repr(C)]
 pub enum ProcBind {
     /// Threads execute close to the master thread
-    Master,
+    Master = 0,
     /// Threads execute close to the master thread (OpenMP 5.1 deprecates 'master')
-    Close,
+    Close = 1,
     /// Threads spread out across available processors
-    Spread,
+    Spread = 2,
     /// Implementation-defined binding
-    Primary,
+    Primary = 3,
 }
 
 impl fmt::Display for ProcBind {
@@ -497,15 +497,15 @@ impl std::str::FromStr for ProcBind {
 #[repr(C)]
 pub enum MemoryOrder {
     /// Sequential consistency (strongest)
-    SeqCst,
+    SeqCst = 0,
     /// Acquire-release ordering
-    AcqRel,
+    AcqRel = 1,
     /// Release ordering
-    Release,
+    Release = 2,
     /// Acquire ordering
-    Acquire,
+    Acquire = 3,
     /// Relaxed ordering (weakest)
-    Relaxed,
+    Relaxed = 4,
 }
 
 impl fmt::Display for MemoryOrder {
@@ -539,13 +539,13 @@ impl fmt::Display for MemoryOrder {
 #[repr(C)]
 pub enum AtomicOp {
     /// Atomic read
-    Read,
+    Read = 0,
     /// Atomic write
-    Write,
+    Write = 1,
     /// Atomic update
-    Update,
+    Update = 2,
     /// Atomic capture
-    Capture,
+    Capture = 3,
 }
 
 impl fmt::Display for AtomicOp {
@@ -581,11 +581,11 @@ impl fmt::Display for AtomicOp {
 #[repr(C)]
 pub enum DeviceType {
     /// Host device
-    Host,
+    Host = 0,
     /// Non-host device (accelerator)
-    Nohost,
+    Nohost = 1,
     /// Any device
-    Any,
+    Any = 2,
 }
 
 impl fmt::Display for DeviceType {
@@ -617,11 +617,11 @@ impl fmt::Display for DeviceType {
 #[repr(C)]
 pub enum LinearModifier {
     /// Linear variable value
-    Val,
+    Val = 0,
     /// Reference to linear variable
-    Ref,
+    Ref = 1,
     /// Uniform across SIMD lanes
-    Uval,
+    Uval = 2,
 }
 
 impl fmt::Display for LinearModifier {
@@ -653,7 +653,7 @@ impl fmt::Display for LinearModifier {
 #[repr(C)]
 pub enum LastprivateModifier {
     /// Update only if condition is true
-    Conditional,
+    Conditional = 0,
 }
 
 impl fmt::Display for LastprivateModifier {
@@ -683,7 +683,7 @@ impl fmt::Display for LastprivateModifier {
 #[repr(C)]
 pub enum OrderKind {
     /// Iterations may execute concurrently
-    Concurrent,
+    Concurrent = 0,
 }
 
 impl fmt::Display for OrderKind {
@@ -1329,9 +1329,16 @@ mod tests {
         assert_eq!(op1, op3);
     }
 
-    // Discriminants are auto-generated sequentially by Rust.
-    // The C API uses these via build.rs constant generation.
-    // No need to test specific values as they're compiler-managed.
+    #[test]
+    fn test_reduction_operator_discriminants() {
+        // Ensure discriminants are stable for FFI
+        assert_eq!(ReductionOperator::Add as i32, 0);
+        assert_eq!(ReductionOperator::Multiply as i32, 1);
+        assert_eq!(ReductionOperator::BitwiseAnd as i32, 10);
+        assert_eq!(ReductionOperator::LogicalAnd as i32, 20);
+        assert_eq!(ReductionOperator::Min as i32, 30);
+        assert_eq!(ReductionOperator::Custom as i32, 100);
+    }
 
     // Test MapType
     #[test]
