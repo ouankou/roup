@@ -47,6 +47,9 @@ extern "C" {
 // Global State
 // ============================================================================
 
+// Global flag for clause normalization control (required by ompparser)
+bool normalize_clauses_global = true;
+
 static OpenMPBaseLang current_lang = Lang_C;
 
 // Language prefix constants - defined once to avoid manual synchronization

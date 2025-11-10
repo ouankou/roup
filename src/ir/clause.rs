@@ -107,6 +107,27 @@ impl fmt::Display for ReductionOperator {
     }
 }
 
+impl std::str::FromStr for ReductionOperator {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "+" => Ok(ReductionOperator::Add),
+            "-" => Ok(ReductionOperator::Subtract),
+            "*" => Ok(ReductionOperator::Multiply),
+            "&" => Ok(ReductionOperator::BitwiseAnd),
+            "|" => Ok(ReductionOperator::BitwiseOr),
+            "^" => Ok(ReductionOperator::BitwiseXor),
+            "&&" => Ok(ReductionOperator::LogicalAnd),
+            "||" => Ok(ReductionOperator::LogicalOr),
+            "min" => Ok(ReductionOperator::Min),
+            "max" => Ok(ReductionOperator::Max),
+            "-=" => Ok(ReductionOperator::MinusEqual),
+            _ => Err(format!("Unknown reduction operator: {}", s)),
+        }
+    }
+}
+
 // ============================================================================
 // Map Type (OpenMP 5.2 spec section 5.8.3)
 // ============================================================================
@@ -151,6 +172,22 @@ impl fmt::Display for MapType {
             MapType::Alloc => write!(f, "alloc"),
             MapType::Release => write!(f, "release"),
             MapType::Delete => write!(f, "delete"),
+        }
+    }
+}
+
+impl std::str::FromStr for MapType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "to" => Ok(MapType::To),
+            "from" => Ok(MapType::From),
+            "tofrom" => Ok(MapType::ToFrom),
+            "alloc" => Ok(MapType::Alloc),
+            "release" => Ok(MapType::Release),
+            "delete" => Ok(MapType::Delete),
+            _ => Err(format!("Unknown map type: {}", s)),
         }
     }
 }
@@ -200,6 +237,21 @@ impl fmt::Display for ScheduleKind {
     }
 }
 
+impl std::str::FromStr for ScheduleKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "static" => Ok(ScheduleKind::Static),
+            "dynamic" => Ok(ScheduleKind::Dynamic),
+            "guided" => Ok(ScheduleKind::Guided),
+            "auto" => Ok(ScheduleKind::Auto),
+            "runtime" => Ok(ScheduleKind::Runtime),
+            _ => Err(format!("Unknown schedule kind: {}", s)),
+        }
+    }
+}
+
 // ============================================================================
 // Schedule Modifier (OpenMP 5.2 spec section 2.9.2)
 // ============================================================================
@@ -232,6 +284,19 @@ impl fmt::Display for ScheduleModifier {
             ScheduleModifier::Monotonic => write!(f, "monotonic"),
             ScheduleModifier::Nonmonotonic => write!(f, "nonmonotonic"),
             ScheduleModifier::Simd => write!(f, "simd"),
+        }
+    }
+}
+
+impl std::str::FromStr for ScheduleModifier {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "monotonic" => Ok(ScheduleModifier::Monotonic),
+            "nonmonotonic" => Ok(ScheduleModifier::Nonmonotonic),
+            "simd" => Ok(ScheduleModifier::Simd),
+            _ => Err(format!("Unknown schedule modifier: {}", s)),
         }
     }
 }
@@ -287,6 +352,23 @@ impl fmt::Display for DependType {
     }
 }
 
+impl std::str::FromStr for DependType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "in" => Ok(DependType::In),
+            "out" => Ok(DependType::Out),
+            "inout" => Ok(DependType::Inout),
+            "mutexinoutset" => Ok(DependType::Mutexinoutset),
+            "depobj" => Ok(DependType::Depobj),
+            "source" => Ok(DependType::Source),
+            "sink" => Ok(DependType::Sink),
+            _ => Err(format!("Unknown depend type: {}", s)),
+        }
+    }
+}
+
 // ============================================================================
 // Default Kind (OpenMP 5.2 spec section 2.9.3.1)
 // ============================================================================
@@ -329,6 +411,20 @@ impl fmt::Display for DefaultKind {
     }
 }
 
+impl std::str::FromStr for DefaultKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim() {
+            "shared" => Ok(DefaultKind::Shared),
+            "none" => Ok(DefaultKind::None),
+            "private" => Ok(DefaultKind::Private),
+            "firstprivate" => Ok(DefaultKind::Firstprivate),
+            _ => Err(format!("Unknown default kind: {}", s)),
+        }
+    }
+}
+
 // ============================================================================
 // Proc Bind (OpenMP 5.2 spec section 2.6.2)
 // ============================================================================
@@ -364,6 +460,20 @@ impl fmt::Display for ProcBind {
             ProcBind::Close => write!(f, "close"),
             ProcBind::Spread => write!(f, "spread"),
             ProcBind::Primary => write!(f, "primary"),
+        }
+    }
+}
+
+impl std::str::FromStr for ProcBind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim() {
+            "master" => Ok(ProcBind::Master),
+            "close" => Ok(ProcBind::Close),
+            "spread" => Ok(ProcBind::Spread),
+            "primary" => Ok(ProcBind::Primary),
+            _ => Err(format!("Unknown proc_bind kind: {}", s)),
         }
     }
 }
