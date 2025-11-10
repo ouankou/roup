@@ -628,6 +628,40 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 }
             }
         }
+        // Handle flush directive - extract variable list
+        else if (kind == OMPD_flush) {
+            if (param.size() >= 2 && param.front() == '(' && param.back() == ')') {
+                std::string vars = param.substr(1, param.size() - 2);
+                // Split by comma and add each variable
+                size_t start = 0;
+                while (start < vars.length()) {
+                    size_t comma = vars.find(',', start);
+                    std::string var = (comma != std::string::npos)
+                        ? vars.substr(start, comma - start)
+                        : vars.substr(start);
+                    // Trim whitespace
+                    var.erase(0, var.find_first_not_of(" \t"));
+                    var.erase(var.find_last_not_of(" \t") + 1);
+                    if (!var.empty()) {
+                        static_cast<OpenMPFlushDirective*>(dir)->addFlushList(var.c_str());
+                    }
+                    if (comma == std::string::npos) break;
+                    start = comma + 1;
+                }
+            }
+        }
+        // Handle depobj directive - extract depobj object
+        else if (kind == OMPD_depobj) {
+            if (param.size() >= 2 && param.front() == '(' && param.back() == ')') {
+                std::string obj = param.substr(1, param.size() - 2);
+                // Trim whitespace
+                obj.erase(0, obj.find_first_not_of(" \t"));
+                obj.erase(obj.find_last_not_of(" \t") + 1);
+                if (!obj.empty()) {
+                    static_cast<OpenMPDepobjDirective*>(dir)->addDepobj(obj.c_str());
+                }
+            }
+        }
         // Handle END directive - create paired directive from directive name
         else if (kind == OMPD_end) {
             // For END directives, extract the directive being ended from the name

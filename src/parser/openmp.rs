@@ -425,6 +425,63 @@ fn parse_threadprivate_directive<'a>(
     }
 }
 
+// Custom parser for flush directive: flush [memory-order] [(list)]
+fn parse_flush_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+    use nom::Parser;
+
+    let (input, _) = crate::lexer::skip_space_and_comments(input)?;
+
+    // Try to parse memory order clause (acq_rel, acquire, release, seq_cst)
+    // followed by parenthesized variable list
+    let memory_orders = ["acq_rel", "acquire", "release", "seq_cst"];
+
+    for order in &memory_orders {
+        if let Ok((rest, _)) = nom::bytes::complete::tag::<_, _, nom::error::Error<_>>(*order).parse(input) {
+            let (rest, _) = crate::lexer::skip_space_and_comments(rest)?;
+            // Try to parse parenthesized variable list
+            if let Ok((rest, var_list)) = parse_parenthesized_content(rest) {
+                // Create a clause for the memory order
+                use crate::parser::clause::{Clause, ClauseKind};
+                let mem_clause = Clause {
+                    name: std::borrow::Cow::Borrowed(order),
+                    kind: ClauseKind::Bare,
+                };
+                return Ok((
+                    rest,
+                    Directive::new(
+                        std::borrow::Cow::Borrowed("flush"),
+                        Some(std::borrow::Cow::Owned(format!("({})", var_list))),
+                        vec![mem_clause],
+                    ),
+                ));
+            }
+            break;
+        }
+    }
+
+    // Try to parse parenthesized variable list (then optional clauses)
+    if let Ok((rest, var_list)) = parse_parenthesized_content(input) {
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+        Ok((
+            rest,
+            Directive::new(
+                std::borrow::Cow::Borrowed("flush"),
+                Some(std::borrow::Cow::Owned(format!("({})", var_list))),
+                clauses,
+            ),
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare flush or flush with clauses)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive::new(name, None, clauses)))
+    }
+}
+
 // Custom parser for critical directive: critical(name) or bare critical
 fn parse_critical_directive<'a>(
     name: std::borrow::Cow<'a, str>,
@@ -833,6 +890,7 @@ const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
     "allocate",
     "threadprivate",
     "critical",
+    "flush",
     "declare target",
     "declare mapper",
     "declare variant",
@@ -851,6 +909,7 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("allocate", parse_allocate_directive);
     builder = builder.register_custom("threadprivate", parse_threadprivate_directive);
     builder = builder.register_custom("critical", parse_critical_directive);
+    builder = builder.register_custom("flush", parse_flush_directive);
     builder = builder.register_custom("declare target", parse_declare_target_extended);
     builder = builder.register_custom("declare mapper", parse_declare_mapper_directive);
     builder = builder.register_custom("declare variant", parse_declare_variant_directive);
