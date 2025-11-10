@@ -85,6 +85,70 @@ pub const ROUP_LANG_FORTRAN_FREE: i32 = 1;
 pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 
 // ============================================================================
+// OpenMP Clause Kind Constants (Internal Rust API)
+// ============================================================================
+// These constants match the auto-generated C header (roup_constants.h)
+// and are used internally to avoid raw numbers in comparisons.
+// DO NOT modify these values - they must match convert_clause() mappings.
+
+#[allow(dead_code)]
+const CLAUSE_KIND_NUM_THREADS: i32 = 0;
+#[allow(dead_code)]
+const CLAUSE_KIND_IF: i32 = 1;
+const CLAUSE_KIND_PRIVATE: i32 = 2;
+#[allow(dead_code)]
+const CLAUSE_KIND_SHARED: i32 = 3;
+#[allow(dead_code)]
+const CLAUSE_KIND_FIRSTPRIVATE: i32 = 4;
+const CLAUSE_KIND_LASTPRIVATE: i32 = 5;
+const CLAUSE_KIND_REDUCTION: i32 = 6;
+const CLAUSE_KIND_SCHEDULE: i32 = 7;
+#[allow(dead_code)]
+const CLAUSE_KIND_COLLAPSE: i32 = 8;
+#[allow(dead_code)]
+const CLAUSE_KIND_ORDERED: i32 = 9;
+#[allow(dead_code)]
+const CLAUSE_KIND_NOWAIT: i32 = 10;
+const CLAUSE_KIND_DEFAULT: i32 = 11;
+#[allow(dead_code)]
+const CLAUSE_KIND_UNKNOWN: i32 = 999;
+
+// ============================================================================
+// Reduction Operator Constants
+// ============================================================================
+// Used by parse_reduction_operator() for clause data values
+
+const REDUCTION_OP_ADD: i32 = 0; // +
+const REDUCTION_OP_SUBTRACT: i32 = 1; // -
+const REDUCTION_OP_MULTIPLY: i32 = 2; // *
+const REDUCTION_OP_BITWISE_AND: i32 = 3; // &
+const REDUCTION_OP_BITWISE_OR: i32 = 4; // |
+const REDUCTION_OP_BITWISE_XOR: i32 = 5; // ^
+const REDUCTION_OP_LOGICAL_AND: i32 = 6; // &&
+const REDUCTION_OP_LOGICAL_OR: i32 = 7; // ||
+const REDUCTION_OP_MIN: i32 = 8; // min
+const REDUCTION_OP_MAX: i32 = 9; // max
+
+// ============================================================================
+// Schedule Kind Constants
+// ============================================================================
+// Used by parse_schedule_kind() for clause data values
+
+const SCHEDULE_KIND_STATIC: i32 = 0;
+const SCHEDULE_KIND_DYNAMIC: i32 = 1;
+const SCHEDULE_KIND_GUIDED: i32 = 2;
+const SCHEDULE_KIND_AUTO: i32 = 3;
+const SCHEDULE_KIND_RUNTIME: i32 = 4;
+
+// ============================================================================
+// Default Clause Constants
+// ============================================================================
+// Used by parse_default_kind() for clause data values
+
+const DEFAULT_KIND_SHARED: i32 = 0;
+const DEFAULT_KIND_NONE: i32 = 1;
+
+// ============================================================================
 // Constants Documentation
 // ============================================================================
 //
@@ -697,7 +761,7 @@ pub extern "C" fn roup_clause_schedule_kind(clause: *const OmpClause) -> i32 {
 
     unsafe {
         let c = &*clause;
-        if c.kind != 7 {
+        if c.kind != CLAUSE_KIND_SCHEDULE {
             // Not a schedule clause
             return -1;
         }
@@ -716,7 +780,7 @@ pub extern "C" fn roup_clause_reduction_operator(clause: *const OmpClause) -> i3
 
     unsafe {
         let c = &*clause;
-        if c.kind != 6 {
+        if c.kind != CLAUSE_KIND_REDUCTION {
             // Not a reduction clause
             return -1;
         }
@@ -735,7 +799,7 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
 
     unsafe {
         let c = &*clause;
-        if c.kind != 11 {
+        if c.kind != CLAUSE_KIND_DEFAULT {
             // Not a default clause
             return -1;
         }
@@ -764,7 +828,7 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
 
         // Check if this clause type has variables
         // Kinds 2-5 are private/shared/firstprivate/lastprivate
-        if c.kind < 2 || c.kind > 6 {
+        if c.kind < CLAUSE_KIND_PRIVATE || c.kind > CLAUSE_KIND_REDUCTION {
             return ptr::null_mut();
         }
 
@@ -970,44 +1034,44 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 /// Extracts the operator from reduction clause like "reduction(+: sum)".
 /// Returns integer code for the operator type.
 ///
-/// ## Operator Codes:
-/// - 0 = +  (addition)      - 5 = ^  (bitwise XOR)
-/// - 1 = -  (subtraction)   - 6 = && (logical AND)
-/// - 2 = *  (multiplication) - 7 = || (logical OR)
-/// - 3 = &  (bitwise AND)   - 8 = min
-/// - 4 = |  (bitwise OR)    - 9 = max
+/// ## Operator Codes (see REDUCTION_OP_* constants):
+/// - REDUCTION_OP_ADD (+)        - REDUCTION_OP_BITWISE_XOR (^)
+/// - REDUCTION_OP_SUBTRACT (-)   - REDUCTION_OP_LOGICAL_AND (&&)
+/// - REDUCTION_OP_MULTIPLY (*)   - REDUCTION_OP_LOGICAL_OR (||)
+/// - REDUCTION_OP_BITWISE_AND (&)- REDUCTION_OP_MIN (min)
+/// - REDUCTION_OP_BITWISE_OR (|) - REDUCTION_OP_MAX (max)
 fn parse_reduction_operator(clause: &Clause) -> i32 {
     // Look for operator in clause kind
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
         // Operators (+, -, *, etc.) are ASCII symbols - no case conversion needed
         if args.contains('+') && !args.contains("++") {
-            return 0; // Plus
+            return REDUCTION_OP_ADD;
         } else if args.contains('-') && !args.contains("--") {
-            return 1; // Minus
+            return REDUCTION_OP_SUBTRACT;
         } else if args.contains('*') {
-            return 2; // Times
+            return REDUCTION_OP_MULTIPLY;
         } else if args.contains('&') && !args.contains("&&") {
-            return 3; // BitwiseAnd
+            return REDUCTION_OP_BITWISE_AND;
         } else if args.contains('|') && !args.contains("||") {
-            return 4; // BitwiseOr
+            return REDUCTION_OP_BITWISE_OR;
         } else if args.contains('^') {
-            return 5; // BitwiseXor
+            return REDUCTION_OP_BITWISE_XOR;
         } else if args.contains("&&") {
-            return 6; // LogicalAnd
+            return REDUCTION_OP_LOGICAL_AND;
         } else if args.contains("||") {
-            return 7; // LogicalOr
+            return REDUCTION_OP_LOGICAL_OR;
         }
 
         // For text keywords (min, max), normalize once for case-insensitive comparison
         let args_lower = args.to_ascii_lowercase();
         if args_lower.contains("min") {
-            return 8; // Min
+            return REDUCTION_OP_MIN;
         } else if args_lower.contains("max") {
-            return 9; // Max
+            return REDUCTION_OP_MAX;
         }
     }
-    0 // Default to plus
+    REDUCTION_OP_ADD // Default to add
 }
 
 /// Parse schedule kind from clause arguments.
@@ -1015,30 +1079,30 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
 /// Extracts schedule type from clause like "schedule(dynamic, 4)".
 /// Returns integer code for the schedule policy.
 ///
-/// ## Schedule Codes:
-/// - 0 = static   (default, divide iterations evenly)
-/// - 1 = dynamic  (distribute at runtime)
-/// - 2 = guided   (decreasing chunk sizes)
-/// - 3 = auto     (compiler decides)
-/// - 4 = runtime  (OMP_SCHEDULE environment variable)
+/// ## Schedule Codes (see SCHEDULE_KIND_* constants):
+/// - SCHEDULE_KIND_STATIC   (default, divide iterations evenly)
+/// - SCHEDULE_KIND_DYNAMIC  (distribute at runtime)
+/// - SCHEDULE_KIND_GUIDED   (decreasing chunk sizes)
+/// - SCHEDULE_KIND_AUTO     (compiler decides)
+/// - SCHEDULE_KIND_RUNTIME  (OMP_SCHEDULE environment variable)
 fn parse_schedule_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
         // Case-insensitive keyword matching without String allocation
         // Check common case variants (lowercase, uppercase, title case)
         if args.contains("static") || args.contains("STATIC") || args.contains("Static") {
-            return 0;
+            return SCHEDULE_KIND_STATIC;
         } else if args.contains("dynamic") || args.contains("DYNAMIC") || args.contains("Dynamic") {
-            return 1;
+            return SCHEDULE_KIND_DYNAMIC;
         } else if args.contains("guided") || args.contains("GUIDED") || args.contains("Guided") {
-            return 2;
+            return SCHEDULE_KIND_GUIDED;
         } else if args.contains("auto") || args.contains("AUTO") || args.contains("Auto") {
-            return 3;
+            return SCHEDULE_KIND_AUTO;
         } else if args.contains("runtime") || args.contains("RUNTIME") || args.contains("Runtime") {
-            return 4;
+            return SCHEDULE_KIND_RUNTIME;
         }
     }
-    0 // Default to static
+    SCHEDULE_KIND_STATIC // Default to static
 }
 
 /// Parse default clause data-sharing attribute.
@@ -1046,21 +1110,21 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
 /// Extracts the default sharing from clause like "default(shared)".
 /// Returns integer code for the default policy.
 ///
-/// ## Default Codes:
-/// - 0 = shared (all variables shared by default)
-/// - 1 = none   (must explicitly declare all variables)
+/// ## Default Codes (see DEFAULT_KIND_* constants):
+/// - DEFAULT_KIND_SHARED (all variables shared by default)
+/// - DEFAULT_KIND_NONE   (must explicitly declare all variables)
 fn parse_default_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
         // Case-insensitive keyword matching without String allocation
         // Check common case variants (lowercase, uppercase, title case)
         if args.contains("shared") || args.contains("SHARED") || args.contains("Shared") {
-            return 0;
+            return DEFAULT_KIND_SHARED;
         } else if args.contains("none") || args.contains("NONE") || args.contains("None") {
-            return 1;
+            return DEFAULT_KIND_NONE;
         }
     }
-    0 // Default to shared
+    DEFAULT_KIND_SHARED // Default to shared
 }
 
 /// Convert directive name to kind enum code.
@@ -1189,11 +1253,11 @@ fn free_clause_data(clause: &OmpClause) {
     unsafe {
         // Free variable lists if present
         // Clause kinds with variable lists (see convert_clause):
-        //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
+        //   CLAUSE_KIND_PRIVATE, CLAUSE_KIND_SHARED, CLAUSE_KIND_FIRSTPRIVATE, CLAUSE_KIND_LASTPRIVATE
         // Other kinds use different union fields:
-        //   6 = reduction (uses .reduction field, NOT .variables)
-        //   7 = schedule (uses .schedule field, NOT .variables)
-        if clause.kind >= 2 && clause.kind <= 5 {
+        //   CLAUSE_KIND_REDUCTION (uses .reduction field, NOT .variables)
+        //   CLAUSE_KIND_SCHEDULE (uses .schedule field, NOT .variables)
+        if clause.kind >= CLAUSE_KIND_PRIVATE && clause.kind <= CLAUSE_KIND_LASTPRIVATE {
             let vars_ptr = clause.data.variables;
             if !vars_ptr.is_null() {
                 roup_string_list_free(vars_ptr);
