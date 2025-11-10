@@ -47,6 +47,14 @@ extern "C" {
 // Global State
 // ============================================================================
 
+// Define normalize_clauses_global (declared extern in OpenMPIR.h)
+// This is normally defined in ompparser.yy but we're not using the parser
+bool normalize_clauses_global = true;
+
+extern "C" void setNormalizeClauses(bool normalize) {
+    normalize_clauses_global = normalize;
+}
+
 static OpenMPBaseLang current_lang = Lang_C;
 
 // Language prefix constants - defined once to avoid manual synchronization
