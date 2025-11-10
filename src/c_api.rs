@@ -1031,6 +1031,12 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 },
             )
         }
+        "dist_schedule" => (
+            999,
+            ClauseData {
+                variables: extract_clause_variables(clause),
+            },
+        ),
         "collapse" => (8, ClauseData { default: 0 }),
         "ordered" => (9, ClauseData { default: 0 }),
         "nowait" => (10, ClauseData { default: 0 }),

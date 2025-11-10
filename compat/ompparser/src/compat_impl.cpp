@@ -448,6 +448,7 @@ static OpenMPClauseKind mapRoupToOmpparserClause(int32_t roup_kind) {
         case 24:                        return OMPC_allocator;
         case 25:                        return OMPC_align;
         case 26:                        return OMPC_proc_bind;
+        case 999:                       return OMPC_dist_schedule;
         default:                        return OMPC_unknown;
     }
 }
@@ -800,6 +801,42 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                                                  OMPC_SCHEDULE_MODIFIER_unspecified,
                                                  OMPC_SCHEDULE_MODIFIER_unspecified,
                                                  omp_sched);
+            }
+            // Handle dist_schedule clause - parse kind and chunk size
+            else if (clause_kind == OMPC_dist_schedule) {
+                OmpStringList* vars = roup_clause_variables(roup_clause);
+                OpenMPDistScheduleClauseKind dist_kind = OMPC_DIST_SCHEDULE_KIND_static;
+
+                if (vars && roup_string_list_len(vars) > 0) {
+                    const char* content = roup_string_list_get(vars, 0);
+                    if (content) {
+                        std::string dist_content(content);
+
+                        // Parse "static" or "static,chunk_size"
+                        if (dist_content.find("static") != std::string::npos) {
+                            dist_kind = OMPC_DIST_SCHEDULE_KIND_static;
+                        } else {
+                            dist_kind = OMPC_DIST_SCHEDULE_KIND_unknown;
+                        }
+
+                        // Create the clause with kind
+                        new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), dist_kind);
+
+                        // Extract chunk size if present (after comma)
+                        size_t comma_pos = dist_content.find(',');
+                        if (comma_pos != std::string::npos && new_clause) {
+                            std::string chunk = dist_content.substr(comma_pos + 1);
+                            chunk.erase(0, chunk.find_first_not_of(" \t"));
+                            chunk.erase(chunk.find_last_not_of(" \t") + 1);
+                            if (!chunk.empty()) {
+                                static_cast<OpenMPDistScheduleClause*>(new_clause)->setChunkSize(chunk.c_str());
+                            }
+                        }
+                    }
+                    roup_string_list_free(vars);
+                }
+                // Skip variable adding loop for dist_schedule
+                continue;
             }
             // Handle if clause - needs modifier extraction from "if(modifier: expr)" or "if(expr)"
             else if (clause_kind == OMPC_if) {
