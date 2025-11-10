@@ -165,9 +165,9 @@ struct ScheduleData {
 
 /// Reduction clause data (operator and variables)
 #[repr(C)]
-#[derive(Copy, Clone)]
 struct ReductionData {
-    operator: i32, // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+    operator: i32,                // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+    variables: *mut OmpStringList // List of reduction variables
 }
 
 /// Iterator over clauses
@@ -817,10 +817,15 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
     unsafe {
         let c = &*clause;
 
-        // Extract variables from the union
-        // The variables field is set for clauses that have variable lists
-        // (private, shared, firstprivate, lastprivate, reduction, etc.)
-        let var_ptr = c.data.variables;
+        // For reduction clauses (kind==6), variables are in reduction.variables
+        // For other clauses, variables are in the variables field directly
+        let var_ptr = if c.kind == 6 {
+            // Reduction clause - get variables from reduction field
+            (*c.data.reduction).variables
+        } else {
+            // Other clauses - get variables from variables field
+            c.data.variables
+        };
 
         // If we have a variables list, clone it and return
         if !var_ptr.is_null() {
@@ -1002,10 +1007,11 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         ),
         "reduction" => {
             let operator = parse_reduction_operator(clause);
+            let variables = extract_reduction_variables(clause);
             (
                 6,
                 ClauseData {
-                    reduction: ManuallyDrop::new(ReductionData { operator }),
+                    reduction: ManuallyDrop::new(ReductionData { operator, variables }),
                 },
             )
         }
@@ -1124,6 +1130,40 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
         }
     }
     0 // Default to plus
+}
+
+/// Extract reduction variables from a clause.
+///
+/// For reduction clauses like "reduction(+:sum,total)", extracts only the variables
+/// after the colon ("sum,total"), splitting by comma.
+/// Returns NULL if no variables found.
+fn extract_reduction_variables(clause: &Clause) -> *mut OmpStringList {
+    use crate::parser::ClauseKind;
+
+    if let ClauseKind::Parenthesized(ref args) = clause.kind {
+        let args = args.as_ref();
+        // Find the colon separator between operator and variables
+        if let Some(colon_pos) = args.find(':') {
+            let vars_str = &args[colon_pos + 1..].trim();
+            // Split by comma and collect variables
+            let vars: Vec<*const c_char> = vars_str
+                .split(',')
+                .map(|v| v.trim())
+                .filter(|v| !v.is_empty())
+                .map(|v| allocate_c_string(v))
+                .collect();
+
+            if vars.is_empty() {
+                ptr::null_mut()
+            } else {
+                Box::into_raw(Box::new(OmpStringList { items: vars }))
+            }
+        } else {
+            ptr::null_mut()
+        }
+    } else {
+        ptr::null_mut()
+    }
 }
 
 /// Extract variable list from a clause.

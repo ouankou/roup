@@ -700,19 +700,60 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             int32_t roup_kind_clause = roup_clause_kind(roup_clause);
             OpenMPClauseKind clause_kind = mapRoupToOmpparserClause(roup_kind_clause);
 
-            // Skip clauses that need special va_args parameters - they require parsing
-            // OMPC_reduction, OMPC_schedule, OMPC_proc_bind, OMPC_lastprivate with modifiers, etc.
-            // For now, only handle simple clauses that just take a list of variables/expressions
-            if (clause_kind == OMPC_reduction ||
-                clause_kind == OMPC_schedule ||
-                clause_kind == OMPC_proc_bind ||
-                clause_kind == OMPC_unknown) {
-                // Skip complex clauses for now
+            OpenMPClause* new_clause = nullptr;
+
+            // Handle reduction clauses - need operator parameter
+            if (clause_kind == OMPC_reduction || clause_kind == OMPC_in_reduction || clause_kind == OMPC_task_reduction) {
+                int32_t roup_op = roup_clause_reduction_operator(roup_clause);
+                OpenMPReductionClauseIdentifier omp_op;
+
+                // Map ROUP ReductionOperator enum to ompparser OpenMPReductionClauseIdentifier
+                switch (roup_op) {
+                    case 0:  omp_op = OMPC_REDUCTION_IDENTIFIER_plus; break;     // Add
+                    case 1:  omp_op = OMPC_REDUCTION_IDENTIFIER_mul; break;      // Multiply
+                    case 2:  omp_op = OMPC_REDUCTION_IDENTIFIER_minus; break;    // Subtract
+                    case 10: omp_op = OMPC_REDUCTION_IDENTIFIER_bitand; break;   // BitwiseAnd
+                    case 11: omp_op = OMPC_REDUCTION_IDENTIFIER_bitor; break;    // BitwiseOr
+                    case 12: omp_op = OMPC_REDUCTION_IDENTIFIER_bitxor; break;   // BitwiseXor
+                    case 20: omp_op = OMPC_REDUCTION_IDENTIFIER_logand; break;   // LogicalAnd
+                    case 21: omp_op = OMPC_REDUCTION_IDENTIFIER_logor; break;    // LogicalOr
+                    case 30: omp_op = OMPC_REDUCTION_IDENTIFIER_min; break;      // Min
+                    case 31: omp_op = OMPC_REDUCTION_IDENTIFIER_max; break;      // Max
+                    default: omp_op = OMPC_REDUCTION_IDENTIFIER_user; break;     // Unknown/custom
+                }
+
+                new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), omp_op);
+            }
+            // Handle schedule clause - needs modifiers and schedule kind
+            else if (clause_kind == OMPC_schedule) {
+                int32_t roup_sched = roup_clause_schedule_kind(roup_clause);
+                OpenMPScheduleClauseKind omp_sched;
+
+                // Map ROUP ScheduleKind enum to ompparser OpenMPScheduleClauseKind
+                switch (roup_sched) {
+                    case 0: omp_sched = OMPC_SCHEDULE_KIND_static; break;
+                    case 1: omp_sched = OMPC_SCHEDULE_KIND_dynamic; break;
+                    case 2: omp_sched = OMPC_SCHEDULE_KIND_guided; break;
+                    case 3: omp_sched = OMPC_SCHEDULE_KIND_auto; break;
+                    case 4: omp_sched = OMPC_SCHEDULE_KIND_runtime; break;
+                    default: omp_sched = OMPC_SCHEDULE_KIND_unspecified; break;
+                }
+
+                // For now, use unspecified modifiers (monotonic/nonmonotonic/simd)
+                // ROUP would need to expose these if they're parsed
+                new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                                                 OMPC_SCHEDULE_MODIFIER_unspecified,
+                                                 OMPC_SCHEDULE_MODIFIER_unspecified,
+                                                 omp_sched);
+            }
+            // Skip unknown clauses
+            else if (clause_kind == OMPC_unknown) {
                 continue;
             }
-
-            // Create the clause (without variables) - addOpenMPClause just creates empty clause
-            OpenMPClause* new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+            // Handle simple clauses (just clause kind, no parameters)
+            else {
+                new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind));
+            }
 
             // Now add variables/expressions if present using addLangExpr
             if (new_clause) {
