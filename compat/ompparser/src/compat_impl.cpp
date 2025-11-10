@@ -47,6 +47,10 @@ extern "C" {
 // Global State
 // ============================================================================
 
+// Define the global flag used by OpenMPDirective constructor
+// (declared in ompparser's OpenMPIR.h, normally defined in ompparser.yy)
+bool normalize_clauses_global = true;
+
 static OpenMPBaseLang current_lang = Lang_C;
 
 // Language prefix constants - defined once to avoid manual synchronization

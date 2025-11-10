@@ -64,7 +64,10 @@ use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
-use crate::ir::{convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
+use crate::ir::{
+    convert_directive, DefaultKind, Language as IrLanguage, ParserConfig, ReductionOperator,
+    ScheduleKind, SourceLocation,
+};
 use crate::lexer::Language;
 use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
 
@@ -85,14 +88,61 @@ pub const ROUP_LANG_FORTRAN_FREE: i32 = 1;
 pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 
 // ============================================================================
+// OpenMP Clause Kind Constants
+// ============================================================================
+//
+// These constants represent clause types and are used in the C API.
+// They are defined here rather than using raw numbers throughout the code.
+
+const OMP_CLAUSE_KIND_NUM_THREADS: i32 = 0;
+const OMP_CLAUSE_KIND_IF: i32 = 1;
+const OMP_CLAUSE_KIND_PRIVATE: i32 = 2;
+const OMP_CLAUSE_KIND_SHARED: i32 = 3;
+const OMP_CLAUSE_KIND_FIRSTPRIVATE: i32 = 4;
+const OMP_CLAUSE_KIND_LASTPRIVATE: i32 = 5;
+const OMP_CLAUSE_KIND_REDUCTION: i32 = 6;
+const OMP_CLAUSE_KIND_SCHEDULE: i32 = 7;
+const OMP_CLAUSE_KIND_COLLAPSE: i32 = 8;
+const OMP_CLAUSE_KIND_ORDERED: i32 = 9;
+const OMP_CLAUSE_KIND_NOWAIT: i32 = 10;
+const OMP_CLAUSE_KIND_DEFAULT: i32 = 11;
+const OMP_CLAUSE_KIND_UNKNOWN: i32 = 999;
+
+// ============================================================================
+// OpenMP Directive Kind Constants (Simplified C API Grouping)
+// ============================================================================
+//
+// These constants represent simplified directive groups for the C API.
+// Note: These are NOT the same as DirectiveKind enum discriminants.
+// The C API uses simplified grouping for ease of use from C code.
+
+const OMP_DIRECTIVE_KIND_PARALLEL: i32 = 0;
+const OMP_DIRECTIVE_KIND_FOR: i32 = 1;
+const OMP_DIRECTIVE_KIND_SECTIONS: i32 = 2;
+const OMP_DIRECTIVE_KIND_SINGLE: i32 = 3;
+const OMP_DIRECTIVE_KIND_TASK: i32 = 4;
+const OMP_DIRECTIVE_KIND_MASTER: i32 = 5;
+const OMP_DIRECTIVE_KIND_CRITICAL: i32 = 6;
+const OMP_DIRECTIVE_KIND_BARRIER: i32 = 7;
+const OMP_DIRECTIVE_KIND_TASKWAIT: i32 = 8;
+const OMP_DIRECTIVE_KIND_TASKGROUP: i32 = 9;
+const OMP_DIRECTIVE_KIND_ATOMIC: i32 = 10;
+const OMP_DIRECTIVE_KIND_FLUSH: i32 = 11;
+const OMP_DIRECTIVE_KIND_ORDERED: i32 = 12;
+const OMP_DIRECTIVE_KIND_TARGET: i32 = 13;
+const OMP_DIRECTIVE_KIND_TEAMS: i32 = 14;
+const OMP_DIRECTIVE_KIND_DISTRIBUTE: i32 = 15;
+const OMP_DIRECTIVE_KIND_METADIRECTIVE: i32 = 16;
+const OMP_DIRECTIVE_KIND_UNKNOWN: i32 = 999;
+
+// ============================================================================
 // Constants Documentation
 // ============================================================================
 //
 // SINGLE SOURCE OF TRUTH: This file defines all directive and clause kind codes.
 //
-// The constants are defined in:
-// - directive_name_to_kind() function (directive codes 0-16)
-// - convert_clause() function (clause codes 0-11)
+// The constants are defined above as named constants that match the IR enum
+// discriminants for type safety.
 //
 // For C/C++ usage:
 // - build.rs auto-generates src/roup_constants.h with #define macros
@@ -697,7 +747,7 @@ pub extern "C" fn roup_clause_schedule_kind(clause: *const OmpClause) -> i32 {
 
     unsafe {
         let c = &*clause;
-        if c.kind != 7 {
+        if c.kind != OMP_CLAUSE_KIND_SCHEDULE {
             // Not a schedule clause
             return -1;
         }
@@ -716,7 +766,7 @@ pub extern "C" fn roup_clause_reduction_operator(clause: *const OmpClause) -> i3
 
     unsafe {
         let c = &*clause;
-        if c.kind != 6 {
+        if c.kind != OMP_CLAUSE_KIND_REDUCTION {
             // Not a reduction clause
             return -1;
         }
@@ -735,7 +785,7 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
 
     unsafe {
         let c = &*clause;
-        if c.kind != 11 {
+        if c.kind != OMP_CLAUSE_KIND_DEFAULT {
             // Not a default clause
             return -1;
         }
@@ -763,8 +813,8 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
         let c = &*clause;
 
         // Check if this clause type has variables
-        // Kinds 2-5 are private/shared/firstprivate/lastprivate
-        if c.kind < 2 || c.kind > 6 {
+        // private/shared/firstprivate/lastprivate/reduction have variable lists
+        if c.kind < OMP_CLAUSE_KIND_PRIVATE || c.kind > OMP_CLAUSE_KIND_REDUCTION {
             return ptr::null_mut();
         }
 
@@ -901,28 +951,28 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     let normalized_name = clause.name.to_ascii_lowercase();
 
     let (kind, data) = match normalized_name.as_str() {
-        "num_threads" => (0, ClauseData { default: 0 }),
-        "if" => (1, ClauseData { default: 0 }),
+        "num_threads" => (OMP_CLAUSE_KIND_NUM_THREADS, ClauseData { default: 0 }),
+        "if" => (OMP_CLAUSE_KIND_IF, ClauseData { default: 0 }),
         "private" => (
-            2,
+            OMP_CLAUSE_KIND_PRIVATE,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
         "shared" => (
-            3,
+            OMP_CLAUSE_KIND_SHARED,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
         "firstprivate" => (
-            4,
+            OMP_CLAUSE_KIND_FIRSTPRIVATE,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
         "lastprivate" => (
-            5,
+            OMP_CLAUSE_KIND_LASTPRIVATE,
             ClauseData {
                 variables: ptr::null_mut(),
             },
@@ -930,7 +980,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "reduction" => {
             let operator = parse_reduction_operator(clause);
             (
-                6,
+                OMP_CLAUSE_KIND_REDUCTION,
                 ClauseData {
                     reduction: ManuallyDrop::new(ReductionData { operator }),
                 },
@@ -939,7 +989,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         "schedule" => {
             let schedule_kind = parse_schedule_kind(clause);
             (
-                7,
+                OMP_CLAUSE_KIND_SCHEDULE,
                 ClauseData {
                     schedule: ManuallyDrop::new(ScheduleData {
                         kind: schedule_kind,
@@ -947,19 +997,19 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 },
             )
         }
-        "collapse" => (8, ClauseData { default: 0 }),
-        "ordered" => (9, ClauseData { default: 0 }),
-        "nowait" => (10, ClauseData { default: 0 }),
+        "collapse" => (OMP_CLAUSE_KIND_COLLAPSE, ClauseData { default: 0 }),
+        "ordered" => (OMP_CLAUSE_KIND_ORDERED, ClauseData { default: 0 }),
+        "nowait" => (OMP_CLAUSE_KIND_NOWAIT, ClauseData { default: 0 }),
         "default" => {
             let default_kind = parse_default_kind(clause);
             (
-                11,
+                OMP_CLAUSE_KIND_DEFAULT,
                 ClauseData {
                     default: default_kind,
                 },
             )
         }
-        _ => (999, ClauseData { default: 0 }), // Unknown
+        _ => (OMP_CLAUSE_KIND_UNKNOWN, ClauseData { default: 0 }), // Unknown
     };
 
     OmpClause { kind, data }
@@ -968,99 +1018,81 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 /// Parse reduction operator from clause arguments.
 ///
 /// Extracts the operator from reduction clause like "reduction(+: sum)".
-/// Returns integer code for the operator type.
-///
-/// ## Operator Codes:
-/// - 0 = +  (addition)      - 5 = ^  (bitwise XOR)
-/// - 1 = -  (subtraction)   - 6 = && (logical AND)
-/// - 2 = *  (multiplication) - 7 = || (logical OR)
-/// - 3 = &  (bitwise AND)   - 8 = min
-/// - 4 = |  (bitwise OR)    - 9 = max
+/// Returns integer code for the operator type matching ReductionOperator enum.
 fn parse_reduction_operator(clause: &Clause) -> i32 {
     // Look for operator in clause kind
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
         // Operators (+, -, *, etc.) are ASCII symbols - no case conversion needed
         if args.contains('+') && !args.contains("++") {
-            return 0; // Plus
+            return ReductionOperator::Add as i32;
         } else if args.contains('-') && !args.contains("--") {
-            return 1; // Minus
+            return ReductionOperator::Subtract as i32;
         } else if args.contains('*') {
-            return 2; // Times
+            return ReductionOperator::Multiply as i32;
         } else if args.contains('&') && !args.contains("&&") {
-            return 3; // BitwiseAnd
+            return ReductionOperator::BitwiseAnd as i32;
         } else if args.contains('|') && !args.contains("||") {
-            return 4; // BitwiseOr
+            return ReductionOperator::BitwiseOr as i32;
         } else if args.contains('^') {
-            return 5; // BitwiseXor
+            return ReductionOperator::BitwiseXor as i32;
         } else if args.contains("&&") {
-            return 6; // LogicalAnd
+            return ReductionOperator::LogicalAnd as i32;
         } else if args.contains("||") {
-            return 7; // LogicalOr
+            return ReductionOperator::LogicalOr as i32;
         }
 
         // For text keywords (min, max), normalize once for case-insensitive comparison
         let args_lower = args.to_ascii_lowercase();
         if args_lower.contains("min") {
-            return 8; // Min
+            return ReductionOperator::Min as i32;
         } else if args_lower.contains("max") {
-            return 9; // Max
+            return ReductionOperator::Max as i32;
         }
     }
-    0 // Default to plus
+    ReductionOperator::Add as i32 // Default to plus
 }
 
 /// Parse schedule kind from clause arguments.
 ///
 /// Extracts schedule type from clause like "schedule(dynamic, 4)".
-/// Returns integer code for the schedule policy.
-///
-/// ## Schedule Codes:
-/// - 0 = static   (default, divide iterations evenly)
-/// - 1 = dynamic  (distribute at runtime)
-/// - 2 = guided   (decreasing chunk sizes)
-/// - 3 = auto     (compiler decides)
-/// - 4 = runtime  (OMP_SCHEDULE environment variable)
+/// Returns integer code for the schedule policy matching ScheduleKind enum.
 fn parse_schedule_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
         // Case-insensitive keyword matching without String allocation
         // Check common case variants (lowercase, uppercase, title case)
         if args.contains("static") || args.contains("STATIC") || args.contains("Static") {
-            return 0;
+            return ScheduleKind::Static as i32;
         } else if args.contains("dynamic") || args.contains("DYNAMIC") || args.contains("Dynamic") {
-            return 1;
+            return ScheduleKind::Dynamic as i32;
         } else if args.contains("guided") || args.contains("GUIDED") || args.contains("Guided") {
-            return 2;
+            return ScheduleKind::Guided as i32;
         } else if args.contains("auto") || args.contains("AUTO") || args.contains("Auto") {
-            return 3;
+            return ScheduleKind::Auto as i32;
         } else if args.contains("runtime") || args.contains("RUNTIME") || args.contains("Runtime") {
-            return 4;
+            return ScheduleKind::Runtime as i32;
         }
     }
-    0 // Default to static
+    ScheduleKind::Static as i32 // Default to static
 }
 
 /// Parse default clause data-sharing attribute.
 ///
 /// Extracts the default sharing from clause like "default(shared)".
-/// Returns integer code for the default policy.
-///
-/// ## Default Codes:
-/// - 0 = shared (all variables shared by default)
-/// - 1 = none   (must explicitly declare all variables)
+/// Returns integer code for the default policy matching DefaultKind enum.
 fn parse_default_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
         // Case-insensitive keyword matching without String allocation
         // Check common case variants (lowercase, uppercase, title case)
         if args.contains("shared") || args.contains("SHARED") || args.contains("Shared") {
-            return 0;
+            return DefaultKind::Shared as i32;
         } else if args.contains("none") || args.contains("NONE") || args.contains("None") {
-            return 1;
+            return DefaultKind::None as i32;
         }
     }
-    0 // Default to shared
+    DefaultKind::Shared as i32 // Default to shared
 }
 
 /// Convert directive name to kind enum code.
@@ -1099,68 +1131,68 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
         // - "target parallel do" -> 13 (same as "target parallel for")
         // etc.
         match name_str.to_lowercase().as_str() {
-            // Parallel directives (kind 0)
-            "parallel" => 0,
-            "parallel for" => 0,
-            "parallel do" => 0, // Fortran variant
-            "parallel for simd" => 0,
-            "parallel do simd" => 0, // Fortran variant
-            "parallel sections" => 0,
+            // Parallel directives
+            "parallel" => OMP_DIRECTIVE_KIND_PARALLEL,
+            "parallel for" => OMP_DIRECTIVE_KIND_PARALLEL,
+            "parallel do" => OMP_DIRECTIVE_KIND_PARALLEL, // Fortran variant
+            "parallel for simd" => OMP_DIRECTIVE_KIND_PARALLEL,
+            "parallel do simd" => OMP_DIRECTIVE_KIND_PARALLEL, // Fortran variant
+            "parallel sections" => OMP_DIRECTIVE_KIND_PARALLEL,
 
-            // For/Do directives (kind 1)
-            "for" => 1,
-            "do" => 1, // Fortran variant
-            "for simd" => 1,
-            "do simd" => 1, // Fortran variant
+            // For/Do directives
+            "for" => OMP_DIRECTIVE_KIND_FOR,
+            "do" => OMP_DIRECTIVE_KIND_FOR, // Fortran variant
+            "for simd" => OMP_DIRECTIVE_KIND_FOR,
+            "do simd" => OMP_DIRECTIVE_KIND_FOR, // Fortran variant
 
             // Other basic directives
-            "sections" => 2,
-            "single" => 3,
-            "task" => 4,
-            "master" => 5,
-            "critical" => 6,
-            "barrier" => 7,
-            "taskwait" => 8,
-            "taskgroup" => 9,
-            "atomic" => 10,
-            "flush" => 11,
-            "ordered" => 12,
+            "sections" => OMP_DIRECTIVE_KIND_SECTIONS,
+            "single" => OMP_DIRECTIVE_KIND_SINGLE,
+            "task" => OMP_DIRECTIVE_KIND_TASK,
+            "master" => OMP_DIRECTIVE_KIND_MASTER,
+            "critical" => OMP_DIRECTIVE_KIND_CRITICAL,
+            "barrier" => OMP_DIRECTIVE_KIND_BARRIER,
+            "taskwait" => OMP_DIRECTIVE_KIND_TASKWAIT,
+            "taskgroup" => OMP_DIRECTIVE_KIND_TASKGROUP,
+            "atomic" => OMP_DIRECTIVE_KIND_ATOMIC,
+            "flush" => OMP_DIRECTIVE_KIND_FLUSH,
+            "ordered" => OMP_DIRECTIVE_KIND_ORDERED,
 
-            // Target directives (kind 13)
-            "target" => 13,
-            "target teams" => 13,
-            "target parallel" => 13,
-            "target parallel for" => 13,
-            "target parallel do" => 13, // Fortran variant
-            "target parallel for simd" => 13,
-            "target parallel do simd" => 13, // Fortran variant
-            "target teams distribute" => 13,
-            "target teams distribute parallel for" => 13,
-            "target teams distribute parallel do" => 13, // Fortran variant
-            "target teams distribute parallel for simd" => 13,
-            "target teams distribute parallel do simd" => 13, // Fortran variant
+            // Target directives
+            "target" => OMP_DIRECTIVE_KIND_TARGET,
+            "target teams" => OMP_DIRECTIVE_KIND_TARGET,
+            "target parallel" => OMP_DIRECTIVE_KIND_TARGET,
+            "target parallel for" => OMP_DIRECTIVE_KIND_TARGET,
+            "target parallel do" => OMP_DIRECTIVE_KIND_TARGET, // Fortran variant
+            "target parallel for simd" => OMP_DIRECTIVE_KIND_TARGET,
+            "target parallel do simd" => OMP_DIRECTIVE_KIND_TARGET, // Fortran variant
+            "target teams distribute" => OMP_DIRECTIVE_KIND_TARGET,
+            "target teams distribute parallel for" => OMP_DIRECTIVE_KIND_TARGET,
+            "target teams distribute parallel do" => OMP_DIRECTIVE_KIND_TARGET, // Fortran variant
+            "target teams distribute parallel for simd" => OMP_DIRECTIVE_KIND_TARGET,
+            "target teams distribute parallel do simd" => OMP_DIRECTIVE_KIND_TARGET, // Fortran variant
 
-            // Teams directives (kind 14)
-            "teams" => 14,
-            "teams distribute" => 14,
-            "teams distribute parallel for" => 14,
-            "teams distribute parallel do" => 14, // Fortran variant
-            "teams distribute parallel for simd" => 14,
-            "teams distribute parallel do simd" => 14, // Fortran variant
+            // Teams directives
+            "teams" => OMP_DIRECTIVE_KIND_TEAMS,
+            "teams distribute" => OMP_DIRECTIVE_KIND_TEAMS,
+            "teams distribute parallel for" => OMP_DIRECTIVE_KIND_TEAMS,
+            "teams distribute parallel do" => OMP_DIRECTIVE_KIND_TEAMS, // Fortran variant
+            "teams distribute parallel for simd" => OMP_DIRECTIVE_KIND_TEAMS,
+            "teams distribute parallel do simd" => OMP_DIRECTIVE_KIND_TEAMS, // Fortran variant
 
-            // Distribute directives (kind 15)
-            "distribute" => 15,
-            "distribute parallel for" => 15,
-            "distribute parallel do" => 15, // Fortran variant
-            "distribute parallel for simd" => 15,
-            "distribute parallel do simd" => 15, // Fortran variant
-            "distribute simd" => 15,
+            // Distribute directives
+            "distribute" => OMP_DIRECTIVE_KIND_DISTRIBUTE,
+            "distribute parallel for" => OMP_DIRECTIVE_KIND_DISTRIBUTE,
+            "distribute parallel do" => OMP_DIRECTIVE_KIND_DISTRIBUTE, // Fortran variant
+            "distribute parallel for simd" => OMP_DIRECTIVE_KIND_DISTRIBUTE,
+            "distribute parallel do simd" => OMP_DIRECTIVE_KIND_DISTRIBUTE, // Fortran variant
+            "distribute simd" => OMP_DIRECTIVE_KIND_DISTRIBUTE,
 
-            // Metadirective (kind 16)
-            "metadirective" => 16,
+            // Metadirective
+            "metadirective" => OMP_DIRECTIVE_KIND_METADIRECTIVE,
 
             // Unknown directive
-            _ => 999,
+            _ => OMP_DIRECTIVE_KIND_UNKNOWN,
         }
     }
 }
@@ -1189,11 +1221,11 @@ fn free_clause_data(clause: &OmpClause) {
     unsafe {
         // Free variable lists if present
         // Clause kinds with variable lists (see convert_clause):
-        //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
+        //   private, shared, firstprivate, lastprivate
         // Other kinds use different union fields:
-        //   6 = reduction (uses .reduction field, NOT .variables)
-        //   7 = schedule (uses .schedule field, NOT .variables)
-        if clause.kind >= 2 && clause.kind <= 5 {
+        //   reduction (uses .reduction field, NOT .variables)
+        //   schedule (uses .schedule field, NOT .variables)
+        if clause.kind >= OMP_CLAUSE_KIND_PRIVATE && clause.kind <= OMP_CLAUSE_KIND_LASTPRIVATE {
             let vars_ptr = clause.data.variables;
             if !vars_ptr.is_null() {
                 roup_string_list_free(vars_ptr);
