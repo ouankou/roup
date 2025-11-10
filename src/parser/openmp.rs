@@ -425,6 +425,33 @@ fn parse_threadprivate_directive<'a>(
     }
 }
 
+// Custom parser for critical directive: critical(name) or bare critical
+fn parse_critical_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized name
+    if let Ok((rest, name_content)) = parse_parenthesized_content(input) {
+        // Parse any remaining clauses (like hint)
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+        Ok((
+            rest,
+            Directive::new(
+                std::borrow::Cow::Borrowed("critical"),
+                Some(std::borrow::Cow::Owned(format!("({})", name_content))),
+                clauses,
+            ),
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive::new(name, None, clauses)))
+    }
+}
+
 // Custom parser for declare target extended form: declare target(list)
 fn parse_declare_target_extended<'a>(
     name: std::borrow::Cow<'a, str>,
@@ -805,6 +832,7 @@ fn parse_end_directive<'a>(
 const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
     "allocate",
     "threadprivate",
+    "critical",
     "declare target",
     "declare mapper",
     "declare variant",
@@ -822,6 +850,7 @@ pub fn directive_registry() -> DirectiveRegistry {
     // Register custom parsers for directives with special syntax
     builder = builder.register_custom("allocate", parse_allocate_directive);
     builder = builder.register_custom("threadprivate", parse_threadprivate_directive);
+    builder = builder.register_custom("critical", parse_critical_directive);
     builder = builder.register_custom("declare target", parse_declare_target_extended);
     builder = builder.register_custom("declare mapper", parse_declare_mapper_directive);
     builder = builder.register_custom("declare variant", parse_declare_variant_directive);

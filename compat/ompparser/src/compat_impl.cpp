@@ -616,6 +616,18 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 }
             }
         }
+        // Handle critical directive - extract name
+        else if (kind == OMPD_critical) {
+            if (param.size() >= 2 && param.front() == '(' && param.back() == ')') {
+                std::string name = param.substr(1, param.size() - 2);
+                // Trim whitespace
+                name.erase(0, name.find_first_not_of(" \t"));
+                name.erase(name.find_last_not_of(" \t") + 1);
+                if (!name.empty()) {
+                    static_cast<OpenMPCriticalDirective*>(dir)->setCriticalName(name.c_str());
+                }
+            }
+        }
         // Handle END directive - create paired directive from directive name
         else if (kind == OMPD_end) {
             // For END directives, extract the directive being ended from the name
