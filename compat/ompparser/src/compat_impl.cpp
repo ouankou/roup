@@ -47,6 +47,9 @@ extern "C" {
 // Global State
 // ============================================================================
 
+// Global flag for clause normalization control (required by ompparser's OpenMPIR.h)
+bool normalize_clauses_global = true;
+
 static OpenMPBaseLang current_lang = Lang_C;
 
 // Language prefix constants - defined once to avoid manual synchronization
@@ -61,32 +64,177 @@ extern "C" void setLang(OpenMPBaseLang lang) {
     current_lang = lang;
 }
 
+// Function to set the global normalize_clauses flag (required by ompparser API)
+extern "C" void setNormalizeClauses(bool normalize) {
+    normalize_clauses_global = normalize;
+}
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
-    // ROUP directive kind mapping using named constants
-    // See roup_constants.h and src/c_api.rs:directive_name_to_kind()
-    switch (roup_kind) {
-        case ROUP_DIRECTIVE_PARALLEL:       return OMPD_parallel;
-        case ROUP_DIRECTIVE_FOR:            return OMPD_for;
-        case ROUP_DIRECTIVE_SECTIONS:       return OMPD_sections;
-        case ROUP_DIRECTIVE_SINGLE:         return OMPD_single;
-        case ROUP_DIRECTIVE_TASK:           return OMPD_task;
-        case ROUP_DIRECTIVE_MASTER:         return OMPD_master;
-        case ROUP_DIRECTIVE_CRITICAL:       return OMPD_critical;
-        case ROUP_DIRECTIVE_BARRIER:        return OMPD_barrier;
-        case ROUP_DIRECTIVE_TASKWAIT:       return OMPD_taskwait;
-        case ROUP_DIRECTIVE_TASKGROUP:      return OMPD_taskgroup;
-        case ROUP_DIRECTIVE_ATOMIC:         return OMPD_atomic;
-        case ROUP_DIRECTIVE_FLUSH:          return OMPD_flush;
-        case ROUP_DIRECTIVE_ORDERED:        return OMPD_ordered;
-        case ROUP_DIRECTIVE_TARGET:         return OMPD_target;
-        case ROUP_DIRECTIVE_TEAMS:          return OMPD_teams;
-        case ROUP_DIRECTIVE_DISTRIBUTE:     return OMPD_distribute;
-        case ROUP_DIRECTIVE_METADIRECTIVE:  return OMPD_metadirective;
-        default:                            return OMPD_unknown;
+static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t kind) {
+    // Comprehensive mapping for all 132 OpenMP directives
+    // Maps sequential IDs (0-131) from ROUP C API to OMPD_* enum values
+    // See src/c_api.rs:directive_name_to_kind() for the source mapping
+    switch (kind) {
+        // Basic directives (0-27)
+        case 0: return OMPD_parallel;
+        case 1: return OMPD_for;
+        case 2: return OMPD_do;
+        case 3: return OMPD_simd;
+        case 4: return OMPD_for_simd;
+        case 5: return OMPD_do_simd;
+        case 6: return OMPD_parallel_for_simd;
+        case 7: return OMPD_parallel_do_simd;
+        case 8: return OMPD_declare_simd;
+        case 9: return OMPD_distribute;
+        case 10: return OMPD_distribute_simd;
+        case 11: return OMPD_distribute_parallel_for;
+        case 12: return OMPD_distribute_parallel_do;
+        case 13: return OMPD_distribute_parallel_for_simd;
+        case 14: return OMPD_distribute_parallel_do_simd;
+        case 15: return OMPD_loop;
+        case 16: return OMPD_scan;
+        case 17: return OMPD_sections;
+        case 18: return OMPD_section;
+        case 19: return OMPD_single;
+        case 20: return OMPD_workshare;
+        case 21: return OMPD_cancel;
+        case 22: return OMPD_cancellation_point;
+        case 23: return OMPD_allocate;
+        case 24: return OMPD_threadprivate;
+        case 25: return OMPD_declare_reduction;
+        case 26: return OMPD_declare_mapper;
+
+        // Parallel composite directives (27-37)
+        case 27: return OMPD_parallel_for;
+        case 28: return OMPD_parallel_do;
+        case 29: return OMPD_parallel_loop;
+        case 30: return OMPD_parallel_sections;
+        case 31: return OMPD_parallel_single;
+        case 32: return OMPD_parallel_workshare;
+        case 33: return OMPD_parallel_master;
+        case 34: return OMPD_master_taskloop;
+        case 35: return OMPD_master_taskloop_simd;
+        case 36: return OMPD_parallel_master_taskloop;
+        case 37: return OMPD_parallel_master_taskloop_simd;
+
+        // Teams and variant directives (38-56)
+        case 38: return OMPD_teams;
+        case 39: return OMPD_metadirective;
+        case 40: return OMPD_declare_variant;
+        case 41: return OMPD_begin_declare_variant;
+        case 42: return OMPD_end_declare_variant;
+        case 43: return OMPD_task;
+        case 44: return OMPD_taskloop;
+        case 45: return OMPD_taskloop_simd;
+        case 46: return OMPD_taskyield;
+        case 47: return OMPD_requires;
+        case 48: return OMPD_target_data;
+        case 49: return OMPD_target_data_composite;
+        case 50: return OMPD_target_enter_data;
+        case 51: return OMPD_target_update;
+        case 52: return OMPD_target_exit_data;
+        case 53: return OMPD_target;
+        case 54: return OMPD_declare_target;
+        case 55: return OMPD_begin_declare_target;
+        case 56: return OMPD_end_declare_target;
+
+        // Synchronization and utility directives (57-68)
+        case 57: return OMPD_master;
+        case 58: return OMPD_end;
+        case 59: return OMPD_barrier;
+        case 60: return OMPD_taskwait;
+        case 61: return OMPD_unroll;
+        case 62: return OMPD_tile;
+        case 63: return OMPD_taskgroup;
+        case 64: return OMPD_flush;
+        case 65: return OMPD_atomic;
+        case 66: return OMPD_critical;
+        case 67: return OMPD_depobj;
+        case 68: return OMPD_ordered;
+
+        // Teams distribute directives (69-73)
+        case 69: return OMPD_teams_distribute;
+        case 70: return OMPD_teams_distribute_simd;
+        case 71: return OMPD_teams_distribute_parallel_for;
+        case 72: return OMPD_teams_distribute_parallel_for_simd;
+        case 73: return OMPD_teams_loop;
+
+        // Target parallel directives (74-84)
+        case 74: return OMPD_target_parallel;
+        case 75: return OMPD_target_parallel_for;
+        case 76: return OMPD_target_parallel_for_simd;
+        case 77: return OMPD_target_parallel_loop;
+        case 78: return OMPD_target_simd;
+        case 79: return OMPD_target_teams;
+        case 80: return OMPD_target_teams_distribute;
+        case 81: return OMPD_target_teams_distribute_simd;
+        case 82: return OMPD_target_teams_loop;
+        case 83: return OMPD_target_teams_distribute_parallel_for;
+        case 84: return OMPD_target_teams_distribute_parallel_for_simd;
+
+        // Fortran 'do' variants (85-90)
+        case 85: return OMPD_teams_distribute_parallel_do;
+        case 86: return OMPD_teams_distribute_parallel_do_simd;
+        case 87: return OMPD_target_parallel_do;
+        case 88: return OMPD_target_parallel_do_simd;
+        case 89: return OMPD_target_teams_distribute_parallel_do;
+        case 90: return OMPD_target_teams_distribute_parallel_do_simd;
+
+        // OpenMP 5.1 directives (91-100)
+        case 91: return OMPD_error;
+        case 92: return OMPD_nothing;
+        case 93: return OMPD_masked;
+        case 94: return OMPD_scope;
+        case 95: return OMPD_masked_taskloop;
+        case 96: return OMPD_masked_taskloop_simd;
+        case 97: return OMPD_parallel_masked;
+        case 98: return OMPD_parallel_masked_taskloop;
+        case 99: return OMPD_parallel_masked_taskloop_simd;
+        case 100: return OMPD_interop;
+
+        // OpenMP 5.2 directives (101-105)
+        case 101: return OMPD_assume;
+        case 102: return OMPD_end_assume;
+        case 103: return OMPD_assumes;
+        case 104: return OMPD_begin_assumes;
+        case 105: return OMPD_end_assumes;
+
+        // OpenMP 6.0 directives (106-118)
+        case 106: return OMPD_allocators;
+        case 107: return OMPD_taskgraph;
+        case 108: return OMPD_task_iteration;
+        case 109: return OMPD_dispatch;
+        case 110: return OMPD_groupprivate;
+        case 111: return OMPD_workdistribute;
+        case 112: return OMPD_fuse;
+        case 113: return OMPD_interchange;
+        case 114: return OMPD_reverse;
+        case 115: return OMPD_split;
+        case 116: return OMPD_stripe;
+        case 117: return OMPD_declare_induction;
+        case 118: return OMPD_begin_metadirective;
+
+        // Missing loop and loop_simd combinations (119-130)
+        case 119: return OMPD_parallel_loop_simd;
+        case 120: return OMPD_teams_loop_simd;
+        case 121: return OMPD_target_loop;
+        case 122: return OMPD_target_loop_simd;
+        case 123: return OMPD_target_parallel_loop_simd;
+        case 124: return OMPD_target_teams_loop_simd;
+        case 125: return OMPD_distribute_parallel_loop;
+        case 126: return OMPD_distribute_parallel_loop_simd;
+        case 127: return OMPD_teams_distribute_parallel_loop;
+        case 128: return OMPD_teams_distribute_parallel_loop_simd;
+        case 129: return OMPD_target_teams_distribute_parallel_loop;
+        case 130: return OMPD_target_teams_distribute_parallel_loop_simd;
+
+        // Unknown directive
+        case 131: return OMPD_unknown;
+
+        default: return OMPD_unknown;
     }
 }
 

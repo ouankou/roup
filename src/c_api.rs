@@ -1092,74 +1092,164 @@ fn directive_name_to_kind(name: *const c_char) -> i32 {
         // the build system's constant parser requires a match expression with string literals.
         // The performance impact is negligible for the C API boundary.
         //
-        // Fortran DO variants map to same codes as their C FOR equivalents:
-        // - "do" -> 1 (same as "for")
-        // - "parallel do" -> 0 (same as "parallel for")
-        // - "distribute parallel do" -> 15 (same as "distribute parallel for")
-        // - "target parallel do" -> 13 (same as "target parallel for")
-        // etc.
+        // Comprehensive mapping for all 132 OpenMP directives
+        // Maps directive names to sequential IDs (0-131) for C API compatibility
         match name_str.to_lowercase().as_str() {
-            // Parallel directives (kind 0)
+            // Basic directives (0-27)
             "parallel" => 0,
-            "parallel for" => 0,
-            "parallel do" => 0, // Fortran variant
-            "parallel for simd" => 0,
-            "parallel do simd" => 0, // Fortran variant
-            "parallel sections" => 0,
-
-            // For/Do directives (kind 1)
             "for" => 1,
-            "do" => 1, // Fortran variant
-            "for simd" => 1,
-            "do simd" => 1, // Fortran variant
+            "do" => 2,  // Fortran variant
+            "simd" => 3,
+            "for simd" | "for_simd" => 4,
+            "do simd" | "do_simd" => 5,  // Fortran variant
+            "parallel for simd" | "parallel_for_simd" => 6,
+            "parallel do simd" | "parallel_do_simd" => 7,  // Fortran variant
+            "declare simd" | "declare_simd" => 8,
+            "distribute" => 9,
+            "distribute simd" | "distribute_simd" => 10,
+            "distribute parallel for" | "distribute_parallel_for" => 11,
+            "distribute parallel do" | "distribute_parallel_do" => 12,  // Fortran variant
+            "distribute parallel for simd" | "distribute_parallel_for_simd" => 13,
+            "distribute parallel do simd" | "distribute_parallel_do_simd" => 14,  // Fortran variant
+            "loop" => 15,
+            "scan" => 16,
+            "sections" => 17,
+            "section" => 18,
+            "single" => 19,
+            "workshare" => 20,
+            "cancel" => 21,
+            "cancellation point" | "cancellation_point" => 22,
+            "allocate" => 23,
+            "threadprivate" => 24,
+            "declare reduction" | "declare_reduction" => 25,
+            "declare mapper" | "declare_mapper" => 26,
 
-            // Other basic directives
-            "sections" => 2,
-            "single" => 3,
-            "task" => 4,
-            "master" => 5,
-            "critical" => 6,
-            "barrier" => 7,
-            "taskwait" => 8,
-            "taskgroup" => 9,
-            "atomic" => 10,
-            "flush" => 11,
-            "ordered" => 12,
+            // Parallel composite directives (27-37)
+            "parallel for" | "parallel_for" => 27,
+            "parallel do" | "parallel_do" => 28,  // Fortran variant
+            "parallel loop" | "parallel_loop" => 29,
+            "parallel sections" | "parallel_sections" => 30,
+            "parallel single" | "parallel_single" => 31,
+            "parallel workshare" | "parallel_workshare" => 32,
+            "parallel master" | "parallel_master" => 33,
+            "master taskloop" | "master_taskloop" => 34,
+            "master taskloop simd" | "master_taskloop_simd" => 35,
+            "parallel master taskloop" | "parallel_master_taskloop" => 36,
+            "parallel master taskloop simd" | "parallel_master_taskloop_simd" => 37,
 
-            // Target directives (kind 13)
-            "target" => 13,
-            "target teams" => 13,
-            "target parallel" => 13,
-            "target parallel for" => 13,
-            "target parallel do" => 13, // Fortran variant
-            "target parallel for simd" => 13,
-            "target parallel do simd" => 13, // Fortran variant
-            "target teams distribute" => 13,
-            "target teams distribute parallel for" => 13,
-            "target teams distribute parallel do" => 13, // Fortran variant
-            "target teams distribute parallel for simd" => 13,
-            "target teams distribute parallel do simd" => 13, // Fortran variant
+            // Teams and variant directives (38-56)
+            "teams" => 38,
+            "metadirective" => 39,
+            "declare variant" | "declare_variant" => 40,
+            "begin declare variant" | "begin_declare_variant" => 41,
+            "end declare variant" | "end_declare_variant" => 42,
+            "task" => 43,
+            "taskloop" => 44,
+            "taskloop simd" | "taskloop_simd" => 45,
+            "taskyield" => 46,
+            "requires" => 47,
+            "target data" | "target_data" => 48,
+            "target data composite" | "target_data_composite" => 49,
+            "target enter data" | "target_enter_data" => 50,
+            "target update" | "target_update" => 51,
+            "target exit data" | "target_exit_data" => 52,
+            "target" => 53,
+            "declare target" | "declare_target" => 54,
+            "begin declare target" | "begin_declare_target" => 55,
+            "end declare target" | "end_declare_target" => 56,
 
-            // Teams directives (kind 14)
-            "teams" => 14,
-            "teams distribute" => 14,
-            "teams distribute parallel for" => 14,
-            "teams distribute parallel do" => 14, // Fortran variant
-            "teams distribute parallel for simd" => 14,
-            "teams distribute parallel do simd" => 14, // Fortran variant
+            // Synchronization and utility directives (57-68)
+            "master" => 57,
+            "end" | "end target" | "end_target" => 58,
+            "barrier" => 59,
+            "taskwait" => 60,
+            "unroll" => 61,
+            "tile" => 62,
+            "taskgroup" => 63,
+            "flush" => 64,
+            "atomic" | "atomic read" | "atomic write" | "atomic update" | "atomic capture" | "atomic compare capture" => 65,
+            "critical" => 66,
+            "depobj" => 67,
+            "ordered" => 68,
 
-            // Distribute directives (kind 15)
-            "distribute" => 15,
-            "distribute parallel for" => 15,
-            "distribute parallel do" => 15, // Fortran variant
-            "distribute parallel for simd" => 15,
-            "distribute parallel do simd" => 15, // Fortran variant
-            "distribute simd" => 15,
+            // Teams distribute directives (69-73)
+            "teams distribute" | "teams_distribute" => 69,
+            "teams distribute simd" | "teams_distribute_simd" => 70,
+            "teams distribute parallel for" | "teams_distribute_parallel_for" => 71,
+            "teams distribute parallel for simd" | "teams_distribute_parallel_for_simd" => 72,
+            "teams loop" | "teams_loop" => 73,
 
-            // Metadirective (kind 16)
-            "metadirective" => 16,
+            // Target parallel directives (74-84)
+            "target parallel" | "target_parallel" => 74,
+            "target parallel for" | "target_parallel_for" => 75,
+            "target parallel for simd" | "target_parallel_for_simd" => 76,
+            "target parallel loop" | "target_parallel_loop" => 77,
+            "target simd" | "target_simd" => 78,
+            "target teams" | "target_teams" => 79,
+            "target teams distribute" | "target_teams_distribute" => 80,
+            "target teams distribute simd" | "target_teams_distribute_simd" => 81,
+            "target teams loop" | "target_teams_loop" => 82,
+            "target teams distribute parallel for" | "target_teams_distribute_parallel_for" => 83,
+            "target teams distribute parallel for simd" | "target_teams_distribute_parallel_for_simd" => 84,
+
+            // Fortran 'do' variants (85-90)
+            "teams distribute parallel do" | "teams_distribute_parallel_do" => 85,
+            "teams distribute parallel do simd" | "teams_distribute_parallel_do_simd" => 86,
+            "target parallel do" | "target_parallel_do" => 87,
+            "target parallel do simd" | "target_parallel_do_simd" => 88,
+            "target teams distribute parallel do" | "target_teams_distribute_parallel_do" => 89,
+            "target teams distribute parallel do simd" | "target_teams_distribute_parallel_do_simd" => 90,
+
+            // OpenMP 5.1 directives (91-100)
+            "error" => 91,
+            "nothing" => 92,
+            "masked" => 93,
+            "scope" => 94,
+            "masked taskloop" | "masked_taskloop" => 95,
+            "masked taskloop simd" | "masked_taskloop_simd" => 96,
+            "parallel masked" | "parallel_masked" => 97,
+            "parallel masked taskloop" | "parallel_masked_taskloop" => 98,
+            "parallel masked taskloop simd" | "parallel_masked_taskloop_simd" => 99,
+            "interop" => 100,
+
+            // OpenMP 5.2 directives (101-105)
+            "assume" => 101,
+            "end assume" | "end_assume" => 102,
+            "assumes" => 103,
+            "begin assumes" | "begin_assumes" => 104,
+            "end assumes" | "end_assumes" => 105,
+
+            // OpenMP 6.0 directives (106-118)
+            "allocators" => 106,
+            "taskgraph" => 107,
+            "task iteration" | "task_iteration" => 108,
+            "dispatch" => 109,
+            "groupprivate" => 110,
+            "workdistribute" => 111,
+            "fuse" => 112,
+            "interchange" => 113,
+            "reverse" => 114,
+            "split" => 115,
+            "stripe" => 116,
+            "declare induction" | "declare_induction" => 117,
+            "begin metadirective" | "begin_metadirective" => 118,
+
+            // Missing loop and loop_simd combinations (119-130)
+            "parallel loop simd" | "parallel_loop_simd" => 119,
+            "teams loop simd" | "teams_loop_simd" => 120,
+            "target loop" | "target_loop" => 121,
+            "target loop simd" | "target_loop_simd" => 122,
+            "target parallel loop simd" | "target_parallel_loop_simd" => 123,
+            "target teams loop simd" | "target_teams_loop_simd" => 124,
+            "distribute parallel loop" | "distribute_parallel_loop" => 125,
+            "distribute parallel loop simd" | "distribute_parallel_loop_simd" => 126,
+            "teams distribute parallel loop" | "teams_distribute_parallel_loop" => 127,
+            "teams distribute parallel loop simd" | "teams_distribute_parallel_loop_simd" => 128,
+            "target teams distribute parallel loop" | "target_teams_distribute_parallel_loop" => 129,
+            "target teams distribute parallel loop simd" | "target_teams_distribute_parallel_loop_simd" => 130,
 
             // Unknown directive
+            "unknown" => 131,
             _ => 999,
         }
     }
