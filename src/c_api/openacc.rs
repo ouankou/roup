@@ -14,6 +14,169 @@ use crate::parser::{
 
 use super::{ROUP_LANG_C, ROUP_LANG_FORTRAN_FIXED, ROUP_LANG_FORTRAN_FREE};
 
+// ============================================================================
+// OpenACC Directive and Clause Kind Enums
+// ============================================================================
+
+/// OpenACC directive kinds for C API
+///
+/// These enums replace raw integer codes to provide type safety and clarity.
+/// The integer discriminants are preserved for C API compatibility.
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccDirectiveKindC {
+    /// parallel directive
+    Parallel = 0,
+    /// loop directive
+    Loop = 1,
+    /// kernels directive
+    Kernels = 2,
+    /// data directive
+    Data = 3,
+    /// enter data directive
+    EnterData = 4,
+    /// exit data directive
+    ExitData = 5,
+    /// host_data directive
+    HostData = 6,
+    /// atomic directive
+    Atomic = 7,
+    /// declare directive
+    Declare = 8,
+    /// wait directive
+    Wait = 9,
+    /// end directive
+    End = 10,
+    /// host data directive (with space)
+    HostDataSpace = 11,
+    /// update directive
+    Update = 12,
+    /// kernels loop directive
+    KernelsLoop = 14,
+    /// parallel loop directive
+    ParallelLoop = 15,
+    /// serial loop directive
+    SerialLoop = 16,
+    /// serial directive
+    Serial = 17,
+    /// routine directive
+    Routine = 18,
+    /// set directive
+    Set = 19,
+    /// init directive
+    Init = 20,
+    /// shutdown directive
+    Shutdown = 21,
+    /// cache directive
+    Cache = 23,
+    /// enter_data directive (with underscore)
+    EnterDataUnderscore = 24,
+    /// exit_data directive (with underscore)
+    ExitDataUnderscore = 25,
+    /// wait directive with arguments (wait(...))
+    WaitWithArgs = 26,
+    /// Unknown directive
+    Unknown = 999,
+}
+
+/// OpenACC clause kinds for C API
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccClauseKindC {
+    /// async clause
+    Async = 0,
+    /// wait clause
+    Wait = 1,
+    /// num_gangs clause
+    NumGangs = 2,
+    /// num_workers clause
+    NumWorkers = 3,
+    /// vector_length clause
+    VectorLength = 4,
+    /// gang clause
+    Gang = 5,
+    /// worker clause
+    Worker = 6,
+    /// vector clause
+    Vector = 7,
+    /// seq clause
+    Seq = 8,
+    /// independent clause
+    Independent = 9,
+    /// auto clause
+    Auto = 10,
+    /// collapse clause
+    Collapse = 11,
+    /// device_type/dtype clause
+    DeviceType = 12,
+    /// bind clause
+    Bind = 13,
+    /// if clause
+    If = 14,
+    /// default clause
+    Default = 15,
+    /// firstprivate clause
+    Firstprivate = 16,
+    /// default_async clause
+    DefaultAsync = 17,
+    /// link clause
+    Link = 18,
+    /// no_create clause
+    NoCreate = 19,
+    /// nohost clause
+    Nohost = 20,
+    /// present clause
+    Present = 21,
+    /// private clause
+    Private = 22,
+    /// reduction clause
+    Reduction = 23,
+    /// read clause
+    Read = 24,
+    /// self clause
+    Self_ = 25,
+    /// tile clause
+    Tile = 26,
+    /// use_device clause
+    UseDevice = 27,
+    /// attach clause
+    Attach = 28,
+    /// detach clause
+    Detach = 29,
+    /// finalize clause
+    Finalize = 30,
+    /// if_present clause
+    IfPresent = 31,
+    /// capture clause
+    Capture = 32,
+    /// write clause
+    Write = 33,
+    /// update clause
+    UpdateClause = 34,
+    /// copy/pcopy/present_or_copy clause
+    Copy = 35,
+    /// copyin/pcopyin/present_or_copyin clause
+    Copyin = 36,
+    /// copyout/pcopyout/present_or_copyout clause
+    Copyout = 37,
+    /// create/pcreate/present_or_create clause
+    Create = 38,
+    /// delete clause
+    Delete = 39,
+    /// device clause
+    Device = 40,
+    /// deviceptr clause
+    Deviceptr = 41,
+    /// device_num clause
+    DeviceNum = 42,
+    /// device_resident clause
+    DeviceResident = 43,
+    /// host clause
+    Host = 44,
+    /// Unknown clause
+    Unknown = 999,
+}
+
 bitflags! {
     struct AccClauseFlags: u32 {
         const WAIT_HAS_QUEUES = 0b0001;
@@ -178,7 +341,7 @@ fn build_acc_directive(parsed: Directive<'_>, language: Language) -> AccDirectiv
         } else if name.eq_ignore_ascii_case("end") {
             // For "end" directives, parameter contains the directive being ended (e.g., "atomic")
             let kind = acc_directive_name_to_kind(param.as_ref());
-            result.end_paired_kind = Some(kind);
+            result.end_paired_kind = Some(kind as i32);
         }
     }
 
@@ -241,7 +404,7 @@ pub extern "C" fn acc_directive_kind(directive: *const AccDirective) -> i32 {
 
     unsafe {
         let name = (*directive).name.as_c_str().to_str().unwrap_or("");
-        acc_directive_name_to_kind(name)
+        acc_directive_name_to_kind(name) as i32
     }
 }
 
@@ -654,7 +817,7 @@ fn convert_acc_clause(clause: &Clause) -> AccClause {
         .collect();
 
     AccClause {
-        kind: clause_kind,
+        kind: clause_kind as i32,
         modifier,
         original_keyword,
         expressions: expression_strings,
@@ -1048,90 +1211,88 @@ fn language_code(language: Language) -> i32 {
     }
 }
 
-const ACC_UNKNOWN_KIND: i32 = 999;
-
-fn acc_directive_name_to_kind(name: &str) -> i32 {
+fn acc_directive_name_to_kind(name: &str) -> AccDirectiveKindC {
     let normalized = name.trim().to_ascii_lowercase();
     match normalized.as_str() {
-        "parallel" => 0,
-        "loop" => 1,
-        "kernels" => 2,
-        "data" => 3,
-        "enter data" => 4,
-        "exit data" => 5,
-        "host_data" => 6,
-        "atomic" => 7,
-        "declare" => 8,
-        "wait" => 9,
-        "end" => 10,
-        "host data" => 11,
-        "update" => 12,
-        "cache" => 23,
-        "kernels loop" => 14,
-        "parallel loop" => 15,
-        "serial loop" => 16,
-        "serial" => 17,
-        "routine" => 18,
-        "set" => 19,
-        "init" => 20,
-        "shutdown" => 21,
-        "enter_data" => 24,
-        "exit_data" => 25,
-        _ if normalized.starts_with("cache(") => 23,
-        _ if normalized.starts_with("wait(") => 26,
-        _ if normalized.starts_with("end ") => 10,
-        _ => ACC_UNKNOWN_KIND,
+        "parallel" => AccDirectiveKindC::Parallel,
+        "loop" => AccDirectiveKindC::Loop,
+        "kernels" => AccDirectiveKindC::Kernels,
+        "data" => AccDirectiveKindC::Data,
+        "enter data" => AccDirectiveKindC::EnterData,
+        "exit data" => AccDirectiveKindC::ExitData,
+        "host_data" => AccDirectiveKindC::HostData,
+        "atomic" => AccDirectiveKindC::Atomic,
+        "declare" => AccDirectiveKindC::Declare,
+        "wait" => AccDirectiveKindC::Wait,
+        "end" => AccDirectiveKindC::End,
+        "host data" => AccDirectiveKindC::HostDataSpace,
+        "update" => AccDirectiveKindC::Update,
+        "cache" => AccDirectiveKindC::Cache,
+        "kernels loop" => AccDirectiveKindC::KernelsLoop,
+        "parallel loop" => AccDirectiveKindC::ParallelLoop,
+        "serial loop" => AccDirectiveKindC::SerialLoop,
+        "serial" => AccDirectiveKindC::Serial,
+        "routine" => AccDirectiveKindC::Routine,
+        "set" => AccDirectiveKindC::Set,
+        "init" => AccDirectiveKindC::Init,
+        "shutdown" => AccDirectiveKindC::Shutdown,
+        "enter_data" => AccDirectiveKindC::EnterDataUnderscore,
+        "exit_data" => AccDirectiveKindC::ExitDataUnderscore,
+        _ if normalized.starts_with("cache(") => AccDirectiveKindC::Cache,
+        _ if normalized.starts_with("wait(") => AccDirectiveKindC::WaitWithArgs,
+        _ if normalized.starts_with("end ") => AccDirectiveKindC::End,
+        _ => AccDirectiveKindC::Unknown,
     }
 }
 
-fn clause_name_to_kind(name: &str) -> i32 {
+fn clause_name_to_kind(name: &str) -> AccClauseKindC {
     match name {
-        "async" => 0,
-        "wait" => 1,
-        "num_gangs" => 2,
-        "num_workers" => 3,
-        "vector_length" => 4,
-        "gang" => 5,
-        "worker" => 6,
-        "vector" => 7,
-        "seq" => 8,
-        "independent" => 9,
-        "auto" => 10,
-        "collapse" => 11,
-        "device_type" | "dtype" => 12,
-        "bind" => 13,
-        "if" => 14,
-        "default" => 15,
-        "firstprivate" => 16,
-        "default_async" => 17,
-        "link" => 18,
-        "no_create" => 19,
-        "nohost" => 20,
-        "present" => 21,
-        "private" => 22,
-        "reduction" => 23,
-        "read" => 24,
-        "self" => 25,
-        "tile" => 26,
-        "use_device" => 27,
-        "attach" => 28,
-        "detach" => 29,
-        "finalize" => 30,
-        "if_present" => 31,
-        "capture" => 32,
-        "write" => 33,
-        "update" => 34,
-        "copy" | "pcopy" | "present_or_copy" => 35,
-        "copyin" | "pcopyin" | "present_or_copyin" => 36,
-        "copyout" | "pcopyout" | "present_or_copyout" => 37,
-        "create" | "pcreate" | "present_or_create" => 38,
-        "delete" => 39,
-        "device" => 40,
-        "deviceptr" => 41,
-        "device_num" => 42,
-        "device_resident" => 43,
-        "host" => 44,
-        _ => 999,
+        "async" => AccClauseKindC::Async,
+        "wait" => AccClauseKindC::Wait,
+        "num_gangs" => AccClauseKindC::NumGangs,
+        "num_workers" => AccClauseKindC::NumWorkers,
+        "vector_length" => AccClauseKindC::VectorLength,
+        "gang" => AccClauseKindC::Gang,
+        "worker" => AccClauseKindC::Worker,
+        "vector" => AccClauseKindC::Vector,
+        "seq" => AccClauseKindC::Seq,
+        "independent" => AccClauseKindC::Independent,
+        "auto" => AccClauseKindC::Auto,
+        "collapse" => AccClauseKindC::Collapse,
+        "device_type" | "dtype" => AccClauseKindC::DeviceType,
+        "bind" => AccClauseKindC::Bind,
+        "if" => AccClauseKindC::If,
+        "default" => AccClauseKindC::Default,
+        "firstprivate" => AccClauseKindC::Firstprivate,
+        "default_async" => AccClauseKindC::DefaultAsync,
+        "link" => AccClauseKindC::Link,
+        "no_create" => AccClauseKindC::NoCreate,
+        "nohost" => AccClauseKindC::Nohost,
+        "present" => AccClauseKindC::Present,
+        "private" => AccClauseKindC::Private,
+        "reduction" => AccClauseKindC::Reduction,
+        "read" => AccClauseKindC::Read,
+        "self" => AccClauseKindC::Self_,
+        "tile" => AccClauseKindC::Tile,
+        "use_device" => AccClauseKindC::UseDevice,
+        "attach" => AccClauseKindC::Attach,
+        "detach" => AccClauseKindC::Detach,
+        "finalize" => AccClauseKindC::Finalize,
+        "if_present" => AccClauseKindC::IfPresent,
+        "capture" => AccClauseKindC::Capture,
+        "write" => AccClauseKindC::Write,
+        "update" => AccClauseKindC::UpdateClause,
+        "copy" | "pcopy" | "present_or_copy" => AccClauseKindC::Copy,
+        "copyin" | "pcopyin" | "present_or_copyin" => AccClauseKindC::Copyin,
+        "copyout" | "pcopyout" | "present_or_copyout" => AccClauseKindC::Copyout,
+        "create" | "pcreate" | "present_or_create" => AccClauseKindC::Create,
+        "delete" => AccClauseKindC::Delete,
+        "device" => AccClauseKindC::Device,
+        "deviceptr" => AccClauseKindC::Deviceptr,
+        "device_num" => AccClauseKindC::DeviceNum,
+        "device_resident" => AccClauseKindC::DeviceResident,
+        "host" => AccClauseKindC::Host,
+        _ => AccClauseKindC::Unknown,
     }
 }
 
