@@ -1,21 +1,46 @@
 # Constants architecture
 
-ROUP uses enum-based parsing throughout the codebase. All directive and clause types implement the `FromStr` trait, eliminating string-based comparisons in favor of centralized enum conversions.
+ROUP uses enum-based parsing with `FromStr` traits to eliminate string-based comparisons, while maintaining explicit enum discriminants for C FFI stability.
 
-## Internal parsing (Rust)
+## String parsing (zero string comparisons)
 
-Directive and clause parsing uses `FromStr` trait implementations on the corresponding enums:
+All directive and clause parsing uses `FromStr` trait implementations:
 - `DirectiveKind::from_str()` in `src/ir/directive.rs`
 - `ReductionOperator::from_str()`, `ScheduleKind::from_str()`, etc. in `src/ir/clause.rs`
 
-This approach centralizes parsing logic, eliminates redundant match statements, and ensures type safety.
+This eliminates all string-based match statements in favor of centralized, type-safe enum conversions.
 
-## C API
+## FFI enum discriminants (ABI stability required)
 
-The C bindings expose numeric directive and clause identifiers. The project generates `roup_constants.h` from the authoritative tables in `src/c_api.rs`.
+**Explicit discriminants in `#[repr(C)]` enums are ABI contracts that MUST remain stable.**
 
-- `build.rs` (or `cargo run --bin gen`) parses the match arms in `directive_name_to_kind` and `convert_clause` using `syn`.
-- The script writes the header and a checksum so CI can confirm the committed file is current.
-- C and C++ code include `roup_constants.h` and use the macros in switches.
+These are NOT "magic numbers" to eliminate—they are part of the public C API:
+- `DirectiveKind` uses explicit discriminants (0, 1, 2, 3, ... with intentional gaps)
+- Gaps allow logical grouping (parallel=0-19, work-sharing=10-19, tasks=30-39, etc.)
+- Changing values would break `roup_constants.h` and all FFI consumers
+- C/Fortran code depends on these specific numeric values
 
-When a directive or clause is added, update the enum's `FromStr` implementation in the IR module, and edit `src/c_api.rs` only if modifying the C API. Never change `roup_constants.h` by hand—the next build will overwrite it.
+## C API constant generation
+
+The build system generates C headers from Rust enum definitions:
+
+1. **Rust enums** have explicit `#[repr(C)]` discriminants for ABI stability
+2. **`build.rs`** parses `src/c_api.rs` to generate `roup_constants.h`
+3. **C/C++ code** includes `roup_constants.h` for stable constants
+4. **Fortran** uses the generated `roup_interface.mod` module
+
+When adding a directive or clause:
+1. Add the variant to the enum with an explicit discriminant (choose unused value)
+2. Implement `FromStr` for string → enum conversion
+3. Update `src/c_api.rs` if modifying the C API
+4. Run `cargo build` to regenerate headers
+
+**Never** edit `roup_constants.h` manually—the build system regenerates it.
+
+## Design rationale
+
+| Aspect | Approach | Reason |
+|--------|----------|--------|
+| String parsing | `FromStr` traits | Eliminates string comparisons, centralized logic |
+| FFI discriminants | Explicit values | ABI stability, C interop requires fixed values |
+| Discriminant gaps | Intentional | Logical grouping, room for future additions |
