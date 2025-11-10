@@ -42,13 +42,19 @@
 //! ```
 
 use super::{
-    lang, ClauseData, ClauseItem, ConversionError, DefaultKind, DependType, DirectiveIR,
-    DirectiveKind, Expression, Identifier, Language, MapType, ParserConfig, ProcBind,
-    ReductionOperator, ScheduleKind, ScheduleModifier, SourceLocation,
+    lang, ClauseData, ClauseItem, ConversionError, DependType, DirectiveIR, DirectiveKind,
+    Expression, Identifier, Language, ParserConfig, ReductionOperator, ScheduleModifier,
+    SourceLocation,
 };
 use crate::parser::{Clause, ClauseKind, Directive};
 
+#[cfg(test)]
+use super::{DefaultKind, MapType, ProcBind, ScheduleKind};
+
 /// Convert a directive name string to DirectiveKind
+///
+/// This function now uses the FromStr trait implementation for DirectiveKind,
+/// providing a centralized, enum-based approach for parsing directive names.
 ///
 /// ## Example
 ///
@@ -61,179 +67,8 @@ use crate::parser::{Clause, ClauseKind, Directive};
 /// assert_eq!(kind, DirectiveKind::TargetTeamsDistribute);
 /// ```
 pub fn parse_directive_kind(name: &str) -> Result<DirectiveKind, ConversionError> {
-    // Normalize whitespace for matching
-    let normalized = name.trim().to_lowercase();
-    let normalized = normalized.as_str();
-
-    match normalized {
-        // Parallel constructs
-        "parallel" => Ok(DirectiveKind::Parallel),
-        "parallel for" => Ok(DirectiveKind::ParallelFor),
-        "parallel do" => Ok(DirectiveKind::ParallelDo), // Fortran equivalent
-        "parallel for simd" => Ok(DirectiveKind::ParallelForSimd),
-        "parallel do simd" => Ok(DirectiveKind::ParallelDoSimd), // Fortran equivalent
-        "parallel sections" => Ok(DirectiveKind::ParallelSections),
-        "parallel workshare" => Ok(DirectiveKind::ParallelWorkshare),
-        "parallel loop" => Ok(DirectiveKind::ParallelLoop),
-        "parallel loop simd" => Ok(DirectiveKind::ParallelLoopSimd),
-        "parallel masked" => Ok(DirectiveKind::ParallelMasked),
-        "parallel master" => Ok(DirectiveKind::ParallelMaster),
-        "parallel masked taskloop" => Ok(DirectiveKind::ParallelMaskedTaskloop),
-        "parallel masked taskloop simd" => Ok(DirectiveKind::ParallelMaskedTaskloopSimd),
-        "parallel master taskloop" => Ok(DirectiveKind::ParallelMasterTaskloop),
-        "parallel master taskloop simd" => Ok(DirectiveKind::ParallelMasterTaskloopSimd),
-
-        // Work-sharing constructs
-        "for" => Ok(DirectiveKind::For),
-        "do" => Ok(DirectiveKind::Do), // Fortran equivalent
-        "for simd" => Ok(DirectiveKind::ForSimd),
-        "do simd" => Ok(DirectiveKind::DoSimd), // Fortran equivalent
-        "sections" => Ok(DirectiveKind::Sections),
-        "section" => Ok(DirectiveKind::Section),
-        "single" => Ok(DirectiveKind::Single),
-        "workshare" => Ok(DirectiveKind::Workshare),
-        "loop" => Ok(DirectiveKind::Loop),
-
-        // SIMD constructs
-        "simd" => Ok(DirectiveKind::Simd),
-        "declare simd" => Ok(DirectiveKind::DeclareSimd),
-
-        // Task constructs
-        "task" => Ok(DirectiveKind::Task),
-        "taskloop" => Ok(DirectiveKind::Taskloop),
-        "taskloop simd" => Ok(DirectiveKind::TaskloopSimd),
-        "masked taskloop" => Ok(DirectiveKind::MaskedTaskloop),
-        "masked taskloop simd" => Ok(DirectiveKind::MaskedTaskloopSimd),
-        "taskyield" => Ok(DirectiveKind::Taskyield),
-        "taskwait" => Ok(DirectiveKind::Taskwait),
-        "taskgroup" => Ok(DirectiveKind::Taskgroup),
-        "taskgraph" => Ok(DirectiveKind::Taskgraph),
-        "task iteration" => Ok(DirectiveKind::TaskIteration),
-
-        // Target constructs
-        "target" => Ok(DirectiveKind::Target),
-        "target data" => Ok(DirectiveKind::TargetData),
-        "target enter data" => Ok(DirectiveKind::TargetEnterData),
-        "target exit data" => Ok(DirectiveKind::TargetExitData),
-        "target update" => Ok(DirectiveKind::TargetUpdate),
-        "end target" => Ok(DirectiveKind::EndTarget),
-        "target parallel" => Ok(DirectiveKind::TargetParallel),
-        "target parallel for" => Ok(DirectiveKind::TargetParallelFor),
-        "target parallel do" => Ok(DirectiveKind::TargetParallelDo), // Fortran equivalent
-        "target parallel for simd" => Ok(DirectiveKind::TargetParallelForSimd),
-        "target parallel do simd" => Ok(DirectiveKind::TargetParallelDoSimd), // Fortran equivalent
-        "target parallel loop" => Ok(DirectiveKind::TargetParallelLoop),
-        "target parallel loop simd" => Ok(DirectiveKind::TargetParallelLoopSimd),
-        "target simd" => Ok(DirectiveKind::TargetSimd),
-        "target loop" => Ok(DirectiveKind::TargetLoop),
-        "target loop simd" => Ok(DirectiveKind::TargetLoopSimd),
-        "target teams" => Ok(DirectiveKind::TargetTeams),
-        "target teams distribute" => Ok(DirectiveKind::TargetTeamsDistribute),
-        "target teams distribute simd" => Ok(DirectiveKind::TargetTeamsDistributeSimd),
-        "target teams distribute parallel for" => {
-            Ok(DirectiveKind::TargetTeamsDistributeParallelFor)
-        }
-        "target teams distribute parallel do" => {
-            Ok(DirectiveKind::TargetTeamsDistributeParallelDo) // Fortran equivalent
-        }
-        "target teams distribute parallel for simd" => {
-            Ok(DirectiveKind::TargetTeamsDistributeParallelForSimd)
-        }
-        "target teams distribute parallel do simd" => {
-            Ok(DirectiveKind::TargetTeamsDistributeParallelDoSimd) // Fortran equivalent
-        }
-        "target teams distribute parallel loop" => {
-            Ok(DirectiveKind::TargetTeamsDistributeParallelLoop)
-        }
-        "target teams distribute parallel loop simd" => {
-            Ok(DirectiveKind::TargetTeamsDistributeParallelLoopSimd)
-        }
-        "target teams loop" => Ok(DirectiveKind::TargetTeamsLoop),
-        "target teams loop simd" => Ok(DirectiveKind::TargetTeamsLoopSimd),
-
-        // Teams constructs
-        "teams" => Ok(DirectiveKind::Teams),
-        "teams distribute" => Ok(DirectiveKind::TeamsDistribute),
-        "teams distribute simd" => Ok(DirectiveKind::TeamsDistributeSimd),
-        "teams distribute parallel for" => Ok(DirectiveKind::TeamsDistributeParallelFor),
-        "teams distribute parallel do" => Ok(DirectiveKind::TeamsDistributeParallelDo), // Fortran equivalent
-        "teams distribute parallel for simd" => Ok(DirectiveKind::TeamsDistributeParallelForSimd),
-        "teams distribute parallel do simd" => Ok(DirectiveKind::TeamsDistributeParallelDoSimd), // Fortran equivalent
-        "teams distribute parallel loop" => Ok(DirectiveKind::TeamsDistributeParallelLoop),
-        "teams distribute parallel loop simd" => Ok(DirectiveKind::TeamsDistributeParallelLoopSimd),
-        "teams loop" => Ok(DirectiveKind::TeamsLoop),
-        "teams loop simd" => Ok(DirectiveKind::TeamsLoopSimd),
-
-        // Synchronization constructs
-        "barrier" => Ok(DirectiveKind::Barrier),
-        "critical" => Ok(DirectiveKind::Critical),
-        "atomic" => Ok(DirectiveKind::Atomic),
-        "atomic read" => Ok(DirectiveKind::AtomicRead),
-        "atomic write" => Ok(DirectiveKind::AtomicWrite),
-        "atomic update" => Ok(DirectiveKind::AtomicUpdate),
-        "atomic capture" => Ok(DirectiveKind::AtomicCapture),
-        "atomic compare capture" => Ok(DirectiveKind::AtomicCompareCapture),
-        "flush" => Ok(DirectiveKind::Flush),
-        "ordered" => Ok(DirectiveKind::Ordered),
-        "master" => Ok(DirectiveKind::Master),
-        "masked" => Ok(DirectiveKind::Masked),
-
-        // Declare constructs
-        "declare reduction" => Ok(DirectiveKind::DeclareReduction),
-        "declare mapper" => Ok(DirectiveKind::DeclareMapper),
-        "declare target" => Ok(DirectiveKind::DeclareTarget),
-        "begin declare target" => Ok(DirectiveKind::BeginDeclareTarget),
-        "end declare target" => Ok(DirectiveKind::EndDeclareTarget),
-        "declare variant" => Ok(DirectiveKind::DeclareVariant),
-        "begin declare variant" => Ok(DirectiveKind::BeginDeclareVariant),
-        "end declare variant" => Ok(DirectiveKind::EndDeclareVariant),
-        "declare induction" => Ok(DirectiveKind::DeclareInduction),
-
-        // Distribute constructs
-        "distribute" => Ok(DirectiveKind::Distribute),
-        "distribute simd" => Ok(DirectiveKind::DistributeSimd),
-        "distribute parallel for" => Ok(DirectiveKind::DistributeParallelFor),
-        "distribute parallel do" => Ok(DirectiveKind::DistributeParallelDo), // Fortran equivalent
-        "distribute parallel for simd" => Ok(DirectiveKind::DistributeParallelForSimd),
-        "distribute parallel do simd" => Ok(DirectiveKind::DistributeParallelDoSimd), // Fortran equivalent
-        "distribute parallel loop" => Ok(DirectiveKind::DistributeParallelLoop),
-        "distribute parallel loop simd" => Ok(DirectiveKind::DistributeParallelLoopSimd),
-
-        // Meta-directives
-        "metadirective" => Ok(DirectiveKind::Metadirective),
-        "begin metadirective" => Ok(DirectiveKind::BeginMetadirective),
-        "assume" => Ok(DirectiveKind::Assume),
-        "assumes" => Ok(DirectiveKind::Assumes),
-        "begin assumes" => Ok(DirectiveKind::BeginAssumes),
-
-        // Loop transformations
-        "tile" => Ok(DirectiveKind::Tile),
-        "unroll" => Ok(DirectiveKind::Unroll),
-        "fuse" => Ok(DirectiveKind::Fuse),
-        "split" => Ok(DirectiveKind::Split),
-        "interchange" => Ok(DirectiveKind::Interchange),
-        "reverse" => Ok(DirectiveKind::Reverse),
-        "stripe" => Ok(DirectiveKind::Stripe),
-
-        // Other constructs
-        "threadprivate" => Ok(DirectiveKind::Threadprivate),
-        "allocate" => Ok(DirectiveKind::Allocate),
-        "allocators" => Ok(DirectiveKind::Allocators),
-        "requires" => Ok(DirectiveKind::Requires),
-        "scan" => Ok(DirectiveKind::Scan),
-        "depobj" => Ok(DirectiveKind::Depobj),
-        "nothing" => Ok(DirectiveKind::Nothing),
-        "error" => Ok(DirectiveKind::Error),
-        "cancel" => Ok(DirectiveKind::Cancel),
-        "cancellation point" => Ok(DirectiveKind::CancellationPoint),
-        "dispatch" => Ok(DirectiveKind::Dispatch),
-        "interop" => Ok(DirectiveKind::Interop),
-        "scope" => Ok(DirectiveKind::Scope),
-        "groupprivate" => Ok(DirectiveKind::Groupprivate),
-        "workdistribute" => Ok(DirectiveKind::Workdistribute),
-
-        _ => Err(ConversionError::UnknownDirective(name.to_string())),
-    }
+    name.parse()
+        .map_err(|e: String| ConversionError::UnknownDirective(e))
 }
 
 /// Parse a clause item list using the configured language front-end.
@@ -249,6 +84,9 @@ pub fn parse_identifier_list(
 
 /// Parse a reduction operator from a string
 ///
+/// This function now uses the FromStr trait implementation for ReductionOperator,
+/// providing a centralized, enum-based approach for parsing operators.
+///
 /// ## Example
 ///
 /// ```
@@ -260,21 +98,9 @@ pub fn parse_identifier_list(
 /// assert_eq!(op, ReductionOperator::Min);
 /// ```
 pub fn parse_reduction_operator(op_str: &str) -> Result<ReductionOperator, ConversionError> {
-    match op_str {
-        "+" => Ok(ReductionOperator::Add),
-        "-" => Ok(ReductionOperator::Subtract),
-        "*" => Ok(ReductionOperator::Multiply),
-        "&" => Ok(ReductionOperator::BitwiseAnd),
-        "|" => Ok(ReductionOperator::BitwiseOr),
-        "^" => Ok(ReductionOperator::BitwiseXor),
-        "&&" => Ok(ReductionOperator::LogicalAnd),
-        "||" => Ok(ReductionOperator::LogicalOr),
-        "min" => Ok(ReductionOperator::Min),
-        "max" => Ok(ReductionOperator::Max),
-        _ => Err(ConversionError::InvalidClauseSyntax(format!(
-            "Unknown reduction operator: {op_str}"
-        ))),
-    }
+    op_str
+        .parse()
+        .map_err(|e: String| ConversionError::InvalidClauseSyntax(e))
 }
 
 /// Parse a schedule clause
@@ -298,18 +124,14 @@ pub fn parse_schedule_clause(
         let (mod_str, kind_str) = content.split_at(colon_pos);
         let kind_str = kind_str[1..].trim(); // Skip the ':'
 
-        // Parse modifiers (comma-separated)
+        // Parse modifiers (comma-separated) using FromStr
         let mods: Vec<ScheduleModifier> = mod_str
             .split(',')
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
-            .map(|s| match s {
-                "monotonic" => Ok(ScheduleModifier::Monotonic),
-                "nonmonotonic" => Ok(ScheduleModifier::Nonmonotonic),
-                "simd" => Ok(ScheduleModifier::Simd),
-                _ => Err(ConversionError::InvalidClauseSyntax(format!(
-                    "Unknown schedule modifier: {s}"
-                ))),
+            .map(|s| {
+                s.parse()
+                    .map_err(|e: String| ConversionError::InvalidClauseSyntax(e))
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -322,16 +144,9 @@ pub fn parse_schedule_clause(
     let parts: Vec<&str> = rest.split(',').map(|s| s.trim()).collect();
 
     let kind = match parts.first() {
-        Some(&"static") => ScheduleKind::Static,
-        Some(&"dynamic") => ScheduleKind::Dynamic,
-        Some(&"guided") => ScheduleKind::Guided,
-        Some(&"auto") => ScheduleKind::Auto,
-        Some(&"runtime") => ScheduleKind::Runtime,
-        Some(s) => {
-            return Err(ConversionError::InvalidClauseSyntax(format!(
-                "Unknown schedule kind: {s}"
-            )))
-        }
+        Some(s) => s
+            .parse()
+            .map_err(|e: String| ConversionError::InvalidClauseSyntax(e))?,
         None => {
             return Err(ConversionError::InvalidClauseSyntax(
                 "schedule clause requires a kind".to_string(),
@@ -391,19 +206,15 @@ pub fn parse_map_clause(
     // Find map-type using top-level colon detection
     let (map_type, items_str) =
         if let Some((type_str, items)) = lang::split_once_top_level(remainder, ':') {
-            let map_type = match type_str.trim().to_ascii_lowercase().as_str() {
-                "" => None,
-                "to" => Some(MapType::To),
-                "from" => Some(MapType::From),
-                "tofrom" => Some(MapType::ToFrom),
-                "alloc" => Some(MapType::Alloc),
-                "release" => Some(MapType::Release),
-                "delete" => Some(MapType::Delete),
-                other => {
-                    return Err(ConversionError::InvalidClauseSyntax(format!(
-                        "Unknown map type: {other}"
-                    )))
-                }
+            let trimmed = type_str.trim();
+            let map_type = if trimmed.is_empty() {
+                None
+            } else {
+                Some(
+                    trimmed
+                        .parse()
+                        .map_err(|e: String| ConversionError::InvalidClauseSyntax(e))?,
+                )
             };
             (map_type, items.trim())
         } else {
@@ -431,6 +242,9 @@ fn extract_parenthesized(input: &str) -> Result<(&str, &str), ConversionError> {
 
 /// Parse a dependence type from a string
 ///
+/// This function now uses the FromStr trait implementation for DependType,
+/// providing a centralized, enum-based approach for parsing dependency types.
+///
 /// ## Example
 ///
 /// ```
@@ -439,18 +253,9 @@ fn extract_parenthesized(input: &str) -> Result<(&str, &str), ConversionError> {
 /// assert_eq!(dt, DependType::In);
 /// ```
 pub fn parse_depend_type(type_str: &str) -> Result<DependType, ConversionError> {
-    match type_str {
-        "in" => Ok(DependType::In),
-        "out" => Ok(DependType::Out),
-        "inout" => Ok(DependType::Inout),
-        "mutexinoutset" => Ok(DependType::Mutexinoutset),
-        "depobj" => Ok(DependType::Depobj),
-        "source" => Ok(DependType::Source),
-        "sink" => Ok(DependType::Sink),
-        _ => Err(ConversionError::InvalidClauseSyntax(format!(
-            "Unknown depend type: {type_str}"
-        ))),
-    }
+    type_str
+        .parse()
+        .map_err(|e: String| ConversionError::InvalidClauseSyntax(e))
 }
 
 /// Parse a linear clause
@@ -522,18 +327,10 @@ pub fn parse_clause_data<'a>(
         "default" => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
-                let kind_str = content.trim();
-                let kind = match kind_str {
-                    "shared" => DefaultKind::Shared,
-                    "none" => DefaultKind::None,
-                    "private" => DefaultKind::Private,
-                    "firstprivate" => DefaultKind::Firstprivate,
-                    _ => {
-                        return Err(ConversionError::InvalidClauseSyntax(format!(
-                            "Unknown default kind: {kind_str}"
-                        )))
-                    }
-                };
+                let kind = content
+                    .trim()
+                    .parse()
+                    .map_err(|e: String| ConversionError::InvalidClauseSyntax(e))?;
                 Ok(ClauseData::Default(kind))
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
@@ -728,18 +525,10 @@ pub fn parse_clause_data<'a>(
         "proc_bind" => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
-                let kind_str = content.trim();
-                let proc_bind = match kind_str {
-                    "master" => ProcBind::Master,
-                    "close" => ProcBind::Close,
-                    "spread" => ProcBind::Spread,
-                    "primary" => ProcBind::Primary,
-                    _ => {
-                        return Err(ConversionError::InvalidClauseSyntax(format!(
-                            "Unknown proc_bind kind: {kind_str}"
-                        )))
-                    }
-                };
+                let proc_bind = content
+                    .trim()
+                    .parse()
+                    .map_err(|e: String| ConversionError::InvalidClauseSyntax(e))?;
                 Ok(ClauseData::ProcBind(proc_bind))
             } else {
                 Err(ConversionError::InvalidClauseSyntax(

@@ -25,9 +25,9 @@ C bindings (`src/c_api.rs`)
 The lexer normalises whitespace, line continuations, sentinel comments, and
 language specific keywords before the parser consumes the token stream.  The
 parser modules mirror the OpenMP structure: directives, clauses, helper
-enumerations, and validation passes.  Rust callers typically work with the IR
-structures directly, while C and C++ consumers receive stable C structs exposed
-through the FFI layer.
+enumerations, and validation passes.
+
+All IR types use enum-based parsing via `FromStr` trait implementations, eliminating string comparisons and centralizing conversion logic. Rust callers work with the IR structures directly, while C and C++ consumers receive stable C structs through the FFI layer.
 
 ## Unsafe code boundaries
 
