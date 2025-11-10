@@ -58,28 +58,43 @@ pub struct AccClauseIterator {
     index: usize,
 }
 
+// ============================================================================
+// OpenACC Constants
+// ============================================================================
+//
+// These constants represent various OpenACC modifiers and kinds.
+// They are defined as named constants rather than raw numbers for type safety.
+
+// Cache modifiers
 const ACC_CACHE_MODIFIER_UNSPECIFIED: i32 = 0;
 const ACC_CACHE_MODIFIER_READONLY: i32 = 1;
 
+// Copyin modifiers
 const ACC_COPYIN_MODIFIER_UNSPECIFIED: i32 = 0;
 const ACC_COPYIN_MODIFIER_READONLY: i32 = 1;
 
+// Copyout modifiers
 const ACC_COPYOUT_MODIFIER_UNSPECIFIED: i32 = 0;
 const ACC_COPYOUT_MODIFIER_ZERO: i32 = 1;
 
+// Create modifiers
 const ACC_CREATE_MODIFIER_UNSPECIFIED: i32 = 0;
 const ACC_CREATE_MODIFIER_ZERO: i32 = 1;
 
+// Default kinds
 const ACC_DEFAULT_KIND_UNSPECIFIED: i32 = 0;
 const ACC_DEFAULT_KIND_NONE: i32 = 1;
 const ACC_DEFAULT_KIND_PRESENT: i32 = 2;
 
+// Vector modifiers
 const ACC_VECTOR_MODIFIER_UNSPECIFIED: i32 = 0;
 const ACC_VECTOR_MODIFIER_LENGTH: i32 = 1;
 
+// Worker modifiers
 const ACC_WORKER_MODIFIER_UNSPECIFIED: i32 = 0;
 const ACC_WORKER_MODIFIER_NUM: i32 = 1;
 
+// Reduction operators
 const ACC_REDUCTION_OP_UNSPECIFIED: i32 = 0;
 const ACC_REDUCTION_OP_READONLY: i32 = 1;
 const ACC_REDUCTION_OP_ADD: i32 = 2;
@@ -99,6 +114,88 @@ const ACC_REDUCTION_OP_FORT_NEQV: i32 = 15;
 const ACC_REDUCTION_OP_FORT_IAND: i32 = 16;
 const ACC_REDUCTION_OP_FORT_IOR: i32 = 17;
 const ACC_REDUCTION_OP_FORT_IEOR: i32 = 18;
+
+// ============================================================================
+// OpenACC Directive Kind Constants
+// ============================================================================
+
+const ACC_DIRECTIVE_PARALLEL: i32 = 0;
+const ACC_DIRECTIVE_LOOP: i32 = 1;
+const ACC_DIRECTIVE_KERNELS: i32 = 2;
+const ACC_DIRECTIVE_DATA: i32 = 3;
+const ACC_DIRECTIVE_ENTER_DATA: i32 = 4;
+const ACC_DIRECTIVE_EXIT_DATA: i32 = 5;
+const ACC_DIRECTIVE_HOST_DATA: i32 = 6;
+const ACC_DIRECTIVE_ATOMIC: i32 = 7;
+const ACC_DIRECTIVE_DECLARE: i32 = 8;
+const ACC_DIRECTIVE_WAIT: i32 = 9;
+const ACC_DIRECTIVE_END: i32 = 10;
+const ACC_DIRECTIVE_HOST_DATA_SPACE: i32 = 11;
+const ACC_DIRECTIVE_UPDATE: i32 = 12;
+const ACC_DIRECTIVE_CACHE: i32 = 23;
+const ACC_DIRECTIVE_KERNELS_LOOP: i32 = 14;
+const ACC_DIRECTIVE_PARALLEL_LOOP: i32 = 15;
+const ACC_DIRECTIVE_SERIAL_LOOP: i32 = 16;
+const ACC_DIRECTIVE_SERIAL: i32 = 17;
+const ACC_DIRECTIVE_ROUTINE: i32 = 18;
+const ACC_DIRECTIVE_SET: i32 = 19;
+const ACC_DIRECTIVE_INIT: i32 = 20;
+const ACC_DIRECTIVE_SHUTDOWN: i32 = 21;
+const ACC_DIRECTIVE_ENTER_DATA_UNDERSCORE: i32 = 24;
+const ACC_DIRECTIVE_EXIT_DATA_UNDERSCORE: i32 = 25;
+const ACC_DIRECTIVE_WAIT_PAREN: i32 = 26;
+const ACC_UNKNOWN_KIND: i32 = 999;
+
+// ============================================================================
+// OpenACC Clause Kind Constants
+// ============================================================================
+
+const ACC_CLAUSE_ASYNC: i32 = 0;
+const ACC_CLAUSE_WAIT: i32 = 1;
+const ACC_CLAUSE_NUM_GANGS: i32 = 2;
+const ACC_CLAUSE_NUM_WORKERS: i32 = 3;
+const ACC_CLAUSE_VECTOR_LENGTH: i32 = 4;
+const ACC_CLAUSE_GANG: i32 = 5;
+const ACC_CLAUSE_WORKER: i32 = 6;
+const ACC_CLAUSE_VECTOR: i32 = 7;
+const ACC_CLAUSE_SEQ: i32 = 8;
+const ACC_CLAUSE_INDEPENDENT: i32 = 9;
+const ACC_CLAUSE_AUTO: i32 = 10;
+const ACC_CLAUSE_COLLAPSE: i32 = 11;
+const ACC_CLAUSE_DEVICE_TYPE: i32 = 12;
+const ACC_CLAUSE_BIND: i32 = 13;
+const ACC_CLAUSE_IF: i32 = 14;
+const ACC_CLAUSE_DEFAULT: i32 = 15;
+const ACC_CLAUSE_FIRSTPRIVATE: i32 = 16;
+const ACC_CLAUSE_DEFAULT_ASYNC: i32 = 17;
+const ACC_CLAUSE_LINK: i32 = 18;
+const ACC_CLAUSE_NO_CREATE: i32 = 19;
+const ACC_CLAUSE_NOHOST: i32 = 20;
+const ACC_CLAUSE_PRESENT: i32 = 21;
+const ACC_CLAUSE_PRIVATE: i32 = 22;
+const ACC_CLAUSE_REDUCTION: i32 = 23;
+const ACC_CLAUSE_READ: i32 = 24;
+const ACC_CLAUSE_SELF: i32 = 25;
+const ACC_CLAUSE_TILE: i32 = 26;
+const ACC_CLAUSE_USE_DEVICE: i32 = 27;
+const ACC_CLAUSE_ATTACH: i32 = 28;
+const ACC_CLAUSE_DETACH: i32 = 29;
+const ACC_CLAUSE_FINALIZE: i32 = 30;
+const ACC_CLAUSE_IF_PRESENT: i32 = 31;
+const ACC_CLAUSE_CAPTURE: i32 = 32;
+const ACC_CLAUSE_WRITE: i32 = 33;
+const ACC_CLAUSE_UPDATE: i32 = 34;
+const ACC_CLAUSE_COPY: i32 = 35;
+const ACC_CLAUSE_COPYIN: i32 = 36;
+const ACC_CLAUSE_COPYOUT: i32 = 37;
+const ACC_CLAUSE_CREATE: i32 = 38;
+const ACC_CLAUSE_DELETE: i32 = 39;
+const ACC_CLAUSE_DEVICE: i32 = 40;
+const ACC_CLAUSE_DEVICEPTR: i32 = 41;
+const ACC_CLAUSE_DEVICE_NUM: i32 = 42;
+const ACC_CLAUSE_DEVICE_RESIDENT: i32 = 43;
+const ACC_CLAUSE_HOST: i32 = 44;
+const ACC_CLAUSE_UNKNOWN: i32 = 999;
 
 #[no_mangle]
 pub extern "C" fn acc_parse(input: *const c_char) -> *mut AccDirective {
@@ -1048,90 +1145,88 @@ fn language_code(language: Language) -> i32 {
     }
 }
 
-const ACC_UNKNOWN_KIND: i32 = 999;
-
 fn acc_directive_name_to_kind(name: &str) -> i32 {
     let normalized = name.trim().to_ascii_lowercase();
     match normalized.as_str() {
-        "parallel" => 0,
-        "loop" => 1,
-        "kernels" => 2,
-        "data" => 3,
-        "enter data" => 4,
-        "exit data" => 5,
-        "host_data" => 6,
-        "atomic" => 7,
-        "declare" => 8,
-        "wait" => 9,
-        "end" => 10,
-        "host data" => 11,
-        "update" => 12,
-        "cache" => 23,
-        "kernels loop" => 14,
-        "parallel loop" => 15,
-        "serial loop" => 16,
-        "serial" => 17,
-        "routine" => 18,
-        "set" => 19,
-        "init" => 20,
-        "shutdown" => 21,
-        "enter_data" => 24,
-        "exit_data" => 25,
-        _ if normalized.starts_with("cache(") => 23,
-        _ if normalized.starts_with("wait(") => 26,
-        _ if normalized.starts_with("end ") => 10,
+        "parallel" => ACC_DIRECTIVE_PARALLEL,
+        "loop" => ACC_DIRECTIVE_LOOP,
+        "kernels" => ACC_DIRECTIVE_KERNELS,
+        "data" => ACC_DIRECTIVE_DATA,
+        "enter data" => ACC_DIRECTIVE_ENTER_DATA,
+        "exit data" => ACC_DIRECTIVE_EXIT_DATA,
+        "host_data" => ACC_DIRECTIVE_HOST_DATA,
+        "atomic" => ACC_DIRECTIVE_ATOMIC,
+        "declare" => ACC_DIRECTIVE_DECLARE,
+        "wait" => ACC_DIRECTIVE_WAIT,
+        "end" => ACC_DIRECTIVE_END,
+        "host data" => ACC_DIRECTIVE_HOST_DATA_SPACE,
+        "update" => ACC_DIRECTIVE_UPDATE,
+        "cache" => ACC_DIRECTIVE_CACHE,
+        "kernels loop" => ACC_DIRECTIVE_KERNELS_LOOP,
+        "parallel loop" => ACC_DIRECTIVE_PARALLEL_LOOP,
+        "serial loop" => ACC_DIRECTIVE_SERIAL_LOOP,
+        "serial" => ACC_DIRECTIVE_SERIAL,
+        "routine" => ACC_DIRECTIVE_ROUTINE,
+        "set" => ACC_DIRECTIVE_SET,
+        "init" => ACC_DIRECTIVE_INIT,
+        "shutdown" => ACC_DIRECTIVE_SHUTDOWN,
+        "enter_data" => ACC_DIRECTIVE_ENTER_DATA_UNDERSCORE,
+        "exit_data" => ACC_DIRECTIVE_EXIT_DATA_UNDERSCORE,
+        _ if normalized.starts_with("cache(") => ACC_DIRECTIVE_CACHE,
+        _ if normalized.starts_with("wait(") => ACC_DIRECTIVE_WAIT_PAREN,
+        _ if normalized.starts_with("end ") => ACC_DIRECTIVE_END,
         _ => ACC_UNKNOWN_KIND,
     }
 }
 
 fn clause_name_to_kind(name: &str) -> i32 {
     match name {
-        "async" => 0,
-        "wait" => 1,
-        "num_gangs" => 2,
-        "num_workers" => 3,
-        "vector_length" => 4,
-        "gang" => 5,
-        "worker" => 6,
-        "vector" => 7,
-        "seq" => 8,
-        "independent" => 9,
-        "auto" => 10,
-        "collapse" => 11,
-        "device_type" | "dtype" => 12,
-        "bind" => 13,
-        "if" => 14,
-        "default" => 15,
-        "firstprivate" => 16,
-        "default_async" => 17,
-        "link" => 18,
-        "no_create" => 19,
-        "nohost" => 20,
-        "present" => 21,
-        "private" => 22,
-        "reduction" => 23,
-        "read" => 24,
-        "self" => 25,
-        "tile" => 26,
-        "use_device" => 27,
-        "attach" => 28,
-        "detach" => 29,
-        "finalize" => 30,
-        "if_present" => 31,
-        "capture" => 32,
-        "write" => 33,
-        "update" => 34,
-        "copy" | "pcopy" | "present_or_copy" => 35,
-        "copyin" | "pcopyin" | "present_or_copyin" => 36,
-        "copyout" | "pcopyout" | "present_or_copyout" => 37,
-        "create" | "pcreate" | "present_or_create" => 38,
-        "delete" => 39,
-        "device" => 40,
-        "deviceptr" => 41,
-        "device_num" => 42,
-        "device_resident" => 43,
-        "host" => 44,
-        _ => 999,
+        "async" => ACC_CLAUSE_ASYNC,
+        "wait" => ACC_CLAUSE_WAIT,
+        "num_gangs" => ACC_CLAUSE_NUM_GANGS,
+        "num_workers" => ACC_CLAUSE_NUM_WORKERS,
+        "vector_length" => ACC_CLAUSE_VECTOR_LENGTH,
+        "gang" => ACC_CLAUSE_GANG,
+        "worker" => ACC_CLAUSE_WORKER,
+        "vector" => ACC_CLAUSE_VECTOR,
+        "seq" => ACC_CLAUSE_SEQ,
+        "independent" => ACC_CLAUSE_INDEPENDENT,
+        "auto" => ACC_CLAUSE_AUTO,
+        "collapse" => ACC_CLAUSE_COLLAPSE,
+        "device_type" | "dtype" => ACC_CLAUSE_DEVICE_TYPE,
+        "bind" => ACC_CLAUSE_BIND,
+        "if" => ACC_CLAUSE_IF,
+        "default" => ACC_CLAUSE_DEFAULT,
+        "firstprivate" => ACC_CLAUSE_FIRSTPRIVATE,
+        "default_async" => ACC_CLAUSE_DEFAULT_ASYNC,
+        "link" => ACC_CLAUSE_LINK,
+        "no_create" => ACC_CLAUSE_NO_CREATE,
+        "nohost" => ACC_CLAUSE_NOHOST,
+        "present" => ACC_CLAUSE_PRESENT,
+        "private" => ACC_CLAUSE_PRIVATE,
+        "reduction" => ACC_CLAUSE_REDUCTION,
+        "read" => ACC_CLAUSE_READ,
+        "self" => ACC_CLAUSE_SELF,
+        "tile" => ACC_CLAUSE_TILE,
+        "use_device" => ACC_CLAUSE_USE_DEVICE,
+        "attach" => ACC_CLAUSE_ATTACH,
+        "detach" => ACC_CLAUSE_DETACH,
+        "finalize" => ACC_CLAUSE_FINALIZE,
+        "if_present" => ACC_CLAUSE_IF_PRESENT,
+        "capture" => ACC_CLAUSE_CAPTURE,
+        "write" => ACC_CLAUSE_WRITE,
+        "update" => ACC_CLAUSE_UPDATE,
+        "copy" | "pcopy" | "present_or_copy" => ACC_CLAUSE_COPY,
+        "copyin" | "pcopyin" | "present_or_copyin" => ACC_CLAUSE_COPYIN,
+        "copyout" | "pcopyout" | "present_or_copyout" => ACC_CLAUSE_COPYOUT,
+        "create" | "pcreate" | "present_or_create" => ACC_CLAUSE_CREATE,
+        "delete" => ACC_CLAUSE_DELETE,
+        "device" => ACC_CLAUSE_DEVICE,
+        "deviceptr" => ACC_CLAUSE_DEVICEPTR,
+        "device_num" => ACC_CLAUSE_DEVICE_NUM,
+        "device_resident" => ACC_CLAUSE_DEVICE_RESIDENT,
+        "host" => ACC_CLAUSE_HOST,
+        _ => ACC_CLAUSE_UNKNOWN,
     }
 }
 

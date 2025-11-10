@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 12 clauses) + OpenACC (18 directives + 45 clauses) = 0x377190AEB0C04C97
+// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 12 clauses) + OpenACC (18 directives + 0 clauses) = 0x2AD097A84C2E139F
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x377190AEB0C04C97
+#define ROUP_CONSTANTS_CHECKSUM 0x2AD097A84C2E139F
 
 // ============================================================================
 // Language Format Constants
@@ -113,51 +113,6 @@ extern "C" {
 // ============================================================================
 // Auto-generated from src/c_api.rs:convert_acc_clause()
 
-#define ACC_CLAUSE_ASYNC           0
-#define ACC_CLAUSE_WAIT            1
-#define ACC_CLAUSE_NUM_GANGS       2
-#define ACC_CLAUSE_NUM_WORKERS     3
-#define ACC_CLAUSE_VECTOR_LENGTH   4
-#define ACC_CLAUSE_GANG            5
-#define ACC_CLAUSE_WORKER          6
-#define ACC_CLAUSE_VECTOR          7
-#define ACC_CLAUSE_SEQ             8
-#define ACC_CLAUSE_INDEPENDENT     9
-#define ACC_CLAUSE_AUTO            10
-#define ACC_CLAUSE_COLLAPSE        11
-#define ACC_CLAUSE_DEVICE_TYPE     12
-#define ACC_CLAUSE_BIND            13
-#define ACC_CLAUSE_IF              14
-#define ACC_CLAUSE_DEFAULT         15
-#define ACC_CLAUSE_FIRSTPRIVATE    16
-#define ACC_CLAUSE_DEFAULT_ASYNC   17
-#define ACC_CLAUSE_LINK            18
-#define ACC_CLAUSE_NO_CREATE       19
-#define ACC_CLAUSE_NOHOST          20
-#define ACC_CLAUSE_PRESENT         21
-#define ACC_CLAUSE_PRIVATE         22
-#define ACC_CLAUSE_REDUCTION       23
-#define ACC_CLAUSE_READ            24
-#define ACC_CLAUSE_SELF            25
-#define ACC_CLAUSE_TILE            26
-#define ACC_CLAUSE_USE_DEVICE      27
-#define ACC_CLAUSE_ATTACH          28
-#define ACC_CLAUSE_DETACH          29
-#define ACC_CLAUSE_FINALIZE        30
-#define ACC_CLAUSE_IF_PRESENT      31
-#define ACC_CLAUSE_CAPTURE         32
-#define ACC_CLAUSE_WRITE           33
-#define ACC_CLAUSE_UPDATE          34
-#define ACC_CLAUSE_COPY            35
-#define ACC_CLAUSE_COPYIN          36
-#define ACC_CLAUSE_COPYOUT         37
-#define ACC_CLAUSE_CREATE          38
-#define ACC_CLAUSE_DELETE          39
-#define ACC_CLAUSE_DEVICE          40
-#define ACC_CLAUSE_DEVICEPTR       41
-#define ACC_CLAUSE_DEVICE_NUM      42
-#define ACC_CLAUSE_DEVICE_RESIDENT 43
-#define ACC_CLAUSE_HOST            44
 #define ACC_CLAUSE_UNKNOWN       999
 
 

@@ -24,10 +24,13 @@
 //!
 //! See: <https://github.com/rust-lang/rust/blob/master/compiler/rustc_span/src/symbol.rs>
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 
-use syn::{Arm, Expr, ExprLit, ExprMatch, ExprTuple, File, Item, ItemFn, Lit, Pat, PatLit};
+use syn::{
+    Arm, Expr, ExprLit, ExprMatch, ExprPath, ExprTuple, File, Item, ItemConst, ItemFn, Lit, Pat,
+    PatLit,
+};
 
 /// Special value for unknown directive/clause kinds
 pub const UNKNOWN_KIND: i32 = 999;
@@ -41,10 +44,33 @@ fn normalize_constant_name(name: &str) -> String {
     name.to_uppercase().replace('-', "_")
 }
 
+/// Parse constant definitions from the AST
+fn parse_constants(ast: &File) -> HashMap<String, i32> {
+    let mut constants = HashMap::new();
+
+    for item in &ast.items {
+        if let Item::Const(ItemConst { ident, expr, .. }) = item {
+            if let Expr::Lit(ExprLit {
+                lit: Lit::Int(lit_int),
+                ..
+            }) = &**expr
+            {
+                if let Ok(value) = lit_int.base10_parse::<i32>() {
+                    constants.insert(ident.to_string(), value);
+                }
+            }
+        }
+    }
+
+    constants
+}
+
 /// Parse directive mappings from c_api.rs directive_name_to_kind() using AST
 pub fn parse_directive_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
+
+    let constants = parse_constants(&ast);
 
     let mut mappings = Vec::new();
     let mut seen_numbers = HashSet::new();
@@ -56,7 +82,7 @@ pub fn parse_directive_mappings() -> Vec<(String, i32)> {
                 // Recursively find match expressions in the function body
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        if let Some((name, num)) = parse_directive_arm(arm) {
+                        if let Some((name, num)) = parse_directive_arm(arm, &constants) {
                             // Filter out: (1) composite directives with spaces, (2) UNKNOWN_KIND, (3) duplicates
                             // Note: OpenMP spec defines composite directives as having spaces
                             // (e.g., "parallel for", "target teams"). Single-word directives
@@ -86,6 +112,8 @@ pub fn parse_clause_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
 
+    let constants = parse_constants(&ast);
+
     let mut mappings = Vec::new();
     let mut seen_numbers = HashSet::new();
 
@@ -96,7 +124,7 @@ pub fn parse_clause_mappings() -> Vec<(String, i32)> {
                 // Recursively find match expressions in the function body
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        if let Some((name, num)) = parse_clause_arm(arm) {
+                        if let Some((name, num)) = parse_clause_arm(arm, &constants) {
                             // Skip unknown and duplicates
                             if num != UNKNOWN_KIND && seen_numbers.insert(num) {
                                 mappings.push((normalize_constant_name(&name), num));
@@ -118,6 +146,8 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
         fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read src/c_api/openacc.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
 
+    let constants = parse_constants(&ast);
+
     let mut mappings = Vec::new();
     let mut seen_numbers = HashSet::new();
 
@@ -128,7 +158,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
                 // Recursively find match expressions in the function body
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        if let Some((name, num)) = parse_directive_arm(arm) {
+                        if let Some((name, num)) = parse_directive_arm(arm, &constants) {
                             // Filter out: (1) composite directives with spaces, (2) UNKNOWN_KIND, (3) duplicates
                             let is_simple_directive = name.split_whitespace().count() == 1;
                             let is_known_kind = num != UNKNOWN_KIND;
@@ -150,47 +180,30 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
 
 /// Parse OpenACC clause mappings from c_api.rs convert_acc_clause() using AST
 pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
-    let source =
+    let c_api =
         fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read src/c_api/openacc.rs");
+    let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api/openacc.rs");
 
-    // Extract the body of clause_name_to_kind()
-    let fn_pos = source
-        .find("fn clause_name_to_kind")
-        .expect("clause_name_to_kind() not found in openacc module");
-    let body_start = source[fn_pos..]
-        .find('{')
-        .map(|idx| fn_pos + idx + 1)
-        .expect("Failed to locate clause_name_to_kind body");
-
-    let mut depth = 1usize;
-    let mut idx = body_start;
-    let bytes = source.as_bytes();
-    while idx < bytes.len() && depth > 0 {
-        match bytes[idx] as char {
-            '{' => depth += 1,
-            '}' => depth -= 1,
-            _ => {}
-        }
-        idx += 1;
-    }
-    let body = &source[body_start..idx.saturating_sub(1)];
+    let constants = parse_constants(&ast);
 
     let mut mappings = Vec::new();
-    for line in body.lines() {
-        let trimmed = line.trim();
-        if !trimmed.starts_with('"') {
-            continue;
-        }
+    let mut seen_numbers = HashSet::new();
 
-        if let Some((name_part, rest)) = trimmed[1..].split_once('"') {
-            if let Some((_, value_part)) = rest.split_once("=>") {
-                if let Some(num_str) = value_part.split(',').next() {
-                    if let Ok(value) = num_str.trim().parse::<i32>() {
-                        if value != UNKNOWN_KIND {
-                            mappings.push((normalize_constant_name(name_part), value));
+    // Find the clause_name_to_kind function
+    for item in &ast.items {
+        if let Item::Fn(ItemFn { sig, block, .. }) = item {
+            if sig.ident == "clause_name_to_kind" {
+                // Recursively find match expressions in the function body
+                find_matches_in_stmts(&block.stmts, &mut |arms| {
+                    for arm in arms {
+                        if let Some((name, num)) = parse_clause_arm(arm, &constants) {
+                            // Skip unknown and duplicates
+                            if num != UNKNOWN_KIND && seen_numbers.insert(num) {
+                                mappings.push((normalize_constant_name(&name), num));
+                            }
                         }
                     }
-                }
+                });
             }
         }
     }
@@ -354,7 +367,7 @@ where
 }
 
 /// Extract (name, number) from a match arm like: "directive-name" => number,
-fn parse_directive_arm(arm: &Arm) -> Option<(String, i32)> {
+fn parse_directive_arm(arm: &Arm, constants: &HashMap<String, i32>) -> Option<(String, i32)> {
     // Extract pattern (the "directive-name" part)
     let name = if let Pat::Lit(PatLit {
         lit: Lit::Str(lit_str),
@@ -367,21 +380,25 @@ fn parse_directive_arm(arm: &Arm) -> Option<(String, i32)> {
     };
 
     // Extract number from body (the number part after =>)
-    let num = if let Expr::Lit(ExprLit {
-        lit: Lit::Int(lit_int),
-        ..
-    }) = &*arm.body
-    {
-        lit_int.base10_parse::<i32>().ok()?
-    } else {
-        return None;
+    let num = match &*arm.body {
+        // Literal number: => 0
+        Expr::Lit(ExprLit {
+            lit: Lit::Int(lit_int),
+            ..
+        }) => lit_int.base10_parse::<i32>().ok()?,
+        // Constant reference: => OMP_DIRECTIVE_KIND_PARALLEL
+        Expr::Path(ExprPath { path, .. }) => {
+            let ident = path.get_ident()?.to_string();
+            *constants.get(&ident)?
+        }
+        _ => return None,
     };
 
     Some((name, num))
 }
 
 /// Extract (name, number) from a match arm like: "clause-name" => (number, ClauseData)
-fn parse_clause_arm(arm: &Arm) -> Option<(String, i32)> {
+fn parse_clause_arm(arm: &Arm, constants: &HashMap<String, i32>) -> Option<(String, i32)> {
     // Extract pattern (the "clause-name" part)
     let name = if let Pat::Lit(PatLit {
         lit: Lit::Str(lit_str),
@@ -393,31 +410,38 @@ fn parse_clause_arm(arm: &Arm) -> Option<(String, i32)> {
         return None;
     };
 
+    // Helper to extract number from an expression (literal or constant reference)
+    let extract_num = |expr: &Expr| -> Option<i32> {
+        match expr {
+            Expr::Lit(ExprLit {
+                lit: Lit::Int(lit_int),
+                ..
+            }) => lit_int.base10_parse::<i32>().ok(),
+            Expr::Path(ExprPath { path, .. }) => {
+                let ident = path.get_ident()?.to_string();
+                constants.get(&ident).copied()
+            }
+            _ => None,
+        }
+    };
+
     // Extract number from tuple body: (number, ClauseData)
     // The body could be a tuple directly, or a block containing a tuple
     let num = match &*arm.body {
-        // Direct tuple: => (6, ClauseData::...)
+        // Direct tuple: => (OMP_CLAUSE_KIND_REDUCTION, ClauseData::...)
         Expr::Tuple(ExprTuple { elems, .. }) => {
-            if let Some(Expr::Lit(ExprLit {
-                lit: Lit::Int(lit_int),
-                ..
-            })) = elems.first()
-            {
-                lit_int.base10_parse::<i32>().ok()?
+            if let Some(first_elem) = elems.first() {
+                extract_num(first_elem)?
             } else {
                 return None;
             }
         }
-        // Block containing tuple: => { ... (6, ClauseData::...) }
+        // Block containing tuple: => { ... (OMP_CLAUSE_KIND_REDUCTION, ClauseData::...) }
         Expr::Block(block) => {
             for stmt in &block.block.stmts {
                 if let syn::Stmt::Expr(Expr::Tuple(ExprTuple { elems, .. }), _) = stmt {
-                    if let Some(Expr::Lit(ExprLit {
-                        lit: Lit::Int(lit_int),
-                        ..
-                    })) = elems.first()
-                    {
-                        return Some((name, lit_int.base10_parse::<i32>().ok()?));
+                    if let Some(first_elem) = elems.first() {
+                        return Some((name, extract_num(first_elem)?));
                     }
                 }
             }

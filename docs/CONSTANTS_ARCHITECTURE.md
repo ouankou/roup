@@ -1,14 +1,17 @@
 # Constants architecture
 
-The C bindings expose numeric directive and clause identifiers. Rather than
-maintaining those numbers in multiple places, the project generates
-`roup_constants.h` from the authoritative tables in `src/c_api.rs`.
+The C bindings expose numeric directive and clause identifiers. All numeric constants are defined as named constants in `src/c_api.rs` and `src/c_api/openacc.rs`, not as raw numbers.
 
-- `build.rs` (or `cargo run --bin gen`) parses the match arms in
-  `directive_name_to_kind` and `convert_clause` using `syn`.
-- The script writes the header and a checksum so CI can confirm the committed
-  file is current.
-- C and C++ code include `roup_constants.h` and use the macros in switches.
+## Enum-based approach
 
-When a directive or clause is added, edit `src/c_api.rs` only and rebuild. Never
-change `roup_constants.h` by hand—the next build will overwrite it.
+- **OpenMP**: Uses constants like `OMP_CLAUSE_KIND_SCHEDULE`, `OMP_DIRECTIVE_KIND_PARALLEL`
+- **OpenACC**: Uses constants like `ACC_CLAUSE_ASYNC`, `ACC_DIRECTIVE_PARALLEL`
+- Reduction operators use `ReductionOperator` enum discriminants (e.g., `ReductionOperator::Add as i32`)
+- Schedule kinds use `ScheduleKind` enum discriminants (e.g., `ScheduleKind::Static as i32`)
+- Default kinds use `DefaultKind` enum discriminants (e.g., `DefaultKind::Shared as i32`)
+
+## Header generation
+
+`build.rs` (or `cargo run --bin gen`) generates `roup_constants.h` from named constants in `src/c_api.rs`, providing C macros for switch statements. The script writes a checksum so CI can verify the header is current.
+
+When adding directives or clauses, edit the named constants and match arms in `src/c_api.rs` only and rebuild. Never modify `roup_constants.h` manually—it will be regenerated.
