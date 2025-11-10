@@ -75,316 +75,316 @@ pub enum DirectiveKind {
     // Parallel constructs
     // ========================================================================
     /// `#pragma omp parallel`
-    Parallel = 0,
+    Parallel,
     /// `#pragma omp parallel for`
-    ParallelFor = 1,
+    ParallelFor,
     /// `#pragma omp parallel for simd`
-    ParallelForSimd = 2,
+    ParallelForSimd,
     /// `#pragma omp parallel sections`
-    ParallelSections = 3,
+    ParallelSections,
     /// `#pragma omp parallel workshare` (Fortran)
-    ParallelWorkshare = 4,
+    ParallelWorkshare,
     /// `#pragma omp parallel loop`
-    ParallelLoop = 5,
+    ParallelLoop,
     /// `#pragma omp parallel loop simd`
-    ParallelLoopSimd = 8,
+    ParallelLoopSimd,
     /// `#pragma omp parallel masked`
-    ParallelMasked = 6,
+    ParallelMasked,
     /// `#pragma omp parallel masked taskloop`
-    ParallelMaskedTaskloop = 9,
+    ParallelMaskedTaskloop,
     /// `#pragma omp parallel masked taskloop simd`
-    ParallelMaskedTaskloopSimd = 17,
+    ParallelMaskedTaskloopSimd,
     /// `#pragma omp parallel master` (deprecated in 5.1)
-    ParallelMaster = 7,
+    ParallelMaster,
     /// `#pragma omp parallel master taskloop`
-    ParallelMasterTaskloop = 18,
+    ParallelMasterTaskloop,
     /// `#pragma omp parallel master taskloop simd`
-    ParallelMasterTaskloopSimd = 19,
+    ParallelMasterTaskloopSimd,
 
     // ========================================================================
     // Work-sharing constructs
     // ========================================================================
     /// `#pragma omp for`
-    For = 10,
+    For,
     /// `#pragma omp for simd`
-    ForSimd = 11,
+    ForSimd,
     /// `#pragma omp sections`
-    Sections = 12,
+    Sections,
     /// `#pragma omp section`
-    Section = 13,
+    Section,
     /// `#pragma omp single`
-    Single = 14,
+    Single,
     /// `#pragma omp workshare` (Fortran)
-    Workshare = 15,
+    Workshare,
     /// `#pragma omp loop`
-    Loop = 16,
+    Loop,
 
     // ========================================================================
     // SIMD constructs
     // ========================================================================
     /// `#pragma omp simd`
-    Simd = 20,
+    Simd,
     /// `#pragma omp declare simd`
-    DeclareSimd = 21,
+    DeclareSimd,
 
     // ========================================================================
     // Task constructs
     // ========================================================================
     /// `#pragma omp task`
-    Task = 30,
+    Task,
     /// `#pragma omp taskloop`
-    Taskloop = 31,
+    Taskloop,
     /// `#pragma omp taskloop simd`
-    TaskloopSimd = 32,
+    TaskloopSimd,
     /// `#pragma omp taskyield`
-    Taskyield = 33,
+    Taskyield,
     /// `#pragma omp taskwait`
-    Taskwait = 34,
+    Taskwait,
     /// `#pragma omp taskgroup`
-    Taskgroup = 35,
+    Taskgroup,
     /// `#pragma omp taskgraph` (OpenMP 6.0)
-    Taskgraph = 36,
+    Taskgraph,
     /// `#pragma omp task iteration` (OpenMP 6.0)
-    TaskIteration = 37,
+    TaskIteration,
     /// `#pragma omp masked taskloop`
-    MaskedTaskloop = 38,
+    MaskedTaskloop,
     /// `#pragma omp masked taskloop simd`
-    MaskedTaskloopSimd = 39,
+    MaskedTaskloopSimd,
 
     // ========================================================================
     // Target constructs
     // ========================================================================
     /// `#pragma omp target`
-    Target = 40,
+    Target,
     /// `#pragma omp target data`
-    TargetData = 41,
+    TargetData,
     /// `#pragma omp target enter data`
-    TargetEnterData = 42,
+    TargetEnterData,
     /// `#pragma omp target exit data`
-    TargetExitData = 43,
+    TargetExitData,
     /// `#pragma omp target update`
-    TargetUpdate = 44,
+    TargetUpdate,
     /// `#pragma omp target parallel`
-    TargetParallel = 45,
+    TargetParallel,
     /// `#pragma omp target parallel for`
-    TargetParallelFor = 46,
+    TargetParallelFor,
     /// `#pragma omp target parallel for simd`
-    TargetParallelForSimd = 47,
+    TargetParallelForSimd,
     /// `#pragma omp target parallel loop`
-    TargetParallelLoop = 48,
+    TargetParallelLoop,
     /// `#pragma omp target parallel loop simd`
-    TargetParallelLoopSimd = 56,
+    TargetParallelLoopSimd,
     /// `#pragma omp target simd`
-    TargetSimd = 49,
+    TargetSimd,
     /// `#pragma omp target loop`
-    TargetLoop = 57,
+    TargetLoop,
     /// `#pragma omp target loop simd`
-    TargetLoopSimd = 58,
+    TargetLoopSimd,
     /// `#pragma omp target teams`
-    TargetTeams = 50,
+    TargetTeams,
     /// `#pragma omp target teams distribute`
-    TargetTeamsDistribute = 51,
+    TargetTeamsDistribute,
     /// `#pragma omp target teams distribute simd`
-    TargetTeamsDistributeSimd = 52,
+    TargetTeamsDistributeSimd,
     /// `#pragma omp target teams distribute parallel for`
-    TargetTeamsDistributeParallelFor = 53,
+    TargetTeamsDistributeParallelFor,
     /// `#pragma omp target teams distribute parallel for simd`
-    TargetTeamsDistributeParallelForSimd = 54,
+    TargetTeamsDistributeParallelForSimd,
     /// `#pragma omp target teams distribute parallel loop`
-    TargetTeamsDistributeParallelLoop = 59,
+    TargetTeamsDistributeParallelLoop,
     /// `#pragma omp target teams distribute parallel loop simd`
-    TargetTeamsDistributeParallelLoopSimd = 69,
+    TargetTeamsDistributeParallelLoopSimd,
     /// `#pragma omp target teams loop`
-    TargetTeamsLoop = 55,
+    TargetTeamsLoop,
     /// `#pragma omp target teams loop simd`
-    TargetTeamsLoopSimd = 85,
+    TargetTeamsLoopSimd,
     /// `#pragma omp end target`
-    EndTarget = 147,
+    EndTarget,
 
     // ========================================================================
     // Teams constructs
     // ========================================================================
     /// `#pragma omp teams`
-    Teams = 60,
+    Teams,
     /// `#pragma omp teams distribute`
-    TeamsDistribute = 61,
+    TeamsDistribute,
     /// `#pragma omp teams distribute simd`
-    TeamsDistributeSimd = 62,
+    TeamsDistributeSimd,
     /// `#pragma omp teams distribute parallel for`
-    TeamsDistributeParallelFor = 63,
+    TeamsDistributeParallelFor,
     /// `#pragma omp teams distribute parallel for simd`
-    TeamsDistributeParallelForSimd = 64,
+    TeamsDistributeParallelForSimd,
     /// `#pragma omp teams distribute parallel loop`
-    TeamsDistributeParallelLoop = 66,
+    TeamsDistributeParallelLoop,
     /// `#pragma omp teams distribute parallel loop simd`
-    TeamsDistributeParallelLoopSimd = 67,
+    TeamsDistributeParallelLoopSimd,
     /// `#pragma omp teams loop`
-    TeamsLoop = 65,
+    TeamsLoop,
     /// `#pragma omp teams loop simd`
-    TeamsLoopSimd = 68,
+    TeamsLoopSimd,
 
     // ========================================================================
     // Synchronization constructs
     // ========================================================================
     /// `#pragma omp barrier`
-    Barrier = 70,
+    Barrier,
     /// `#pragma omp critical`
-    Critical = 71,
+    Critical,
     /// `#pragma omp atomic`
-    Atomic = 72,
+    Atomic,
     /// `#pragma omp atomic read`
-    AtomicRead = 77,
+    AtomicRead,
     /// `#pragma omp atomic write`
-    AtomicWrite = 78,
+    AtomicWrite,
     /// `#pragma omp atomic update`
-    AtomicUpdate = 79,
+    AtomicUpdate,
     /// `#pragma omp atomic capture`
-    AtomicCapture = 86,
+    AtomicCapture,
     /// `#pragma omp atomic compare capture`
-    AtomicCompareCapture = 87,
+    AtomicCompareCapture,
     /// `#pragma omp flush`
-    Flush = 73,
+    Flush,
     /// `#pragma omp ordered`
-    Ordered = 74,
+    Ordered,
     /// `#pragma omp master`
-    Master = 75,
+    Master,
     /// `#pragma omp masked`
-    Masked = 76,
+    Masked,
 
     // ========================================================================
     // Declare constructs
     // ========================================================================
     /// `#pragma omp declare reduction`
-    DeclareReduction = 80,
+    DeclareReduction,
     /// `#pragma omp declare mapper`
-    DeclareMapper = 81,
+    DeclareMapper,
     /// `#pragma omp declare target`
-    DeclareTarget = 82,
+    DeclareTarget,
     /// `#pragma omp declare variant`
-    DeclareVariant = 83,
+    DeclareVariant,
     /// `#pragma omp declare induction` (OpenMP 6.0)
-    DeclareInduction = 84,
+    DeclareInduction,
 
     // ========================================================================
     // Distribute constructs
     // ========================================================================
     /// `#pragma omp distribute`
-    Distribute = 90,
+    Distribute,
     /// `#pragma omp distribute simd`
-    DistributeSimd = 91,
+    DistributeSimd,
     /// `#pragma omp distribute parallel for`
-    DistributeParallelFor = 92,
+    DistributeParallelFor,
     /// `#pragma omp distribute parallel for simd`
-    DistributeParallelForSimd = 93,
+    DistributeParallelForSimd,
     /// `#pragma omp distribute parallel loop`
-    DistributeParallelLoop = 94,
+    DistributeParallelLoop,
     /// `#pragma omp distribute parallel loop simd`
-    DistributeParallelLoopSimd = 95,
+    DistributeParallelLoopSimd,
 
     // ========================================================================
     // Meta-directives
     // ========================================================================
     /// `#pragma omp metadirective`
-    Metadirective = 100,
+    Metadirective,
     /// `#pragma omp begin metadirective`
-    BeginMetadirective = 103,
+    BeginMetadirective,
     /// `#pragma omp assume` (OpenMP 6.0)
-    Assume = 101,
+    Assume,
     /// `#pragma omp assumes` (OpenMP 6.0)
-    Assumes = 102,
+    Assumes,
     /// `#pragma omp begin assumes`
-    BeginAssumes = 104,
+    BeginAssumes,
     /// `#pragma omp begin declare target`
-    BeginDeclareTarget = 112,
+    BeginDeclareTarget,
     /// `#pragma omp end declare target`
-    EndDeclareTarget = 113,
+    EndDeclareTarget,
     /// `#pragma omp begin declare variant`
-    BeginDeclareVariant = 114,
+    BeginDeclareVariant,
     /// `#pragma omp end declare variant`
-    EndDeclareVariant = 115,
+    EndDeclareVariant,
 
     // ========================================================================
     // Loop transformation directives (OpenMP 6.0)
     // ========================================================================
     /// `#pragma omp tile`
-    Tile = 105,
+    Tile,
     /// `#pragma omp unroll`
-    Unroll = 106,
+    Unroll,
     /// `#pragma omp fuse`
-    Fuse = 107,
+    Fuse,
     /// `#pragma omp split`
-    Split = 108,
+    Split,
     /// `#pragma omp interchange`
-    Interchange = 109,
+    Interchange,
     /// `#pragma omp reverse`
-    Reverse = 110,
+    Reverse,
     /// `#pragma omp stripe`
-    Stripe = 111,
+    Stripe,
 
     // ========================================================================
     // Other constructs
     // ========================================================================
     /// `#pragma omp threadprivate`
-    Threadprivate = 120,
+    Threadprivate,
     /// `#pragma omp allocate`
-    Allocate = 121,
+    Allocate,
     /// `#pragma omp allocators` (OpenMP 6.0)
-    Allocators = 122,
+    Allocators,
     /// `#pragma omp requires`
-    Requires = 123,
+    Requires,
     /// `#pragma omp scan`
-    Scan = 124,
+    Scan,
     /// `#pragma omp depobj`
-    Depobj = 125,
+    Depobj,
     /// `#pragma omp nothing`
-    Nothing = 126,
+    Nothing,
     /// `#pragma omp error`
-    Error = 127,
+    Error,
     /// `#pragma omp cancel` (OpenMP 4.0)
-    Cancel = 128,
+    Cancel,
     /// `#pragma omp cancellation point` (OpenMP 4.0)
-    CancellationPoint = 129,
+    CancellationPoint,
     /// `#pragma omp dispatch` (OpenMP 6.0)
-    Dispatch = 130,
+    Dispatch,
     /// `#pragma omp interop` (OpenMP 5.1)
-    Interop = 131,
+    Interop,
     /// `#pragma omp scope` (OpenMP 5.1)
-    Scope = 132,
+    Scope,
     /// `#pragma omp groupprivate` (OpenMP 6.0)
-    Groupprivate = 133,
+    Groupprivate,
     /// `#pragma omp workdistribute` (Fortran, OpenMP 6.0)
-    Workdistribute = 134,
+    Workdistribute,
 
     // ========================================================================
     // Fortran "do" variants (Fortran equivalents of "for" directives)
     // ========================================================================
     /// `!$omp do` (Fortran equivalent of `for`)
-    Do = 135,
+    Do,
     /// `!$omp do simd` (Fortran equivalent of `for simd`)
-    DoSimd = 136,
+    DoSimd,
     /// `!$omp parallel do` (Fortran equivalent of `parallel for`)
-    ParallelDo = 137,
+    ParallelDo,
     /// `!$omp parallel do simd` (Fortran equivalent of `parallel for simd`)
-    ParallelDoSimd = 138,
+    ParallelDoSimd,
     /// `!$omp distribute parallel do` (Fortran)
-    DistributeParallelDo = 139,
+    DistributeParallelDo,
     /// `!$omp distribute parallel do simd` (Fortran)
-    DistributeParallelDoSimd = 140,
+    DistributeParallelDoSimd,
     /// `!$omp teams distribute parallel do` (Fortran)
-    TeamsDistributeParallelDo = 141,
+    TeamsDistributeParallelDo,
     /// `!$omp teams distribute parallel do simd` (Fortran)
-    TeamsDistributeParallelDoSimd = 142,
+    TeamsDistributeParallelDoSimd,
     /// `!$omp target parallel do` (Fortran)
-    TargetParallelDo = 143,
+    TargetParallelDo,
     /// `!$omp target parallel do simd` (Fortran)
-    TargetParallelDoSimd = 144,
+    TargetParallelDoSimd,
     /// `!$omp target teams distribute parallel do` (Fortran)
-    TargetTeamsDistributeParallelDo = 145,
+    TargetTeamsDistributeParallelDo,
     /// `!$omp target teams distribute parallel do simd` (Fortran)
-    TargetTeamsDistributeParallelDoSimd = 146,
+    TargetTeamsDistributeParallelDoSimd,
 
     /// Unknown or custom directive
-    Unknown = 255,
+    Unknown,
 }
 
 impl fmt::Display for DirectiveKind {
