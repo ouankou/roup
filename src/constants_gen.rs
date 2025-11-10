@@ -70,14 +70,15 @@ fn parse_enum_discriminants(ast: &File, enum_name: &str) -> HashMap<String, i32>
 /// Extract discriminant value from an enum variant
 fn extract_discriminant(variant: &Variant) -> Option<i32> {
     if let Fields::Unit = &variant.fields {
-        if let Some((_, expr)) = &variant.discriminant {
-            if let Expr::Lit(ExprLit {
+        if let Some((
+            _,
+            Expr::Lit(ExprLit {
                 lit: Lit::Int(lit_int),
                 ..
-            }) = expr
-            {
-                return lit_int.base10_parse::<i32>().ok();
-            }
+            }),
+        )) = &variant.discriminant
+        {
+            return lit_int.base10_parse::<i32>().ok();
         }
     }
     None
