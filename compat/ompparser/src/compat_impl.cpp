@@ -722,7 +722,12 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                     default: omp_op = OMPC_REDUCTION_IDENTIFIER_user; break;     // Unknown/custom
                 }
 
-                new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind), omp_op);
+                // Reduction clause va_args: modifier, identifier, user_defined_modifier, user_defined_identifier
+                new_clause = dir->addOpenMPClause(static_cast<int>(clause_kind),
+                                                 OMPC_REDUCTION_MODIFIER_unspecified,
+                                                 omp_op,
+                                                 (char*)nullptr,
+                                                 (char*)nullptr);
             }
             // Handle schedule clause - needs modifiers and schedule kind
             else if (clause_kind == OMPC_schedule) {
