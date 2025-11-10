@@ -26,6 +26,9 @@ bitflags = "2.4"
 once_cell = "1"     # Lazy static initialization
 parking_lot = "0.12" # Faster Mutex than std
 
+# Enum string conversions
+strum = { version = "0.26", features = ["derive"] }
+
 # Robust Rust AST parser (used by both build.rs and `gen` binary for header validation)
 syn = { version = "2", features = ["full", "parsing"] }
 
