@@ -4,6 +4,152 @@ use nom::{multi::separated_list0, IResult, Parser};
 
 use crate::lexer;
 
+use once_cell::sync::Lazy;
+
+/// Typed representation of known clause names.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ClauseName {
+    NumThreads,
+    If,
+    Private,
+    Shared,
+    Firstprivate,
+    Lastprivate,
+    Reduction,
+    Schedule,
+    Collapse,
+    Ordered,
+    Nowait,
+    Default,
+    // OpenACC-specific canonical clause names
+    Copy,
+    CopyIn,
+    CopyOut,
+    // Additional OpenACC clause names (explicit variants to avoid string-based checks)
+    Async,
+    Wait,
+    NumGangs,
+    NumWorkers,
+    VectorLength,
+    Gang,
+    Worker,
+    Vector,
+    Seq,
+    Independent,
+    Auto,
+    DeviceType,
+    Bind,
+    DefaultAsync,
+    Link,
+    NoCreate,
+    NoHost,
+    Read,
+    SelfClause,
+    Tile,
+    UseDevice,
+    Attach,
+    Detach,
+    Finalize,
+    IfPresent,
+    Capture,
+    Write,
+    Update,
+    Delete,
+    Device,
+    DevicePtr,
+    DeviceNum,
+    DeviceResident,
+    Host,
+    Present,
+    Create,
+    Other(Cow<'static, str>),
+}
+
+static CLAUSE_MAP: Lazy<HashMap<&'static str, ClauseName>> = Lazy::new(|| {
+    let mut m = HashMap::new();
+    macro_rules! insert {
+        ($k:expr, $v:expr) => {
+            m.insert($k, $v);
+        };
+    }
+
+    insert!("num_threads", ClauseName::NumThreads);
+    insert!("if", ClauseName::If);
+    insert!("private", ClauseName::Private);
+    insert!("shared", ClauseName::Shared);
+    insert!("firstprivate", ClauseName::Firstprivate);
+    insert!("lastprivate", ClauseName::Lastprivate);
+    insert!("reduction", ClauseName::Reduction);
+    insert!("schedule", ClauseName::Schedule);
+    insert!("collapse", ClauseName::Collapse);
+    insert!("ordered", ClauseName::Ordered);
+    insert!("nowait", ClauseName::Nowait);
+    insert!("default", ClauseName::Default);
+
+    // Common OpenACC synonyms - canonicalize to dedicated ClauseName variants
+    insert!("copy", ClauseName::Copy);
+    insert!("pcopy", ClauseName::Copy);
+    insert!("present_or_copy", ClauseName::Copy);
+    insert!("present", ClauseName::Present);
+    insert!("copyin", ClauseName::CopyIn);
+    insert!("pcopyin", ClauseName::CopyIn);
+    insert!("present_or_copyin", ClauseName::CopyIn);
+    insert!("copyout", ClauseName::CopyOut);
+    insert!("pcopyout", ClauseName::CopyOut);
+    insert!("present_or_copyout", ClauseName::CopyOut);
+    insert!("create", ClauseName::Create);
+    insert!("pcreate", ClauseName::Create);
+    insert!("present_or_create", ClauseName::Create);
+
+    // OpenACC-specific clause keywords
+    insert!("async", ClauseName::Async);
+    insert!("wait", ClauseName::Wait);
+    insert!("num_gangs", ClauseName::NumGangs);
+    insert!("num_workers", ClauseName::NumWorkers);
+    insert!("vector_length", ClauseName::VectorLength);
+    insert!("gang", ClauseName::Gang);
+    insert!("worker", ClauseName::Worker);
+    insert!("vector", ClauseName::Vector);
+    insert!("seq", ClauseName::Seq);
+    insert!("independent", ClauseName::Independent);
+    insert!("auto", ClauseName::Auto);
+    insert!("device_type", ClauseName::DeviceType);
+    insert!("dtype", ClauseName::DeviceType);
+    insert!("bind", ClauseName::Bind);
+    insert!("default_async", ClauseName::DefaultAsync);
+    insert!("link", ClauseName::Link);
+    insert!("no_create", ClauseName::NoCreate);
+    insert!("nohost", ClauseName::NoHost);
+    insert!("read", ClauseName::Read);
+    insert!("self", ClauseName::SelfClause);
+    insert!("tile", ClauseName::Tile);
+    insert!("use_device", ClauseName::UseDevice);
+    insert!("attach", ClauseName::Attach);
+    insert!("detach", ClauseName::Detach);
+    insert!("finalize", ClauseName::Finalize);
+    insert!("if_present", ClauseName::IfPresent);
+    insert!("capture", ClauseName::Capture);
+    insert!("write", ClauseName::Write);
+    insert!("update", ClauseName::Update);
+    insert!("delete", ClauseName::Delete);
+    insert!("device", ClauseName::Device);
+    insert!("deviceptr", ClauseName::DevicePtr);
+    insert!("device_num", ClauseName::DeviceNum);
+    insert!("device_resident", ClauseName::DeviceResident);
+    insert!("host", ClauseName::Host);
+
+    m
+});
+
+/// Lookup a ClauseName from a normalized name string. If not found, returns Other variant
+pub fn lookup_clause_name(name: &str) -> ClauseName {
+    let key = name.trim().to_ascii_lowercase();
+    CLAUSE_MAP
+        .get(key.as_str())
+        .cloned()
+        .unwrap_or(ClauseName::Other(Cow::Owned(name.to_string())))
+}
+
 type ClauseParserFn = for<'a> fn(Cow<'a, str>, &'a str) -> IResult<&'a str, Clause<'a>>;
 
 /// OpenACC copyin clause modifier
@@ -496,6 +642,7 @@ mod tests {
     use super::*;
     use crate::lexer;
     use nom::character::complete::char;
+    use std::borrow::Cow;
 
     #[test]
     fn parses_empty_clause_sequence() {
@@ -559,6 +706,20 @@ mod tests {
 
         assert_eq!(clause.to_string(), "private(a, b)");
         assert_eq!(clause.to_source_string(), "private(a, b)");
+    }
+
+    #[test]
+    fn lookup_clause_name_canonical() {
+        assert_eq!(lookup_clause_name("private"), ClauseName::Private);
+        assert_eq!(lookup_clause_name("Private"), ClauseName::Private);
+        assert_eq!(lookup_clause_name("  shared  "), ClauseName::Shared);
+    }
+
+    #[test]
+    fn lookup_clause_name_synonyms() {
+        // OpenACC synonyms should map to the dedicated ClauseName variants we added
+        assert_eq!(lookup_clause_name("pcopy"), ClauseName::Copy);
+        assert_eq!(lookup_clause_name("present_or_create"), ClauseName::Create);
     }
 
     fn parse_single_identifier<'a>(

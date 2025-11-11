@@ -29,14 +29,18 @@ pub fn parse_clause_item_list(
             continue;
         }
 
-        if trimmed.contains('[') {
+        // If it contains a top-level '[' then treat as C-like variable with array sections
+        // Detect C-like array sections by splitting on top-level '[' (pairs empty
+        // so '[' is recognized unless inside quotes/templates).
+        if split_top_level(trimmed, '[', &[] as &[(char, char)]).len() > 1 {
             let variable = parse_c_like_variable(trimmed, config)?;
             items.push(ClauseItem::Variable(variable));
             continue;
         }
 
-        if matches!(language, Language::Fortran)
-            && (trimmed.contains('(') && trimmed.ends_with(')'))
+        // Fortran form: name(...) with parentheses. Use a simple contains +
+        // ends_with check and let parse_fortran_variable handle nesting properly.
+        if matches!(language, Language::Fortran) && trimmed.contains('(') && trimmed.ends_with(')')
         {
             if let Some(variable) = parse_fortran_variable(trimmed, config)? {
                 items.push(ClauseItem::Variable(variable));

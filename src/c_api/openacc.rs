@@ -14,6 +14,9 @@ use crate::parser::{
 
 use super::{ROUP_LANG_C, ROUP_LANG_FORTRAN_FIXED, ROUP_LANG_FORTRAN_FREE};
 
+// Use the parser's canonical directive lookup and the shared enum->int helper
+use crate::parser::directive_kind::lookup_directive_name;
+
 bitflags! {
     struct AccClauseFlags: u32 {
         const WAIT_HAS_QUEUES = 0b0001;
@@ -177,7 +180,10 @@ fn build_acc_directive(parsed: Directive<'_>, language: Language) -> AccDirectiv
             result.routine_name = Some(make_c_string(routine_name));
         } else if name.eq_ignore_ascii_case("end") {
             // For "end" directives, parameter contains the directive being ended (e.g., "atomic")
-            let kind = acc_directive_name_to_kind(param.as_ref());
+            // Use the canonical lookup to map to DirectiveName then to integer kind.
+            let dname = lookup_directive_name(param.as_ref());
+            // `directive_name_enum_to_kind` lives in the parent c_api module; call via super::
+            let kind = super::directive_name_enum_to_kind(dname);
             result.end_paired_kind = Some(kind);
         }
     }
@@ -238,10 +244,107 @@ pub extern "C" fn acc_directive_kind(directive: *const AccDirective) -> i32 {
     if directive.is_null() {
         return -1;
     }
-
     unsafe {
         let name = (*directive).name.as_c_str().to_str().unwrap_or("");
-        acc_directive_name_to_kind(name)
+        let dname = lookup_directive_name(name);
+        // Prefer an OpenACC-specific mapping when available so we can
+        // preserve directive codes expected by compatibility layers.
+        acc_directive_name_to_kind(dname)
+    }
+}
+
+/// OpenACC-specific mapping from `DirectiveName` -> integer kind code.
+///
+/// This function mirrors the old `acc_directive_name_to_kind` helper and is
+/// intentionally enum-based so `src/constants_gen.rs` can extract its
+/// match arms at build time (AST-only). The numeric codes align with the
+/// compatibility mapping used by `compat/accparser`.
+fn acc_directive_name_to_kind(name: crate::parser::directive_kind::DirectiveName) -> i32 {
+    use crate::parser::directive_kind::DirectiveName::*;
+
+    match name {
+        // Parallel family -> 0
+        Parallel | ParallelFor | ParallelDo | ParallelForSimd | ParallelDoSimd
+        | ParallelSections => 0,
+
+        // Loop / For -> 1
+        For | Do | ForSimd | DoSimd | Loop => 1,
+
+        // Kernels -> 2
+        Kernels => 2,
+
+        // Sections -> 2 as well
+        Sections | Section => 2,
+
+        // Data family
+        Data => 3,
+        // Underscored forms have separate DirectiveName variants but map to the
+        // same numeric codes expected by compatibility layer.
+        EnterData | EnterDataUnderscore => 24,
+        ExitData | ExitDataUnderscore => 25,
+        HostData | HostDataUnderscore => 6,
+
+        // Atomic / declare / wait / end
+        Atomic => 7,
+        Declare => 8,
+        Wait => 9,
+        End => 10,
+
+        // Update / kernels/parallel/serial loops
+        Update => 12,
+        KernelsLoop => 14,
+        ParallelLoop => 15,
+        SerialLoop => 16,
+        Serial => 17,
+
+        // Misc
+        Routine => 18,
+        Set => 19,
+        Init => 20,
+        Shutdown => 21,
+        Cache => 23,
+
+        // Target / teams / distribute / metadirective families
+        // Use the same numeric codes as the canonical OpenMP mapping so the
+        // compatibility header remains consistent with `directive_name_enum_to_kind`.
+        Target
+        | TargetTeams
+        | TargetTeamsDistribute
+        | TargetTeamsDistributeParallelFor
+        | TargetTeamsDistributeParallelForSimd
+        | TargetTeamsDistributeParallelLoop
+        | TargetTeamsDistributeParallelLoopSimd
+        | TargetTeamsDistributeParallelDo
+        | TargetTeamsDistributeParallelDoSimd
+        | TargetTeamsDistributeSimd
+        | TargetTeamsLoop
+        | TargetTeamsLoopSimd => 13,
+
+        Teams
+        | TeamsDistribute
+        | TeamsDistributeParallelFor
+        | TeamsDistributeParallelForSimd
+        | TeamsDistributeParallelLoop
+        | TeamsDistributeParallelLoopSimd
+        | TeamsDistributeParallelDo
+        | TeamsDistributeParallelDoSimd
+        | TeamsDistributeSimd
+        | TeamsLoop
+        | TeamsLoopSimd => 14,
+
+        Distribute
+        | DistributeParallelFor
+        | DistributeParallelForSimd
+        | DistributeParallelLoop
+        | DistributeParallelLoopSimd
+        | DistributeParallelDo
+        | DistributeParallelDoSimd
+        | DistributeSimd => 15,
+
+        Metadirective => 16,
+
+        // Default: delegate to canonical mapping
+        other => super::directive_name_enum_to_kind(other),
     }
 }
 
@@ -1048,90 +1151,75 @@ fn language_code(language: Language) -> i32 {
     }
 }
 
-const ACC_UNKNOWN_KIND: i32 = 999;
-
-fn acc_directive_name_to_kind(name: &str) -> i32 {
-    let normalized = name.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "parallel" => 0,
-        "loop" => 1,
-        "kernels" => 2,
-        "data" => 3,
-        "enter data" => 4,
-        "exit data" => 5,
-        "host_data" => 6,
-        "atomic" => 7,
-        "declare" => 8,
-        "wait" => 9,
-        "end" => 10,
-        "host data" => 11,
-        "update" => 12,
-        "cache" => 23,
-        "kernels loop" => 14,
-        "parallel loop" => 15,
-        "serial loop" => 16,
-        "serial" => 17,
-        "routine" => 18,
-        "set" => 19,
-        "init" => 20,
-        "shutdown" => 21,
-        "enter_data" => 24,
-        "exit_data" => 25,
-        _ if normalized.starts_with("cache(") => 23,
-        _ if normalized.starts_with("wait(") => 26,
-        _ if normalized.starts_with("end ") => 10,
-        _ => ACC_UNKNOWN_KIND,
-    }
-}
+// acc_directive_name_to_kind is removed: we now use the canonical
+// `DirectiveName` lookup and the shared `directive_name_enum_to_kind`
+// helper in the parent module directly. Unknown directives return -1.
 
 fn clause_name_to_kind(name: &str) -> i32 {
-    match name {
-        "async" => 0,
-        "wait" => 1,
-        "num_gangs" => 2,
-        "num_workers" => 3,
-        "vector_length" => 4,
-        "gang" => 5,
-        "worker" => 6,
-        "vector" => 7,
-        "seq" => 8,
-        "independent" => 9,
-        "auto" => 10,
-        "collapse" => 11,
-        "device_type" | "dtype" => 12,
-        "bind" => 13,
-        "if" => 14,
-        "default" => 15,
-        "firstprivate" => 16,
-        "default_async" => 17,
-        "link" => 18,
-        "no_create" => 19,
-        "nohost" => 20,
-        "present" => 21,
-        "private" => 22,
-        "reduction" => 23,
-        "read" => 24,
-        "self" => 25,
-        "tile" => 26,
-        "use_device" => 27,
-        "attach" => 28,
-        "detach" => 29,
-        "finalize" => 30,
-        "if_present" => 31,
-        "capture" => 32,
-        "write" => 33,
-        "update" => 34,
-        "copy" | "pcopy" | "present_or_copy" => 35,
-        "copyin" | "pcopyin" | "present_or_copyin" => 36,
-        "copyout" | "pcopyout" | "present_or_copyout" => 37,
-        "create" | "pcreate" | "present_or_create" => 38,
-        "delete" => 39,
-        "device" => 40,
-        "deviceptr" => 41,
-        "device_num" => 42,
-        "device_resident" => 43,
-        "host" => 44,
-        _ => 999,
+    let cname = crate::parser::lookup_clause_name(name);
+    use crate::parser::ClauseName;
+
+    match cname {
+        ClauseName::Copy => 35,
+        ClauseName::CopyIn => 36,
+        ClauseName::CopyOut => 37,
+        ClauseName::Create => 38,
+        ClauseName::Present => 39,
+        // OpenACC-specific clause kind codes (match generated header expectations)
+        ClauseName::Async => 2000,
+        ClauseName::Wait => 2001,
+        ClauseName::NumGangs => 2002,
+        ClauseName::NumWorkers => 2003,
+        ClauseName::VectorLength => 2004,
+        ClauseName::Gang => 2005,
+        ClauseName::Worker => 2006,
+        ClauseName::Vector => 2007,
+        ClauseName::Seq => 2008,
+        ClauseName::Independent => 2009,
+        ClauseName::Auto => 2010,
+        ClauseName::DeviceType => 2011,
+        ClauseName::Bind => 2012,
+        ClauseName::DefaultAsync => 2013,
+        ClauseName::Link => 2014,
+        ClauseName::NoCreate => 2015,
+        ClauseName::NoHost => 2016,
+        ClauseName::Read => 2017,
+        ClauseName::SelfClause => 2018,
+        ClauseName::Tile => 2019,
+        ClauseName::UseDevice => 2020,
+        ClauseName::Attach => 2021,
+        ClauseName::Detach => 2022,
+        ClauseName::Finalize => 2023,
+        ClauseName::IfPresent => 2024,
+        ClauseName::Capture => 2025,
+        ClauseName::Write => 2026,
+        ClauseName::Update => 2027,
+        ClauseName::Delete => 2028,
+        ClauseName::Device => 2029,
+        ClauseName::DevicePtr => 2030,
+        ClauseName::DeviceNum => 2031,
+        ClauseName::DeviceResident => 2032,
+        ClauseName::Host => 2033,
+        ClauseName::Other(ref s) => {
+            // Unknown clause names remain unmapped for OpenACC C API
+            eprintln!(
+                "[acc_c_api] unknown clause mapping requested: {}",
+                s.as_ref()
+            );
+            999
+        }
+        ClauseName::NumThreads => 0,
+        ClauseName::If => 14,
+        ClauseName::Private => 22,
+        ClauseName::Shared => 21, // shared mapping
+        ClauseName::Firstprivate => 16,
+        ClauseName::Lastprivate => 999, // not present in OpenACC table above
+        ClauseName::Reduction => 23,
+        ClauseName::Schedule => 999, // not in OpenACC table
+        ClauseName::Collapse => 11,
+        ClauseName::Ordered => 999,
+        ClauseName::Nowait => 999,
+        ClauseName::Default => 15,
     }
 }
 

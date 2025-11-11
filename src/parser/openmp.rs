@@ -385,7 +385,7 @@ fn parse_allocate_directive<'a>(
         Ok((
             rest,
             Directive {
-                name: std::borrow::Cow::Borrowed("allocate"),
+                name: crate::parser::directive_kind::lookup_directive_name("allocate"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
                 clauses,
                 wait_data: None,
@@ -412,7 +412,7 @@ fn parse_threadprivate_directive<'a>(
         Ok((
             rest,
             Directive::new(
-                std::borrow::Cow::Borrowed("threadprivate"),
+                crate::parser::directive_kind::lookup_directive_name("threadprivate"),
                 Some(std::borrow::Cow::Owned(format!("({})", list_content))),
                 vec![],
             ),
@@ -439,7 +439,7 @@ fn parse_declare_target_extended<'a>(
         Ok((
             rest,
             Directive {
-                name: std::borrow::Cow::Borrowed("declare target"),
+                name: crate::parser::directive_kind::lookup_directive_name("declare target"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
                 clauses,
                 wait_data: None,
@@ -468,7 +468,7 @@ fn parse_declare_mapper_directive<'a>(
         Ok((
             rest,
             Directive {
-                name: std::borrow::Cow::Borrowed("declare mapper"),
+                name: crate::parser::directive_kind::lookup_directive_name("declare mapper"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", mapper_id))),
                 clauses,
                 wait_data: None,
@@ -497,7 +497,7 @@ fn parse_declare_variant_directive<'a>(
         Ok((
             rest,
             Directive {
-                name: std::borrow::Cow::Borrowed("declare variant"),
+                name: crate::parser::directive_kind::lookup_directive_name("declare variant"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", variant_func))),
                 clauses,
                 wait_data: None,
@@ -526,7 +526,7 @@ fn parse_depobj_directive<'a>(
         Ok((
             rest,
             Directive {
-                name: std::borrow::Cow::Borrowed("depobj"),
+                name: crate::parser::directive_kind::lookup_directive_name("depobj"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", depobj_id))),
                 clauses,
                 wait_data: None,
@@ -582,7 +582,7 @@ fn parse_scan_directive<'a>(
             return Ok((
                 rest,
                 Directive {
-                    name: std::borrow::Cow::Borrowed("scan"),
+                    name: crate::parser::directive_kind::lookup_directive_name("scan"),
                     // Store the parameter without a leading space; the display/formatting layer
                     // is responsible for spacing when rendering the directive.
                     parameter: Some(std::borrow::Cow::Owned(format!(
@@ -622,7 +622,7 @@ fn parse_scan_directive<'a>(
             return Ok((
                 rest,
                 Directive {
-                    name: std::borrow::Cow::Borrowed("scan"),
+                    name: crate::parser::directive_kind::lookup_directive_name("scan"),
                     parameter: Some(std::borrow::Cow::Owned(format!(
                         "inclusive({})",
                         list_content
@@ -659,7 +659,7 @@ fn parse_cancel_directive<'a>(
         Ok((
             rest,
             Directive {
-                name: std::borrow::Cow::Borrowed("cancel"),
+                name: crate::parser::directive_kind::lookup_directive_name("cancel"),
                 // Store the construct type without a leading space; presentation spacing
                 // should be handled by the renderer that prints directives.
                 parameter: Some(std::borrow::Cow::Owned(construct_type.to_string())),
@@ -690,7 +690,7 @@ fn parse_groupprivate_directive<'a>(
         Ok((
             rest,
             Directive {
-                name: std::borrow::Cow::Borrowed("groupprivate"),
+                name: crate::parser::directive_kind::lookup_directive_name("groupprivate"),
                 parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
                 clauses,
                 wait_data: None,
@@ -717,7 +717,11 @@ fn parse_target_data_directive<'a>(
 
     Ok((
         rest,
-        Directive::new(std::borrow::Cow::Borrowed("target_data"), None, clauses),
+        Directive::new(
+            crate::parser::directive_kind::lookup_directive_name("target_data"),
+            None,
+            clauses,
+        ),
     ))
 }
 

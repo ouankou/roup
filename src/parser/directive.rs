@@ -7,6 +7,7 @@ use std::{
 use nom::{error::ErrorKind, IResult};
 
 use super::clause::{Clause, ClauseRegistry};
+use crate::parser::directive_kind::DirectiveName;
 
 type DirectiveParserFn =
     for<'a> fn(Cow<'a, str>, &'a str, &ClauseRegistry) -> IResult<&'a str, Directive<'a>>;
@@ -26,7 +27,7 @@ pub struct CacheDirectiveData<'a> {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Directive<'a> {
-    pub name: Cow<'a, str>,
+    pub name: DirectiveName,
     pub parameter: Option<Cow<'a, str>>,
     pub clauses: Vec<Clause<'a>>,
     // Structured data for specific directive types
@@ -35,18 +36,24 @@ pub struct Directive<'a> {
 }
 
 impl<'a> Directive<'a> {
-    pub fn new(
-        name: Cow<'a, str>,
+    pub fn new<N: Into<DirectiveName>>(
+        name: N,
         parameter: Option<Cow<'a, str>>,
         clauses: Vec<Clause<'a>>,
     ) -> Self {
         Self {
-            name,
+            name: name.into(),
             parameter,
             clauses,
             wait_data: None,
             cache_data: None,
         }
+    }
+
+    /// Return the typed directive name (lookup in the canonical registry).
+    pub fn name_kind(&self) -> crate::parser::directive_kind::DirectiveName {
+        // Already stored as a DirectiveName
+        self.name.clone()
     }
 
     /// Merge duplicate clauses and deduplicate variables (accparser compatibility)
@@ -58,7 +65,6 @@ impl<'a> Directive<'a> {
     pub fn merge_clauses(&mut self) {
         use super::clause::{Clause, ClauseKind};
         use std::collections::{HashMap, HashSet};
-
         // Group clauses by name AND modifier/kind for merging
         // Key: (name, kind_discriminant, modifier_value)
         type MergeKey = (String, u8, u32);
@@ -279,7 +285,7 @@ impl<'a> Directive<'a> {
     /// # use roup::parser::{Directive, Clause, ClauseKind};
     /// # use std::borrow::Cow;
     /// let directive = Directive {
-    ///     name: Cow::Borrowed("parallel"),
+    ///     name: "parallel".into(),
     ///     parameter: None,
     ///     clauses: vec![],
     ///     cache_data: None,
@@ -299,7 +305,7 @@ impl<'a> Directive<'a> {
     /// # use roup::parser::{Directive, Clause, ClauseKind};
     /// # use std::borrow::Cow;
     /// let directive = Directive {
-    ///     name: Cow::Borrowed("parallel"),
+    ///     name: "parallel".into(),
     ///     parameter: None,
     ///     clauses: vec![
     ///         Clause { name: Cow::Borrowed("async"), kind: ClauseKind::Parenthesized(Cow::Borrowed("1")) },
@@ -489,14 +495,25 @@ impl DirectiveRegistry {
 
             let candidate = &input[start..j];
             let candidate = crate::lexer::collapse_line_continuations(candidate);
-            let candidate_ref = candidate.as_ref().trim();
+            // Normalize candidate: replace any non-identifier characters with
+            // spaces, then collapse whitespace. This makes matching robust to
+            // stray separators (e.g., artifacts from continuation handling).
+            let mut tmp = String::with_capacity(candidate.len());
+            for ch in candidate.as_ref().chars() {
+                if is_ident_char(ch) || ch.is_whitespace() {
+                    tmp.push(ch);
+                } else {
+                    tmp.push(' ');
+                }
+            }
+            let candidate_ref = tmp.split_whitespace().collect::<Vec<_>>().join(" ");
             // Check if this candidate matches any registered directive
             let has_rule = if self.case_insensitive {
                 self.rules
                     .keys()
-                    .any(|k| k.eq_ignore_ascii_case(candidate_ref))
+                    .any(|k| k.eq_ignore_ascii_case(&candidate_ref))
             } else {
-                self.rules.contains_key(candidate_ref)
+                self.rules.contains_key(candidate_ref.as_str())
             };
 
             if has_rule {
@@ -517,19 +534,29 @@ impl DirectiveRegistry {
                     let prefix_candidate = input[start..idx].trim_end();
                     let prefix_candidate =
                         crate::lexer::collapse_line_continuations(prefix_candidate);
-                    let prefix_candidate_ref = prefix_candidate.as_ref().trim_end();
+                    // Normalize prefix similarly
+                    let mut ptmp = String::with_capacity(prefix_candidate.len());
+                    for ch in prefix_candidate.as_ref().chars() {
+                        if is_ident_char(ch) || ch.is_whitespace() {
+                            ptmp.push(ch);
+                        } else {
+                            ptmp.push(' ');
+                        }
+                    }
+                    let prefix_candidate_ref =
+                        ptmp.split_whitespace().collect::<Vec<_>>().join(" ");
                     // Check for prefixes
                     let has_prefix = if self.case_insensitive {
                         self.prefixes
                             .iter()
-                            .any(|p| p.eq_ignore_ascii_case(prefix_candidate_ref))
+                            .any(|p| p.eq_ignore_ascii_case(&prefix_candidate_ref))
                             || self
                                 .rules
                                 .keys()
-                                .any(|k| k.eq_ignore_ascii_case(prefix_candidate_ref))
+                                .any(|k| k.eq_ignore_ascii_case(prefix_candidate_ref.as_str()))
                     } else {
-                        self.prefixes.contains(prefix_candidate_ref)
-                            || self.rules.contains_key(prefix_candidate_ref)
+                        self.prefixes.contains(prefix_candidate_ref.as_str())
+                            || self.rules.contains_key(prefix_candidate_ref.as_str())
                     };
                     if has_prefix {
                         continue;
@@ -706,7 +733,7 @@ mod tests {
         Ok((
             input,
             Directive {
-                name,
+                name: name.into(),
                 parameter: None,
                 clauses,
                 wait_data: None,

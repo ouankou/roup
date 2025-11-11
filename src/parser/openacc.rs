@@ -248,7 +248,7 @@ fn parse_cache_directive<'a>(
     Ok((
         rest,
         Directive {
-            name,
+            name: crate::parser::directive_kind::lookup_directive_name(name.as_ref()),
             parameter: Some(Cow::Owned(parameter)),
             clauses,
             wait_data: None,
@@ -366,7 +366,7 @@ fn parse_wait_directive<'a>(
         return Ok((
             rest,
             Directive {
-                name,
+                name: crate::parser::directive_kind::lookup_directive_name(name.as_ref()),
                 parameter: Some(Cow::Owned(parameter)),
                 clauses,
                 wait_data: Some(WaitDirectiveData {
@@ -383,7 +383,7 @@ fn parse_wait_directive<'a>(
     Ok((
         rest,
         Directive {
-            name,
+            name: name.into(),
             parameter: None,
             clauses,
             wait_data: None,
@@ -425,7 +425,7 @@ fn parse_end_directive<'a>(
     Ok((
         rest,
         Directive {
-            name,
+            name: crate::parser::directive_kind::lookup_directive_name(name.as_ref()),
             parameter: Some(Cow::Owned(parameter)),
             clauses,
             wait_data: None,
@@ -451,7 +451,7 @@ fn parse_routine_directive<'a>(
         return Ok((
             rest,
             Directive {
-                name,
+                name: crate::parser::directive_kind::lookup_directive_name(name.as_ref()),
                 parameter: Some(Cow::Owned(parameter)),
                 clauses,
                 wait_data: None,
@@ -464,7 +464,7 @@ fn parse_routine_directive<'a>(
     Ok((
         rest,
         Directive {
-            name,
+            name: name.into(),
             parameter: None,
             clauses,
             wait_data: None,

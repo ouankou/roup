@@ -26,7 +26,7 @@
 //! ```
 //!
 //! Becomes:
-//! ```ignore
+//! ```text
 //! DirectiveIR {
 //!     kind: DirectiveKind::ParallelFor,
 //!     clauses: vec![

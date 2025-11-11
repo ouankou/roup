@@ -329,8 +329,8 @@ pub fn collapse_line_continuations(input: &str) -> Cow<'_, str> {
                 while next < len && matches!(bytes[next], b' ' | b'\t') {
                     next += 1;
                 }
-                // Insert a space to preserve token separation, but only if
-                // the output doesn't already end with whitespace
+                // Insert a space to preserve token separation, but avoid adding
+                // duplicate spaces if the output already ends with whitespace.
                 if !output.is_empty() && !output.ends_with(|c: char| c.is_whitespace()) {
                     output.push(' ');
                 }
@@ -340,7 +340,8 @@ pub fn collapse_line_continuations(input: &str) -> Cow<'_, str> {
         } else if bytes[idx] == b'&' {
             if let Some(next) = skip_fortran_continuation(input, idx) {
                 changed = true;
-                // For Fortran, also preserve token separation
+                // For Fortran, also preserve token separation but avoid duplicate
+                // spaces as above.
                 if !output.is_empty() && !output.ends_with(|c: char| c.is_whitespace()) {
                     output.push(' ');
                 }
@@ -355,7 +356,22 @@ pub fn collapse_line_continuations(input: &str) -> Cow<'_, str> {
     }
 
     if changed {
-        Cow::Owned(output)
+        // Normalize any runs of multiple spaces to a single space to avoid
+        // artifacts from mixed indentation and continuation handling.
+        let mut normalized = String::with_capacity(output.len());
+        let mut last_was_space = false;
+        for ch in output.chars() {
+            if ch.is_whitespace() {
+                if !last_was_space {
+                    normalized.push(' ');
+                    last_was_space = true;
+                }
+            } else {
+                normalized.push(ch);
+                last_was_space = false;
+            }
+        }
+        Cow::Owned(normalized)
     } else {
         Cow::Borrowed(input)
     }
