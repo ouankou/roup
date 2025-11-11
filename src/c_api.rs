@@ -1218,6 +1218,14 @@ fn directive_name_enum_to_kind(name: DirectiveName) -> i32 {
 
         Metadirective => 16,
 
+        // OpenACC-specific directives: these are not part of the OpenMP C API
+        // mapping. Return -1 quietly so callers can detect an unsupported
+        // directive without noisy logs. The dedicated OpenACC C API (in
+        // src/c_api/openacc.rs) maps these to the OpenACC numeric namespace.
+        Data | EnterData | EnterDataUnderscore | ExitData | ExitDataUnderscore | HostData
+        | HostDataUnderscore | Kernels | KernelsLoop | Update | Serial | SerialLoop | Routine
+        | Set | Init | Shutdown | Cache => -1,
+
         // Unknown / unhandled directive — treat as error so maintainers notice
         Other(s) => {
             eprintln!(

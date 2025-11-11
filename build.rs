@@ -49,22 +49,22 @@ fn generate_header(
         "#define ROUP_CLAUSE_UNKNOWN      {UNKNOWN_KIND}\n"
     ));
 
-    // Generate OpenACC directive constants
+    // Generate OpenACC directive constants with ROUP_ACC_ prefix
     let mut acc_directive_defs = String::new();
     for (name, num) in acc_directives {
-        acc_directive_defs.push_str(&format!("#define ACC_DIRECTIVE_{name:<20} {num}\n"));
+        acc_directive_defs.push_str(&format!("#define ROUP_ACC_DIRECTIVE_{name:<20} {num}\n"));
     }
     acc_directive_defs.push_str(&format!(
-        "#define ACC_DIRECTIVE_UNKNOWN        {UNKNOWN_KIND}\n"
+        "#define ROUP_ACC_DIRECTIVE_UNKNOWN        {UNKNOWN_KIND}\n"
     ));
 
-    // Generate OpenACC clause constants
+    // Generate OpenACC clause constants with ROUP_ACC_ prefix
     let mut acc_clause_defs = String::new();
     for (name, num) in acc_clauses {
-        acc_clause_defs.push_str(&format!("#define ACC_CLAUSE_{name:<15} {num}\n"));
+        acc_clause_defs.push_str(&format!("#define ROUP_ACC_CLAUSE_{name:<15} {num}\n"));
     }
     acc_clause_defs.push_str(&format!(
-        "#define ACC_CLAUSE_UNKNOWN       {UNKNOWN_KIND}\n"
+        "#define ROUP_ACC_CLAUSE_UNKNOWN       {UNKNOWN_KIND}\n"
     ));
 
     // Generate checksum for validation (includes both OpenMP and OpenACC)

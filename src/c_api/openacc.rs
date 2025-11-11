@@ -180,10 +180,13 @@ fn build_acc_directive(parsed: Directive<'_>, language: Language) -> AccDirectiv
             result.routine_name = Some(make_c_string(routine_name));
         } else if name.eq_ignore_ascii_case("end") {
             // For "end" directives, parameter contains the directive being ended (e.g., "atomic")
-            // Use the canonical lookup to map to DirectiveName then to integer kind.
+            // Use the canonical lookup to map to DirectiveName then to the OpenACC-specific
+            // integer kind. We must call the OpenACC mapping helper so OpenACC-only
+            // directive names (kernels, host_data, serial_loop, etc.) are handled.
             let dname = lookup_directive_name(param.as_ref());
-            // `directive_name_enum_to_kind` lives in the parent c_api module; call via super::
-            let kind = super::directive_name_enum_to_kind(dname);
+            // Call the OpenACC-specific enum -> kind helper defined in this module
+            // so the returned value lives in the OpenACC numeric namespace.
+            let kind = acc_directive_name_to_kind(dname);
             result.end_paired_kind = Some(kind);
         }
     }
@@ -296,10 +299,9 @@ fn acc_directive_name_to_kind(name: crate::parser::directive_kind::DirectiveName
         EnterData => 5,
         ExitData => 6,
         HostData => 7,
-        HostDataUnderscore => 8,
-        EnterDataUnderscore => 9,
-        ExitDataUnderscore => 10,
-
+        /* underscore-form variants removed: enter_data/exit_data underscore forms
+        are not valid OpenACC directives in accparser; only space-separated
+        canonical names are supported. */
         // Atomic / declare / wait / end
         Atomic => 11,
         Declare => 12,
@@ -322,42 +324,11 @@ fn acc_directive_name_to_kind(name: crate::parser::directive_kind::DirectiveName
         Shutdown => 23,
         Cache => 24,
 
-        // Target / teams / distribute / metadirective families
-        Target
-        | TargetTeams
-        | TargetTeamsDistribute
-        | TargetTeamsDistributeParallelFor
-        | TargetTeamsDistributeParallelForSimd
-        | TargetTeamsDistributeParallelLoop
-        | TargetTeamsDistributeParallelLoopSimd
-        | TargetTeamsDistributeParallelDo
-        | TargetTeamsDistributeParallelDoSimd
-        | TargetTeamsDistributeSimd
-        | TargetTeamsLoop
-        | TargetTeamsLoopSimd => 25,
-
-        Teams
-        | TeamsDistribute
-        | TeamsDistributeParallelFor
-        | TeamsDistributeParallelForSimd
-        | TeamsDistributeParallelLoop
-        | TeamsDistributeParallelLoopSimd
-        | TeamsDistributeParallelDo
-        | TeamsDistributeParallelDoSimd
-        | TeamsDistributeSimd
-        | TeamsLoop
-        | TeamsLoopSimd => 26,
-
-        Distribute
-        | DistributeParallelFor
-        | DistributeParallelForSimd
-        | DistributeParallelLoop
-        | DistributeParallelLoopSimd
-        | DistributeParallelDo
-        | DistributeParallelDoSimd
-        | DistributeSimd => 27,
-
-        // Metadirective is an OpenMP construct; do not include it in the OpenACC mapping
+        // Only include directives that accparser's OpenACCKinds.h understands.
+        // The accparser header contains: atomic, cache, data, declare, end,
+        // enter_data, exit_data, host_data, init, kernels, kernels_loop,
+        // loop, parallel, parallel_loop, routine, serial, serial_loop,
+        // set, shutdown, update, wait.
 
         // Default: unknown in OpenACC mapping — enforce strict separation.
         _ => return -1,

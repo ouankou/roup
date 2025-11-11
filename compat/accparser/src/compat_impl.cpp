@@ -152,32 +152,38 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
     // Mapping from ROUP IDs (src/c_api.rs:acc_directive_name_to_kind lines 1636-1664)
     // to accparser enum values (compat/accparser/accparser/src/OpenACCKinds.h)
     //
+    // The ROUP C API may return either the reduced directive kind (small
+    // integers like 0..N) or the full macro values (offset by ACC_DIRECTIVE_BASE,
+    // e.g., 10000+). Normalize here to the full macro values so the switch
+    // statements using `ROUP_ACC_DIRECTIVE_*` macros match correctly.
+    const int32_t ACC_DIRECTIVE_BASE = 10000;
+    int32_t full_kind = roup_kind;
+    if (full_kind >= 0 && full_kind < ACC_DIRECTIVE_BASE) {
+        full_kind += ACC_DIRECTIVE_BASE;
+    }
+
     // Note: ROUP supports both space and underscore variants for some directives:
     //   - "enter data" (4) and "enter_data" (24) both map to ACCD_enter_data
     //   - "exit data" (5) and "exit_data" (25) both map to ACCD_exit_data
     //   - "host data" (11) and "host_data" (6) both map to ACCD_host_data
-    //   - "wait" (9) and "wait(...)" (26) both map to ACCD_wait
-    switch (roup_kind) {
+    //   - "wait" (9) and "wait(... )" (26) both map to ACCD_wait
+    switch (full_kind) {
         case ROUP_ACC_DIRECTIVE_PARALLEL:    return ACCD_parallel;     // 0 = "parallel"
         case ROUP_ACC_DIRECTIVE_LOOP:        return ACCD_loop;         // 1 = "loop"
         case ROUP_ACC_DIRECTIVE_KERNELS:     return ACCD_kernels;      // 2 = "kernels"
     case ROUP_ACC_DIRECTIVE_DATA:                 return ACCD_data;         // 3 = "data"
     case ROUP_ACC_DIRECTIVE_ENTER_DATA:           return ACCD_enter_data;   // 4 = "enter data" (space)
     case ROUP_ACC_DIRECTIVE_EXIT_DATA:            return ACCD_exit_data;    // 5 = "exit data" (space)
-    case ROUP_ACC_DIRECTIVE_HOST_DATA_UNDERSCORE: return ACCD_host_data;    // 6 = "host_data" (underscore)
         case ROUP_ACC_DIRECTIVE_ATOMIC:      return ACCD_atomic;       // 7 = "atomic"
         case ROUP_ACC_DIRECTIVE_DECLARE:     return ACCD_declare;      // 8 = "declare"
         case ROUP_ACC_DIRECTIVE_WAIT:        return ACCD_wait;         // 9 = "wait"
         case ROUP_ACC_DIRECTIVE_END:         return ACCD_end;          // 10 = "end"
         case ROUP_ACC_DIRECTIVE_HOST_DATA:   return ACCD_host_data;    // 11 = "host data" (space) - same as 6
     case ROUP_ACC_DIRECTIVE_UPDATE:      return ACCD_update;       // 12 = "update"
-    // Target / teams / distribute families added by ROUP
-    // Map them to the closest accparser kinds so the compatibility shim
-    // does not drop these directives. These are best-effort mappings
-    // because the accparser IR predates these newer OpenACC constructs.
-    case ROUP_ACC_DIRECTIVE_TARGET:       return ACCD_kernels;   // "target" (family aliases)
-    case ROUP_ACC_DIRECTIVE_TEAMS:        return ACCD_parallel;  // "teams" (family aliases)
-    case ROUP_ACC_DIRECTIVE_DISTRIBUTE:   return ACCD_loop;      // "distribute" (family aliases)
+    // Note: ROUP previously emitted target/teams/distribute family aliases
+    // in the OpenACC mapping. These constructs do not appear in the
+    // accparser OpenACCKinds.h header, so the ROUP constants for them are
+    // no longer generated. Do not attempt to map them here.
 
     // Preserve earlier per-directive loop/kernels mappings for other kinds
     case ROUP_ACC_DIRECTIVE_KERNELS_LOOP:         return ACCD_kernels_loop; // 10016 = "kernels loop"
@@ -189,8 +195,7 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
         case ROUP_ACC_DIRECTIVE_INIT:        return ACCD_init;         // 20 = "init"
         case ROUP_ACC_DIRECTIVE_SHUTDOWN:    return ACCD_shutdown;     // 21 = "shutdown"
     case ROUP_ACC_DIRECTIVE_CACHE:       return ACCD_cache;        // 23 = "cache(... )" with content
-    case ROUP_ACC_DIRECTIVE_ENTER_DATA_UNDERSCORE:  return ACCD_enter_data;   // 24 = "enter_data" (underscore)
-    case ROUP_ACC_DIRECTIVE_EXIT_DATA_UNDERSCORE:   return ACCD_exit_data;    // 25 = "exit_data" (underscore)
+    // underscore-form variants removed from ROUP OpenACC mapping
         default:                        return ACCD_unknown;
     }
 }
