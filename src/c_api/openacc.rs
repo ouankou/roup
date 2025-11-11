@@ -291,8 +291,9 @@ fn acc_directive_name_to_kind(name: crate::parser::directive_kind::DirectiveName
         // Data family
         Data => 4,
         // Distinguish space vs underscore forms explicitly so the
-        // auto-generated header contains stable macros for both variants
-        // (e.g., "enter data" vs "enter_data").
+        // auto-generated header contains stable macros for the canonical
+        // variants (space-separated where applicable). Underscore-form
+        // enum variants must not be present in the AST.
         EnterData => 5,
         ExitData => 6,
         HostData => 7,

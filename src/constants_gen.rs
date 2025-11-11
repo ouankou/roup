@@ -111,14 +111,17 @@ fn parse_directive_enum_raw_mappings() -> Vec<(String, i32)> {
     enum_mappings
 }
 
-// Helper to detect disallowed underscore-form enum variants such as
-// `EnterDataUnderscore` or `HostDataUnderscore` which represent non-
-// canonical synonyms. Per project policy these must not be present in
+// Helper to detect disallowed underscore-form enum variants which represent
+// non-canonical synonyms. Per project policy these must not be present in
 // the AST-based directive mappings — fail fast if they are.
 fn ensure_no_underscore_variants(mappings: &[(String, i32)]) {
+    // Any underscore-form enum variant is forbidden in the AST-derived
+    // mappings. These variants represent non-canonical synonyms and must be
+    // removed from the source enums/registrations rather than tolerated by
+    // the generator.
     let mut bad: Vec<String> = mappings
         .iter()
-        .filter_map(|(variant, _)| {
+        .filter_map(|(variant, _num)| {
             if variant.ends_with("Underscore") {
                 Some(variant_to_constant(variant))
             } else {
@@ -288,7 +291,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
 
     // Known alias candidates for expected compat names. Each expected key
     // may map from multiple variant identifiers present in the parser AST
-    // (e.g., EnterData and EnterDataUnderscore). We check all candidates
+    // (e.g., EnterData). We check all candidates
     // when attempting to resolve the expected mapping.
     let alias_candidates = vec![
         ("ENTER_DATA", "EnterData"),
@@ -340,15 +343,15 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
         })
         .collect();
 
-    // Allow variants that map to a canonical header token (e.g., EnterDataUnderscore -> ENTER_DATA).
+    // Allow variants that map to a canonical header token.
     // build.rs includes this file directly so we cannot reference `crate::parser` here;
     // provide a local helper that mirrors the parser's canonical mapping for the
     // handful of ambiguous variants we care about.
     fn canonical_header_token_for_variant_local(variant: &str) -> Option<&'static str> {
         match variant {
-            "EnterData" | "EnterDataUnderscore" => Some("ENTER_DATA"),
-            "ExitData" | "ExitDataUnderscore" => Some("EXIT_DATA"),
-            "HostData" | "HostDataUnderscore" => Some("HOST_DATA"),
+            "EnterData" => Some("ENTER_DATA"),
+            "ExitData" => Some("EXIT_DATA"),
+            "HostData" => Some("HOST_DATA"),
             // Variants that are semantically the same as LOOP in the header
             "For" | "Do" | "ForSimd" | "DoSimd" | "Loop" => Some("LOOP"),
             // Variants in the parallel family map to PARALLEL in the header
