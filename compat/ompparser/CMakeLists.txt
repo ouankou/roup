@@ -45,6 +45,11 @@ set(OMPPARSER_IR_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ompparser/src/OpenMPIR.cpp)
 set(OMPPARSER_TOSTRING_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ompparser/src/OpenMPIRToString.cpp)
 set(OMPPARSER_TODOT_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ompparser/src/OpenMPIRToDOT.cpp)
 
+# Provide our own small compatibility source that defines globals expected by
+# the ompparser headers (e.g., normalize_clauses_global) so we don't need to
+# invoke the original project's bison/flex pipeline.
+set(OMP_COMPATIAL_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/compat_globals.cpp)
+
 # Rename upstream parseOpenMP symbol to avoid multiple definition when linking
 set_source_files_properties(${OMPPARSER_IR_SRC}
     PROPERTIES COMPILE_DEFINITIONS "parseOpenMP=ompparser_legacy_parseOpenMP")
@@ -52,6 +57,7 @@ set_source_files_properties(${OMPPARSER_IR_SRC}
 # Option 1: Static library (current)
 add_library(roup-ompparser-compat STATIC
     src/compat_impl.cpp
+    ${OMP_COMPATIAL_SRC}
     # Include ompparser's own implementation for toString, etc.
     ${OMPPARSER_IR_SRC}
     ${OMPPARSER_TOSTRING_SRC}
@@ -79,6 +85,7 @@ target_link_libraries(roup-ompparser-compat PUBLIC
 add_library(ompparser SHARED
     src/compat_impl.cpp
     ${OMPPARSER_IR_SRC}
+    ${OMP_COMPATIAL_SRC}
     ${OMPPARSER_TOSTRING_SRC}
     ${OMPPARSER_TODOT_SRC}
 )

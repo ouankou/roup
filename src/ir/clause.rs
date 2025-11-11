@@ -620,7 +620,7 @@ impl fmt::Display for OrderKind {
 /// Unlike the modifier enums (which are just unit variants), ClauseItem
 /// is an enum where each variant **contains data**:
 ///
-/// ```ignore
+/// ```text
 /// enum ClauseItem {
 ///     Identifier(Identifier),  // Contains an Identifier
 ///     Variable(Variable),       // Contains a Variable

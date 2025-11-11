@@ -343,7 +343,7 @@ impl DebugSession {
                     .collect();
 
                 let static_directive = Directive {
-                    name: Cow::Owned(directive.name.to_string()),
+                    name: directive.name.clone(),
                     parameter: directive
                         .parameter
                         .as_ref()

@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 12 clauses) + OpenACC (18 directives + 45 clauses) = 0x377190AEB0C04C97
+// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 12 clauses) + OpenACC (67 directives + 52 clauses) = 0xD095A2C2941DEE87
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x377190AEB0C04C97
+#define ROUP_CONSTANTS_CHECKSUM 0xD095A2C2941DEE87
 
 // ============================================================================
 // Language Format Constants
@@ -97,6 +97,14 @@ extern "C" {
 #define ACC_DIRECTIVE_WAIT                 9
 #define ACC_DIRECTIVE_END                  10
 #define ACC_DIRECTIVE_UPDATE               12
+#define ACC_DIRECTIVE_TARGET               13
+#define ACC_DIRECTIVE_TARGET_TEAMS         13
+#define ACC_DIRECTIVE_KERNELS_LOOP         14
+#define ACC_DIRECTIVE_TEAMS                14
+#define ACC_DIRECTIVE_PARALLEL_LOOP        15
+#define ACC_DIRECTIVE_DISTRIBUTE           15
+#define ACC_DIRECTIVE_SERIAL_LOOP          16
+#define ACC_DIRECTIVE_METADIRECTIVE        16
 #define ACC_DIRECTIVE_SERIAL               17
 #define ACC_DIRECTIVE_ROUTINE              18
 #define ACC_DIRECTIVE_SET                  19
@@ -105,6 +113,47 @@ extern "C" {
 #define ACC_DIRECTIVE_CACHE                23
 #define ACC_DIRECTIVE_ENTER_DATA           24
 #define ACC_DIRECTIVE_EXIT_DATA            25
+#define ACC_DIRECTIVE_PARALLEL_FOR         0
+#define ACC_DIRECTIVE_PARALLEL_DO          0
+#define ACC_DIRECTIVE_PARALLEL_FOR_SIMD    0
+#define ACC_DIRECTIVE_PARALLEL_DO_SIMD     0
+#define ACC_DIRECTIVE_PARALLEL_SECTIONS    0
+#define ACC_DIRECTIVE_FOR                  1
+#define ACC_DIRECTIVE_DO                   1
+#define ACC_DIRECTIVE_FOR_SIMD             1
+#define ACC_DIRECTIVE_DO_SIMD              1
+#define ACC_DIRECTIVE_SECTIONS             2
+#define ACC_DIRECTIVE_SECTION              2
+#define ACC_DIRECTIVE_HOST_DATA_UNDERSCORE 6
+#define ACC_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE 13
+#define ACC_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR 13
+#define ACC_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_FOR_SIMD 13
+#define ACC_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_LOOP 13
+#define ACC_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_LOOP_SIMD 13
+#define ACC_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_DO 13
+#define ACC_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_PARALLEL_DO_SIMD 13
+#define ACC_DIRECTIVE_TARGET_TEAMS_DISTRIBUTE_SIMD 13
+#define ACC_DIRECTIVE_TARGET_TEAMS_LOOP    13
+#define ACC_DIRECTIVE_TARGET_TEAMS_LOOP_SIMD 13
+#define ACC_DIRECTIVE_TEAMS_DISTRIBUTE     14
+#define ACC_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_FOR 14
+#define ACC_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_FOR_SIMD 14
+#define ACC_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_LOOP 14
+#define ACC_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_LOOP_SIMD 14
+#define ACC_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_DO 14
+#define ACC_DIRECTIVE_TEAMS_DISTRIBUTE_PARALLEL_DO_SIMD 14
+#define ACC_DIRECTIVE_TEAMS_DISTRIBUTE_SIMD 14
+#define ACC_DIRECTIVE_TEAMS_LOOP           14
+#define ACC_DIRECTIVE_TEAMS_LOOP_SIMD      14
+#define ACC_DIRECTIVE_DISTRIBUTE_PARALLEL_FOR 15
+#define ACC_DIRECTIVE_DISTRIBUTE_PARALLEL_FOR_SIMD 15
+#define ACC_DIRECTIVE_DISTRIBUTE_PARALLEL_LOOP 15
+#define ACC_DIRECTIVE_DISTRIBUTE_PARALLEL_LOOP_SIMD 15
+#define ACC_DIRECTIVE_DISTRIBUTE_PARALLEL_DO 15
+#define ACC_DIRECTIVE_DISTRIBUTE_PARALLEL_DO_SIMD 15
+#define ACC_DIRECTIVE_DISTRIBUTE_SIMD      15
+#define ACC_DIRECTIVE_ENTER_DATA_UNDERSCORE 24
+#define ACC_DIRECTIVE_EXIT_DATA_UNDERSCORE 25
 #define ACC_DIRECTIVE_UNKNOWN        999
 
 
@@ -113,51 +162,58 @@ extern "C" {
 // ============================================================================
 // Auto-generated from src/c_api.rs:convert_acc_clause()
 
-#define ACC_CLAUSE_ASYNC           0
-#define ACC_CLAUSE_WAIT            1
-#define ACC_CLAUSE_NUM_GANGS       2
-#define ACC_CLAUSE_NUM_WORKERS     3
-#define ACC_CLAUSE_VECTOR_LENGTH   4
-#define ACC_CLAUSE_GANG            5
-#define ACC_CLAUSE_WORKER          6
-#define ACC_CLAUSE_VECTOR          7
-#define ACC_CLAUSE_SEQ             8
-#define ACC_CLAUSE_INDEPENDENT     9
-#define ACC_CLAUSE_AUTO            10
+#define ACC_CLAUSE_NUM_THREADS     0
 #define ACC_CLAUSE_COLLAPSE        11
-#define ACC_CLAUSE_DEVICE_TYPE     12
-#define ACC_CLAUSE_BIND            13
 #define ACC_CLAUSE_IF              14
 #define ACC_CLAUSE_DEFAULT         15
 #define ACC_CLAUSE_FIRSTPRIVATE    16
-#define ACC_CLAUSE_DEFAULT_ASYNC   17
-#define ACC_CLAUSE_LINK            18
-#define ACC_CLAUSE_NO_CREATE       19
-#define ACC_CLAUSE_NOHOST          20
-#define ACC_CLAUSE_PRESENT         21
 #define ACC_CLAUSE_PRIVATE         22
 #define ACC_CLAUSE_REDUCTION       23
-#define ACC_CLAUSE_READ            24
-#define ACC_CLAUSE_SELF            25
-#define ACC_CLAUSE_TILE            26
-#define ACC_CLAUSE_USE_DEVICE      27
-#define ACC_CLAUSE_ATTACH          28
-#define ACC_CLAUSE_DETACH          29
-#define ACC_CLAUSE_FINALIZE        30
-#define ACC_CLAUSE_IF_PRESENT      31
-#define ACC_CLAUSE_CAPTURE         32
-#define ACC_CLAUSE_WRITE           33
-#define ACC_CLAUSE_UPDATE          34
 #define ACC_CLAUSE_COPY            35
 #define ACC_CLAUSE_COPYIN          36
 #define ACC_CLAUSE_COPYOUT         37
 #define ACC_CLAUSE_CREATE          38
-#define ACC_CLAUSE_DELETE          39
-#define ACC_CLAUSE_DEVICE          40
-#define ACC_CLAUSE_DEVICEPTR       41
-#define ACC_CLAUSE_DEVICE_NUM      42
-#define ACC_CLAUSE_DEVICE_RESIDENT 43
-#define ACC_CLAUSE_HOST            44
+#define ACC_CLAUSE_PRESENT         39
+#define ACC_CLAUSE_ASYNC           2000
+#define ACC_CLAUSE_WAIT            2001
+#define ACC_CLAUSE_NUM_GANGS       2002
+#define ACC_CLAUSE_NUM_WORKERS     2003
+#define ACC_CLAUSE_VECTOR_LENGTH   2004
+#define ACC_CLAUSE_GANG            2005
+#define ACC_CLAUSE_WORKER          2006
+#define ACC_CLAUSE_VECTOR          2007
+#define ACC_CLAUSE_SEQ             2008
+#define ACC_CLAUSE_INDEPENDENT     2009
+#define ACC_CLAUSE_AUTO            2010
+#define ACC_CLAUSE_DEVICE_TYPE     2011
+#define ACC_CLAUSE_BIND            2012
+#define ACC_CLAUSE_DEFAULT_ASYNC   2013
+#define ACC_CLAUSE_LINK            2014
+#define ACC_CLAUSE_NO_CREATE       2015
+#define ACC_CLAUSE_NOHOST          2016
+#define ACC_CLAUSE_READ            2017
+#define ACC_CLAUSE_SELF            2018
+#define ACC_CLAUSE_TILE            2019
+#define ACC_CLAUSE_USE_DEVICE      2020
+#define ACC_CLAUSE_ATTACH          2021
+#define ACC_CLAUSE_DETACH          2022
+#define ACC_CLAUSE_FINALIZE        2023
+#define ACC_CLAUSE_IF_PRESENT      2024
+#define ACC_CLAUSE_CAPTURE         2025
+#define ACC_CLAUSE_WRITE           2026
+#define ACC_CLAUSE_UPDATE          2027
+#define ACC_CLAUSE_DELETE          2028
+#define ACC_CLAUSE_DEVICE          2029
+#define ACC_CLAUSE_DEVICEPTR       2030
+#define ACC_CLAUSE_DEVICE_NUM      2031
+#define ACC_CLAUSE_DEVICE_RESIDENT 2032
+#define ACC_CLAUSE_HOST            2033
+#define ACC_CLAUSE_SHARED          21
+#define ACC_CLAUSE_COPY_IN         36
+#define ACC_CLAUSE_COPY_OUT        37
+#define ACC_CLAUSE_NO_HOST         2016
+#define ACC_CLAUSE_SELF_CLAUSE     2018
+#define ACC_CLAUSE_DEVICE_PTR      2030
 #define ACC_CLAUSE_UNKNOWN       999
 
 

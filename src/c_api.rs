@@ -66,6 +66,8 @@ use std::ptr;
 
 use crate::ir::{convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
 use crate::lexer::Language;
+use crate::parser::directive_kind::{lookup_directive_name, DirectiveName};
+use crate::parser::lookup_clause_name;
 use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
 
 mod openacc;
@@ -554,9 +556,26 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
     // Safety: Caller guarantees valid pointer from roup_parse
     unsafe {
         let dir = &*directive;
-        directive_name_to_kind(dir.name)
+
+        // Use the canonical lookup to map the stored directive name into
+        // a `DirectiveName` enum, then map that enum to the C integer code.
+        if dir.name.is_null() {
+            return -1;
+        }
+
+        let c_str = CStr::from_ptr(dir.name);
+        let name_str = match c_str.to_str() {
+            Ok(s) => s,
+            Err(_) => return -1,
+        };
+
+        let dname = lookup_directive_name(name_str);
+        directive_name_enum_to_kind(dname)
     }
 }
+
+// See `directive_name_enum_to_kind` below for the canonical mapping of
+// `DirectiveName` -> integer codes. Unknown/unhandled directives return -1.
 
 /// Get directive name as a C string.
 ///
@@ -879,6 +898,26 @@ fn allocate_c_string(s: &str) -> *const c_char {
     c_string.into_raw() as *const c_char
 }
 
+/// Find a top-level colon (:) not nested inside parentheses. Returns (left, right)
+fn split_once_top_level_colon(input: &str) -> Option<(&str, &str)> {
+    let mut depth: isize = 0;
+    for (i, ch) in input.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ':' => {
+                if depth == 0 {
+                    let left = &input[..i];
+                    let right = &input[i + 1..];
+                    return Some((left, right));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Convert Rust Clause to C-compatible OmpClause.
 ///
 /// Maps clause names to integer kind codes (C doesn't have Rust enums).
@@ -900,34 +939,35 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     // to parse if-else chains instead of match expressions.
     let normalized_name = clause.name.to_ascii_lowercase();
 
-    let (kind, data) = match normalized_name.as_str() {
-        "num_threads" => (0, ClauseData { default: 0 }),
-        "if" => (1, ClauseData { default: 0 }),
-        "private" => (
+    let clause_enum = lookup_clause_name(&normalized_name);
+    let (kind, data) = match clause_enum {
+        crate::parser::ClauseName::NumThreads => (0, ClauseData { default: 0 }),
+        crate::parser::ClauseName::If => (1, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Private => (
             2,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
-        "shared" => (
+        crate::parser::ClauseName::Shared => (
             3,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
-        "firstprivate" => (
+        crate::parser::ClauseName::Firstprivate => (
             4,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
-        "lastprivate" => (
+        crate::parser::ClauseName::Lastprivate => (
             5,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
-        "reduction" => {
+        crate::parser::ClauseName::Reduction => {
             let operator = parse_reduction_operator(clause);
             (
                 6,
@@ -936,7 +976,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 },
             )
         }
-        "schedule" => {
+        crate::parser::ClauseName::Schedule => {
             let schedule_kind = parse_schedule_kind(clause);
             (
                 7,
@@ -947,10 +987,10 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 },
             )
         }
-        "collapse" => (8, ClauseData { default: 0 }),
-        "ordered" => (9, ClauseData { default: 0 }),
-        "nowait" => (10, ClauseData { default: 0 }),
-        "default" => {
+        crate::parser::ClauseName::Collapse => (8, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Ordered => (9, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Nowait => (10, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Default => {
             let default_kind = parse_default_kind(clause);
             (
                 11,
@@ -959,7 +999,51 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 },
             )
         }
-        _ => (999, ClauseData { default: 0 }), // Unknown
+        // OpenACC-only clause names map to unknown in the OpenMP C API layer
+        crate::parser::ClauseName::Copy
+        | crate::parser::ClauseName::CopyIn
+        | crate::parser::ClauseName::CopyOut
+        | crate::parser::ClauseName::Create
+        | crate::parser::ClauseName::Present
+        | crate::parser::ClauseName::Async
+        | crate::parser::ClauseName::Wait
+        | crate::parser::ClauseName::NumGangs
+        | crate::parser::ClauseName::NumWorkers
+        | crate::parser::ClauseName::VectorLength
+        | crate::parser::ClauseName::Gang
+        | crate::parser::ClauseName::Worker
+        | crate::parser::ClauseName::Vector
+        | crate::parser::ClauseName::Seq
+        | crate::parser::ClauseName::Independent
+        | crate::parser::ClauseName::Auto
+        | crate::parser::ClauseName::DeviceType
+        | crate::parser::ClauseName::Bind
+        | crate::parser::ClauseName::DefaultAsync
+        | crate::parser::ClauseName::Link
+        | crate::parser::ClauseName::NoCreate
+        | crate::parser::ClauseName::NoHost
+        | crate::parser::ClauseName::Read
+        | crate::parser::ClauseName::SelfClause
+        | crate::parser::ClauseName::Tile
+        | crate::parser::ClauseName::UseDevice
+        | crate::parser::ClauseName::Attach
+        | crate::parser::ClauseName::Detach
+        | crate::parser::ClauseName::Finalize
+        | crate::parser::ClauseName::IfPresent
+        | crate::parser::ClauseName::Capture
+        | crate::parser::ClauseName::Write
+        | crate::parser::ClauseName::Update
+        | crate::parser::ClauseName::Delete
+        | crate::parser::ClauseName::Device
+        | crate::parser::ClauseName::DevicePtr
+        | crate::parser::ClauseName::DeviceNum
+        | crate::parser::ClauseName::DeviceResident
+        | crate::parser::ClauseName::Host => (999, ClauseData { default: 0 }),
+
+        crate::parser::ClauseName::Other(ref s) => {
+            eprintln!("[c_api] unknown clause mapping requested: {}", s.as_ref());
+            (999, ClauseData { default: 0 })
+        }
     };
 
     OmpClause { kind, data }
@@ -977,36 +1061,31 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 /// - 3 = &  (bitwise AND)   - 8 = min
 /// - 4 = |  (bitwise OR)    - 9 = max
 fn parse_reduction_operator(clause: &Clause) -> i32 {
-    // Look for operator in clause kind
+    // Use the IR-level reduction operator parser to canonicalize the operator
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
-        // Operators (+, -, *, etc.) are ASCII symbols - no case conversion needed
-        if args.contains('+') && !args.contains("++") {
-            return 0; // Plus
-        } else if args.contains('-') && !args.contains("--") {
-            return 1; // Minus
-        } else if args.contains('*') {
-            return 2; // Times
-        } else if args.contains('&') && !args.contains("&&") {
-            return 3; // BitwiseAnd
-        } else if args.contains('|') && !args.contains("||") {
-            return 4; // BitwiseOr
-        } else if args.contains('^') {
-            return 5; // BitwiseXor
-        } else if args.contains("&&") {
-            return 6; // LogicalAnd
-        } else if args.contains("||") {
-            return 7; // LogicalOr
-        }
-
-        // For text keywords (min, max), normalize once for case-insensitive comparison
-        let args_lower = args.to_ascii_lowercase();
-        if args_lower.contains("min") {
-            return 8; // Min
-        } else if args_lower.contains("max") {
-            return 9; // Max
+        // Find operator before top-level ':' using IR helper
+        if let Some((op_str, _)) = split_once_top_level_colon(args) {
+            let op_trim = op_str.trim();
+            if let Ok(op_enum) = crate::ir::convert::parse_reduction_operator(op_trim) {
+                use crate::ir::ReductionOperator;
+                return match op_enum {
+                    ReductionOperator::Add => 0,
+                    ReductionOperator::Subtract => 1,
+                    ReductionOperator::Multiply => 2,
+                    ReductionOperator::BitwiseAnd => 3,
+                    ReductionOperator::BitwiseOr => 4,
+                    ReductionOperator::BitwiseXor => 5,
+                    ReductionOperator::LogicalAnd => 6,
+                    ReductionOperator::LogicalOr => 7,
+                    ReductionOperator::Min => 8,
+                    ReductionOperator::Max => 9,
+                    _ => 0,
+                };
+            }
         }
     }
+
     0 // Default to plus
 }
 
@@ -1024,18 +1103,19 @@ fn parse_reduction_operator(clause: &Clause) -> i32 {
 fn parse_schedule_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
-        // Case-insensitive keyword matching without String allocation
-        // Check common case variants (lowercase, uppercase, title case)
-        if args.contains("static") || args.contains("STATIC") || args.contains("Static") {
-            return 0;
-        } else if args.contains("dynamic") || args.contains("DYNAMIC") || args.contains("Dynamic") {
-            return 1;
-        } else if args.contains("guided") || args.contains("GUIDED") || args.contains("Guided") {
-            return 2;
-        } else if args.contains("auto") || args.contains("AUTO") || args.contains("Auto") {
-            return 3;
-        } else if args.contains("runtime") || args.contains("RUNTIME") || args.contains("Runtime") {
-            return 4;
+        // Use IR schedule parser to canonicalize modifiers and kind
+        let config = ParserConfig::default();
+        if let Ok(crate::ir::ClauseData::Schedule { kind, .. }) =
+            crate::ir::convert::parse_schedule_clause(args, &config)
+        {
+            use crate::ir::ScheduleKind;
+            return match kind {
+                ScheduleKind::Static => 0,
+                ScheduleKind::Dynamic => 1,
+                ScheduleKind::Guided => 2,
+                ScheduleKind::Auto => 3,
+                ScheduleKind::Runtime => 4,
+            };
         }
     }
     0 // Default to static
@@ -1052,12 +1132,10 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
 fn parse_default_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
-        // Case-insensitive keyword matching without String allocation
-        // Check common case variants (lowercase, uppercase, title case)
-        if args.contains("shared") || args.contains("SHARED") || args.contains("Shared") {
-            return 0;
-        } else if args.contains("none") || args.contains("NONE") || args.contains("None") {
-            return 1;
+        match args.trim().to_ascii_lowercase().as_str() {
+            "shared" => return 0,
+            "none" => return 1,
+            _ => {}
         }
     }
     0 // Default to shared
@@ -1076,91 +1154,82 @@ fn parse_default_kind(clause: &Clause) -> i32 {
 /// - 4 = task         - 9 = teams
 /// - 10 = target      - 11 = distribute
 /// - -1 = NULL/unknown
-fn directive_name_to_kind(name: *const c_char) -> i32 {
-    if name.is_null() {
-        return -1;
-    }
+// Map a `DirectiveName` enum to the integer codes used by the C API.
+// This function is the single source of truth for directive -> integer mapping
+// at runtime. It uses the typed `DirectiveName` enum (no string matching).
+//
+// Unknown or unhandled directives are treated as an error and return `-1` so
+// callers can detect a missing mapping and the maintainers are alerted to add
+// the correct mapping.
+fn directive_name_enum_to_kind(name: DirectiveName) -> i32 {
+    use DirectiveName::*;
 
-    // UNSAFE BLOCK 11: Read directive name
-    // Safety: name pointer is valid (from our own allocation)
-    unsafe {
-        let c_str = CStr::from_ptr(name);
-        let name_str = c_str.to_str().unwrap_or("");
+    match name {
+        Parallel | ParallelFor | ParallelDo | ParallelForSimd | ParallelDoSimd | ParallelLoop
+        | ParallelLoopSimd | ParallelSections => 0,
 
-        // Case-insensitive directive name matching via to_lowercase()
-        // Note: This allocates a String. While eq_ignore_ascii_case() would be more efficient,
-        // the build system's constant parser requires a match expression with string literals.
-        // The performance impact is negligible for the C API boundary.
-        //
-        // Fortran DO variants map to same codes as their C FOR equivalents:
-        // - "do" -> 1 (same as "for")
-        // - "parallel do" -> 0 (same as "parallel for")
-        // - "distribute parallel do" -> 15 (same as "distribute parallel for")
-        // - "target parallel do" -> 13 (same as "target parallel for")
-        // etc.
-        match name_str.to_lowercase().as_str() {
-            // Parallel directives (kind 0)
-            "parallel" => 0,
-            "parallel for" => 0,
-            "parallel do" => 0, // Fortran variant
-            "parallel for simd" => 0,
-            "parallel do simd" => 0, // Fortran variant
-            "parallel sections" => 0,
+        For | Do | ForSimd | DoSimd | Loop => 1,
 
-            // For/Do directives (kind 1)
-            "for" => 1,
-            "do" => 1, // Fortran variant
-            "for simd" => 1,
-            "do simd" => 1, // Fortran variant
+        Sections | Section => 2,
+        Single => 3,
+        Task => 4,
+        Master => 5,
+        Critical => 6,
+        Barrier => 7,
+        Taskwait => 8,
+        Taskgroup => 9,
+        Atomic => 10,
+        Flush => 11,
+        Ordered => 12,
 
-            // Other basic directives
-            "sections" => 2,
-            "single" => 3,
-            "task" => 4,
-            "master" => 5,
-            "critical" => 6,
-            "barrier" => 7,
-            "taskwait" => 8,
-            "taskgroup" => 9,
-            "atomic" => 10,
-            "flush" => 11,
-            "ordered" => 12,
+        Target
+        | TargetTeams
+        | TargetTeamsDistribute
+        | TargetTeamsDistributeParallelFor
+        | TargetTeamsDistributeParallelForSimd
+        | TargetTeamsDistributeParallelLoop
+        | TargetTeamsDistributeParallelLoopSimd
+        | TargetTeamsDistributeParallelDo
+        | TargetTeamsDistributeParallelDoSimd
+        | TargetTeamsDistributeSimd
+        | TargetTeamsLoop
+        | TargetTeamsLoopSimd => 13,
 
-            // Target directives (kind 13)
-            "target" => 13,
-            "target teams" => 13,
-            "target parallel" => 13,
-            "target parallel for" => 13,
-            "target parallel do" => 13, // Fortran variant
-            "target parallel for simd" => 13,
-            "target parallel do simd" => 13, // Fortran variant
-            "target teams distribute" => 13,
-            "target teams distribute parallel for" => 13,
-            "target teams distribute parallel do" => 13, // Fortran variant
-            "target teams distribute parallel for simd" => 13,
-            "target teams distribute parallel do simd" => 13, // Fortran variant
+        Teams
+        | TeamsDistribute
+        | TeamsDistributeParallelFor
+        | TeamsDistributeParallelForSimd
+        | TeamsDistributeParallelLoop
+        | TeamsDistributeParallelLoopSimd
+        | TeamsDistributeParallelDo
+        | TeamsDistributeParallelDoSimd
+        | TeamsDistributeSimd
+        | TeamsLoop
+        | TeamsLoopSimd => 14,
 
-            // Teams directives (kind 14)
-            "teams" => 14,
-            "teams distribute" => 14,
-            "teams distribute parallel for" => 14,
-            "teams distribute parallel do" => 14, // Fortran variant
-            "teams distribute parallel for simd" => 14,
-            "teams distribute parallel do simd" => 14, // Fortran variant
+        Distribute
+        | DistributeParallelFor
+        | DistributeParallelForSimd
+        | DistributeParallelLoop
+        | DistributeParallelLoopSimd
+        | DistributeParallelDo
+        | DistributeParallelDoSimd
+        | DistributeSimd => 15,
 
-            // Distribute directives (kind 15)
-            "distribute" => 15,
-            "distribute parallel for" => 15,
-            "distribute parallel do" => 15, // Fortran variant
-            "distribute parallel for simd" => 15,
-            "distribute parallel do simd" => 15, // Fortran variant
-            "distribute simd" => 15,
+        Metadirective => 16,
 
-            // Metadirective (kind 16)
-            "metadirective" => 16,
-
-            // Unknown directive
-            _ => 999,
+        // Unknown / unhandled directive — treat as error so maintainers notice
+        Other(s) => {
+            eprintln!(
+                "[c_api] unknown directive mapping requested: {}",
+                s.as_ref()
+            );
+            -1
+        }
+        _ => {
+            // Catch any other un-mapped variants
+            eprintln!("[c_api] unhandled directive variant: {:?}", name);
+            -1
         }
     }
 }
@@ -1199,6 +1268,20 @@ fn free_clause_data(clause: &OmpClause) {
                 roup_string_list_free(vars_ptr);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::borrow::Cow;
+
+    #[test]
+    fn unmapped_directive_returns_minus_one() {
+        // Construct an Other variant and ensure the enum->int helper returns -1
+        let other = DirectiveName::Other(Cow::Owned("__not_a_real_directive__".to_string()));
+        let v = directive_name_enum_to_kind(other);
+        assert_eq!(v, -1);
     }
 }
 

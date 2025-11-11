@@ -1,12 +1,13 @@
 mod clause;
 mod directive;
+pub mod directive_kind;
 pub mod openacc;
 pub mod openmp;
 
 pub use clause::{
-    Clause, ClauseKind, ClauseRegistry, ClauseRegistryBuilder, ClauseRule, CopyinModifier,
-    CopyoutModifier, CreateModifier, GangModifier, ReductionOperator, VectorModifier,
-    WorkerModifier,
+    lookup_clause_name, Clause, ClauseKind, ClauseName, ClauseRegistry, ClauseRegistryBuilder,
+    ClauseRule, CopyinModifier, CopyoutModifier, CreateModifier, GangModifier, ReductionOperator,
+    VectorModifier, WorkerModifier,
 };
 pub use directive::{
     CacheDirectiveData, Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule,
@@ -115,8 +116,27 @@ impl Default for Parser {
 }
 
 pub fn parse_omp_directive(input: &str) -> IResult<&str, Directive<'_>> {
-    let parser = Parser::default();
-    parser.parse(input)
+    // Try the default C-style parser first for performance and compatibility.
+    // If that fails, attempt Fortran free-form and fixed-form parsers so callers
+    // using the convenience function `parse_omp_directive` can parse Fortran
+    // sentinel forms (e.g. "!$omp ...") without having to construct a
+    // language-specific parser manually.
+    let c_parser = Parser::default();
+    match c_parser.parse(input) {
+        Ok((rest, dir)) => Ok((rest, dir)),
+        Err(_) => {
+            // Try Fortran free-form
+            let ff_parser = Parser::default().with_language(Language::FortranFree);
+            match ff_parser.parse(input) {
+                Ok((rest, dir)) => Ok((rest, dir)),
+                Err(_) => {
+                    // Try Fortran fixed-form as a last resort
+                    let fx_parser = Parser::default().with_language(Language::FortranFixed);
+                    fx_parser.parse(input)
+                }
+            }
+        }
+    }
 }
 
 pub fn parse_acc_directive(input: &str) -> IResult<&str, Directive<'_>> {
@@ -184,7 +204,7 @@ mod tests {
             Ok((
                 input,
                 Directive {
-                    name,
+                    name: name.into(),
                     parameter: None,
                     clauses,
                     wait_data: None,
