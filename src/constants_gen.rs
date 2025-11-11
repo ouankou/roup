@@ -26,6 +26,7 @@
 
 use std::collections::HashSet;
 use std::fs;
+use std::path::Path;
 
 use syn::{Arm, Expr, ExprLit, ExprMatch, ExprTuple, File, Item, ItemFn, Lit, Pat};
 
@@ -762,7 +763,22 @@ where
 /// Load the OpenACCKinds.h file and extract canonical directive identifiers
 /// into an UPPER_SNAKE set (e.g., kernels_loop -> KERNELS_LOOP)
 fn load_openacc_kinds_from_header(path: &str) -> std::collections::HashSet<String> {
-    let content = fs::read_to_string(path).unwrap_or_default();
+    // Ensure the header file exists; if it doesn't, provide an actionable
+    // error that helps CI users initialize submodules. Previously the
+    // generator silently returned an empty set which later produced
+    // confusing panics listing every directive as illegal.
+    if !Path::new(path).exists() {
+        panic!(
+            "FATAL: Expected OpenACCKinds.h at '{}' but file was not found.\n\n\
+Please ensure the accparser compatibility submodule is initialized before building.\n\
+Run: git submodule update --init --recursive\n\n\
+If you intentionally removed the submodule, update src/constants_gen.rs to point\n\
+to a valid OpenACCKinds.h location or adjust the build to provide the header.\n",
+            path
+        );
+    }
+
+    let content = fs::read_to_string(path).expect("Failed to read OpenACCKinds.h");
     let mut set = std::collections::HashSet::new();
 
     for line in content.lines() {

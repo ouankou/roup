@@ -33,6 +33,7 @@ syn = { version = "2", features = ["full", "parsing"] }
 # Test-only dependencies
 serial_test = "3.0" # Serialize tests that share global state
 criterion = "0.5"   # Benchmarking framework
+regex = "1"
 
 [build-dependencies]
 # Build script dependencies (build.rs only) - syn also in main dependencies for `gen` binary
