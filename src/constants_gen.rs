@@ -611,10 +611,9 @@ where
     }
 }
 
-// Note: older versions supported string-based directive arms. That helper
-// was removed during the enum-first migration; keep the codebase lean.
-
-// String-based clause-arm parsing removed: generator is AST-only.
+// Note: older versions supported directive arms derived from string-matching
+// of parser output. That helper was removed during the enum-first migration;
+// the generator is strictly AST-only and derives mappings from enum match arms.
 
 /// Parse an arm that maps an enum variant to an integer, e.g.
 /// `DirectiveName::Parallel => 0,` returning ("Parallel", 0)

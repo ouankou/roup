@@ -711,7 +711,7 @@ impl From<Expression> for ClauseItem {
 /// - `Map`: Map type + list of variables to map
 /// - `Schedule`: Schedule kind + optional modifiers + optional chunk size
 ///
-/// This is much richer than the parser's string-based representation.
+/// This is much richer than the parser's textual parser representation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ClauseData {
     // ========================================================================

@@ -1,6 +1,6 @@
 //! Conversion from parser types to IR types
 //!
-//! This module handles the conversion from the parser's string-based
+//! This module handles the conversion from the parser's textual
 //! representation to the IR's semantic representation.
 //!
 //! ## Learning Objectives
@@ -80,6 +80,7 @@ pub fn parse_directive_kind(
         DirectiveName::ParallelDoSimd => Ok(DirectiveKind::ParallelDoSimd),
         DirectiveName::ParallelSections => Ok(DirectiveKind::ParallelSections),
         DirectiveName::ParallelLoop => Ok(DirectiveKind::ParallelLoop),
+        DirectiveName::ParallelWorkshare => Ok(DirectiveKind::ParallelWorkshare),
         DirectiveName::ParallelLoopSimd => Ok(DirectiveKind::ParallelLoopSimd),
         DirectiveName::ParallelMasked => Ok(DirectiveKind::ParallelMasked),
         DirectiveName::ParallelMaster => Ok(DirectiveKind::ParallelMaster),
@@ -250,7 +251,7 @@ pub fn parse_directive_kind(
         //
         // Rationale: We intentionally prefer an explicit error for unknown
         // directives (ConversionError::UnknownDirective) instead of silently
-        // falling back to a string-based mapping. This ensures missing
+        // falling back to a textual (string) mapping. This ensures missing
         // mappings are visible during development and tests, and prevents
         // surprising behavior across the FFI boundary.
         DirectiveName::Other(s) => Err(ConversionError::UnknownDirective(s.as_ref().to_string())),
