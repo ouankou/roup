@@ -16,7 +16,9 @@ fn acc_multiple_directives_and_end_pairs_match_generated_macros() {
 
     for (text, macro_name) in &directives {
         let re = regex::Regex::new(&format!(r"#define\s+{}\s+(\-?\d+)", macro_name)).unwrap();
-        let caps = re.captures(&header).unwrap_or_else(|| panic!("{} not found in header", macro_name));
+        let caps = re
+            .captures(&header)
+            .unwrap_or_else(|| panic!("{} not found in header", macro_name));
         let expected: i32 = caps.get(1).unwrap().as_str().parse().unwrap();
 
         let input = CString::new(format!("#pragma acc {}", text)).unwrap();
