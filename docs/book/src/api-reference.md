@@ -330,7 +330,7 @@ The C API supports 12 common clause types with simple integer mapping:
 | 9 | `ordered` | Ordered execution | `ordered` |
 | 10 | `nowait` | Remove barrier | `nowait` |
 | 11 | `default` | Default sharing | `default(shared)` |
-| 999 | Unknown | Unrecognized clause | - |
+| -1 | Unknown | Unrecognized clause | - |
 
 **Note**: The C API intentionally supports a focused subset of clauses for simplicity. The Rust API supports all 92+ OpenMP 6.0 clauses.
 

@@ -41,18 +41,18 @@ fn clause_kinds(input: &str) -> Vec<i32> {
 fn directive_synonyms_share_kind() {
     let enter_data = directive_kind("#pragma acc enter data copyin(a)");
     let enter_data_underscore = directive_kind("#pragma acc enter_data copyin(a)");
-    assert_ne!(enter_data, 999);
-    assert_ne!(enter_data_underscore, 999);
+    assert_ne!(enter_data, -1);
+    assert_ne!(enter_data_underscore, -1);
 
     let host_data = directive_kind("#pragma acc host_data use_device(ptr)");
     let host_data_space = directive_kind("#pragma acc host data use_device(ptr)");
-    assert_ne!(host_data, 999);
-    assert_ne!(host_data_space, 999);
+    assert_ne!(host_data, -1);
+    assert_ne!(host_data_space, -1);
 
     let wait_plain = directive_kind("#pragma acc wait");
     let wait_with_args = directive_kind("#pragma acc wait(1)");
-    assert_ne!(wait_plain, 999);
-    assert_ne!(wait_with_args, 999);
+    assert_ne!(wait_plain, -1);
+    assert_ne!(wait_with_args, -1);
 }
 
 #[test]

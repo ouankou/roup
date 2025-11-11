@@ -558,7 +558,7 @@ The C API supports 12 common clause types:
 | 9 | `ordered` | No | - |
 | 10 | `nowait` | No | - |
 | 11 | `default` | No | Sharing kind |
-| 999 | Unknown | - | - |
+| -1 | Unknown | - | - |
 
 **Schedule Kinds** (for clause kind 7):
 - 0 = `static`
