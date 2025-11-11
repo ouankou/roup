@@ -16,9 +16,7 @@ fn acc_multiple_directives_and_end_pairs_match_generated_macros() {
 
     for (text, macro_name) in &directives {
         let re = regex::Regex::new(&format!(r"#define\s+{}\s+(\-?\d+)", macro_name)).unwrap();
-        let caps = re
-            .captures(&header)
-            .expect(&format!("{} not found in header", macro_name));
+        let caps = re.captures(&header).unwrap_or_else(|| panic!("{} not found in header", macro_name));
         let expected: i32 = caps.get(1).unwrap().as_str().parse().unwrap();
 
         let input = CString::new(format!("#pragma acc {}", text)).unwrap();
@@ -39,7 +37,7 @@ fn acc_multiple_directives_and_end_pairs_match_generated_macros() {
     let re = regex::Regex::new(r"#define\s+ROUP_ACC_DIRECTIVE_PARALLEL\s+(\-?\d+)").unwrap();
     let caps = re
         .captures(&header)
-        .expect("ROUP_ACC_DIRECTIVE_PARALLEL not found in header");
+        .unwrap_or_else(|| panic!("ROUP_ACC_DIRECTIVE_PARALLEL not found in header"));
     let expected_parallel: i32 = caps.get(1).unwrap().as_str().parse().unwrap();
 
     let end_input = CString::new("#pragma acc end parallel").unwrap();

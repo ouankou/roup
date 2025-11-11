@@ -260,8 +260,7 @@ pub extern "C" fn acc_directive_kind(directive: *const AccDirective) -> i32 {
         // mapping generated at build time. Do NOT normalize back to reduced
         // 0..N values here — that leakage is the root cause of runtime
         // mismatches and must be fixed at the producer.
-        let kind = acc_directive_name_to_kind(dname);
-        kind
+        acc_directive_name_to_kind(dname)
     }
 }
 
