@@ -4,7 +4,7 @@ use std::path::Path;
 
 // This test verifies that the generated header `src/roup_constants.h` contains
 // all expected `ACC_CLAUSE_*` macro definitions and none are left as the
-// UNKNOWN_KIND sentinel (999). This provides fast feedback when adding new
+// UNKNOWN_KIND sentinel (-1). This provides fast feedback when adding new
 // OpenACC clauses or changing the generator.
 
 #[test]
@@ -106,8 +106,8 @@ fn generated_header_has_all_acc_clauses() {
         // Print macros and values for easier debugging when the test runs in CI
         println!("{} = {}", name, val);
 
-        // Ensure macro value is not the UNKNOWN_KIND (999)
-        assert_ne!(val, 999, "Macro {} is UNKNOWN_KIND in header", name);
+        // Ensure macro value is not the UNKNOWN_KIND (-1)
+        assert_ne!(val, -1, "Macro {} is UNKNOWN_KIND in header", name);
 
         values.insert(name.to_string(), val);
     }

@@ -30,7 +30,11 @@ use std::fs;
 use syn::{Arm, Expr, ExprLit, ExprMatch, ExprTuple, File, Item, ItemFn, Lit, Pat};
 
 /// Special value for unknown directive/clause kinds
-pub const UNKNOWN_KIND: i32 = 999;
+///
+/// Historically this module used 999 as the unknown sentinel. The project
+/// now standardizes on -1 for unknown directive/clause sentinel values so
+/// that runtime mappings and generated headers are consistent.
+pub const UNKNOWN_KIND: i32 = -1;
 
 /// FNV-1a hash algorithm constants
 const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;

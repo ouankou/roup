@@ -1038,11 +1038,11 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         | crate::parser::ClauseName::DevicePtr
         | crate::parser::ClauseName::DeviceNum
         | crate::parser::ClauseName::DeviceResident
-        | crate::parser::ClauseName::Host => (999, ClauseData { default: 0 }),
+        | crate::parser::ClauseName::Host => (-1, ClauseData { default: 0 }),
 
         crate::parser::ClauseName::Other(ref s) => {
             eprintln!("[c_api] unknown clause mapping requested: {}", s.as_ref());
-            (999, ClauseData { default: 0 })
+            (-1, ClauseData { default: 0 })
         }
     };
 

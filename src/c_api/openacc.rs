@@ -1206,19 +1206,19 @@ fn clause_name_to_kind(name: &str) -> i32 {
                 "[acc_c_api] unknown clause mapping requested: {}",
                 s.as_ref()
             );
-            999
+            -1
         }
         ClauseName::NumThreads => 0,
         ClauseName::If => 14,
         ClauseName::Private => 22,
         ClauseName::Shared => 21, // shared mapping
         ClauseName::Firstprivate => 16,
-        ClauseName::Lastprivate => 999, // not present in OpenACC table above
+        ClauseName::Lastprivate => -1, // not present in OpenACC table above
         ClauseName::Reduction => 23,
-        ClauseName::Schedule => 999, // not in OpenACC table
+        ClauseName::Schedule => -1, // not in OpenACC table
         ClauseName::Collapse => 11,
-        ClauseName::Ordered => 999,
-        ClauseName::Nowait => 999,
+        ClauseName::Ordered => -1,
+        ClauseName::Nowait => -1,
         ClauseName::Default => 15,
     }
 }

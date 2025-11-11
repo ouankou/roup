@@ -59,7 +59,7 @@ extern "C" {
 #define ROUP_DIRECTIVE_TEAMS                14
 #define ROUP_DIRECTIVE_DISTRIBUTE           15
 #define ROUP_DIRECTIVE_METADIRECTIVE        16
-#define ROUP_DIRECTIVE_UNKNOWN       999
+#define ROUP_DIRECTIVE_UNKNOWN       -1
 
 
 // ============================================================================
@@ -79,7 +79,7 @@ extern "C" {
 #define ROUP_CLAUSE_ORDERED         9
 #define ROUP_CLAUSE_NOWAIT          10
 #define ROUP_CLAUSE_DEFAULT         11
-#define ROUP_CLAUSE_UNKNOWN      999
+#define ROUP_CLAUSE_UNKNOWN      -1
 
 
 // ============================================================================
@@ -154,7 +154,7 @@ extern "C" {
 #define ACC_DIRECTIVE_DISTRIBUTE_SIMD      15
 #define ACC_DIRECTIVE_ENTER_DATA_UNDERSCORE 24
 #define ACC_DIRECTIVE_EXIT_DATA_UNDERSCORE 25
-#define ACC_DIRECTIVE_UNKNOWN        999
+#define ACC_DIRECTIVE_UNKNOWN        -1
 
 
 // ============================================================================
@@ -214,7 +214,7 @@ extern "C" {
 #define ACC_CLAUSE_NO_HOST         2016
 #define ACC_CLAUSE_SELF_CLAUSE     2018
 #define ACC_CLAUSE_DEVICE_PTR      2030
-#define ACC_CLAUSE_UNKNOWN       999
+#define ACC_CLAUSE_UNKNOWN       -1
 
 
 // ============================================================================
