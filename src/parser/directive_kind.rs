@@ -78,11 +78,9 @@ pub enum DirectiveName {
     KernelsLoop,
     Data,
     EnterData,
-    EnterDataUnderscore,
     ExitData,
-    ExitDataUnderscore,
     HostData,
-    HostDataUnderscore,
+
     Declare,
     Wait,
     End,
@@ -167,12 +165,12 @@ pub enum DirectiveName {
 /// Return the canonical OpenACCKinds.h token (UPPER_SNAKE) for a given
 /// enum variant name. This helps the generator decide which directive
 /// variants correspond to the same header token (for example, both
-/// `EnterData` and `EnterDataUnderscore` should map to `ENTER_DATA`).
+/// `EnterData` should map to `ENTER_DATA`.
 pub fn canonical_header_token_for_variant(variant: &str) -> Option<&'static str> {
     match variant {
-        "EnterData" | "EnterDataUnderscore" => Some("ENTER_DATA"),
-        "ExitData" | "ExitDataUnderscore" => Some("EXIT_DATA"),
-        "HostData" | "HostDataUnderscore" => Some("HOST_DATA"),
+        "EnterData" => Some("ENTER_DATA"),
+        "ExitData" => Some("EXIT_DATA"),
+        "HostData" => Some("HOST_DATA"),
         _ => None,
     }
 }
@@ -301,7 +299,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     // Accept only canonical OpenACC inputs for these directives:
     // - "enter data" (space-separated)
     // - "exit data"  (space-separated)
-    // - "host_data"  (underscore form)
+    // - "host_data"  (canonical underscore form for host_data per spec)
     insert!("enter data", DirectiveName::EnterData);
     insert!("exit data", DirectiveName::ExitData);
     insert!("host_data", DirectiveName::HostData);
@@ -581,15 +579,8 @@ impl DirectiveName {
             DirectiveName::KernelsLoop => "kernels loop",
             DirectiveName::Data => "data",
             DirectiveName::EnterData => "enter data",
-            DirectiveName::EnterDataUnderscore => "enter_data",
             DirectiveName::ExitData => "exit data",
-            DirectiveName::ExitDataUnderscore => "exit_data",
-            // Use the underscore form as the canonical unparse for HostData so the
-            // runtime C API and generated header receive the exact canonical token
-            // the compatibility layer expects (`host_data`). The parser still
-            // registers the same normalized key so lookups remain consistent.
             DirectiveName::HostData => "host_data",
-            DirectiveName::HostDataUnderscore => "host_data",
             DirectiveName::Declare => "declare",
             DirectiveName::Wait => "wait",
             DirectiveName::End => "end",

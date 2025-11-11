@@ -169,10 +169,11 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
     }
 
     // Note: ROUP supports both space and underscore variants for some directives:
-    //   - "enter data" (4) and "enter_data" (24) both map to ACCD_enter_data
-    //   - "exit data" (5) and "exit_data" (25) both map to ACCD_exit_data
-    //   - "host data" (11) and "host_data" (6) both map to ACCD_host_data
-    //   - "wait" (9) and "wait(... )" (26) both map to ACCD_wait
+    //   - "enter data" and "enter_data" both map to ACCD_enter_data
+    //   - "exit data" and "exit_data" both map to ACCD_exit_data
+    //   - "host_data" (underscore form) maps to ACCD_host_data (space-form is
+    //     not accepted by the ROUP canonical mapping used here)
+    //   - "wait" and "wait(... )" both map to ACCD_wait
     switch (full_kind) {
         case ROUP_ACC_DIRECTIVE_PARALLEL:    return ACCD_parallel;     // 0 = "parallel"
         case ROUP_ACC_DIRECTIVE_LOOP:        return ACCD_loop;         // 1 = "loop"
@@ -184,7 +185,7 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
         case ROUP_ACC_DIRECTIVE_DECLARE:     return ACCD_declare;      // 8 = "declare"
         case ROUP_ACC_DIRECTIVE_WAIT:        return ACCD_wait;         // 9 = "wait"
         case ROUP_ACC_DIRECTIVE_END:         return ACCD_end;          // 10 = "end"
-        case ROUP_ACC_DIRECTIVE_HOST_DATA:   return ACCD_host_data;    // 11 = "host data" (space) - same as 6
+    case ROUP_ACC_DIRECTIVE_HOST_DATA:   return ACCD_host_data;    // host_data (underscore form)
     case ROUP_ACC_DIRECTIVE_UPDATE:      return ACCD_update;       // 12 = "update"
     // Note: ROUP previously emitted target/teams/distribute family aliases
     // in the OpenACC mapping. These constructs do not appear in the

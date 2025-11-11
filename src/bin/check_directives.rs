@@ -21,7 +21,6 @@ fn main() {
         "#pragma acc exit data delete(a)",
         "#pragma acc exit_data delete(a)",
         "#pragma acc host_data use_device(ptr)",
-        "#pragma acc host data use_device(ptr)",
     ];
 
     for s in &samples {

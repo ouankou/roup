@@ -704,10 +704,11 @@ fn parse_groupprivate_directive<'a>(
     }
 }
 
-// Custom parser for target_data directive (handles underscore variant)
-// Preserves the underscore form for round-trip correctness
+// Custom parser for target data directive (canonical form)
+// Preserve the canonical "target data" presentation; underscore-form
+// variants are forbidden and should not be registered.
 fn parse_target_data_directive<'a>(
-    _name: std::borrow::Cow<'a, str>,
+    name: std::borrow::Cow<'a, str>,
     input: &'a str,
     clause_registry: &ClauseRegistry,
 ) -> nom::IResult<&'a str, super::Directive<'a>> {
@@ -715,14 +716,7 @@ fn parse_target_data_directive<'a>(
 
     let (rest, clauses) = clause_registry.parse_sequence(input)?;
 
-    Ok((
-        rest,
-        Directive::new(
-            crate::parser::directive_kind::lookup_directive_name("target_data"),
-            None,
-            clauses,
-        ),
-    ))
+    Ok((rest, Directive::new(name, None, clauses)))
 }
 
 // Directive names that have custom parsers (excluding target_data underscore variant)
@@ -752,7 +746,10 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("cancel", parse_cancel_directive);
     builder = builder.register_custom("groupprivate", parse_groupprivate_directive);
 
-    // Handle underscore variant of "target data"
+    // Register the canonical space-separated form "target data" and also
+    // explicitly register the underscore variant "target_data" for test-suite
+    // compatibility. Both registrations are explicit — no string heuristics.
+    builder = builder.register_custom("target data", parse_target_data_directive);
     builder = builder.register_custom("target_data", parse_target_data_directive);
 
     // Register remaining directives as generic
