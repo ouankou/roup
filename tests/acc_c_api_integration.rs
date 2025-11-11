@@ -12,7 +12,10 @@ fn acc_parse_and_kind_roundtrip() {
     // After migrating the OpenACC C API to expose canonical ACC namespace values,
     // OpenACC directive kinds are returned as ACC_DIRECTIVE_BASE + raw (10000 + raw).
     // 'parallel' raw value is 0, so the expected returned kind is 10000.
-    assert_eq!(kind, 10000, "expected acc_directive_kind == 10000 for 'parallel'");
+    assert_eq!(
+        kind, 10000,
+        "expected acc_directive_kind == 10000 for 'parallel'"
+    );
 
     // Clean up
     roup::c_api::acc_directive_free(dir);
