@@ -183,11 +183,38 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
 
     // Build a map from generated name -> num for quick lookup
     let mut gen_map = std::collections::HashMap::new();
-    for (variant, num) in &enum_mappings {
-        gen_map.insert(variant_to_constant(variant), *num);
+    // Detect an optional ACC_DIRECTIVE_BASE constant in the AST so the
+    // generator can output offset numeric values that match the runtime
+    // mapping in `src/c_api/openacc.rs`. If absent, default to 0.
+    let mut acc_directive_base: i32 = 0;
+    for item in &ast.items {
+        if let Item::Fn(ItemFn { sig, block, .. }) = item {
+            if sig.ident == "acc_directive_name_to_kind" {
+                // Inspect statements in the function body for a local const
+                for stmt in &block.stmts {
+                    if let syn::Stmt::Item(Item::Const(item_const)) = stmt {
+                        if item_const.ident == "ACC_DIRECTIVE_BASE" {
+                            if let Expr::Lit(ExprLit {
+                                lit: Lit::Int(lit_int),
+                                ..
+                            }) = &*item_const.expr
+                            {
+                                if let Ok(v) = lit_int.base10_parse::<i32>() {
+                                    acc_directive_base = v;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    // List of ACC_DIRECTIVE_* identifiers expected by compat/accparser
+    for (variant, num) in &enum_mappings {
+        gen_map.insert(variant_to_constant(variant), acc_directive_base + *num);
+    }
+
+    // List of ROUP_ACC_DIRECTIVE_* identifiers expected by compat/accparser
     // This list focuses on the directive names used by the compatibility layer
     // and mirrors the identifiers referenced in compat/accparser/src/compat_impl.cpp
     let expected = vec![
@@ -216,7 +243,6 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
         "TARGET_TEAMS",
         "TEAMS",
         "DISTRIBUTE",
-        "METADIRECTIVE",
     ];
 
     // Known alias mapping from expected compat names -> generated variant names
@@ -253,7 +279,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     for (name, num) in enum_mappings {
         let const_name = variant_to_constant(&name);
         if !final_mappings.iter().any(|(n, _)| n == &const_name) {
-            final_mappings.push((const_name, num));
+            final_mappings.push((const_name, acc_directive_base + num));
         }
     }
 
@@ -272,7 +298,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     // The user requested there be no post-parse string heuristics and that any
     // unknown keyword should produce a fatal error during header generation so
     // the issue is fixed at compile time instead of silently assigned placeholders.
-    check_no_unknowns(&final_mappings, "OpenACC directive (ACC_DIRECTIVE_*)");
+    check_no_unknowns(&final_mappings, "OpenACC directive (ROUP_ACC_DIRECTIVE_*)");
 
     final_mappings
 }
@@ -414,7 +440,7 @@ pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
     });
 
     // Fail fast if any expected compat clause identifiers are missing in the AST-derived map.
-    check_no_unknowns(&final_mappings, "OpenACC clause (ACC_CLAUSE_*)");
+    check_no_unknowns(&final_mappings, "OpenACC clause (ROUP_ACC_CLAUSE_*)");
 
     final_mappings
 }

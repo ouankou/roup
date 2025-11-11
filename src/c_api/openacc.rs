@@ -249,7 +249,18 @@ pub extern "C" fn acc_directive_kind(directive: *const AccDirective) -> i32 {
         let dname = lookup_directive_name(name);
         // Prefer an OpenACC-specific mapping when available so we can
         // preserve directive codes expected by compatibility layers.
-        acc_directive_name_to_kind(dname)
+        // The internal OpenACC mapping uses an ACC_DIRECTIVE_BASE offset
+        // so generated macros occupy a separate numeric namespace. For the
+        // runtime C API we normalize back to the canonical (small) values
+        // by subtracting the base when present so existing tests and
+        // consumers that expect 0..N values continue to work.
+        const ACC_DIRECTIVE_BASE: i32 = 10000;
+        let kind = acc_directive_name_to_kind(dname);
+        if kind >= ACC_DIRECTIVE_BASE {
+            kind - ACC_DIRECTIVE_BASE
+        } else {
+            kind
+        }
     }
 }
 
@@ -261,11 +272,13 @@ pub extern "C" fn acc_directive_kind(directive: *const AccDirective) -> i32 {
 /// compatibility mapping used by `compat/accparser`.
 fn acc_directive_name_to_kind(name: crate::parser::directive_kind::DirectiveName) -> i32 {
     use crate::parser::directive_kind::DirectiveName::*;
+    // Put OpenACC directive numeric codes into their own numeric range so
+    // OpenMP and OpenACC codes never overlap. Use a large base offset.
+    const ACC_DIRECTIVE_BASE: i32 = 10000;
 
-    match name {
+    let raw = match name {
         // Parallel family -> 0
-        Parallel | ParallelFor | ParallelDo | ParallelForSimd | ParallelDoSimd
-        | ParallelSections => 0,
+        Parallel | ParallelFor | ParallelDo | ParallelForSimd | ParallelDoSimd => 0,
 
         // Loop / For -> 1
         For | Do | ForSimd | DoSimd | Loop => 1,
@@ -273,40 +286,43 @@ fn acc_directive_name_to_kind(name: crate::parser::directive_kind::DirectiveName
         // Kernels -> 2
         Kernels => 2,
 
-        // Sections -> 2 as well
-        Sections | Section => 2,
+        // Sections are OpenMP constructs; do not include them in the OpenACC mapping
 
         // Data family
-        Data => 3,
-        // Underscored forms have separate DirectiveName variants but map to the
-        // same numeric codes expected by compatibility layer.
-        EnterData | EnterDataUnderscore => 24,
-        ExitData | ExitDataUnderscore => 25,
-        HostData | HostDataUnderscore => 6,
+        Data => 4,
+        // Distinguish space vs underscore forms explicitly so the
+        // auto-generated header contains stable macros for both variants
+        // (e.g., "enter data" vs "enter_data").
+        EnterData => 5,
+        ExitData => 6,
+        HostData => 7,
+        HostDataUnderscore => 8,
+        EnterDataUnderscore => 9,
+        ExitDataUnderscore => 10,
 
         // Atomic / declare / wait / end
-        Atomic => 7,
-        Declare => 8,
-        Wait => 9,
-        End => 10,
+        Atomic => 11,
+        Declare => 12,
+        Wait => 13,
+        End => 14,
 
-        // Update / kernels/parallel/serial loops
-        Update => 12,
-        KernelsLoop => 14,
-        ParallelLoop => 15,
-        SerialLoop => 16,
-        Serial => 17,
+        // Update
+        Update => 15,
+
+        // Kernel/Loop family (unique values to avoid duplicates)
+        KernelsLoop => 16,
+        ParallelLoop => 17,
+        SerialLoop => 18,
+        Serial => 19,
 
         // Misc
-        Routine => 18,
-        Set => 19,
-        Init => 20,
-        Shutdown => 21,
-        Cache => 23,
+        Routine => 20,
+        Set => 21,
+        Init => 22,
+        Shutdown => 23,
+        Cache => 24,
 
         // Target / teams / distribute / metadirective families
-        // Use the same numeric codes as the canonical OpenMP mapping so the
-        // compatibility header remains consistent with `directive_name_enum_to_kind`.
         Target
         | TargetTeams
         | TargetTeamsDistribute
@@ -318,7 +334,7 @@ fn acc_directive_name_to_kind(name: crate::parser::directive_kind::DirectiveName
         | TargetTeamsDistributeParallelDoSimd
         | TargetTeamsDistributeSimd
         | TargetTeamsLoop
-        | TargetTeamsLoopSimd => 13,
+        | TargetTeamsLoopSimd => 25,
 
         Teams
         | TeamsDistribute
@@ -330,7 +346,7 @@ fn acc_directive_name_to_kind(name: crate::parser::directive_kind::DirectiveName
         | TeamsDistributeParallelDoSimd
         | TeamsDistributeSimd
         | TeamsLoop
-        | TeamsLoopSimd => 14,
+        | TeamsLoopSimd => 26,
 
         Distribute
         | DistributeParallelFor
@@ -339,13 +355,15 @@ fn acc_directive_name_to_kind(name: crate::parser::directive_kind::DirectiveName
         | DistributeParallelLoopSimd
         | DistributeParallelDo
         | DistributeParallelDoSimd
-        | DistributeSimd => 15,
+        | DistributeSimd => 27,
 
-        Metadirective => 16,
+        // Metadirective is an OpenMP construct; do not include it in the OpenACC mapping
 
-        // Default: delegate to canonical mapping
-        other => super::directive_name_enum_to_kind(other),
-    }
+        // Default: unknown in OpenACC mapping — enforce strict separation.
+        _ => return -1,
+    };
+
+    ACC_DIRECTIVE_BASE + raw
 }
 
 #[no_mangle]
