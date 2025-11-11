@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DirectiveName","DirectiveParameter"],"fn":["canonical_header_token_for_variant","lookup_directive_name"]};

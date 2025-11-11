@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/parser/openmp.rs`."><title>openmp.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-e56847b5.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="roup" data-themes="" data-resource-suffix="" data-rustdoc-version="1.91.0 (f8297e351 2025-10-28)" data-channel="1.91.0" data-search-js="search-e256b49e.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-6dc2a7f3.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">roup/parser/</div>openmp.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use super</span>::{
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/parser/openmp.rs`."><title>openmp.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-e56847b5.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="roup" data-themes="" data-resource-suffix="" data-rustdoc-version="1.91.1 (ed61e7d7e 2025-11-07)" data-channel="1.91.1" data-search-js="search-e256b49e.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-6dc2a7f3.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">roup/parser/</div>openmp.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use super</span>::{
 <a href=#2 id=2 data-nosnippet>2</a>    ClauseRegistry, ClauseRegistryBuilder, ClauseRule, DirectiveRegistry, DirectiveRegistryBuilder,
 <a href=#3 id=3 data-nosnippet>3</a>    Parser,
 <a href=#4 id=4 data-nosnippet>4</a>};
@@ -385,7 +385,7 @@
 <a href=#385 id=385 data-nosnippet>385</a>        <span class="prelude-val">Ok</span>((
 <a href=#386 id=386 data-nosnippet>386</a>            rest,
 <a href=#387 id=387 data-nosnippet>387</a>            Directive {
-<a href=#388 id=388 data-nosnippet>388</a>                name: std::borrow::Cow::Borrowed(<span class="string">"allocate"</span>),
+<a href=#388 id=388 data-nosnippet>388</a>                name: <span class="kw">crate</span>::parser::directive_kind::lookup_directive_name(<span class="string">"allocate"</span>),
 <a href=#389 id=389 data-nosnippet>389</a>                parameter: <span class="prelude-val">Some</span>(std::borrow::Cow::Owned(<span class="macro">format!</span>(<span class="string">"({})"</span>, list_content))),
 <a href=#390 id=390 data-nosnippet>390</a>                clauses,
 <a href=#391 id=391 data-nosnippet>391</a>                wait_data: <span class="prelude-val">None</span>,
@@ -412,7 +412,7 @@
 <a href=#412 id=412 data-nosnippet>412</a>        <span class="prelude-val">Ok</span>((
 <a href=#413 id=413 data-nosnippet>413</a>            rest,
 <a href=#414 id=414 data-nosnippet>414</a>            Directive::new(
-<a href=#415 id=415 data-nosnippet>415</a>                std::borrow::Cow::Borrowed(<span class="string">"threadprivate"</span>),
+<a href=#415 id=415 data-nosnippet>415</a>                <span class="kw">crate</span>::parser::directive_kind::lookup_directive_name(<span class="string">"threadprivate"</span>),
 <a href=#416 id=416 data-nosnippet>416</a>                <span class="prelude-val">Some</span>(std::borrow::Cow::Owned(<span class="macro">format!</span>(<span class="string">"({})"</span>, list_content))),
 <a href=#417 id=417 data-nosnippet>417</a>                <span class="macro">vec!</span>[],
 <a href=#418 id=418 data-nosnippet>418</a>            ),
@@ -439,7 +439,7 @@
 <a href=#439 id=439 data-nosnippet>439</a>        <span class="prelude-val">Ok</span>((
 <a href=#440 id=440 data-nosnippet>440</a>            rest,
 <a href=#441 id=441 data-nosnippet>441</a>            Directive {
-<a href=#442 id=442 data-nosnippet>442</a>                name: std::borrow::Cow::Borrowed(<span class="string">"declare target"</span>),
+<a href=#442 id=442 data-nosnippet>442</a>                name: <span class="kw">crate</span>::parser::directive_kind::lookup_directive_name(<span class="string">"declare target"</span>),
 <a href=#443 id=443 data-nosnippet>443</a>                parameter: <span class="prelude-val">Some</span>(std::borrow::Cow::Owned(<span class="macro">format!</span>(<span class="string">"({})"</span>, list_content))),
 <a href=#444 id=444 data-nosnippet>444</a>                clauses,
 <a href=#445 id=445 data-nosnippet>445</a>                wait_data: <span class="prelude-val">None</span>,
@@ -468,7 +468,7 @@
 <a href=#468 id=468 data-nosnippet>468</a>        <span class="prelude-val">Ok</span>((
 <a href=#469 id=469 data-nosnippet>469</a>            rest,
 <a href=#470 id=470 data-nosnippet>470</a>            Directive {
-<a href=#471 id=471 data-nosnippet>471</a>                name: std::borrow::Cow::Borrowed(<span class="string">"declare mapper"</span>),
+<a href=#471 id=471 data-nosnippet>471</a>                name: <span class="kw">crate</span>::parser::directive_kind::lookup_directive_name(<span class="string">"declare mapper"</span>),
 <a href=#472 id=472 data-nosnippet>472</a>                parameter: <span class="prelude-val">Some</span>(std::borrow::Cow::Owned(<span class="macro">format!</span>(<span class="string">"({})"</span>, mapper_id))),
 <a href=#473 id=473 data-nosnippet>473</a>                clauses,
 <a href=#474 id=474 data-nosnippet>474</a>                wait_data: <span class="prelude-val">None</span>,
@@ -497,7 +497,7 @@
 <a href=#497 id=497 data-nosnippet>497</a>        <span class="prelude-val">Ok</span>((
 <a href=#498 id=498 data-nosnippet>498</a>            rest,
 <a href=#499 id=499 data-nosnippet>499</a>            Directive {
-<a href=#500 id=500 data-nosnippet>500</a>                name: std::borrow::Cow::Borrowed(<span class="string">"declare variant"</span>),
+<a href=#500 id=500 data-nosnippet>500</a>                name: <span class="kw">crate</span>::parser::directive_kind::lookup_directive_name(<span class="string">"declare variant"</span>),
 <a href=#501 id=501 data-nosnippet>501</a>                parameter: <span class="prelude-val">Some</span>(std::borrow::Cow::Owned(<span class="macro">format!</span>(<span class="string">"({})"</span>, variant_func))),
 <a href=#502 id=502 data-nosnippet>502</a>                clauses,
 <a href=#503 id=503 data-nosnippet>503</a>                wait_data: <span class="prelude-val">None</span>,
@@ -526,7 +526,7 @@
 <a href=#526 id=526 data-nosnippet>526</a>        <span class="prelude-val">Ok</span>((
 <a href=#527 id=527 data-nosnippet>527</a>            rest,
 <a href=#528 id=528 data-nosnippet>528</a>            Directive {
-<a href=#529 id=529 data-nosnippet>529</a>                name: std::borrow::Cow::Borrowed(<span class="string">"depobj"</span>),
+<a href=#529 id=529 data-nosnippet>529</a>                name: <span class="kw">crate</span>::parser::directive_kind::lookup_directive_name(<span class="string">"depobj"</span>),
 <a href=#530 id=530 data-nosnippet>530</a>                parameter: <span class="prelude-val">Some</span>(std::borrow::Cow::Owned(<span class="macro">format!</span>(<span class="string">"({})"</span>, depobj_id))),
 <a href=#531 id=531 data-nosnippet>531</a>                clauses,
 <a href=#532 id=532 data-nosnippet>532</a>                wait_data: <span class="prelude-val">None</span>,
@@ -582,7 +582,7 @@
 <a href=#582 id=582 data-nosnippet>582</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>((
 <a href=#583 id=583 data-nosnippet>583</a>                rest,
 <a href=#584 id=584 data-nosnippet>584</a>                Directive {
-<a href=#585 id=585 data-nosnippet>585</a>                    name: std::borrow::Cow::Borrowed(<span class="string">"scan"</span>),
+<a href=#585 id=585 data-nosnippet>585</a>                    name: <span class="kw">crate</span>::parser::directive_kind::lookup_directive_name(<span class="string">"scan"</span>),
 <a href=#586 id=586 data-nosnippet>586</a>                    <span class="comment">// Store the parameter without a leading space; the display/formatting layer
 <a href=#587 id=587 data-nosnippet>587</a>                    // is responsible for spacing when rendering the directive.
 <a href=#588 id=588 data-nosnippet>588</a>                    </span>parameter: <span class="prelude-val">Some</span>(std::borrow::Cow::Owned(<span class="macro">format!</span>(
@@ -622,7 +622,7 @@
 <a href=#622 id=622 data-nosnippet>622</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>((
 <a href=#623 id=623 data-nosnippet>623</a>                rest,
 <a href=#624 id=624 data-nosnippet>624</a>                Directive {
-<a href=#625 id=625 data-nosnippet>625</a>                    name: std::borrow::Cow::Borrowed(<span class="string">"scan"</span>),
+<a href=#625 id=625 data-nosnippet>625</a>                    name: <span class="kw">crate</span>::parser::directive_kind::lookup_directive_name(<span class="string">"scan"</span>),
 <a href=#626 id=626 data-nosnippet>626</a>                    parameter: <span class="prelude-val">Some</span>(std::borrow::Cow::Owned(<span class="macro">format!</span>(
 <a href=#627 id=627 data-nosnippet>627</a>                        <span class="string">"inclusive({})"</span>,
 <a href=#628 id=628 data-nosnippet>628</a>                        list_content
@@ -659,7 +659,7 @@
 <a href=#659 id=659 data-nosnippet>659</a>        <span class="prelude-val">Ok</span>((
 <a href=#660 id=660 data-nosnippet>660</a>            rest,
 <a href=#661 id=661 data-nosnippet>661</a>            Directive {
-<a href=#662 id=662 data-nosnippet>662</a>                name: std::borrow::Cow::Borrowed(<span class="string">"cancel"</span>),
+<a href=#662 id=662 data-nosnippet>662</a>                name: <span class="kw">crate</span>::parser::directive_kind::lookup_directive_name(<span class="string">"cancel"</span>),
 <a href=#663 id=663 data-nosnippet>663</a>                <span class="comment">// Store the construct type without a leading space; presentation spacing
 <a href=#664 id=664 data-nosnippet>664</a>                // should be handled by the renderer that prints directives.
 <a href=#665 id=665 data-nosnippet>665</a>                </span>parameter: <span class="prelude-val">Some</span>(std::borrow::Cow::Owned(construct_type.to_string())),
@@ -690,7 +690,7 @@
 <a href=#690 id=690 data-nosnippet>690</a>        <span class="prelude-val">Ok</span>((
 <a href=#691 id=691 data-nosnippet>691</a>            rest,
 <a href=#692 id=692 data-nosnippet>692</a>            Directive {
-<a href=#693 id=693 data-nosnippet>693</a>                name: std::borrow::Cow::Borrowed(<span class="string">"groupprivate"</span>),
+<a href=#693 id=693 data-nosnippet>693</a>                name: <span class="kw">crate</span>::parser::directive_kind::lookup_directive_name(<span class="string">"groupprivate"</span>),
 <a href=#694 id=694 data-nosnippet>694</a>                parameter: <span class="prelude-val">Some</span>(std::borrow::Cow::Owned(<span class="macro">format!</span>(<span class="string">"({})"</span>, list_content))),
 <a href=#695 id=695 data-nosnippet>695</a>                clauses,
 <a href=#696 id=696 data-nosnippet>696</a>                wait_data: <span class="prelude-val">None</span>,
@@ -704,65 +704,66 @@
 <a href=#704 id=704 data-nosnippet>704</a>    }
 <a href=#705 id=705 data-nosnippet>705</a>}
 <a href=#706 id=706 data-nosnippet>706</a>
-<a href=#707 id=707 data-nosnippet>707</a><span class="comment">// Custom parser for target_data directive (handles underscore variant)
-<a href=#708 id=708 data-nosnippet>708</a>// Preserves the underscore form for round-trip correctness
-<a href=#709 id=709 data-nosnippet>709</a></span><span class="kw">fn </span>parse_target_data_directive&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#710 id=710 data-nosnippet>710</a>    _name: std::borrow::Cow&lt;<span class="lifetime">'a</span>, str&gt;,
-<a href=#711 id=711 data-nosnippet>711</a>    input: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
-<a href=#712 id=712 data-nosnippet>712</a>    clause_registry: <span class="kw-2">&amp;</span>ClauseRegistry,
-<a href=#713 id=713 data-nosnippet>713</a>) -&gt; nom::IResult&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, <span class="kw">super</span>::Directive&lt;<span class="lifetime">'a</span>&gt;&gt; {
-<a href=#714 id=714 data-nosnippet>714</a>    <span class="kw">use </span><span class="kw">super</span>::Directive;
-<a href=#715 id=715 data-nosnippet>715</a>
-<a href=#716 id=716 data-nosnippet>716</a>    <span class="kw">let </span>(rest, clauses) = clause_registry.parse_sequence(input)<span class="question-mark">?</span>;
-<a href=#717 id=717 data-nosnippet>717</a>
-<a href=#718 id=718 data-nosnippet>718</a>    <span class="prelude-val">Ok</span>((
-<a href=#719 id=719 data-nosnippet>719</a>        rest,
-<a href=#720 id=720 data-nosnippet>720</a>        Directive::new(std::borrow::Cow::Borrowed(<span class="string">"target_data"</span>), <span class="prelude-val">None</span>, clauses),
-<a href=#721 id=721 data-nosnippet>721</a>    ))
-<a href=#722 id=722 data-nosnippet>722</a>}
-<a href=#723 id=723 data-nosnippet>723</a>
-<a href=#724 id=724 data-nosnippet>724</a><span class="comment">// Directive names that have custom parsers (excluding target_data underscore variant)
-<a href=#725 id=725 data-nosnippet>725</a></span><span class="kw">const </span>CUSTOM_PARSER_DIRECTIVES: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str] = <span class="kw-2">&amp;</span>[
-<a href=#726 id=726 data-nosnippet>726</a>    <span class="string">"allocate"</span>,
-<a href=#727 id=727 data-nosnippet>727</a>    <span class="string">"threadprivate"</span>,
-<a href=#728 id=728 data-nosnippet>728</a>    <span class="string">"declare target"</span>,
-<a href=#729 id=729 data-nosnippet>729</a>    <span class="string">"declare mapper"</span>,
-<a href=#730 id=730 data-nosnippet>730</a>    <span class="string">"declare variant"</span>,
-<a href=#731 id=731 data-nosnippet>731</a>    <span class="string">"depobj"</span>,
-<a href=#732 id=732 data-nosnippet>732</a>    <span class="string">"scan"</span>,
-<a href=#733 id=733 data-nosnippet>733</a>    <span class="string">"cancel"</span>,
-<a href=#734 id=734 data-nosnippet>734</a>    <span class="string">"groupprivate"</span>,
-<a href=#735 id=735 data-nosnippet>735</a>];
-<a href=#736 id=736 data-nosnippet>736</a>
-<a href=#737 id=737 data-nosnippet>737</a><span class="kw">pub fn </span>directive_registry() -&gt; DirectiveRegistry {
-<a href=#738 id=738 data-nosnippet>738</a>    <span class="kw">let </span><span class="kw-2">mut </span>builder = DirectiveRegistryBuilder::new();
-<a href=#739 id=739 data-nosnippet>739</a>
-<a href=#740 id=740 data-nosnippet>740</a>    <span class="comment">// Register custom parsers for directives with special syntax
-<a href=#741 id=741 data-nosnippet>741</a>    </span>builder = builder.register_custom(<span class="string">"allocate"</span>, parse_allocate_directive);
-<a href=#742 id=742 data-nosnippet>742</a>    builder = builder.register_custom(<span class="string">"threadprivate"</span>, parse_threadprivate_directive);
-<a href=#743 id=743 data-nosnippet>743</a>    builder = builder.register_custom(<span class="string">"declare target"</span>, parse_declare_target_extended);
-<a href=#744 id=744 data-nosnippet>744</a>    builder = builder.register_custom(<span class="string">"declare mapper"</span>, parse_declare_mapper_directive);
-<a href=#745 id=745 data-nosnippet>745</a>    builder = builder.register_custom(<span class="string">"declare variant"</span>, parse_declare_variant_directive);
-<a href=#746 id=746 data-nosnippet>746</a>    builder = builder.register_custom(<span class="string">"depobj"</span>, parse_depobj_directive);
-<a href=#747 id=747 data-nosnippet>747</a>    builder = builder.register_custom(<span class="string">"scan"</span>, parse_scan_directive);
-<a href=#748 id=748 data-nosnippet>748</a>    builder = builder.register_custom(<span class="string">"cancel"</span>, parse_cancel_directive);
-<a href=#749 id=749 data-nosnippet>749</a>    builder = builder.register_custom(<span class="string">"groupprivate"</span>, parse_groupprivate_directive);
-<a href=#750 id=750 data-nosnippet>750</a>
-<a href=#751 id=751 data-nosnippet>751</a>    <span class="comment">// Handle underscore variant of "target data"
-<a href=#752 id=752 data-nosnippet>752</a>    </span>builder = builder.register_custom(<span class="string">"target_data"</span>, parse_target_data_directive);
-<a href=#753 id=753 data-nosnippet>753</a>
-<a href=#754 id=754 data-nosnippet>754</a>    <span class="comment">// Register remaining directives as generic
-<a href=#755 id=755 data-nosnippet>755</a>    </span><span class="kw">for </span>directive <span class="kw">in </span>OpenMpDirective::ALL {
-<a href=#756 id=756 data-nosnippet>756</a>        <span class="kw">let </span>name = directive.as_str();
-<a href=#757 id=757 data-nosnippet>757</a>        <span class="comment">// Skip directives that already have custom parsers
-<a href=#758 id=758 data-nosnippet>758</a>        </span><span class="kw">if </span>!CUSTOM_PARSER_DIRECTIVES.contains(<span class="kw-2">&amp;</span>name) {
-<a href=#759 id=759 data-nosnippet>759</a>            builder = builder.register_generic(name);
-<a href=#760 id=760 data-nosnippet>760</a>        }
-<a href=#761 id=761 data-nosnippet>761</a>    }
-<a href=#762 id=762 data-nosnippet>762</a>
-<a href=#763 id=763 data-nosnippet>763</a>    builder.build()
-<a href=#764 id=764 data-nosnippet>764</a>}
-<a href=#765 id=765 data-nosnippet>765</a>
-<a href=#766 id=766 data-nosnippet>766</a><span class="kw">pub fn </span>parser() -&gt; Parser {
-<a href=#767 id=767 data-nosnippet>767</a>    Parser::new(directive_registry(), clause_registry())
-<a href=#768 id=768 data-nosnippet>768</a>}</code></pre></div></section></main></body></html>
+<a href=#707 id=707 data-nosnippet>707</a><span class="comment">// Custom parser for target data directive (canonical form)
+<a href=#708 id=708 data-nosnippet>708</a>// Preserve the canonical "target data" presentation; underscore-form
+<a href=#709 id=709 data-nosnippet>709</a>// variants are forbidden and should not be registered.
+<a href=#710 id=710 data-nosnippet>710</a></span><span class="kw">fn </span>parse_target_data_directive&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#711 id=711 data-nosnippet>711</a>    name: std::borrow::Cow&lt;<span class="lifetime">'a</span>, str&gt;,
+<a href=#712 id=712 data-nosnippet>712</a>    input: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+<a href=#713 id=713 data-nosnippet>713</a>    clause_registry: <span class="kw-2">&amp;</span>ClauseRegistry,
+<a href=#714 id=714 data-nosnippet>714</a>) -&gt; nom::IResult&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, <span class="kw">super</span>::Directive&lt;<span class="lifetime">'a</span>&gt;&gt; {
+<a href=#715 id=715 data-nosnippet>715</a>    <span class="kw">use </span><span class="kw">super</span>::Directive;
+<a href=#716 id=716 data-nosnippet>716</a>
+<a href=#717 id=717 data-nosnippet>717</a>    <span class="kw">let </span>(rest, clauses) = clause_registry.parse_sequence(input)<span class="question-mark">?</span>;
+<a href=#718 id=718 data-nosnippet>718</a>
+<a href=#719 id=719 data-nosnippet>719</a>    <span class="prelude-val">Ok</span>((rest, Directive::new(name, <span class="prelude-val">None</span>, clauses)))
+<a href=#720 id=720 data-nosnippet>720</a>}
+<a href=#721 id=721 data-nosnippet>721</a>
+<a href=#722 id=722 data-nosnippet>722</a><span class="comment">// Directive names that have custom parsers (excluding target_data underscore variant)
+<a href=#723 id=723 data-nosnippet>723</a></span><span class="kw">const </span>CUSTOM_PARSER_DIRECTIVES: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str] = <span class="kw-2">&amp;</span>[
+<a href=#724 id=724 data-nosnippet>724</a>    <span class="string">"allocate"</span>,
+<a href=#725 id=725 data-nosnippet>725</a>    <span class="string">"threadprivate"</span>,
+<a href=#726 id=726 data-nosnippet>726</a>    <span class="string">"declare target"</span>,
+<a href=#727 id=727 data-nosnippet>727</a>    <span class="string">"declare mapper"</span>,
+<a href=#728 id=728 data-nosnippet>728</a>    <span class="string">"declare variant"</span>,
+<a href=#729 id=729 data-nosnippet>729</a>    <span class="string">"depobj"</span>,
+<a href=#730 id=730 data-nosnippet>730</a>    <span class="string">"scan"</span>,
+<a href=#731 id=731 data-nosnippet>731</a>    <span class="string">"cancel"</span>,
+<a href=#732 id=732 data-nosnippet>732</a>    <span class="string">"groupprivate"</span>,
+<a href=#733 id=733 data-nosnippet>733</a>];
+<a href=#734 id=734 data-nosnippet>734</a>
+<a href=#735 id=735 data-nosnippet>735</a><span class="kw">pub fn </span>directive_registry() -&gt; DirectiveRegistry {
+<a href=#736 id=736 data-nosnippet>736</a>    <span class="kw">let </span><span class="kw-2">mut </span>builder = DirectiveRegistryBuilder::new();
+<a href=#737 id=737 data-nosnippet>737</a>
+<a href=#738 id=738 data-nosnippet>738</a>    <span class="comment">// Register custom parsers for directives with special syntax
+<a href=#739 id=739 data-nosnippet>739</a>    </span>builder = builder.register_custom(<span class="string">"allocate"</span>, parse_allocate_directive);
+<a href=#740 id=740 data-nosnippet>740</a>    builder = builder.register_custom(<span class="string">"threadprivate"</span>, parse_threadprivate_directive);
+<a href=#741 id=741 data-nosnippet>741</a>    builder = builder.register_custom(<span class="string">"declare target"</span>, parse_declare_target_extended);
+<a href=#742 id=742 data-nosnippet>742</a>    builder = builder.register_custom(<span class="string">"declare mapper"</span>, parse_declare_mapper_directive);
+<a href=#743 id=743 data-nosnippet>743</a>    builder = builder.register_custom(<span class="string">"declare variant"</span>, parse_declare_variant_directive);
+<a href=#744 id=744 data-nosnippet>744</a>    builder = builder.register_custom(<span class="string">"depobj"</span>, parse_depobj_directive);
+<a href=#745 id=745 data-nosnippet>745</a>    builder = builder.register_custom(<span class="string">"scan"</span>, parse_scan_directive);
+<a href=#746 id=746 data-nosnippet>746</a>    builder = builder.register_custom(<span class="string">"cancel"</span>, parse_cancel_directive);
+<a href=#747 id=747 data-nosnippet>747</a>    builder = builder.register_custom(<span class="string">"groupprivate"</span>, parse_groupprivate_directive);
+<a href=#748 id=748 data-nosnippet>748</a>
+<a href=#749 id=749 data-nosnippet>749</a>    <span class="comment">// Register the canonical space-separated form "target data" and also
+<a href=#750 id=750 data-nosnippet>750</a>    // explicitly register the underscore variant "target_data" for test-suite
+<a href=#751 id=751 data-nosnippet>751</a>    // compatibility. Both registrations are explicit — no string heuristics.
+<a href=#752 id=752 data-nosnippet>752</a>    </span>builder = builder.register_custom(<span class="string">"target data"</span>, parse_target_data_directive);
+<a href=#753 id=753 data-nosnippet>753</a>    builder = builder.register_custom(<span class="string">"target_data"</span>, parse_target_data_directive);
+<a href=#754 id=754 data-nosnippet>754</a>
+<a href=#755 id=755 data-nosnippet>755</a>    <span class="comment">// Register remaining directives as generic
+<a href=#756 id=756 data-nosnippet>756</a>    </span><span class="kw">for </span>directive <span class="kw">in </span>OpenMpDirective::ALL {
+<a href=#757 id=757 data-nosnippet>757</a>        <span class="kw">let </span>name = directive.as_str();
+<a href=#758 id=758 data-nosnippet>758</a>        <span class="comment">// Skip directives that already have custom parsers
+<a href=#759 id=759 data-nosnippet>759</a>        </span><span class="kw">if </span>!CUSTOM_PARSER_DIRECTIVES.contains(<span class="kw-2">&amp;</span>name) {
+<a href=#760 id=760 data-nosnippet>760</a>            builder = builder.register_generic(name);
+<a href=#761 id=761 data-nosnippet>761</a>        }
+<a href=#762 id=762 data-nosnippet>762</a>    }
+<a href=#763 id=763 data-nosnippet>763</a>
+<a href=#764 id=764 data-nosnippet>764</a>    builder.build()
+<a href=#765 id=765 data-nosnippet>765</a>}
+<a href=#766 id=766 data-nosnippet>766</a>
+<a href=#767 id=767 data-nosnippet>767</a><span class="kw">pub fn </span>parser() -&gt; Parser {
+<a href=#768 id=768 data-nosnippet>768</a>    Parser::new(directive_registry(), clause_registry())
+<a href=#769 id=769 data-nosnippet>769</a>}</code></pre></div></section></main></body></html>

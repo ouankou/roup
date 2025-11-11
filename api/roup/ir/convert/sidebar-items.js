@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["convert_directive","parse_clause_data","parse_depend_type","parse_directive_kind","parse_identifier_list","parse_linear_clause","parse_map_clause","parse_reduction_operator","parse_schedule_clause"]};
+window.SIDEBAR_ITEMS = {"fn":["convert_directive","parse_clause_data","parse_depend_type","parse_directive_kind","parse_directive_kind_from_str","parse_identifier_list","parse_linear_clause","parse_map_clause","parse_reduction_operator","parse_schedule_clause"]};

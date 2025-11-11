@@ -330,7 +330,11 @@ Returns: OpenACCDirective with accparser methods
 <li><strong>Loop</strong>: <code>gang</code>, <code>worker</code>, <code>vector</code>, <code>seq</code>, <code>independent</code>, <code>collapse</code>, <code>tile</code></li>
 <li><strong>Other</strong>: <code>private</code>, <code>firstprivate</code>, <code>reduction</code>, <code>if</code>, <code>default</code></li>
 </ul>
-<p>See <code>compat/accparser/src/roup_constants.h</code> for complete list.</p>
+<p>See <code>compat/accparser/src/roup_constants.h</code> (and the auto-generated
+<code>src/roup_constants.h</code>) for the complete list of generated macros. Note that
+generated OpenACC macros now use the <code>ROUP_ACC_*</code> prefix (for example
+<code>ROUP_ACC_DIRECTIVE_PARALLEL</code> and <code>ROUP_ACC_CLAUSE_ASYNC</code>). The legacy
+<code>ACC_*</code> aliases are not emitted by the generator.</p>
 <h2 id="known-limitations"><a class="header" href="#known-limitations">Known Limitations</a></h2>
 <h3 id="clause-parameters-"><a class="header" href="#clause-parameters-">Clause Parameters 🔄</a></h3>
 <p>Basic clause detection works, but parameter extraction not yet implemented.</p>

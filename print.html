@@ -2396,7 +2396,7 @@ int main(void) {
 <tr><td>9</td><td><code>ordered</code></td><td>No</td><td>-</td></tr>
 <tr><td>10</td><td><code>nowait</code></td><td>No</td><td>-</td></tr>
 <tr><td>11</td><td><code>default</code></td><td>No</td><td>Sharing kind</td></tr>
-<tr><td>999</td><td>Unknown</td><td>-</td><td>-</td></tr>
+<tr><td>-1</td><td>Unknown</td><td>-</td><td>-</td></tr>
 </tbody></table>
 </div>
 <p><strong>Schedule Kinds</strong> (for clause kind 7):</p>
@@ -3742,7 +3742,11 @@ Returns: OpenACCDirective with accparser methods
 <li><strong>Loop</strong>: <code>gang</code>, <code>worker</code>, <code>vector</code>, <code>seq</code>, <code>independent</code>, <code>collapse</code>, <code>tile</code></li>
 <li><strong>Other</strong>: <code>private</code>, <code>firstprivate</code>, <code>reduction</code>, <code>if</code>, <code>default</code></li>
 </ul>
-<p>See <code>compat/accparser/src/roup_constants.h</code> for complete list.</p>
+<p>See <code>compat/accparser/src/roup_constants.h</code> (and the auto-generated
+<code>src/roup_constants.h</code>) for the complete list of generated macros. Note that
+generated OpenACC macros now use the <code>ROUP_ACC_*</code> prefix (for example
+<code>ROUP_ACC_DIRECTIVE_PARALLEL</code> and <code>ROUP_ACC_CLAUSE_ASYNC</code>). The legacy
+<code>ACC_*</code> aliases are not emitted by the generator.</p>
 <h2 id="known-limitations-2"><a class="header" href="#known-limitations-2">Known Limitations</a></h2>
 <h3 id="clause-parameters-"><a class="header" href="#clause-parameters-">Clause Parameters 🔄</a></h3>
 <p>Basic clause detection works, but parameter extraction not yet implemented.</p>
@@ -4068,7 +4072,7 @@ void roup_string_list_free(OmpStringList* list);
 <tr><td>9</td><td><code>ordered</code></td><td>Ordered execution</td><td><code>ordered</code></td></tr>
 <tr><td>10</td><td><code>nowait</code></td><td>Remove barrier</td><td><code>nowait</code></td></tr>
 <tr><td>11</td><td><code>default</code></td><td>Default sharing</td><td><code>default(shared)</code></td></tr>
-<tr><td>999</td><td>Unknown</td><td>Unrecognized clause</td><td>-</td></tr>
+<tr><td>-1</td><td>Unknown</td><td>Unrecognized clause</td><td>-</td></tr>
 </tbody></table>
 </div>
 <p><strong>Note</strong>: The C API intentionally supports a focused subset of clauses for simplicity. The Rust API supports all 92+ OpenMP 6.0 clauses.</p>
