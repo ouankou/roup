@@ -164,6 +164,19 @@ pub enum DirectiveName {
     Other(Cow<'static, str>),
 }
 
+/// Return the canonical OpenACCKinds.h token (UPPER_SNAKE) for a given
+/// enum variant name. This helps the generator decide which directive
+/// variants correspond to the same header token (for example, both
+/// `EnterData` and `EnterDataUnderscore` should map to `ENTER_DATA`).
+pub fn canonical_header_token_for_variant(variant: &str) -> Option<&'static str> {
+    match variant {
+        "EnterData" | "EnterDataUnderscore" => Some("ENTER_DATA"),
+        "ExitData" | "ExitDataUnderscore" => Some("EXIT_DATA"),
+        "HostData" | "HostDataUnderscore" => Some("HOST_DATA"),
+        _ => None,
+    }
+}
+
 /// Typed representation for directive parameters when structured.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DirectiveParameter<'a> {
@@ -285,12 +298,13 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("kernels", DirectiveName::Kernels);
     insert!("kernels loop", DirectiveName::KernelsLoop);
     insert!("data", DirectiveName::Data);
+    // Accept only canonical OpenACC inputs for these directives:
+    // - "enter data" (space-separated)
+    // - "exit data"  (space-separated)
+    // - "host_data"  (underscore form)
     insert!("enter data", DirectiveName::EnterData);
-    insert!("enter_data", DirectiveName::EnterDataUnderscore);
     insert!("exit data", DirectiveName::ExitData);
-    insert!("exit_data", DirectiveName::ExitDataUnderscore);
-    insert!("host_data", DirectiveName::HostDataUnderscore);
-    insert!("host data", DirectiveName::HostData);
+    insert!("host_data", DirectiveName::HostData);
     insert!("declare", DirectiveName::Declare);
     insert!("wait", DirectiveName::Wait);
     insert!("end", DirectiveName::End);
@@ -570,7 +584,11 @@ impl DirectiveName {
             DirectiveName::EnterDataUnderscore => "enter_data",
             DirectiveName::ExitData => "exit data",
             DirectiveName::ExitDataUnderscore => "exit_data",
-            DirectiveName::HostData => "host data",
+            // Use the underscore form as the canonical unparse for HostData so the
+            // runtime C API and generated header receive the exact canonical token
+            // the compatibility layer expects (`host_data`). The parser still
+            // registers the same normalized key so lookups remain consistent.
+            DirectiveName::HostData => "host_data",
             DirectiveName::HostDataUnderscore => "host_data",
             DirectiveName::Declare => "declare",
             DirectiveName::Wait => "wait",

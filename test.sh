@@ -196,18 +196,34 @@ fi
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. accparser Compat Tests ==="
 if [ -d "compat/accparser" ] && [ -f "compat/accparser/build.sh" ]; then
-    echo -n "Running accparser compat tests (clean build)... "
+    echo -n "Running accparser compat tests (clean isolated build + ctest)... "
     cd compat/accparser
-    # Clean build to ensure fresh state (like CI)
-    rm -rf build > /dev/null 2>&1
-    if ./build.sh > /tmp/accparser_compat_test.log 2>&1; then
-        echo -e "${GREEN}✓ PASS${NC}"
+    # Use an isolated build dir so we don't interfere with user artifacts
+    BUILD_DIR="build-temp"
+    rm -rf "${BUILD_DIR}" > /dev/null 2>&1
+    mkdir -p "${BUILD_DIR}"
+    pushd "${BUILD_DIR}" > /dev/null
+    # Run the local build script (it will honor being invoked from a build dir)
+    if ../build.sh > /tmp/accparser_compat_build.log 2>&1; then
+        # Run ctest to exercise the test harness; use all CPUs and show failures
+        echo "Running ctest (this may take several minutes)..."
+        if ctest --output-on-failure -j$(nproc) > /tmp/accparser_compat_ctest.log 2>&1; then
+            echo -e "${GREEN}✓ PASS${NC}"
+        else
+            echo -e "${RED}✗ FAIL - ctest failures${NC}"
+            tail -200 /tmp/accparser_compat_ctest.log || true
+            popd > /dev/null
+            cd ../..
+            exit 1
+        fi
     else
-        echo -e "${RED}✗ FAIL${NC}"
-        cat /tmp/accparser_compat_test.log
+        echo -e "${RED}✗ FAIL - build.sh failed${NC}"
+        tail -200 /tmp/accparser_compat_build.log || true
+        popd > /dev/null
         cd ../..
         exit 1
     fi
+    popd > /dev/null
     cd ../..
 else
     echo -e "${YELLOW}⚠ SKIP - accparser compatibility layer not found (optional)${NC}"

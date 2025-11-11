@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 // This test verifies that the generated header `src/roup_constants.h` contains
-// all expected `ACC_CLAUSE_*` macro definitions and none are left as the
+// all expected `ROUP_ACC_CLAUSE_*` macro definitions and none are left as the
 // UNKNOWN_KIND sentinel (-1). This provides fast feedback when adding new
 // OpenACC clauses or changing the generator.
 
@@ -19,52 +19,52 @@ fn generated_header_has_all_acc_clauses() {
 
     // These names must match the list in src/constants_gen.rs expected list.
     let expected = [
-        "ACC_CLAUSE_ASYNC",
-        "ACC_CLAUSE_WAIT",
-        "ACC_CLAUSE_NUM_GANGS",
-        "ACC_CLAUSE_NUM_WORKERS",
-        "ACC_CLAUSE_VECTOR_LENGTH",
-        "ACC_CLAUSE_GANG",
-        "ACC_CLAUSE_WORKER",
-        "ACC_CLAUSE_VECTOR",
-        "ACC_CLAUSE_SEQ",
-        "ACC_CLAUSE_INDEPENDENT",
-        "ACC_CLAUSE_AUTO",
-        "ACC_CLAUSE_COLLAPSE",
-        "ACC_CLAUSE_DEVICE_TYPE",
-        "ACC_CLAUSE_BIND",
-        "ACC_CLAUSE_IF",
-        "ACC_CLAUSE_DEFAULT",
-        "ACC_CLAUSE_FIRSTPRIVATE",
-        "ACC_CLAUSE_DEFAULT_ASYNC",
-        "ACC_CLAUSE_LINK",
-        "ACC_CLAUSE_NO_CREATE",
-        "ACC_CLAUSE_NOHOST",
-        "ACC_CLAUSE_PRESENT",
-        "ACC_CLAUSE_PRIVATE",
-        "ACC_CLAUSE_REDUCTION",
-        "ACC_CLAUSE_READ",
-        "ACC_CLAUSE_SELF",
-        "ACC_CLAUSE_TILE",
-        "ACC_CLAUSE_USE_DEVICE",
-        "ACC_CLAUSE_ATTACH",
-        "ACC_CLAUSE_DETACH",
-        "ACC_CLAUSE_FINALIZE",
-        "ACC_CLAUSE_IF_PRESENT",
-        "ACC_CLAUSE_CAPTURE",
-        "ACC_CLAUSE_WRITE",
-        "ACC_CLAUSE_UPDATE",
-        "ACC_CLAUSE_COPY",
-        "ACC_CLAUSE_COPYIN",
-        "ACC_CLAUSE_COPYOUT",
-        "ACC_CLAUSE_CREATE",
-        "ACC_CLAUSE_DELETE",
-        "ACC_CLAUSE_DEVICE",
-        "ACC_CLAUSE_DEVICEPTR",
-        "ACC_CLAUSE_DEVICE_NUM",
-        "ACC_CLAUSE_DEVICE_RESIDENT",
-        "ACC_CLAUSE_HOST",
-        "ACC_CLAUSE_NUM_THREADS",
+        "ROUP_ACC_CLAUSE_ASYNC",
+        "ROUP_ACC_CLAUSE_WAIT",
+        "ROUP_ACC_CLAUSE_NUM_GANGS",
+        "ROUP_ACC_CLAUSE_NUM_WORKERS",
+        "ROUP_ACC_CLAUSE_VECTOR_LENGTH",
+        "ROUP_ACC_CLAUSE_GANG",
+        "ROUP_ACC_CLAUSE_WORKER",
+        "ROUP_ACC_CLAUSE_VECTOR",
+        "ROUP_ACC_CLAUSE_SEQ",
+        "ROUP_ACC_CLAUSE_INDEPENDENT",
+        "ROUP_ACC_CLAUSE_AUTO",
+        "ROUP_ACC_CLAUSE_COLLAPSE",
+        "ROUP_ACC_CLAUSE_DEVICE_TYPE",
+        "ROUP_ACC_CLAUSE_BIND",
+        "ROUP_ACC_CLAUSE_IF",
+        "ROUP_ACC_CLAUSE_DEFAULT",
+        "ROUP_ACC_CLAUSE_FIRSTPRIVATE",
+        "ROUP_ACC_CLAUSE_DEFAULT_ASYNC",
+        "ROUP_ACC_CLAUSE_LINK",
+        "ROUP_ACC_CLAUSE_NO_CREATE",
+        "ROUP_ACC_CLAUSE_NOHOST",
+        "ROUP_ACC_CLAUSE_PRESENT",
+        "ROUP_ACC_CLAUSE_PRIVATE",
+        "ROUP_ACC_CLAUSE_REDUCTION",
+        "ROUP_ACC_CLAUSE_READ",
+        "ROUP_ACC_CLAUSE_SELF",
+        "ROUP_ACC_CLAUSE_TILE",
+        "ROUP_ACC_CLAUSE_USE_DEVICE",
+        "ROUP_ACC_CLAUSE_ATTACH",
+        "ROUP_ACC_CLAUSE_DETACH",
+        "ROUP_ACC_CLAUSE_FINALIZE",
+        "ROUP_ACC_CLAUSE_IF_PRESENT",
+        "ROUP_ACC_CLAUSE_CAPTURE",
+        "ROUP_ACC_CLAUSE_WRITE",
+        "ROUP_ACC_CLAUSE_UPDATE",
+        "ROUP_ACC_CLAUSE_COPY",
+        "ROUP_ACC_CLAUSE_COPYIN",
+        "ROUP_ACC_CLAUSE_COPYOUT",
+        "ROUP_ACC_CLAUSE_CREATE",
+        "ROUP_ACC_CLAUSE_DELETE",
+        "ROUP_ACC_CLAUSE_DEVICE",
+        "ROUP_ACC_CLAUSE_DEVICEPTR",
+        "ROUP_ACC_CLAUSE_DEVICE_NUM",
+        "ROUP_ACC_CLAUSE_DEVICE_RESIDENT",
+        "ROUP_ACC_CLAUSE_HOST",
+        "ROUP_ACC_CLAUSE_NUM_THREADS",
     ];
 
     // Map from macro name -> numeric value (as i64) for later duplicate-checks
@@ -122,10 +122,10 @@ fn generated_header_has_all_acc_clauses() {
     let duplicates: Vec<(&i64, &Vec<String>)> =
         rev.iter().filter(|(_, names)| names.len() > 1).collect();
     if !duplicates.is_empty() {
-        eprintln!("Found duplicate ACC_CLAUSE_* numeric values:");
+        eprintln!("Found duplicate ROUP_ACC_CLAUSE_* numeric values:");
         for (val, names) in &duplicates {
             eprintln!("  {} -> {:?}", val, names);
         }
-        panic!("Duplicate ACC_CLAUSE_* numeric values found in generated header");
+        panic!("Duplicate ROUP_ACC_CLAUSE_* numeric values found in generated header");
     }
 }

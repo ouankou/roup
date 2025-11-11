@@ -104,7 +104,38 @@ fn parse_directive_enum_raw_mappings() -> Vec<(String, i32)> {
         }
     }
 
+    // Enforce policy at extraction time: no underscore-form enum variants should exist.
+    ensure_no_underscore_variants(&enum_mappings);
+
     enum_mappings
+}
+
+// Helper to detect disallowed underscore-form enum variants such as
+// `EnterDataUnderscore` or `HostDataUnderscore` which represent non-
+// canonical synonyms. Per project policy these must not be present in
+// the AST-based directive mappings — fail fast if they are.
+fn ensure_no_underscore_variants(mappings: &[(String, i32)]) {
+    let mut bad: Vec<String> = mappings
+        .iter()
+        .filter_map(|(variant, _)| {
+            if variant.ends_with("Underscore") {
+                Some(variant_to_constant(variant))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if !bad.is_empty() {
+        bad.sort();
+        let mut msg =
+            String::from("Found forbidden underscore-form directive variants in AST mapping:\n");
+        for v in &bad {
+            msg.push_str(&format!("  - {}\n", v));
+        }
+        msg.push_str("\nRemove these variants from the enum-based mapping in src/c_api or adjust the parser registrations to use canonical tokens only.\n");
+        panic!("{}", msg);
+    }
 }
 
 /// Parse clause mappings from c_api.rs convert_clause() using AST
@@ -163,6 +194,9 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
         }
     }
 
+    // Enforce no underscore-form variants in the acc-specific mapping as well.
+    ensure_no_underscore_variants(&enum_mappings);
+
     if enum_mappings.is_empty() {
         // OpenACC may reuse the canonical DirectiveName -> kind mapping from
         // the parent module (src/c_api.rs). In that case, there's no
@@ -214,47 +248,53 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
         gen_map.insert(variant_to_constant(variant), acc_directive_base + *num);
     }
 
+    // Load the authoritative whitelist from accparser's OpenACCKinds.h so we
+    // can ensure the ROUP OpenACC mapping only emits directives that the
+    // compatibility layer understands. This prevents accidentally re-introducing
+    // OpenMP-only or other non-OpenACC keywords (e.g., "Metadirective").
+    let allowed_from_header =
+        load_openacc_kinds_from_header("compat/accparser/accparser/src/OpenACCKinds.h");
+
     // List of ROUP_ACC_DIRECTIVE_* identifiers expected by compat/accparser
     // This list focuses on the directive names used by the compatibility layer
     // and mirrors the identifiers referenced in compat/accparser/src/compat_impl.cpp
+    // Exact whitelist derived from compat/accparser/accparser/src/OpenACCKinds.h
+    // This ensures the generated ROUP_ACC_DIRECTIVE_* macros only include
+    // directives that the accparser compatibility layer understands.
     let expected = vec![
-        "PARALLEL",
-        "LOOP",
-        "KERNELS",
+        "ATOMIC",
+        "CACHE",
         "DATA",
+        "DECLARE",
+        "END",
         "ENTER_DATA",
         "EXIT_DATA",
         "HOST_DATA",
-        "ATOMIC",
-        "DECLARE",
-        "WAIT",
-        "END",
-        "UPDATE",
-        "KERNELS_LOOP",
-        "PARALLEL_LOOP",
-        "SERIAL_LOOP",
-        "SERIAL",
-        "ROUTINE",
-        "SET",
         "INIT",
+        "KERNELS",
+        "KERNELS_LOOP",
+        "LOOP",
+        "PARALLEL",
+        "PARALLEL_LOOP",
+        "ROUTINE",
+        "SERIAL",
+        "SERIAL_LOOP",
+        "SET",
         "SHUTDOWN",
-        "CACHE",
-        "TARGET",
-        "TARGET_TEAMS",
-        "TEAMS",
-        "DISTRIBUTE",
+        "UPDATE",
+        "WAIT",
     ];
 
-    // Known alias mapping from expected compat names -> generated variant names
-    // (in case the AST variant uses a slightly different token)
-    let alias_map = vec![
-        ("ENTER_DATA", "ENTER_DATA"),
-        ("EXIT_DATA", "EXIT_DATA"),
-        ("HOST_DATA", "HOST_DATA"),
+    // Known alias candidates for expected compat names. Each expected key
+    // may map from multiple variant identifiers present in the parser AST
+    // (e.g., EnterData and EnterDataUnderscore). We check all candidates
+    // when attempting to resolve the expected mapping.
+    let alias_candidates = vec![
+        ("ENTER_DATA", "EnterData"),
+        ("EXIT_DATA", "ExitData"),
+        ("HOST_DATA", "HostData"),
         ("KERNELS_LOOP", "KernelsLoop"),
-    ]
-    .into_iter()
-    .collect::<std::collections::HashMap<_, _>>();
+    ];
 
     let mut final_mappings: Vec<(String, i32)> = Vec::new();
     // First emit the expected compat list in fixed order using available AST values
@@ -263,24 +303,106 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
             final_mappings.push((key.to_string(), v));
             continue;
         }
-        if let Some(canon) = alias_map.get(*key) {
-            // alias_map stores raw variant names; convert to constant form
-            let canon_const = variant_to_constant(canon);
-            if let Some(&v) = gen_map.get(&canon_const) {
-                final_mappings.push((key.to_string(), v));
+        // Try alias candidates if direct key not present
+        let mut found_alias = false;
+        for (k, cand) in &alias_candidates {
+            if k != key {
                 continue;
             }
+            let canon_const = variant_to_constant(cand);
+            if let Some(&v) = gen_map.get(&canon_const) {
+                final_mappings.push((key.to_string(), v));
+                found_alias = true;
+                break;
+            }
+        }
+        if found_alias {
+            continue;
         }
         // Not present in AST-derived map; emit as UNKNOWN_KIND to keep compat builds compiling
         final_mappings.push((key.to_string(), UNKNOWN_KIND));
     }
 
-    // Also append any generator-discovered directive names that weren't on the expected list
-    for (name, num) in enum_mappings {
-        let const_name = variant_to_constant(&name);
-        if !final_mappings.iter().any(|(n, _)| n == &const_name) {
-            final_mappings.push((const_name, acc_directive_base + num));
+    // Build set of allowed numeric codes from the final_mappings we will emit.
+    // This accepts multiple enum variants that resolve to the same code
+    // (e.g., For/Do/Loop -> same LOOP code). Any enum variant that maps to a
+    // numeric code not in this set is considered illegal and causes a fatal
+    // error to prevent reintroducing non-OpenACC keywords.
+    let allowed_codes: std::collections::HashSet<i32> = final_mappings
+        .iter()
+        .filter_map(|(_name, num)| {
+            if *num != UNKNOWN_KIND {
+                Some(*num)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Allow variants that map to a canonical header token (e.g., EnterDataUnderscore -> ENTER_DATA).
+    // build.rs includes this file directly so we cannot reference `crate::parser` here;
+    // provide a local helper that mirrors the parser's canonical mapping for the
+    // handful of ambiguous variants we care about.
+    fn canonical_header_token_for_variant_local(variant: &str) -> Option<&'static str> {
+        match variant {
+            "EnterData" | "EnterDataUnderscore" => Some("ENTER_DATA"),
+            "ExitData" | "ExitDataUnderscore" => Some("EXIT_DATA"),
+            "HostData" | "HostDataUnderscore" => Some("HOST_DATA"),
+            // Variants that are semantically the same as LOOP in the header
+            "For" | "Do" | "ForSimd" | "DoSimd" | "Loop" => Some("LOOP"),
+            // Variants in the parallel family map to PARALLEL in the header
+            "Parallel" | "ParallelFor" | "ParallelDo" | "ParallelForSimd" | "ParallelDoSimd"
+            | "ParallelLoop" => Some("PARALLEL"),
+            // KernelsLoop is represented in header as KERNELS_LOOP
+            "KernelsLoop" => Some("KERNELS_LOOP"),
+            _ => None,
         }
+    }
+
+    // Enforce whitelist: every AST-derived OpenACC enum variant must map to
+    // a canonical OpenACCKinds.h identifier. We check by mapping enum
+    // variants to their canonical header token (if any) and ensuring that
+    // canonical token exists in the header set. If a variant has no
+    // canonical header token, we also accept it only if its generated
+    // constant name is present in the header set. Any failure is fatal.
+    let mut illegal: Vec<String> = Vec::new();
+    for (variant, num) in &enum_mappings {
+        // Compute the candidate canonical token name (UPPER_SNAKE) that would
+        // appear in OpenACCKinds.h. Prefer explicit canonical mappings for a
+        // few ambiguous variants; otherwise derive from the variant name.
+        let candidate_token = if let Some(tok) = canonical_header_token_for_variant_local(variant) {
+            tok.to_string()
+        } else {
+            variant_to_constant(variant)
+        };
+
+        // If the canonical token is not listed in the OpenACCKinds.h whitelist,
+        // this AST-derived variant is illegal for OpenACC mapping.
+        if !allowed_from_header.contains(&candidate_token) {
+            illegal.push(variant_to_constant(variant));
+            continue;
+        }
+
+        // Additionally ensure the numeric code is allowed (matches one of the
+        // expected final mappings). This prevents mapping to an unrelated numeric
+        // code even when the token exists in the header (defensive check).
+        let code = acc_directive_base + *num;
+        if !allowed_codes.contains(&code) {
+            illegal.push(variant_to_constant(variant));
+            continue;
+        }
+    }
+
+    if !illegal.is_empty() {
+        illegal.sort();
+        let mut msg = String::from(
+            "Found non-OpenACCKinds.h directive variants in openacc mapping (not present in OpenACCKinds.h whitelist):\n",
+        );
+        for name in &illegal {
+            msg.push_str(&format!("  - {}\n", name));
+        }
+        msg.push_str("\nPlease remove these variants from src/c_api/openacc.rs or update compat/accparser/accparser/src/OpenACCKinds.h after careful review.\n");
+        panic!("{}", msg);
     }
 
     // Preserve expected order for first entries; otherwise sort remaining by numeric value
@@ -635,6 +757,29 @@ where
         }
         _ => {}
     }
+}
+
+/// Load the OpenACCKinds.h file and extract canonical directive identifiers
+/// into an UPPER_SNAKE set (e.g., kernels_loop -> KERNELS_LOOP)
+fn load_openacc_kinds_from_header(path: &str) -> std::collections::HashSet<String> {
+    let content = fs::read_to_string(path).unwrap_or_default();
+    let mut set = std::collections::HashSet::new();
+
+    for line in content.lines() {
+        // Look for lines like: OPENACC_DIRECTIVE(kernels_loop)
+        if let Some(idx) = line.find("OPENACC_DIRECTIVE(") {
+            if let Some(start) = line[idx..].find('(') {
+                if let Some(end) = line[idx + start + 1..].find(')') {
+                    let name = &line[idx + start + 1..idx + start + 1 + end];
+                    // Convert to upper snake form
+                    let const_name = name.to_ascii_uppercase();
+                    set.insert(const_name);
+                }
+            }
+        }
+    }
+
+    set
 }
 
 // Note: older versions supported directive arms derived from string-matching
