@@ -156,10 +156,16 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
     // integers like 0..N) or the full macro values (offset by ACC_DIRECTIVE_BASE,
     // e.g., 10000+). Normalize here to the full macro values so the switch
     // statements using `ROUP_ACC_DIRECTIVE_*` macros match correctly.
+    // Expect ROUP to publish canonical ACC namespace values (ACC_DIRECTIVE_BASE + raw).
+    // Any reduced 0..N values or otherwise out-of-range values indicate a producer bug
+    // and must be treated as a fatal error rather than normalized silently.
     const int32_t ACC_DIRECTIVE_BASE = 10000;
     int32_t full_kind = roup_kind;
     if (full_kind >= 0 && full_kind < ACC_DIRECTIVE_BASE) {
-        full_kind += ACC_DIRECTIVE_BASE;
+        // This indicates ROUP returned a reduced numeric value rather than the
+        // canonical ACC_DIRECTIVE_BASE-offset value. Treat as fatal.
+        fprintf(stderr, "FATAL: ROUP returned non-canonical OpenACC directive kind: %d\n", roup_kind);
+        abort();
     }
 
     // Note: ROUP supports both space and underscore variants for some directives:
@@ -325,9 +331,11 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
     int32_t roup_kind = acc_directive_kind(roup_dir);
     OpenACCDirectiveKind kind = mapRoupToAccparserDirective(roup_kind);
 
-    // Debug: print directive kind if unknown
+    // Unknown directive kind is a fatal error: the generator and runtime
+    // must agree on canonical OpenACC mapping.
     if (kind == ACCD_unknown) {
-        fprintf(stderr, "WARNING: Unknown directive kind from ROUP: %d\n", roup_kind);
+        fprintf(stderr, "FATAL: Unknown directive kind from ROUP: %d\n", roup_kind);
+        abort();
     }
 
     // Create accparser-compatible directive

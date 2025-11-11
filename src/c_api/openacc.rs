@@ -253,17 +253,15 @@ pub extern "C" fn acc_directive_kind(directive: *const AccDirective) -> i32 {
         // Prefer an OpenACC-specific mapping when available so we can
         // preserve directive codes expected by compatibility layers.
         // The internal OpenACC mapping uses an ACC_DIRECTIVE_BASE offset
-        // so generated macros occupy a separate numeric namespace. For the
-        // runtime C API we normalize back to the canonical (small) values
-        // by subtracting the base when present so existing tests and
-        // consumers that expect 0..N values continue to work.
-        const ACC_DIRECTIVE_BASE: i32 = 10000;
+        // The internal OpenACC mapping puts OpenACC directive numeric codes
+        // into their own numeric range (ACC_DIRECTIVE_BASE + raw). The C API
+        // must expose these canonical OpenACC numeric values directly so
+        // consumers (including compatibility layers) receive the authoritative
+        // mapping generated at build time. Do NOT normalize back to reduced
+        // 0..N values here — that leakage is the root cause of runtime
+        // mismatches and must be fixed at the producer.
         let kind = acc_directive_name_to_kind(dname);
-        if kind >= ACC_DIRECTIVE_BASE {
-            kind - ACC_DIRECTIVE_BASE
-        } else {
-            kind
-        }
+        kind
     }
 }
 

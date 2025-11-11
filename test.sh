@@ -19,6 +19,13 @@ rustc --version
 cargo clippy --version 2>/dev/null || echo "  clippy: not installed"
 echo ""
 
+# Ensure git submodules are initialized so compat/accparser/accparser/src/OpenACCKinds.h
+# is available to the build script. This mirrors common CI setup where submodules
+# may not be initialized by default.
+echo "Initializing git submodules (if necessary)..."
+git submodule update --init --recursive || true
+echo ""
+
 # Test section counter for auto-numbering
 SECTION_NUM=1
 

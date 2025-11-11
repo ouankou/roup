@@ -9,8 +9,10 @@ fn acc_parse_and_kind_roundtrip() {
     assert!(!dir.is_null(), "acc_parse returned NULL");
 
     let kind = roup::c_api::acc_directive_kind(dir);
-    // 'parallel' should map to directive code 0 in the current mapping
-    assert_eq!(kind, 0, "expected acc_directive_kind == 0 for 'parallel'");
+    // After migrating the OpenACC C API to expose canonical ACC namespace values,
+    // OpenACC directive kinds are returned as ACC_DIRECTIVE_BASE + raw (10000 + raw).
+    // 'parallel' raw value is 0, so the expected returned kind is 10000.
+    assert_eq!(kind, 10000, "expected acc_directive_kind == 10000 for 'parallel'");
 
     // Clean up
     roup::c_api::acc_directive_free(dir);
