@@ -171,18 +171,13 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
         case ROUP_ACC_DIRECTIVE_END:         return ACCD_end;          // 10 = "end"
         case ROUP_ACC_DIRECTIVE_HOST_DATA:   return ACCD_host_data;    // 11 = "host data" (space) - same as 6
     case ROUP_ACC_DIRECTIVE_UPDATE:      return ACCD_update;       // 12 = "update"
-    // Target / teams / distribute / metadirective families added by ROUP
+    // Target / teams / distribute families added by ROUP
     // Map them to the closest accparser kinds so the compatibility shim
     // does not drop these directives. These are best-effort mappings
     // because the accparser IR predates these newer OpenACC constructs.
-    // The ROUP generator assigns distinct numeric codes for families and
-    // many family-specific variants (e.g., TargetTeamsDistributeParallelFor).
-    // Ensure we map all generated ROUP_ACC_DIRECTIVE_* macros so they are
-    // not reported as ACCD_unknown by the compat bridge.
-    case ROUP_ACC_DIRECTIVE_TARGET:       return ACCD_kernels;   // 10025 = "target" (covers family aliases)
-    case ROUP_ACC_DIRECTIVE_TEAMS:        return ACCD_parallel;  // 10026 = "teams" (covers family aliases)
-    case ROUP_ACC_DIRECTIVE_DISTRIBUTE:   return ACCD_loop;      // 10027 = "distribute" (covers family aliases)
-    case ROUP_ACC_DIRECTIVE_METADIRECTIVE:return ACCD_parallel;  // 10028 = "metadirective"
+    case ROUP_ACC_DIRECTIVE_TARGET:       return ACCD_kernels;   // "target" (family aliases)
+    case ROUP_ACC_DIRECTIVE_TEAMS:        return ACCD_parallel;  // "teams" (family aliases)
+    case ROUP_ACC_DIRECTIVE_DISTRIBUTE:   return ACCD_loop;      // "distribute" (family aliases)
 
     // Preserve earlier per-directive loop/kernels mappings for other kinds
     case ROUP_ACC_DIRECTIVE_KERNELS_LOOP:         return ACCD_kernels_loop; // 10016 = "kernels loop"
