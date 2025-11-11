@@ -1166,7 +1166,7 @@ fn directive_name_enum_to_kind(name: DirectiveName) -> i32 {
 
     match name {
         Parallel | ParallelFor | ParallelDo | ParallelForSimd | ParallelDoSimd | ParallelLoop
-        | ParallelLoopSimd | ParallelSections => 0,
+        | ParallelLoopSimd | ParallelSections | ParallelWorkshare => 0,
 
         For | Do | ForSimd | DoSimd | Loop => 1,
 

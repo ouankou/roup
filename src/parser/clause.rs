@@ -25,7 +25,8 @@ pub enum ClauseName {
     Copy,
     CopyIn,
     CopyOut,
-    // Additional OpenACC clause names (explicit variants to avoid string-based checks)
+    // Additional OpenACC clause names (explicit variants to avoid string-based
+    // post-parse heuristics and to make the mapping AST-driven)
     Async,
     Wait,
     NumGangs,

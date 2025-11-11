@@ -72,6 +72,7 @@ pub enum DirectiveName {
     ParallelFor,
     ParallelForSimd,
     ParallelLoop,
+    ParallelWorkshare,
     ParallelLoopSimd,
     Kernels,
     KernelsLoop,
@@ -312,7 +313,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
         DirectiveName::ParallelMasterTaskloopSimd
     );
     insert!("parallel sections", DirectiveName::ParallelSections);
-    insert!("parallel workshare", DirectiveName::ParallelLoop);
+    insert!("parallel workshare", DirectiveName::ParallelWorkshare);
     insert!("requires", DirectiveName::Requires);
     insert!("scope", DirectiveName::Scope);
     insert!("scan", DirectiveName::Scan);
@@ -509,6 +510,7 @@ impl DirectiveName {
             DirectiveName::ParallelFor => "parallel for",
             DirectiveName::ParallelForSimd => "parallel for simd",
             DirectiveName::ParallelLoop => "parallel loop",
+            DirectiveName::ParallelWorkshare => "parallel workshare",
             DirectiveName::ParallelLoopSimd => "parallel loop simd",
             DirectiveName::ParallelMasked => "parallel masked",
             DirectiveName::ParallelMaster => "parallel master",
