@@ -66,21 +66,18 @@ void test_for_directive() {
 
 void test_parallel_for() {
     std::cout << "Testing: #pragma omp parallel for" << std::endl;
-    
+
     OpenMPDirective* dir = parseOpenMP("omp parallel for", nullptr);
     assert(dir != nullptr);
-    
-    // NOTE: ROUP currently treats combined directives like "parallel for" 
-    // as just the first directive (parallel). This is a known limitation.
-    // See ROUP's c_api.rs: "parallel for" => 0 (parallel)
-    std::cout << "  ⚠ WARNING: Combined directive 'parallel for' currently parsed as 'parallel' (ROUP limitation)" << std::endl;
-    assert(dir->getKind() == OMPD_parallel);  // TODO: Should be OMPD_parallel_for
-    
+
+    // ROUP correctly parses "parallel for" as OMPD_parallel_for
+    assert(dir->getKind() == OMPD_parallel_for);
+
     std::string str = dir->toString();
     std::cout << "  Generated: " << str << std::endl;
-    
+
     delete dir;
-    std::cout << "  ✓ PASS (with known limitation)" << std::endl;
+    std::cout << "  ✓ PASS" << std::endl;
 }
 
 void test_invalid_input() {

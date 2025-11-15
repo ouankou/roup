@@ -211,7 +211,9 @@ impl<'a> Directive<'a> {
                         new_clauses.push(Clause {
                             name: first.name.clone(),
                             kind: ClauseKind::ReductionClause {
+                                modifiers: Vec::new(),
                                 operator: *operator,
+                                user_defined_identifier: None,
                                 variables: vars,
                                 space_after_colon: false,
                             },
@@ -370,11 +372,13 @@ impl fmt::Display for Directive<'_> {
 // duplication between different render paths.
 fn render_parameter_into(output: &mut String, param: Option<&str>) {
     if let Some(p) = param {
-        if p.starts_with('(') || p.starts_with(' ') {
-            output.push_str(p);
-        } else {
-            output.push(' ');
-            output.push_str(p);
+        if !p.is_empty() {
+            if p.starts_with('(') || p.starts_with(' ') {
+                output.push_str(p);
+            } else {
+                output.push(' ');
+                output.push_str(p);
+            }
         }
     }
 }

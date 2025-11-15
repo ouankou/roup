@@ -1086,14 +1086,19 @@ impl fmt::Display for ClauseData {
                 Ok(())
             }
             ClauseData::Depend { depend_type, items } => {
-                write!(f, "depend({depend_type}: ")?;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if items.is_empty() {
+                    // For depend(source) or empty depend types, no colon or items
+                    write!(f, "depend({depend_type})")
+                } else {
+                    write!(f, "depend({depend_type}: ")?;
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{item}")?;
                     }
-                    write!(f, "{item}")?;
+                    write!(f, ")")
                 }
-                write!(f, ")")
             }
             // Simplified Display for remaining variants (can be expanded as needed)
             _ => write!(f, "<clause>"),

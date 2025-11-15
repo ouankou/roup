@@ -127,8 +127,9 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 /// C sees this as an opaque pointer - internal structure is hidden.
 #[repr(C)]
 pub struct OmpDirective {
-    name: *const c_char,     // Directive name (e.g., "parallel")
-    clauses: Vec<OmpClause>, // Associated clauses
+    name: *const c_char,      // Directive name (e.g., "parallel")
+    parameter: *const c_char, // Directive parameter (e.g., "(a,b,c)" for allocate/threadprivate)
+    clauses: Vec<OmpClause>,  // Associated clauses
 }
 
 /// Opaque clause type (C-compatible)
@@ -137,8 +138,9 @@ pub struct OmpDirective {
 /// Uses tagged union pattern for clause-specific data.
 #[repr(C)]
 pub struct OmpClause {
-    kind: i32,        // Clause type (num_threads=0, schedule=7, etc.)
-    data: ClauseData, // Clause-specific data (union)
+    kind: i32,                // Clause type (num_threads=0, schedule=7, etc.)
+    arguments: *const c_char, // Raw clause arguments (NULL for bare clauses)
+    data: ClauseData,         // Clause-specific data (union)
 }
 
 /// Clause-specific data stored in a C union
@@ -163,12 +165,23 @@ struct ScheduleData {
     kind: i32, // 0=static, 1=dynamic, 2=guided, 3=auto, 4=runtime
 }
 
-/// Reduction clause data (operator and variables)
+/// Reduction clause data (operator, modifiers, and variables)
 #[repr(C)]
-#[derive(Copy, Clone)]
 struct ReductionData {
-    operator: i32, // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max
+    operator: i32,      // 0=+, 1=-, 2=*, 6=&&, 7=||, 8=min, 9=max, -1=user-defined
+    modifier_mask: u32, // bitmask of ReductionModifier values
+    modifiers_text: *const c_char,
+    user_identifier: *const c_char,
+    variables: *mut OmpStringList,
+    space_after_colon: bool,
 }
+
+const REDUCTION_MODIFIER_TASK: u32 = 1 << 0;
+const REDUCTION_MODIFIER_INSCAN: u32 = 1 << 1;
+const REDUCTION_MODIFIER_DEFAULT: u32 = 1 << 2;
+const CLAUSE_KIND_REDUCTION: i32 = 8;
+const CLAUSE_KIND_IN_REDUCTION: i32 = 45;
+const CLAUSE_KIND_TASK_REDUCTION: i32 = 75;
 
 /// Iterator over clauses
 ///
@@ -231,14 +244,47 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
     };
 
     // Parse using safe Rust parser
-    let directive = match parse_omp_directive(rust_str) {
+    let mut directive = match parse_omp_directive(rust_str) {
         Ok((_, dir)) => dir,
         Err(_) => return ptr::null_mut(), // Parse error
     };
 
+    // ompparser compatibility fix: Handle atomic variants
+    // ROUP parses "atomic read" as compound directive DirectiveName::AtomicRead
+    // but ompparser expects directive "atomic" with clause "read"
+    let directive_name_str = directive.name.as_ref();
+    let (final_name, extra_clause) = if directive_name_str.starts_with("atomic ") {
+        let suffix = &directive_name_str[7..]; // Skip "atomic "
+        match suffix {
+            "read" | "write" | "update" | "capture" | "compare" | "compare capture" => {
+                // Add the atomic variant as a clause
+                use crate::parser::{Clause, ClauseKind};
+                use std::borrow::Cow;
+                let clause = Clause {
+                    name: Cow::Borrowed(suffix),
+                    kind: ClauseKind::Bare,
+                };
+                ("atomic", Some(clause))
+            }
+            _ => (directive_name_str, None),
+        }
+    } else {
+        (directive_name_str, None)
+    };
+
+    // Add the extra clause if needed
+    if let Some(clause) = extra_clause {
+        directive.clauses.insert(0, clause);
+    }
+
     // Convert to C-compatible format
     let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name.as_ref()),
+        name: allocate_c_string(final_name),
+        parameter: directive
+            .parameter
+            .as_ref()
+            .map(|p| allocate_c_string(p.as_ref()))
+            .unwrap_or(ptr::null()),
         clauses: directive
             .clauses
             .into_iter()
@@ -271,6 +317,11 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
         // Free the name string (was allocated with CString::into_raw)
         if !boxed.name.is_null() {
             drop(CString::from_raw(boxed.name as *mut c_char));
+        }
+
+        // Free the parameter string if present
+        if !boxed.parameter.is_null() {
+            drop(CString::from_raw(boxed.parameter as *mut c_char));
         }
 
         // Free clause data
@@ -351,14 +402,47 @@ pub extern "C" fn roup_parse_with_language(
     let parser = openmp::parser().with_language(lang);
 
     // Parse using language-aware parser
-    let directive = match parser.parse(rust_str) {
+    let mut directive = match parser.parse(rust_str) {
         Ok((_, dir)) => dir,
         Err(_) => return ptr::null_mut(),
     };
 
+    // ompparser compatibility fix: Handle atomic variants
+    // ROUP parses "atomic read" as compound directive DirectiveName::AtomicRead
+    // but ompparser expects directive "atomic" with clause "read"
+    let directive_name_str = directive.name.as_ref();
+    let (final_name, extra_clause) = if directive_name_str.starts_with("atomic ") {
+        let suffix = &directive_name_str[7..]; // Skip "atomic "
+        match suffix {
+            "read" | "write" | "update" | "capture" | "compare" | "compare capture" => {
+                // Add the atomic variant as a clause
+                use crate::parser::{Clause, ClauseKind};
+                use std::borrow::Cow;
+                let clause = Clause {
+                    name: Cow::Borrowed(suffix),
+                    kind: ClauseKind::Bare,
+                };
+                ("atomic", Some(clause))
+            }
+            _ => (directive_name_str, None),
+        }
+    } else {
+        (directive_name_str, None)
+    };
+
+    // Add the extra clause if needed
+    if let Some(clause) = extra_clause {
+        directive.clauses.insert(0, clause);
+    }
+
     // Convert to C-compatible format
     let c_directive = OmpDirective {
-        name: allocate_c_string(directive.name.as_ref()),
+        name: allocate_c_string(final_name),
+        parameter: directive
+            .parameter
+            .as_ref()
+            .map(|p| allocate_c_string(p.as_ref()))
+            .unwrap_or(ptr::null()),
         clauses: directive
             .clauses
             .into_iter()
@@ -570,7 +654,8 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
         };
 
         let dname = lookup_directive_name(name_str);
-        directive_name_enum_to_kind(dname)
+        let kind = directive_name_enum_to_kind(dname);
+        kind
     }
 }
 
@@ -590,6 +675,22 @@ pub extern "C" fn roup_directive_name(directive: *const OmpDirective) -> *const 
     unsafe {
         let dir = &*directive;
         dir.name
+    }
+}
+
+/// Get directive parameter as a C string (e.g., "(a,b,c)" for allocate/threadprivate).
+///
+/// Returns NULL if directive is NULL or has no parameter.
+/// Returned pointer is valid until directive is freed.
+#[no_mangle]
+pub extern "C" fn roup_directive_parameter(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let dir = &*directive;
+        dir.parameter
     }
 }
 
@@ -735,11 +836,83 @@ pub extern "C" fn roup_clause_reduction_operator(clause: *const OmpClause) -> i3
 
     unsafe {
         let c = &*clause;
-        if c.kind != 6 {
-            // Not a reduction clause
-            return -1;
+        if let Some(data) = get_reduction_data(c) {
+            data.operator
+        } else {
+            -1
         }
-        c.data.reduction.operator
+    }
+}
+
+/// Get reduction modifier mask (bitfield of task/inscan/default).
+#[no_mangle]
+pub extern "C" fn roup_clause_reduction_modifier_mask(clause: *const OmpClause) -> u32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if let Some(data) = get_reduction_data(c) {
+            data.modifier_mask
+        } else {
+            0
+        }
+    }
+}
+
+/// Get user-defined identifier for reduction operator (if any).
+#[no_mangle]
+pub extern "C" fn roup_clause_reduction_user_identifier(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        if let Some(data) = get_reduction_data(c) {
+            data.user_identifier
+        } else {
+            ptr::null()
+        }
+    }
+}
+
+/// Get comma-separated modifier text for reduction clause (if any).
+#[no_mangle]
+pub extern "C" fn roup_clause_reduction_modifiers_text(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        if let Some(data) = get_reduction_data(c) {
+            data.modifiers_text
+        } else {
+            ptr::null()
+        }
+    }
+}
+
+/// Whether a space existed after the colon in the reduction clause.
+#[no_mangle]
+pub extern "C" fn roup_clause_reduction_space_after_colon(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if let Some(data) = get_reduction_data(c) {
+            if data.space_after_colon {
+                1
+            } else {
+                0
+            }
+        } else {
+            0
+        }
     }
 }
 
@@ -759,6 +932,26 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
             return -1;
         }
         c.data.default
+    }
+}
+
+/// Get clause arguments as a string.
+///
+/// Returns NULL if clause is NULL or has no arguments.
+/// Returned pointer is valid until clause is freed.
+///
+/// For bare clauses (nowait, ordered, etc.), returns NULL.
+/// For parenthesized clauses, returns the content inside parentheses.
+/// For example: "private(a, b)" returns "a, b"
+#[no_mangle]
+pub extern "C" fn roup_clause_arguments(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let c = &*clause;
+        c.arguments
     }
 }
 
@@ -782,14 +975,19 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
         let c = &*clause;
 
         // Check if this clause type has variables
-        // Kinds 2-5 are private/shared/firstprivate/lastprivate
-        if c.kind < 2 || c.kind > 6 {
+        // Kinds 3,4,5,13 are private/firstprivate/shared/lastprivate
+        if is_reduction_clause_kind(c.kind) {
+            if let Some(data) = get_reduction_data(c) {
+                return clone_string_list(data.variables);
+            }
+        }
+
+        if !((c.kind >= 3 && c.kind <= 5) || c.kind == 13) {
             return ptr::null_mut();
         }
 
-        // For now, return empty list (would need clause parsing enhancement)
-        let list = OmpStringList { items: Vec::new() };
-        Box::into_raw(Box::new(list))
+        // Variable list extraction for private/firstprivate/shared/lastprivate is not yet implemented.
+        ptr::null_mut()
     }
 }
 
@@ -918,6 +1116,149 @@ fn split_once_top_level_colon(input: &str) -> Option<(&str, &str)> {
     None
 }
 
+fn build_string_list(items: &[std::borrow::Cow<'_, str>]) -> *mut OmpStringList {
+    if items.is_empty() {
+        return ptr::null_mut();
+    }
+
+    let mut list = OmpStringList { items: Vec::new() };
+    for item in items {
+        let c_string = match CString::new(item.as_ref()) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        list.items.push(c_string.into_raw());
+    }
+
+    Box::into_raw(Box::new(list))
+}
+
+unsafe fn clone_string_list(src: *mut OmpStringList) -> *mut OmpStringList {
+    if src.is_null() {
+        return ptr::null_mut();
+    }
+
+    let src_ref = &*src;
+    if src_ref.items.is_empty() {
+        return ptr::null_mut();
+    }
+
+    let mut list = OmpStringList { items: Vec::new() };
+    for &ptr in &src_ref.items {
+        if ptr.is_null() {
+            continue;
+        }
+        let c_str = std::ffi::CStr::from_ptr(ptr);
+        if let Ok(cloned) = CString::new(c_str.to_bytes()) {
+            list.items.push(cloned.into_raw());
+        }
+    }
+
+    Box::into_raw(Box::new(list))
+}
+
+fn reduction_operator_code(op: crate::parser::clause::ReductionOperator) -> i32 {
+    match op {
+        crate::parser::clause::ReductionOperator::Add => 0,
+        crate::parser::clause::ReductionOperator::Sub => 1,
+        crate::parser::clause::ReductionOperator::Mul => 2,
+        crate::parser::clause::ReductionOperator::BitAnd => 3,
+        crate::parser::clause::ReductionOperator::BitOr => 4,
+        crate::parser::clause::ReductionOperator::BitXor => 5,
+        crate::parser::clause::ReductionOperator::LogAnd => 6,
+        crate::parser::clause::ReductionOperator::LogOr => 7,
+        crate::parser::clause::ReductionOperator::Min => 8,
+        crate::parser::clause::ReductionOperator::Max => 9,
+        crate::parser::clause::ReductionOperator::FortAnd => 6,
+        crate::parser::clause::ReductionOperator::FortOr => 7,
+        crate::parser::clause::ReductionOperator::FortEqv => 10,
+        crate::parser::clause::ReductionOperator::FortNeqv => 11,
+        crate::parser::clause::ReductionOperator::FortIand => 12,
+        crate::parser::clause::ReductionOperator::FortIor => 13,
+        crate::parser::clause::ReductionOperator::FortIeor => 14,
+        crate::parser::clause::ReductionOperator::UserDefined => -1,
+    }
+}
+
+fn reduction_modifier_mask(modifiers: &[crate::parser::clause::ReductionModifier]) -> u32 {
+    use crate::parser::clause::ReductionModifier;
+    let mut mask = 0;
+    for modifier in modifiers {
+        match modifier {
+            ReductionModifier::Task => mask |= REDUCTION_MODIFIER_TASK,
+            ReductionModifier::Inscan => mask |= REDUCTION_MODIFIER_INSCAN,
+            ReductionModifier::Default => mask |= REDUCTION_MODIFIER_DEFAULT,
+        }
+    }
+    mask
+}
+
+fn build_reduction_data(clause: &Clause) -> ReductionData {
+    if let ClauseKind::ReductionClause {
+        modifiers,
+        operator,
+        user_defined_identifier,
+        variables,
+        space_after_colon,
+    } = &clause.kind
+    {
+        let user_identifier_ptr = user_defined_identifier
+            .as_ref()
+            .map(|value| CString::new(value.as_ref()).unwrap().into_raw())
+            .unwrap_or(ptr::null_mut()) as *const c_char;
+
+        let modifiers_text_ptr = if modifiers.is_empty() {
+            ptr::null()
+        } else {
+            let joined = modifiers
+                .iter()
+                .map(|m| match m {
+                    crate::parser::clause::ReductionModifier::Task => "task",
+                    crate::parser::clause::ReductionModifier::Inscan => "inscan",
+                    crate::parser::clause::ReductionModifier::Default => "default",
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            CString::new(joined).unwrap().into_raw()
+        };
+
+        let vars_ptr = build_string_list(variables);
+
+        ReductionData {
+            operator: reduction_operator_code(*operator),
+            modifier_mask: reduction_modifier_mask(modifiers),
+            modifiers_text: modifiers_text_ptr,
+            user_identifier: user_identifier_ptr,
+            variables: vars_ptr,
+            space_after_colon: *space_after_colon,
+        }
+    } else {
+        ReductionData {
+            operator: -1,
+            modifier_mask: 0,
+            modifiers_text: ptr::null(),
+            user_identifier: ptr::null(),
+            variables: ptr::null_mut(),
+            space_after_colon: true,
+        }
+    }
+}
+
+fn is_reduction_clause_kind(kind: i32) -> bool {
+    matches!(
+        kind,
+        CLAUSE_KIND_REDUCTION | CLAUSE_KIND_IN_REDUCTION | CLAUSE_KIND_TASK_REDUCTION
+    )
+}
+
+unsafe fn get_reduction_data<'a>(clause: &'a OmpClause) -> Option<&'a ReductionData> {
+    if is_reduction_clause_kind(clause.kind) {
+        Some(&*clause.data.reduction)
+    } else {
+        None
+    }
+}
+
 /// Convert Rust Clause to C-compatible OmpClause.
 ///
 /// Maps clause names to integer kind codes (C doesn't have Rust enums).
@@ -941,15 +1282,21 @@ fn convert_clause(clause: &Clause) -> OmpClause {
 
     let clause_enum = lookup_clause_name(&normalized_name);
     let (kind, data) = match clause_enum {
-        crate::parser::ClauseName::NumThreads => (0, ClauseData { default: 0 }),
-        crate::parser::ClauseName::If => (1, ClauseData { default: 0 }),
+        // Generated from compat/ompparser/ompparser/src/OpenMPKinds.h enum OpenMPClauseKind
+        // The enum starts at index 0, incrementing by 1 for each OPENMP_CLAUSE entry
+        // Only clauses that exist in ROUP's ClauseName enum (src/parser/clause.rs) are mapped
+        crate::parser::ClauseName::If => (0, ClauseData { default: 0 }),
+        crate::parser::ClauseName::NumThreads => (1, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Default => {
+            let default_kind = parse_default_kind(clause);
+            (
+                2,
+                ClauseData {
+                    default: default_kind,
+                },
+            )
+        }
         crate::parser::ClauseName::Private => (
-            2,
-            ClauseData {
-                variables: ptr::null_mut(),
-            },
-        ),
-        crate::parser::ClauseName::Shared => (
             3,
             ClauseData {
                 variables: ptr::null_mut(),
@@ -961,25 +1308,42 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 variables: ptr::null_mut(),
             },
         ),
-        crate::parser::ClauseName::Lastprivate => (
+        crate::parser::ClauseName::Shared => (
             5,
             ClauseData {
                 variables: ptr::null_mut(),
             },
         ),
-        crate::parser::ClauseName::Reduction => {
-            let operator = parse_reduction_operator(clause);
-            (
-                6,
-                ClauseData {
-                    reduction: ManuallyDrop::new(ReductionData { operator }),
-                },
-            )
-        }
+        // copyin is 6 in both OpenMP and OpenACC, but with different semantics
+        crate::parser::ClauseName::CopyIn => (6, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Align => (7, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Reduction => (
+            8,
+            ClauseData {
+                reduction: ManuallyDrop::new(build_reduction_data(clause)),
+            },
+        ),
+        // proc_bind = 9 (not in ROUP ClauseName yet, mapped via Other below)
+        // allocate = 10 (not in ROUP ClauseName yet, mapped via Other below)
+        crate::parser::ClauseName::NumTeams => (11, ClauseData { default: 0 }),
+        crate::parser::ClauseName::ThreadLimit => (12, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Lastprivate => (
+            13,
+            ClauseData {
+                variables: ptr::null_mut(),
+            },
+        ),
+        crate::parser::ClauseName::Collapse => (14, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Ordered => (15, ClauseData { default: 0 }),
+        // partial = 16 (not in ROUP ClauseName yet, mapped via Other below)
+        crate::parser::ClauseName::Nowait => (17, ClauseData { default: 0 }),
+        // full = 18 (not in ROUP ClauseName yet, mapped via Other below)
+        // order = 19 (not in ROUP ClauseName yet, mapped via Other below)
+        // linear = 20 (not in ROUP ClauseName yet, mapped via Other below)
         crate::parser::ClauseName::Schedule => {
             let schedule_kind = parse_schedule_kind(clause);
             (
-                7,
+                21,
                 ClauseData {
                     schedule: ManuallyDrop::new(ScheduleData {
                         kind: schedule_kind,
@@ -987,21 +1351,106 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 },
             )
         }
-        crate::parser::ClauseName::Collapse => (8, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Ordered => (9, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Nowait => (10, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Default => {
-            let default_kind = parse_default_kind(clause);
-            (
-                11,
-                ClauseData {
-                    default: default_kind,
-                },
-            )
+        // safelen to bind = 22-30
+        crate::parser::ClauseName::DistSchedule => (29, ClauseData { default: 0 }),
+        // 31-44 (not in ROUP ClauseName yet, mapped via Other below)
+        crate::parser::ClauseName::InReduction => (
+            45,
+            ClauseData {
+                reduction: ManuallyDrop::new(build_reduction_data(clause)),
+            },
+        ),
+        crate::parser::ClauseName::Depend => (46, ClauseData { default: 0 }),
+        // 47-65 (not in ROUP ClauseName yet, mapped via Other below)
+        crate::parser::ClauseName::IsDevicePtr => (66, ClauseData { default: 0 }),
+        // 67 (not in ROUP ClauseName yet, mapped via Other below)
+        crate::parser::ClauseName::Defaultmap => (68, ClauseData { default: 0 }),
+        // 69-70 (not in ROUP ClauseName yet, mapped via Other below)
+        crate::parser::ClauseName::UsesAllocators => (71, ClauseData { default: 0 }),
+        // Additional OpenMP clauses from spec
+        crate::parser::ClauseName::ProcBind => (9, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Allocate => (10, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Partial => (16, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Full => (18, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Order => (19, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Linear => (20, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Safelen => (22, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Simdlen => (23, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Aligned => (24, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Nontemporal => (25, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Uniform => (26, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Inbranch => (27, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Notinbranch => (28, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Bind => (30, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Inclusive => (31, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Exclusive => (32, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Copyprivate => (33, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Parallel => (34, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Sections => (35, ClauseData { default: 0 }),
+        crate::parser::ClauseName::For => (36, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Do => (37, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Taskgroup => (38, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Initializer => (40, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Final => (41, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Untied => (42, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Requires => (43, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Mergeable => (44, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Priority => (90, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Affinity => (48, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Detach => (49, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Grainsize => (50, ClauseData { default: 0 }),
+        crate::parser::ClauseName::NumTasks => (51, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Nogroup => (52, ClauseData { default: 0 }),
+        crate::parser::ClauseName::ReverseOffload => (53, ClauseData { default: 0 }),
+        crate::parser::ClauseName::UnifiedAddress => (54, ClauseData { default: 0 }),
+        crate::parser::ClauseName::UnifiedSharedMemory => (55, ClauseData { default: 0 }),
+        crate::parser::ClauseName::AtomicDefaultMemOrder => (56, ClauseData { default: 0 }),
+        crate::parser::ClauseName::DynamicAllocators => (57, ClauseData { default: 0 }),
+        crate::parser::ClauseName::SelfMaps => (58, ClauseData { default: 0 }),
+        crate::parser::ClauseName::ExtImplementationDefinedRequirement => {
+            (59, ClauseData { default: 0 })
         }
-        // OpenACC-only clause names map to unknown in the OpenMP C API layer
+        crate::parser::ClauseName::UseDevicePtr => (62, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Sizes => (63, ClauseData { default: 0 }),
+        crate::parser::ClauseName::UseDeviceAddr => (64, ClauseData { default: 0 }),
+        crate::parser::ClauseName::HasDeviceAddr => (91, ClauseData { default: 0 }),
+        crate::parser::ClauseName::To => (92, ClauseData { default: 0 }),
+        crate::parser::ClauseName::From => (69, ClauseData { default: 0 }),
+        crate::parser::ClauseName::When => (70, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Match => (72, ClauseData { default: 0 }),
+        crate::parser::ClauseName::TaskReduction => (
+            75,
+            ClauseData {
+                reduction: ManuallyDrop::new(build_reduction_data(clause)),
+            },
+        ),
+        crate::parser::ClauseName::Compare => (86, ClauseData { default: 0 }),
+        crate::parser::ClauseName::CompareCapture => (87, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Destroy => (88, ClauseData { default: 0 }),
+        crate::parser::ClauseName::DepobjUpdate => (89, ClauseData { default: 0 }),
+        // OpenACC/OpenMP device clauses
+        crate::parser::ClauseName::Device => (60, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Map => (61, ClauseData { default: 0 }),
+        // OpenMP atomic memory order clauses (bare clauses, no parameters)
+        crate::parser::ClauseName::AcqRel => (76, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Release => (77, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Acquire => (78, ClauseData { default: 0 }),
+        // Note: Read, Write, Update, Capture are handled below (OpenMP codes 79-82)
+        crate::parser::ClauseName::SeqCst => (83, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Relaxed => (84, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Hint => (85, ClauseData { default: 0 }),
+        // OpenMP atomic operation clauses (these are used for both OpenMP and OpenACC)
+        crate::parser::ClauseName::Read => (79, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Write => (80, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Update => (81, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Capture => (82, ClauseData { default: 0 }),
+        // OpenMP allocate directive clauses
+        crate::parser::ClauseName::Allocator => (39, ClauseData { default: 0 }),
+        // OpenMP clauses that are also in OpenACC (but with different codes)
+        crate::parser::ClauseName::Link => (73, ClauseData { default: 0 }),
+        crate::parser::ClauseName::DeviceType => (74, ClauseData { default: 0 }),
+        // OpenACC-only clause names map to -1 in the OpenMP C API layer
         crate::parser::ClauseName::Copy
-        | crate::parser::ClauseName::CopyIn
         | crate::parser::ClauseName::CopyOut
         | crate::parser::ClauseName::Create
         | crate::parser::ClauseName::Present
@@ -1016,77 +1465,252 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         | crate::parser::ClauseName::Seq
         | crate::parser::ClauseName::Independent
         | crate::parser::ClauseName::Auto
-        | crate::parser::ClauseName::DeviceType
-        | crate::parser::ClauseName::Bind
         | crate::parser::ClauseName::DefaultAsync
-        | crate::parser::ClauseName::Link
         | crate::parser::ClauseName::NoCreate
         | crate::parser::ClauseName::NoHost
-        | crate::parser::ClauseName::Read
         | crate::parser::ClauseName::SelfClause
         | crate::parser::ClauseName::Tile
         | crate::parser::ClauseName::UseDevice
         | crate::parser::ClauseName::Attach
-        | crate::parser::ClauseName::Detach
         | crate::parser::ClauseName::Finalize
         | crate::parser::ClauseName::IfPresent
-        | crate::parser::ClauseName::Capture
-        | crate::parser::ClauseName::Write
-        | crate::parser::ClauseName::Update
         | crate::parser::ClauseName::Delete
-        | crate::parser::ClauseName::Device
         | crate::parser::ClauseName::DevicePtr
         | crate::parser::ClauseName::DeviceNum
         | crate::parser::ClauseName::DeviceResident
         | crate::parser::ClauseName::Host => (-1, ClauseData { default: 0 }),
 
+        // Additional OpenMP clauses for ompparser compatibility
+        // Starting from 133 to avoid conflicts with existing clauses (highest is 132)
+        crate::parser::ClauseName::Threads => (133, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Simd => (134, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Filter => (135, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Fail => (93, ClauseData { default: 0 }), // Keep 93 (ROUP_OMPC_fail)
+        crate::parser::ClauseName::Weak => (136, ClauseData { default: 0 }),
+        crate::parser::ClauseName::At => (137, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Severity => (138, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Message => (139, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Doacross => (140, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Absent => (141, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Contains => (142, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Holds => (143, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Otherwise => (144, ClauseData { default: 0 }),
+        crate::parser::ClauseName::GraphId => (145, ClauseData { default: 0 }),
+        crate::parser::ClauseName::GraphReset => (146, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Transparent => (147, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Replayable => (148, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Threadset => (149, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Indirect => (108, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Local => (109, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Init => (110, ClauseData { default: 0 }),
+        crate::parser::ClauseName::InitComplete => (111, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Safesync => (112, ClauseData { default: 0 }),
+        crate::parser::ClauseName::DeviceSafesync => (113, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Memscope => (114, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Looprange => (115, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Permutation => (116, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Counts => (117, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Induction => (118, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Inductor => (119, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Collector => (120, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Combiner => (121, ClauseData { default: 0 }),
+        crate::parser::ClauseName::AdjustArgs => (122, ClauseData { default: 0 }),
+        crate::parser::ClauseName::AppendArgs => (123, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Apply => (124, ClauseData { default: 0 }),
+        crate::parser::ClauseName::NoOpenmp => (125, ClauseData { default: 0 }),
+        crate::parser::ClauseName::NoOpenmpConstructs => (126, ClauseData { default: 0 }),
+        crate::parser::ClauseName::NoOpenmpRoutines => (127, ClauseData { default: 0 }),
+        crate::parser::ClauseName::NoParallelism => (128, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Nocontext => (129, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Novariants => (130, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Enter => (131, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Use => (132, ClauseData { default: 0 }),
+
         crate::parser::ClauseName::Other(ref s) => {
-            eprintln!("[c_api] unknown clause mapping requested: {}", s.as_ref());
-            (-1, ClauseData { default: 0 })
+            // Map common OpenMP clauses that aren't yet in ROUP's ClauseName enum
+            let normalized = s.to_ascii_lowercase();
+            match normalized.as_ref() {
+                // Atomic operation variants (for ompparser compatibility)
+                "read" => (79, ClauseData { default: 0 }),
+                "write" => (80, ClauseData { default: 0 }),
+                "update" => (81, ClauseData { default: 0 }),
+                "capture" => (82, ClauseData { default: 0 }),
+                "compare" => (86, ClauseData { default: 0 }),
+                "compare capture" => (87, ClauseData { default: 0 }),
+                "proc_bind" => (9, ClauseData { default: 0 }),
+                "allocate" => (10, ClauseData { default: 0 }),
+                "num_teams" => (11, ClauseData { default: 0 }),
+                "thread_limit" => (12, ClauseData { default: 0 }),
+                "partial" => (16, ClauseData { default: 0 }),
+                "full" => (18, ClauseData { default: 0 }),
+                "order" => (19, ClauseData { default: 0 }),
+                "linear" => (20, ClauseData { default: 0 }),
+                "safelen" => (22, ClauseData { default: 0 }),
+                "simdlen" => (23, ClauseData { default: 0 }),
+                "aligned" => (24, ClauseData { default: 0 }),
+                "nontemporal" => (25, ClauseData { default: 0 }),
+                "uniform" => (26, ClauseData { default: 0 }),
+                "inbranch" => (27, ClauseData { default: 0 }),
+                "notinbranch" => (28, ClauseData { default: 0 }),
+                "dist_schedule" => (29, ClauseData { default: 0 }),
+                "bind" => (30, ClauseData { default: 0 }),
+                "inclusive" => (31, ClauseData { default: 0 }),
+                "exclusive" => (32, ClauseData { default: 0 }),
+                "copyprivate" => (33, ClauseData { default: 0 }),
+                "parallel" => (34, ClauseData { default: 0 }),
+                "sections" => (35, ClauseData { default: 0 }),
+                "for" => (36, ClauseData { default: 0 }),
+                "do" => (37, ClauseData { default: 0 }),
+                "taskgroup" => (38, ClauseData { default: 0 }),
+                "initializer" => (40, ClauseData { default: 0 }),
+                "final" => (41, ClauseData { default: 0 }),
+                "untied" => (42, ClauseData { default: 0 }),
+                "requires" => (43, ClauseData { default: 0 }),
+                "mergeable" => (44, ClauseData { default: 0 }),
+                "in_reduction" => (45, ClauseData { default: 0 }),
+                "depend" => (46, ClauseData { default: 0 }),
+                "priority" => (47, ClauseData { default: 0 }),
+                "affinity" => (48, ClauseData { default: 0 }),
+                "detach" => (49, ClauseData { default: 0 }),
+                "grainsize" => (50, ClauseData { default: 0 }),
+                "num_tasks" => (51, ClauseData { default: 0 }),
+                "nogroup" => (52, ClauseData { default: 0 }),
+                "reverse_offload" => (53, ClauseData { default: 0 }),
+                "unified_address" => (54, ClauseData { default: 0 }),
+                "unified_shared_memory" => (55, ClauseData { default: 0 }),
+                "atomic_default_mem_order" => (56, ClauseData { default: 0 }),
+                "dynamic_allocators" => (57, ClauseData { default: 0 }),
+                "self_maps" => (58, ClauseData { default: 0 }),
+                "ext_implementation_defined_requirement" => (59, ClauseData { default: 0 }),
+                "use_device_ptr" => (62, ClauseData { default: 0 }),
+                "sizes" => (63, ClauseData { default: 0 }),
+                "use_device_addr" => (64, ClauseData { default: 0 }),
+                "is_device_ptr" => (65, ClauseData { default: 0 }),
+                "has_device_addr" => (66, ClauseData { default: 0 }),
+                "defaultmap" => (67, ClauseData { default: 0 }),
+                "to" => (68, ClauseData { default: 0 }),
+                "from" => (69, ClauseData { default: 0 }),
+                "uses_allocators" => (70, ClauseData { default: 0 }),
+                "when" => (71, ClauseData { default: 0 }),
+                "match" => (72, ClauseData { default: 0 }),
+                "link" => (73, ClauseData { default: 0 }),
+                "device_type" => (74, ClauseData { default: 0 }),
+                "task_reduction" => (75, ClauseData { default: 0 }),
+                "destroy" => (86, ClauseData { default: 0 }),
+                "depobj_update" => (87, ClauseData { default: 0 }),
+                // Additional OpenMP clauses for ompparser compatibility (fallback for Other)
+                "threads" => (89, ClauseData { default: 0 }),
+                "simd" => (90, ClauseData { default: 0 }),
+                "filter" => (91, ClauseData { default: 0 }),
+                "fail" => (93, ClauseData { default: 0 }),
+                "weak" => (94, ClauseData { default: 0 }),
+                "at" => (95, ClauseData { default: 0 }),
+                "severity" => (96, ClauseData { default: 0 }),
+                "message" => (97, ClauseData { default: 0 }),
+                "doacross" => (98, ClauseData { default: 0 }),
+                "absent" => (99, ClauseData { default: 0 }),
+                "contains" => (100, ClauseData { default: 0 }),
+                "holds" => (101, ClauseData { default: 0 }),
+                "otherwise" => (102, ClauseData { default: 0 }),
+                "graph_id" => (103, ClauseData { default: 0 }),
+                "graph_reset" => (104, ClauseData { default: 0 }),
+                "transparent" => (105, ClauseData { default: 0 }),
+                "replayable" => (106, ClauseData { default: 0 }),
+                "threadset" => (107, ClauseData { default: 0 }),
+                "indirect" => (108, ClauseData { default: 0 }),
+                "local" => (109, ClauseData { default: 0 }),
+                "init" => (110, ClauseData { default: 0 }),
+                "init_complete" => (111, ClauseData { default: 0 }),
+                "safesync" => (112, ClauseData { default: 0 }),
+                "device_safesync" => (113, ClauseData { default: 0 }),
+                "memscope" => (114, ClauseData { default: 0 }),
+                "looprange" => (115, ClauseData { default: 0 }),
+                "permutation" => (116, ClauseData { default: 0 }),
+                "counts" => (117, ClauseData { default: 0 }),
+                "induction" => (118, ClauseData { default: 0 }),
+                "inductor" => (119, ClauseData { default: 0 }),
+                "collector" => (120, ClauseData { default: 0 }),
+                "combiner" => (121, ClauseData { default: 0 }),
+                "adjust_args" => (122, ClauseData { default: 0 }),
+                "append_args" => (123, ClauseData { default: 0 }),
+                "apply" => (124, ClauseData { default: 0 }),
+                "no_openmp" => (125, ClauseData { default: 0 }),
+                "no_openmp_constructs" => (126, ClauseData { default: 0 }),
+                "no_openmp_routines" => (127, ClauseData { default: 0 }),
+                "no_parallelism" => (128, ClauseData { default: 0 }),
+                "nocontext" => (129, ClauseData { default: 0 }),
+                "novariants" => (130, ClauseData { default: 0 }),
+                "enter" => (131, ClauseData { default: 0 }),
+                "use" => (132, ClauseData { default: 0 }),
+                _ => {
+                    // Unknown/user-extension clauses should be mapped to ext_implementation_defined_requirement
+                    // per OpenMP spec section 2.3.1
+                    eprintln!("[c_api] mapping unknown clause '{}' to ext_implementation_defined_requirement", s.as_ref());
+                    (59, ClauseData { default: 0 })
+                }
+            }
         }
     };
 
-    OmpClause { kind, data }
-}
-
-/// Parse reduction operator from clause arguments.
-///
-/// Extracts the operator from reduction clause like "reduction(+: sum)".
-/// Returns integer code for the operator type.
-///
-/// ## Operator Codes:
-/// - 0 = +  (addition)      - 5 = ^  (bitwise XOR)
-/// - 1 = -  (subtraction)   - 6 = && (logical AND)
-/// - 2 = *  (multiplication) - 7 = || (logical OR)
-/// - 3 = &  (bitwise AND)   - 8 = min
-/// - 4 = |  (bitwise OR)    - 9 = max
-fn parse_reduction_operator(clause: &Clause) -> i32 {
-    // Use the IR-level reduction operator parser to canonicalize the operator
-    if let ClauseKind::Parenthesized(ref args) = clause.kind {
-        let args = args.as_ref();
-        // Find operator before top-level ':' using IR helper
-        if let Some((op_str, _)) = split_once_top_level_colon(args) {
-            let op_trim = op_str.trim();
-            if let Ok(op_enum) = crate::ir::convert::parse_reduction_operator(op_trim) {
-                use crate::ir::ReductionOperator;
-                return match op_enum {
-                    ReductionOperator::Add => 0,
-                    ReductionOperator::Subtract => 1,
-                    ReductionOperator::Multiply => 2,
-                    ReductionOperator::BitwiseAnd => 3,
-                    ReductionOperator::BitwiseOr => 4,
-                    ReductionOperator::BitwiseXor => 5,
-                    ReductionOperator::LogicalAnd => 6,
-                    ReductionOperator::LogicalOr => 7,
-                    ReductionOperator::Min => 8,
-                    ReductionOperator::Max => 9,
-                    _ => 0,
-                };
+    // Extract clause arguments based on ClauseKind
+    // For simplicity, we reconstruct the clause as a string using the Display trait
+    // This avoids having to handle all the complex ClauseKind variants
+    let arguments = match &clause.kind {
+        ClauseKind::Bare => {
+            // For extension clauses (kind == 59), pass the clause name as the argument
+            // IMPORTANT: ompparser expects the name WITHOUT the "ext_" prefix
+            // e.g., "ext_user_test" → "user_test" (ompparser adds "ext_" when printing)
+            if kind == 59 {
+                let name = clause.name.as_ref();
+                if name.starts_with("ext_") {
+                    allocate_c_string(&name[4..]) // Skip "ext_" prefix
+                } else {
+                    allocate_c_string(name)
+                }
+            } else {
+                ptr::null()
             }
         }
-    }
+        ClauseKind::Parenthesized(ref args) => {
+            // For extension clauses with parentheses, prepend the clause name
+            // Format: "clause_name(args)" → "clause_name" as the argument
+            if kind == 59 {
+                // Include both name and arguments: "name(args)"
+                // Strip "ext_" prefix from the name, if present
+                let name = clause.name.as_ref();
+                let stripped_name = if name.starts_with("ext_") {
+                    &name[4..]
+                } else {
+                    name
+                };
+                let full_clause = format!("{}({})", stripped_name, args.as_ref());
+                allocate_c_string(&full_clause)
+            } else {
+                allocate_c_string(args.as_ref())
+            }
+        }
+        _ => {
+            // Use the Display implementation to get a string representation
+            let clause_str = clause.to_source_string();
+            // Extract content after clause name (inside parentheses)
+            if let Some(start) = clause_str.find('(') {
+                if let Some(end) = clause_str.rfind(')') {
+                    let args_str = &clause_str[start + 1..end];
+                    allocate_c_string(args_str)
+                } else {
+                    ptr::null()
+                }
+            } else {
+                ptr::null()
+            }
+        }
+    };
 
-    0 // Default to plus
+    OmpClause {
+        kind,
+        arguments,
+        data,
+    }
 }
 
 /// Parse schedule kind from clause arguments.
@@ -1164,68 +1788,231 @@ fn parse_default_kind(clause: &Clause) -> i32 {
 fn directive_name_enum_to_kind(name: DirectiveName) -> i32 {
     use DirectiveName::*;
 
-    match name {
-        Parallel | ParallelFor | ParallelDo | ParallelForSimd | ParallelDoSimd | ParallelLoop
-        | ParallelLoopSimd | ParallelSections | ParallelWorkshare => 0,
-
-        For | Do | ForSimd | DoSimd | Loop => 1,
-
-        Sections | Section => 2,
-        Single => 3,
-        Task => 4,
-        Master => 5,
-        Critical => 6,
-        Barrier => 7,
-        Taskwait => 8,
-        Taskgroup => 9,
-        Atomic => 10,
-        Flush => 11,
-        Ordered => 12,
-
-        Target
-        | TargetTeams
-        | TargetTeamsDistribute
-        | TargetTeamsDistributeParallelFor
-        | TargetTeamsDistributeParallelForSimd
-        | TargetTeamsDistributeParallelLoop
-        | TargetTeamsDistributeParallelLoopSimd
-        | TargetTeamsDistributeParallelDo
-        | TargetTeamsDistributeParallelDoSimd
-        | TargetTeamsDistributeSimd
-        | TargetTeamsLoop
-        | TargetTeamsLoopSimd => 13,
-
-        Teams
-        | TeamsDistribute
-        | TeamsDistributeParallelFor
-        | TeamsDistributeParallelForSimd
-        | TeamsDistributeParallelLoop
-        | TeamsDistributeParallelLoopSimd
-        | TeamsDistributeParallelDo
-        | TeamsDistributeParallelDoSimd
-        | TeamsDistributeSimd
-        | TeamsLoop
-        | TeamsLoopSimd => 14,
-
-        Distribute
-        | DistributeParallelFor
-        | DistributeParallelForSimd
-        | DistributeParallelLoop
-        | DistributeParallelLoopSimd
-        | DistributeParallelDo
-        | DistributeParallelDoSimd
-        | DistributeSimd => 15,
-
-        Metadirective => 16,
+    // Map to ompparser's OpenMPDirectiveKind enum values
+    // These must match the sequential order in OpenMPKinds.h exactly
+    // Generated from compat/ompparser/ompparser/src/OpenMPKinds.h
+    let result = match name {
+        Parallel => 0,                    // OMPD_parallel
+        For => 1,                         // OMPD_for
+        Do => 2,                          // OMPD_do
+        Simd => 3,                        // OMPD_simd
+        ForSimd => 4,                     // OMPD_for_simd
+        DoSimd => 5,                      // OMPD_do_simd
+        ParallelForSimd => 6,             // OMPD_parallel_for_simd
+        ParallelDoSimd => 7,              // OMPD_parallel_do_simd
+        DeclareSimd => 8,                 // OMPD_declare_simd
+        Distribute => 9,                  // OMPD_distribute
+        DistributeSimd => 10,             // OMPD_distribute_simd
+        DistributeParallelFor => 11,      // OMPD_distribute_parallel_for
+        DistributeParallelDo => 12,       // OMPD_distribute_parallel_do
+        DistributeParallelForSimd => 13,  // OMPD_distribute_parallel_for_simd
+        DistributeParallelDoSimd => 14,   // OMPD_distribute_parallel_do_simd
+        Loop => 15,                       // OMPD_loop
+        Scan => 16,                       // OMPD_scan
+        Sections => 17,                   // OMPD_sections
+        Section => 18,                    // OMPD_section
+        Single => 19,                     // OMPD_single
+        Workshare => 20,                  // OMPD_workshare
+        Cancel => 21,                     // OMPD_cancel
+        CancellationPoint => 22,          // OMPD_cancellation_point
+        Allocate => 23,                   // OMPD_allocate
+        Threadprivate => 24,              // OMPD_threadprivate
+        DeclareReduction => 25,           // OMPD_declare_reduction
+        DeclareMapper => 26,              // OMPD_declare_mapper
+        ParallelFor => 27,                // OMPD_parallel_for
+        ParallelDo => 28,                 // OMPD_parallel_do
+        ParallelLoop => 29,               // OMPD_parallel_loop
+        ParallelSections => 30,           // OMPD_parallel_sections
+        ParallelSingle => 31,             // OMPD_parallel_single
+        ParallelWorkshare => 32,          // OMPD_parallel_workshare
+        ParallelMaster => 33,             // OMPD_parallel_master
+        MasterTaskloop => 34,             // OMPD_master_taskloop
+        MasterTaskloopSimd => 35,         // OMPD_master_taskloop_simd
+        ParallelMasterTaskloop => 36,     // OMPD_parallel_master_taskloop
+        ParallelMasterTaskloopSimd => 37, // OMPD_parallel_master_taskloop_simd
+        Teams => 38,                      // OMPD_teams
+        Metadirective => 39,              // OMPD_metadirective
+        DeclareVariant => 40,             // OMPD_declare_variant
+        BeginDeclareVariant => 41,        // OMPD_begin_declare_variant
+        EndDeclareVariant => 42,          // OMPD_end_declare_variant
+        Task => 43,                       // OMPD_task
+        Taskloop => 44,                   // OMPD_taskloop
+        TaskloopSimd => 45,               // OMPD_taskloop_simd
+        Taskyield => 46,                  // OMPD_taskyield
+        Requires => 47,                   // OMPD_requires
+        TargetData => 48,                 // OMPD_target_data
+        TargetDataComposite => 49,        // OMPD_target_data_composite
+        TargetEnterData => 50,            // OMPD_target_enter_data
+        TargetUpdate => 51,               // OMPD_target_update
+        TargetExitData => 52,             // OMPD_target_exit_data
+        Target => 53,                     // OMPD_target
+        DeclareTarget => 54,              // OMPD_declare_target
+        BeginDeclareTarget => 55,         // OMPD_begin_declare_target
+        EndDeclareTarget => 56,           // OMPD_end_declare_target
+        Master => 57,                     // OMPD_master
+        End => 58,                        // OMPD_end (bare "end" only)
+        // End directives - each gets unique constant for enum-based compat layer
+        // These map to OMPD_end in ompparser but need unique ROUP constants
+        EndParallel => 131,
+        EndDo => 132,
+        EndSimd => 133,
+        EndSections => 134,
+        EndSingle => 135,
+        EndWorkshare => 136,
+        EndOrdered => 137,
+        EndLoop => 138,
+        EndDistribute => 139,
+        EndTeams => 140,
+        EndTaskloop => 141,
+        EndTask => 142,
+        EndTaskgroup => 143,
+        EndMaster => 144,
+        EndCritical => 145,
+        EndAtomic => 146,
+        EndParallelDo => 147,
+        EndParallelFor => 148,
+        EndParallelSections => 149,
+        EndParallelWorkshare => 150,
+        EndParallelMaster => 151,
+        EndDoSimd => 152,
+        EndForSimd => 153,
+        EndParallelDoSimd => 154,
+        EndParallelForSimd => 155,
+        EndDistributeSimd => 156,
+        EndDistributeParallelDo => 157,
+        EndDistributeParallelFor => 158,
+        EndDistributeParallelDoSimd => 159,
+        EndDistributeParallelForSimd => 160,
+        EndTargetParallel => 161,
+        EndTargetParallelDo => 162,
+        EndTargetParallelFor => 163,
+        EndTargetParallelDoSimd => 164,
+        EndTargetParallelForSimd => 165,
+        EndTargetSimd => 166,
+        EndTargetTeams => 167,
+        EndTargetTeamsDistribute => 168,
+        EndTargetTeamsDistributeParallelDo => 169,
+        EndTargetTeamsDistributeParallelFor => 170,
+        EndTargetTeamsDistributeParallelDoSimd => 171,
+        EndTargetTeamsDistributeParallelForSimd => 172,
+        EndTargetTeamsDistributeSimd => 173,
+        EndTargetTeamsLoop => 174,
+        EndTeamsDistribute => 175,
+        EndTeamsDistributeParallelDo => 176,
+        EndTeamsDistributeParallelFor => 177,
+        EndTeamsDistributeParallelDoSimd => 178,
+        EndTeamsDistributeParallelForSimd => 179,
+        EndTeamsDistributeSimd => 180,
+        EndTeamsLoop => 181,
+        EndTaskloopSimd => 182,
+        EndMasterTaskloop => 183,
+        EndMasterTaskloopSimd => 184,
+        EndParallelMasterTaskloop => 185,
+        EndParallelMasterTaskloopSimd => 186,
+        EndTargetParallelLoop => 187,
+        EndParallelLoop => 188,
+        EndTargetLoop => 189,
+        EndSection => 190,
+        EndUnroll => 196,
+        EndTile => 197,
+        EndMasked => 198,
+        EndMaskedTaskloop => 199,
+        EndMaskedTaskloopSimd => 200,
+        EndParallelMasked => 201,
+        EndParallelMaskedTaskloop => 202,
+        EndParallelMaskedTaskloopSimd => 203,
+        Barrier => 59,   // OMPD_barrier
+        Taskwait => 60,  // OMPD_taskwait
+        Unroll => 61,    // OMPD_unroll
+        Tile => 62,      // OMPD_tile
+        Taskgroup => 63, // OMPD_taskgroup
+        Flush => 64,     // OMPD_flush
+        Atomic => 65,    // OMPD_atomic
+        // All atomic variants map to OMPD_atomic (read/write/update/capture are clauses)
+        AtomicRead => 65,
+        AtomicWrite => 65,
+        AtomicUpdate => 65,
+        AtomicCapture => 65,
+        AtomicCompareCapture => 65,
+        Critical => 66,                               // OMPD_critical
+        Depobj => 67,                                 // OMPD_depobj
+        Ordered => 68,                                // OMPD_ordered
+        TeamsDistribute => 69,                        // OMPD_teams_distribute
+        TeamsDistributeSimd => 70,                    // OMPD_teams_distribute_simd
+        TeamsDistributeParallelFor => 71,             // OMPD_teams_distribute_parallel_for
+        TeamsDistributeParallelForSimd => 72,         // OMPD_teams_distribute_parallel_for_simd
+        TeamsLoop => 73,                              // OMPD_teams_loop
+        TargetParallel => 74,                         // OMPD_target_parallel
+        TargetParallelFor => 75,                      // OMPD_target_parallel_for
+        TargetParallelForSimd => 76,                  // OMPD_target_parallel_for_simd
+        TargetParallelLoop => 77,                     // OMPD_target_parallel_loop
+        TargetSimd => 78,                             // OMPD_target_simd
+        TargetTeams => 79,                            // OMPD_target_teams
+        TargetTeamsDistribute => 80,                  // OMPD_target_teams_distribute
+        TargetTeamsDistributeSimd => 81,              // OMPD_target_teams_distribute_simd
+        TargetTeamsLoop => 82,                        // OMPD_target_teams_loop
+        TargetTeamsDistributeParallelFor => 83,       // OMPD_target_teams_distribute_parallel_for
+        TargetTeamsDistributeParallelForSimd => 84, // OMPD_target_teams_distribute_parallel_for_simd
+        TeamsDistributeParallelDo => 85,            // OMPD_teams_distribute_parallel_do
+        TeamsDistributeParallelDoSimd => 86,        // OMPD_teams_distribute_parallel_do_simd
+        TargetParallelDo => 87,                     // OMPD_target_parallel_do
+        TargetParallelDoSimd => 88,                 // OMPD_target_parallel_do_simd
+        TargetTeamsDistributeParallelDo => 89,      // OMPD_target_teams_distribute_parallel_do
+        TargetTeamsDistributeParallelDoSimd => 90,  // OMPD_target_teams_distribute_parallel_do_simd
+        Error => 91,                                // OMPD_error
+        Nothing => 92,                              // OMPD_nothing
+        Masked => 93,                               // OMPD_masked
+        Scope => 94,                                // OMPD_scope
+        MaskedTaskloop => 95,                       // OMPD_masked_taskloop
+        MaskedTaskloopSimd => 96,                   // OMPD_masked_taskloop_simd
+        ParallelMasked => 97,                       // OMPD_parallel_masked
+        ParallelMaskedTaskloop => 98,               // OMPD_parallel_masked_taskloop
+        ParallelMaskedTaskloopSimd => 99,           // OMPD_parallel_masked_taskloop_simd
+        Interop => 100,                             // OMPD_interop
+        Assume => 101,                              // OMPD_assume
+        EndAssume => 102,                           // OMPD_end_assume
+        Assumes => 103,                             // OMPD_assumes
+        BeginAssumes => 104,                        // OMPD_begin_assumes
+        EndAssumes => 105,                          // OMPD_end_assumes
+        Allocators => 106,                          // OMPD_allocators
+        Taskgraph => 107,                           // OMPD_taskgraph
+        TaskIteration => 108,                       // OMPD_task_iteration
+        Dispatch => 109,                            // OMPD_dispatch
+        Groupprivate => 110,                        // OMPD_groupprivate
+        Workdistribute => 111,                      // OMPD_workdistribute
+        Fuse => 112,                                // OMPD_fuse
+        Interchange => 113,                         // OMPD_interchange
+        Reverse => 114,                             // OMPD_reverse
+        Split => 115,                               // OMPD_split
+        Stripe => 116,                              // OMPD_stripe
+        DeclareInduction => 117,                    // OMPD_declare_induction
+        BeginMetadirective => 118,                  // OMPD_begin_metadirective
+        ParallelLoopSimd => 119,                    // OMPD_parallel_loop_simd
+        TeamsLoopSimd => 120,                       // OMPD_teams_loop_simd
+        TargetLoop => 121,                          // OMPD_target_loop
+        TargetLoopSimd => 122,                      // OMPD_target_loop_simd
+        TargetParallelLoopSimd => 123,              // OMPD_target_parallel_loop_simd
+        TargetTeamsLoopSimd => 124,                 // OMPD_target_teams_loop_simd
+        DistributeParallelLoop => 125,              // OMPD_distribute_parallel_loop
+        DistributeParallelLoopSimd => 126,          // OMPD_distribute_parallel_loop_simd
+        TeamsDistributeParallelLoop => 127,         // OMPD_teams_distribute_parallel_loop
+        TeamsDistributeParallelLoopSimd => 128,     // OMPD_teams_distribute_parallel_loop_simd
+        TargetTeamsDistributeParallelLoop => 129,   // OMPD_target_teams_distribute_parallel_loop
+        TargetTeamsDistributeParallelLoopSimd => 130, // OMPD_target_teams_distribute_parallel_loop_simd
 
         // OpenACC-specific directives: these are not part of the OpenMP C API
-        // mapping. Return -1 quietly so callers can detect an unsupported
-        // directive without noisy logs. The dedicated OpenACC C API (in
-        // src/c_api/openacc.rs) maps these to the OpenACC numeric namespace.
-        // Note: underscore-form variants are forbidden in the AST and must not
-        // appear here. Only canonical enum variants are referenced.
         Data | EnterData | ExitData | HostData | Kernels | KernelsLoop | Update | Serial
-        | SerialLoop | Routine | Set | Init | Shutdown | Cache => -1,
+        | SerialLoop | Routine | Set | Init | Shutdown | Cache | Wait | Declare => -1,
+
+        // EndTarget and related end directives - unique constants
+        EndTarget => 191,          // Maps to OMPD_end in ompparser
+        EndTargetData => 192,      // Maps to OMPD_end in ompparser
+        EndTargetEnterData => 193, // Maps to OMPD_end in ompparser
+        EndTargetExitData => 194,  // Maps to OMPD_end in ompparser
+        EndTargetUpdate => 195,    // Maps to OMPD_end in ompparser
+
+        // NothingKnown is a placeholder
+        NothingKnown => -1,
 
         // Unknown / unhandled directive — treat as error so maintainers notice
         Other(s) => {
@@ -1235,12 +2022,8 @@ fn directive_name_enum_to_kind(name: DirectiveName) -> i32 {
             );
             -1
         }
-        _ => {
-            // Catch any other un-mapped variants
-            eprintln!("[c_api] unhandled directive variant: {:?}", name);
-            -1
-        }
-    }
+    };
+    result
 }
 
 /// Free clause-specific data.
@@ -1265,13 +2048,31 @@ fn directive_name_enum_to_kind(name: DirectiveName) -> i32 {
 /// wrong union variant (the bytes of ReductionData::operator interpreted as a pointer).
 fn free_clause_data(clause: &OmpClause) {
     unsafe {
+        // Free arguments string if present
+        if !clause.arguments.is_null() {
+            drop(CString::from_raw(clause.arguments as *mut c_char));
+        }
+
         // Free variable lists if present
         // Clause kinds with variable lists (see convert_clause):
-        //   2 = private, 3 = shared, 4 = firstprivate, 5 = lastprivate
+        //   3 = private, 4 = firstprivate, 5 = shared, 13 = lastprivate
         // Other kinds use different union fields:
-        //   6 = reduction (uses .reduction field, NOT .variables)
-        //   7 = schedule (uses .schedule field, NOT .variables)
-        if clause.kind >= 2 && clause.kind <= 5 {
+        //   2 = default (uses .default field, NOT .variables)
+        //   8 = reduction (uses .reduction field, NOT .variables)
+        //   21 = schedule (uses .schedule field, NOT .variables)
+        if is_reduction_clause_kind(clause.kind) {
+            if let Some(data) = get_reduction_data(clause) {
+                if !data.user_identifier.is_null() {
+                    drop(CString::from_raw(data.user_identifier as *mut c_char));
+                }
+                if !data.modifiers_text.is_null() {
+                    drop(CString::from_raw(data.modifiers_text as *mut c_char));
+                }
+                if !data.variables.is_null() {
+                    roup_string_list_free(data.variables);
+                }
+            }
+        } else if (clause.kind >= 3 && clause.kind <= 5) || clause.kind == 13 {
             let vars_ptr = clause.data.variables;
             if !vars_ptr.is_null() {
                 roup_string_list_free(vars_ptr);

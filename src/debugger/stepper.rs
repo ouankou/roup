@@ -297,11 +297,17 @@ impl DebugSession {
                                     .collect(),
                             },
                             crate::parser::ClauseKind::ReductionClause {
+                                modifiers,
                                 operator,
+                                user_defined_identifier,
                                 variables,
                                 space_after_colon,
                             } => crate::parser::ClauseKind::ReductionClause {
+                                modifiers: modifiers.clone(),
                                 operator: *operator,
+                                user_defined_identifier: user_defined_identifier
+                                    .as_ref()
+                                    .map(|id| Cow::Owned(id.to_string())),
                                 variables: variables
                                     .iter()
                                     .map(|v| Cow::Owned(v.to_string()))

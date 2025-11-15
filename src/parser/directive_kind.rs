@@ -8,6 +8,7 @@ pub enum DirectiveName {
     Allocate,
     Allocators,
     Assume,
+    EndAssume,
     Assumes,
     Atomic,
     AtomicCapture,
@@ -84,6 +85,75 @@ pub enum DirectiveName {
     Declare,
     Wait,
     End,
+    // Fortran end directives - all map to OMPD_end but have unique enum variants
+    EndParallel,
+    EndDo,
+    EndSimd,
+    EndSections,
+    EndSingle,
+    EndWorkshare,
+    EndOrdered,
+    EndLoop,
+    EndDistribute,
+    EndTeams,
+    EndTaskloop,
+    EndTask,
+    EndTaskgroup,
+    EndMaster,
+    EndMasked,
+    EndCritical,
+    EndAtomic,
+    EndParallelDo,
+    EndParallelFor,
+    EndParallelSections,
+    EndParallelWorkshare,
+    EndParallelMaster,
+    EndDoSimd,
+    EndForSimd,
+    EndParallelDoSimd,
+    EndParallelForSimd,
+    EndDistributeSimd,
+    EndDistributeParallelDo,
+    EndDistributeParallelFor,
+    EndDistributeParallelDoSimd,
+    EndDistributeParallelForSimd,
+    EndTargetParallel,
+    EndTargetParallelDo,
+    EndTargetParallelFor,
+    EndTargetParallelDoSimd,
+    EndTargetParallelForSimd,
+    EndTargetSimd,
+    EndTargetTeams,
+    EndTargetTeamsDistribute,
+    EndTargetTeamsDistributeParallelDo,
+    EndTargetTeamsDistributeParallelFor,
+    EndTargetTeamsDistributeParallelDoSimd,
+    EndTargetTeamsDistributeParallelForSimd,
+    EndTargetTeamsDistributeSimd,
+    EndTargetTeamsLoop,
+    EndTeamsDistribute,
+    EndTeamsDistributeParallelDo,
+    EndTeamsDistributeParallelFor,
+    EndTeamsDistributeParallelDoSimd,
+    EndTeamsDistributeParallelForSimd,
+    EndTeamsDistributeSimd,
+    EndTeamsLoop,
+    EndTaskloopSimd,
+    EndMasterTaskloop,
+    EndMasterTaskloopSimd,
+    EndMaskedTaskloop,
+    EndMaskedTaskloopSimd,
+    EndParallelMasterTaskloop,
+    EndParallelMasterTaskloopSimd,
+    EndParallelMasked,
+    EndParallelMaskedTaskloop,
+    EndParallelMaskedTaskloopSimd,
+    EndTargetParallelLoop,
+    EndParallelLoop,
+    EndTargetLoop,
+    EndSection,
+    EndUnroll,
+    EndTile,
     Update,
     Serial,
     SerialLoop,
@@ -97,6 +167,7 @@ pub enum DirectiveName {
     ParallelMasterTaskloop,
     ParallelMasterTaskloopSimd,
     ParallelSections,
+    ParallelSingle,
     Requires,
     Scope,
     Scan,
@@ -108,9 +179,14 @@ pub enum DirectiveName {
     Stripe,
     Target,
     TargetData,
+    TargetDataComposite,
     TargetEnterData,
     TargetExitData,
     EndTarget,
+    EndTargetData,
+    EndTargetEnterData,
+    EndTargetExitData,
+    EndTargetUpdate,
     TargetLoop,
     TargetLoopSimd,
     TargetParallel,
@@ -202,6 +278,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("allocate", DirectiveName::Allocate);
     insert!("allocators", DirectiveName::Allocators);
     insert!("assume", DirectiveName::Assume);
+    insert!("end assume", DirectiveName::EndAssume);
     insert!("assumes", DirectiveName::Assumes);
     insert!("atomic", DirectiveName::Atomic);
     insert!("atomic capture", DirectiveName::AtomicCapture);
@@ -306,6 +383,185 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("declare", DirectiveName::Declare);
     insert!("wait", DirectiveName::Wait);
     insert!("end", DirectiveName::End);
+    // Fortran end directives (with space and without space variants)
+    insert!("end parallel", DirectiveName::EndParallel);
+    insert!("endparallel", DirectiveName::EndParallel);
+    insert!("end do", DirectiveName::EndDo);
+    insert!("enddo", DirectiveName::EndDo);
+    insert!("end simd", DirectiveName::EndSimd);
+    insert!("endsimd", DirectiveName::EndSimd);
+    insert!("end sections", DirectiveName::EndSections);
+    insert!("endsections", DirectiveName::EndSections);
+    insert!("end single", DirectiveName::EndSingle);
+    insert!("endsingle", DirectiveName::EndSingle);
+    insert!("end workshare", DirectiveName::EndWorkshare);
+    insert!("endworkshare", DirectiveName::EndWorkshare);
+    insert!("end ordered", DirectiveName::EndOrdered);
+    insert!("endordered", DirectiveName::EndOrdered);
+    insert!("end loop", DirectiveName::EndLoop);
+    insert!("endloop", DirectiveName::EndLoop);
+    insert!("end distribute", DirectiveName::EndDistribute);
+    insert!("enddistribute", DirectiveName::EndDistribute);
+    insert!("end teams", DirectiveName::EndTeams);
+    insert!("endteams", DirectiveName::EndTeams);
+    insert!("end taskloop", DirectiveName::EndTaskloop);
+    insert!("endtaskloop", DirectiveName::EndTaskloop);
+    insert!("end task", DirectiveName::EndTask);
+    insert!("endtask", DirectiveName::EndTask);
+    insert!("end taskgroup", DirectiveName::EndTaskgroup);
+    insert!("endtaskgroup", DirectiveName::EndTaskgroup);
+    insert!("end master", DirectiveName::EndMaster);
+    insert!("endmaster", DirectiveName::EndMaster);
+    insert!("end masked", DirectiveName::EndMasked);
+    insert!("endmasked", DirectiveName::EndMasked);
+    insert!("end critical", DirectiveName::EndCritical);
+    insert!("endcritical", DirectiveName::EndCritical);
+    insert!("end atomic", DirectiveName::EndAtomic);
+    insert!("endatomic", DirectiveName::EndAtomic);
+    insert!("end parallel do", DirectiveName::EndParallelDo);
+    insert!("endparalleldo", DirectiveName::EndParallelDo);
+    insert!("end parallel for", DirectiveName::EndParallelFor);
+    insert!("end parallel sections", DirectiveName::EndParallelSections);
+    insert!("endparallelsections", DirectiveName::EndParallelSections);
+    insert!(
+        "end parallel workshare",
+        DirectiveName::EndParallelWorkshare
+    );
+    insert!("endparallelworkshare", DirectiveName::EndParallelWorkshare);
+    insert!("end parallel master", DirectiveName::EndParallelMaster);
+    insert!("endparallelmaster", DirectiveName::EndParallelMaster);
+    insert!("end do simd", DirectiveName::EndDoSimd);
+    insert!("enddosimd", DirectiveName::EndDoSimd);
+    insert!("end for simd", DirectiveName::EndForSimd);
+    insert!("end parallel do simd", DirectiveName::EndParallelDoSimd);
+    insert!("endparalleldosimd", DirectiveName::EndParallelDoSimd);
+    insert!("end parallel for simd", DirectiveName::EndParallelForSimd);
+    insert!("end distribute simd", DirectiveName::EndDistributeSimd);
+    insert!("enddistributesimd", DirectiveName::EndDistributeSimd);
+    insert!(
+        "end distribute parallel do",
+        DirectiveName::EndDistributeParallelDo
+    );
+    insert!(
+        "enddistributeparalleldo",
+        DirectiveName::EndDistributeParallelDo
+    );
+    insert!(
+        "end distribute parallel for",
+        DirectiveName::EndDistributeParallelFor
+    );
+    insert!(
+        "end distribute parallel do simd",
+        DirectiveName::EndDistributeParallelDoSimd
+    );
+    insert!(
+        "enddistributeparalleldosimd",
+        DirectiveName::EndDistributeParallelDoSimd
+    );
+    insert!(
+        "end distribute parallel for simd",
+        DirectiveName::EndDistributeParallelForSimd
+    );
+    insert!("end target parallel", DirectiveName::EndTargetParallel);
+    insert!("end target parallel do", DirectiveName::EndTargetParallelDo);
+    insert!(
+        "end target parallel for",
+        DirectiveName::EndTargetParallelFor
+    );
+    insert!(
+        "end target parallel do simd",
+        DirectiveName::EndTargetParallelDoSimd
+    );
+    insert!(
+        "end target parallel for simd",
+        DirectiveName::EndTargetParallelForSimd
+    );
+    insert!("end target simd", DirectiveName::EndTargetSimd);
+    insert!("end target teams", DirectiveName::EndTargetTeams);
+    insert!(
+        "end target teams distribute",
+        DirectiveName::EndTargetTeamsDistribute
+    );
+    insert!(
+        "end target teams distribute parallel do",
+        DirectiveName::EndTargetTeamsDistributeParallelDo
+    );
+    insert!(
+        "end target teams distribute parallel for",
+        DirectiveName::EndTargetTeamsDistributeParallelFor
+    );
+    insert!(
+        "end target teams distribute parallel do simd",
+        DirectiveName::EndTargetTeamsDistributeParallelDoSimd
+    );
+    insert!(
+        "end target teams distribute parallel for simd",
+        DirectiveName::EndTargetTeamsDistributeParallelForSimd
+    );
+    insert!(
+        "end target teams distribute simd",
+        DirectiveName::EndTargetTeamsDistributeSimd
+    );
+    insert!("end target teams loop", DirectiveName::EndTargetTeamsLoop);
+    insert!("end teams distribute", DirectiveName::EndTeamsDistribute);
+    insert!(
+        "end teams distribute parallel do",
+        DirectiveName::EndTeamsDistributeParallelDo
+    );
+    insert!(
+        "end teams distribute parallel for",
+        DirectiveName::EndTeamsDistributeParallelFor
+    );
+    insert!(
+        "end teams distribute parallel do simd",
+        DirectiveName::EndTeamsDistributeParallelDoSimd
+    );
+    insert!(
+        "end teams distribute parallel for simd",
+        DirectiveName::EndTeamsDistributeParallelForSimd
+    );
+    insert!(
+        "end teams distribute simd",
+        DirectiveName::EndTeamsDistributeSimd
+    );
+    insert!("end teams loop", DirectiveName::EndTeamsLoop);
+    insert!("end taskloop simd", DirectiveName::EndTaskloopSimd);
+    insert!("end master taskloop", DirectiveName::EndMasterTaskloop);
+    insert!(
+        "end master taskloop simd",
+        DirectiveName::EndMasterTaskloopSimd
+    );
+    insert!("end masked taskloop", DirectiveName::EndMaskedTaskloop);
+    insert!(
+        "end masked taskloop simd",
+        DirectiveName::EndMaskedTaskloopSimd
+    );
+    insert!(
+        "end parallel master taskloop",
+        DirectiveName::EndParallelMasterTaskloop
+    );
+    insert!(
+        "end parallel master taskloop simd",
+        DirectiveName::EndParallelMasterTaskloopSimd
+    );
+    insert!("end parallel masked", DirectiveName::EndParallelMasked);
+    insert!(
+        "end parallel masked taskloop",
+        DirectiveName::EndParallelMaskedTaskloop
+    );
+    insert!(
+        "end parallel masked taskloop simd",
+        DirectiveName::EndParallelMaskedTaskloopSimd
+    );
+    insert!(
+        "end target parallel loop",
+        DirectiveName::EndTargetParallelLoop
+    );
+    insert!("end parallel loop", DirectiveName::EndParallelLoop);
+    insert!("end target loop", DirectiveName::EndTargetLoop);
+    insert!("end section", DirectiveName::EndSection);
+    insert!("end unroll", DirectiveName::EndUnroll);
+    insert!("end tile", DirectiveName::EndTile);
     insert!("update", DirectiveName::Update);
     insert!("serial", DirectiveName::Serial);
     insert!("serial loop", DirectiveName::SerialLoop);
@@ -325,6 +581,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
         DirectiveName::ParallelMasterTaskloopSimd
     );
     insert!("parallel sections", DirectiveName::ParallelSections);
+    insert!("parallel single", DirectiveName::ParallelSingle);
     insert!("parallel workshare", DirectiveName::ParallelWorkshare);
     insert!("requires", DirectiveName::Requires);
     insert!("scope", DirectiveName::Scope);
@@ -337,8 +594,13 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("stripe", DirectiveName::Stripe);
     insert!("target", DirectiveName::Target);
     insert!("target data", DirectiveName::TargetData);
+    insert!("target data composite", DirectiveName::TargetDataComposite);
     insert!("target enter data", DirectiveName::TargetEnterData);
     insert!("target exit data", DirectiveName::TargetExitData);
+    insert!("end target data", DirectiveName::EndTargetData);
+    insert!("end target enter data", DirectiveName::EndTargetEnterData);
+    insert!("end target exit data", DirectiveName::EndTargetExitData);
+    insert!("end target update", DirectiveName::EndTargetUpdate);
     insert!("end target", DirectiveName::EndTarget);
     insert!("target loop", DirectiveName::TargetLoop);
     insert!("target loop simd", DirectiveName::TargetLoopSimd);
@@ -397,6 +659,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("target update", DirectiveName::TargetUpdate);
     insert!("task", DirectiveName::Task);
     insert!("task iteration", DirectiveName::TaskIteration);
+    insert!("task_iteration", DirectiveName::TaskIteration);
     insert!("taskgroup", DirectiveName::Taskgroup);
     insert!("taskgraph", DirectiveName::Taskgraph);
     insert!("taskloop", DirectiveName::Taskloop);
@@ -459,6 +722,7 @@ impl DirectiveName {
             DirectiveName::Allocate => "allocate",
             DirectiveName::Allocators => "allocators",
             DirectiveName::Assume => "assume",
+            DirectiveName::EndAssume => "end assume",
             DirectiveName::Assumes => "assumes",
             DirectiveName::Atomic => "atomic",
             DirectiveName::AtomicCapture => "atomic capture",
@@ -529,6 +793,7 @@ impl DirectiveName {
             DirectiveName::ParallelMasterTaskloop => "parallel master taskloop",
             DirectiveName::ParallelMasterTaskloopSimd => "parallel master taskloop simd",
             DirectiveName::ParallelSections => "parallel sections",
+            DirectiveName::ParallelSingle => "parallel single",
             DirectiveName::Requires => "requires",
             DirectiveName::Scope => "scope",
             DirectiveName::Scan => "scan",
@@ -540,9 +805,14 @@ impl DirectiveName {
             DirectiveName::Stripe => "stripe",
             DirectiveName::Target => "target",
             DirectiveName::TargetData => "target data",
+            DirectiveName::TargetDataComposite => "target data composite",
             DirectiveName::TargetEnterData => "target enter data",
             DirectiveName::TargetExitData => "target exit data",
             DirectiveName::EndTarget => "end target",
+            DirectiveName::EndTargetData => "end target data",
+            DirectiveName::EndTargetEnterData => "end target enter data",
+            DirectiveName::EndTargetExitData => "end target exit data",
+            DirectiveName::EndTargetUpdate => "end target update",
             DirectiveName::TargetLoop => "target loop",
             DirectiveName::TargetLoopSimd => "target loop simd",
             DirectiveName::TargetParallel => "target parallel",
@@ -584,6 +854,86 @@ impl DirectiveName {
             DirectiveName::Declare => "declare",
             DirectiveName::Wait => "wait",
             DirectiveName::End => "end",
+            DirectiveName::EndParallel => "end parallel",
+            DirectiveName::EndDo => "end do",
+            DirectiveName::EndSimd => "end simd",
+            DirectiveName::EndSections => "end sections",
+            DirectiveName::EndSingle => "end single",
+            DirectiveName::EndWorkshare => "end workshare",
+            DirectiveName::EndOrdered => "end ordered",
+            DirectiveName::EndLoop => "end loop",
+            DirectiveName::EndDistribute => "end distribute",
+            DirectiveName::EndTeams => "end teams",
+            DirectiveName::EndTaskloop => "end taskloop",
+            DirectiveName::EndTask => "end task",
+            DirectiveName::EndTaskgroup => "end taskgroup",
+            DirectiveName::EndMaster => "end master",
+            DirectiveName::EndMasked => "end masked",
+            DirectiveName::EndCritical => "end critical",
+            DirectiveName::EndAtomic => "end atomic",
+            DirectiveName::EndParallelDo => "end parallel do",
+            DirectiveName::EndParallelFor => "end parallel for",
+            DirectiveName::EndParallelSections => "end parallel sections",
+            DirectiveName::EndParallelWorkshare => "end parallel workshare",
+            DirectiveName::EndParallelMaster => "end parallel master",
+            DirectiveName::EndDoSimd => "end do simd",
+            DirectiveName::EndForSimd => "end for simd",
+            DirectiveName::EndParallelDoSimd => "end parallel do simd",
+            DirectiveName::EndParallelForSimd => "end parallel for simd",
+            DirectiveName::EndDistributeSimd => "end distribute simd",
+            DirectiveName::EndDistributeParallelDo => "end distribute parallel do",
+            DirectiveName::EndDistributeParallelFor => "end distribute parallel for",
+            DirectiveName::EndDistributeParallelDoSimd => "end distribute parallel do simd",
+            DirectiveName::EndDistributeParallelForSimd => "end distribute parallel for simd",
+            DirectiveName::EndTargetParallel => "end target parallel",
+            DirectiveName::EndTargetParallelDo => "end target parallel do",
+            DirectiveName::EndTargetParallelFor => "end target parallel for",
+            DirectiveName::EndTargetParallelDoSimd => "end target parallel do simd",
+            DirectiveName::EndTargetParallelForSimd => "end target parallel for simd",
+            DirectiveName::EndTargetSimd => "end target simd",
+            DirectiveName::EndTargetTeams => "end target teams",
+            DirectiveName::EndTargetTeamsDistribute => "end target teams distribute",
+            DirectiveName::EndTargetTeamsDistributeParallelDo => {
+                "end target teams distribute parallel do"
+            }
+            DirectiveName::EndTargetTeamsDistributeParallelFor => {
+                "end target teams distribute parallel for"
+            }
+            DirectiveName::EndTargetTeamsDistributeParallelDoSimd => {
+                "end target teams distribute parallel do simd"
+            }
+            DirectiveName::EndTargetTeamsDistributeParallelForSimd => {
+                "end target teams distribute parallel for simd"
+            }
+            DirectiveName::EndTargetTeamsDistributeSimd => "end target teams distribute simd",
+            DirectiveName::EndTargetTeamsLoop => "end target teams loop",
+            DirectiveName::EndTeamsDistribute => "end teams distribute",
+            DirectiveName::EndTeamsDistributeParallelDo => "end teams distribute parallel do",
+            DirectiveName::EndTeamsDistributeParallelFor => "end teams distribute parallel for",
+            DirectiveName::EndTeamsDistributeParallelDoSimd => {
+                "end teams distribute parallel do simd"
+            }
+            DirectiveName::EndTeamsDistributeParallelForSimd => {
+                "end teams distribute parallel for simd"
+            }
+            DirectiveName::EndTeamsDistributeSimd => "end teams distribute simd",
+            DirectiveName::EndTeamsLoop => "end teams loop",
+            DirectiveName::EndTaskloopSimd => "end taskloop simd",
+            DirectiveName::EndMasterTaskloop => "end master taskloop",
+            DirectiveName::EndMasterTaskloopSimd => "end master taskloop simd",
+            DirectiveName::EndMaskedTaskloop => "end masked taskloop",
+            DirectiveName::EndMaskedTaskloopSimd => "end masked taskloop simd",
+            DirectiveName::EndParallelMasterTaskloop => "end parallel master taskloop",
+            DirectiveName::EndParallelMasterTaskloopSimd => "end parallel master taskloop simd",
+            DirectiveName::EndParallelMasked => "end parallel masked",
+            DirectiveName::EndParallelMaskedTaskloop => "end parallel masked taskloop",
+            DirectiveName::EndParallelMaskedTaskloopSimd => "end parallel masked taskloop simd",
+            DirectiveName::EndTargetParallelLoop => "end target parallel loop",
+            DirectiveName::EndParallelLoop => "end parallel loop",
+            DirectiveName::EndTargetLoop => "end target loop",
+            DirectiveName::EndSection => "end section",
+            DirectiveName::EndUnroll => "end unroll",
+            DirectiveName::EndTile => "end tile",
             DirectiveName::Update => "update",
             DirectiveName::Serial => "serial",
             DirectiveName::SerialLoop => "serial loop",

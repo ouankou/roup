@@ -2,6 +2,9 @@ use super::{
     ClauseRegistry, ClauseRegistryBuilder, ClauseRule, DirectiveRegistry, DirectiveRegistryBuilder,
     Parser,
 };
+use crate::parser::clause::{
+    parse_variable_list, ClauseKind, ReductionModifier, ReductionOperator,
+};
 
 const OPENMP_DEFAULT_CLAUSE_RULE: ClauseRule = ClauseRule::Unsupported;
 
@@ -81,7 +84,7 @@ openmp_clauses! {
     Hint => { name: "hint", rule: ClauseRule::Parenthesized },
     Holds => { name: "holds", rule: ClauseRule::Parenthesized },
     If => { name: "if", rule: ClauseRule::Parenthesized },
-    InReduction => { name: "in_reduction", rule: ClauseRule::Parenthesized },
+    InReduction => { name: "in_reduction", rule: ClauseRule::Custom(parse_openmp_in_reduction_clause) },
     Induction => { name: "induction", rule: ClauseRule::Parenthesized },
     Inductor => { name: "inductor", rule: ClauseRule::Parenthesized },
     Inbranch => { name: "inbranch", rule: ClauseRule::Bare },
@@ -126,7 +129,7 @@ openmp_clauses! {
     ProcBind => { name: "proc_bind", rule: ClauseRule::Parenthesized },
     Public => { name: "public", rule: ClauseRule::Flexible },
     Read => { name: "read", rule: ClauseRule::Flexible },
-    Reduction => { name: "reduction", rule: ClauseRule::Parenthesized },
+    Reduction => { name: "reduction", rule: ClauseRule::Custom(parse_openmp_reduction_clause) },
     Release => { name: "release", rule: ClauseRule::Bare },
     Relaxed => { name: "relaxed", rule: ClauseRule::Bare },
     Replayable => { name: "replayable", rule: ClauseRule::Flexible },
@@ -143,7 +146,7 @@ openmp_clauses! {
     Simd => { name: "simd", rule: ClauseRule::Bare },
     Simdlen => { name: "simdlen", rule: ClauseRule::Parenthesized },
     Sizes => { name: "sizes", rule: ClauseRule::Parenthesized },
-    TaskReduction => { name: "task_reduction", rule: ClauseRule::Parenthesized },
+    TaskReduction => { name: "task_reduction", rule: ClauseRule::Custom(parse_openmp_task_reduction_clause) },
     ThreadLimit => { name: "thread_limit", rule: ClauseRule::Parenthesized },
     Threads => { name: "threads", rule: ClauseRule::Bare },
     Threadset => { name: "threadset", rule: ClauseRule::Parenthesized },
@@ -221,9 +224,79 @@ openmp_directives! {
     DistributeParallelDoSimd => "distribute parallel do simd",  // Fortran variant
     Do => "do",  // Fortran equivalent of FOR
     DoSimd => "do simd",  // Fortran equivalent of FOR SIMD
+    EndAssume => "end assume",
     EndAssumes => "end assumes",
     EndDeclareTarget => "end declare target",
     EndDeclareVariant => "end declare variant",
+    // Fortran end directives
+    EndParallel => "end parallel",
+    EndDo => "end do",
+    EndSimd => "end simd",
+    EndSections => "end sections",
+    EndSingle => "end single",
+    EndWorkshare => "end workshare",
+    EndOrdered => "end ordered",
+    EndLoop => "end loop",
+    EndDistribute => "end distribute",
+    EndTeams => "end teams",
+    EndTaskloop => "end taskloop",
+    EndTask => "end task",
+    EndTaskgroup => "end taskgroup",
+    EndMaster => "end master",
+    EndMasked => "end masked",
+    EndUnroll => "end unroll",
+    EndCritical => "end critical",
+    EndAtomic => "end atomic",
+    EndParallelDo => "end parallel do",
+    EndParallelFor => "end parallel for",
+    EndParallelSections => "end parallel sections",
+    EndParallelWorkshare => "end parallel workshare",
+    EndParallelMaster => "end parallel master",
+    EndDoSimd => "end do simd",
+    EndForSimd => "end for simd",
+    EndParallelDoSimd => "end parallel do simd",
+    EndParallelForSimd => "end parallel for simd",
+    EndDistributeSimd => "end distribute simd",
+    EndDistributeParallelDo => "end distribute parallel do",
+    EndDistributeParallelFor => "end distribute parallel for",
+    EndDistributeParallelDoSimd => "end distribute parallel do simd",
+    EndDistributeParallelForSimd => "end distribute parallel for simd",
+    EndTargetParallel => "end target parallel",
+    EndTargetParallelDo => "end target parallel do",
+    EndTargetParallelFor => "end target parallel for",
+    EndTargetParallelDoSimd => "end target parallel do simd",
+    EndTargetParallelForSimd => "end target parallel for simd",
+    EndTargetSimd => "end target simd",
+    EndTargetTeams => "end target teams",
+    EndTargetTeamsDistribute => "end target teams distribute",
+    EndTargetTeamsDistributeParallelDo => "end target teams distribute parallel do",
+    EndTargetTeamsDistributeParallelFor => "end target teams distribute parallel for",
+    EndTargetTeamsDistributeParallelDoSimd => "end target teams distribute parallel do simd",
+    EndTargetTeamsDistributeParallelForSimd => "end target teams distribute parallel for simd",
+    EndTargetTeamsDistributeSimd => "end target teams distribute simd",
+    EndTargetTeamsLoop => "end target teams loop",
+    EndTeamsDistribute => "end teams distribute",
+    EndTeamsDistributeParallelDo => "end teams distribute parallel do",
+    EndTeamsDistributeParallelFor => "end teams distribute parallel for",
+    EndTeamsDistributeParallelDoSimd => "end teams distribute parallel do simd",
+    EndTeamsDistributeParallelForSimd => "end teams distribute parallel for simd",
+    EndTeamsDistributeSimd => "end teams distribute simd",
+    EndTeamsLoop => "end teams loop",
+    EndTaskloopSimd => "end taskloop simd",
+    EndMasterTaskloop => "end master taskloop",
+    EndMasterTaskloopSimd => "end master taskloop simd",
+    EndMaskedTaskloop => "end masked taskloop",
+    EndMaskedTaskloopSimd => "end masked taskloop simd",
+    EndParallelMasterTaskloop => "end parallel master taskloop",
+    EndParallelMasterTaskloopSimd => "end parallel master taskloop simd",
+    EndParallelMasked => "end parallel masked",
+    EndParallelMaskedTaskloop => "end parallel masked taskloop",
+    EndParallelMaskedTaskloopSimd => "end parallel masked taskloop simd",
+    EndTargetParallelLoop => "end target parallel loop",
+    EndParallelLoop => "end parallel loop",
+    EndTargetLoop => "end target loop",
+    EndSection => "end section",
+    EndScope => "end scope",
     Error => "error",
     Flush => "flush",
     Fuse => "fuse",
@@ -258,6 +331,8 @@ openmp_directives! {
     ParallelMasterTaskloop => "parallel master taskloop",
     ParallelMasterTaskloopSimd => "parallel master taskloop simd",
     ParallelSections => "parallel sections",
+    ParallelSingle => "parallel single",
+    ParallelWorkshare => "parallel workshare",
     Requires => "requires",
     Scope => "scope",
     Scan => "scan",
@@ -269,9 +344,14 @@ openmp_directives! {
     Stripe => "stripe",
     Target => "target",
     TargetData => "target data",
+    TargetDataComposite => "target data composite",
     TargetEnterData => "target enter data",
     TargetExitData => "target exit data",
     EndTarget => "end target",
+    EndTargetData => "end target data",
+    EndTargetEnterData => "end target enter data",
+    EndTargetExitData => "end target exit data",
+    EndTargetUpdate => "end target update",
     TargetLoop => "target loop",
     TargetLoopSimd => "target loop simd",
     TargetParallel => "target parallel",
@@ -368,6 +448,181 @@ fn parse_parenthesized_content(input: &str) -> nom::IResult<&str, String> {
     let rest = &input[end_index + 1..];
 
     Ok((rest, normalized.into_owned()))
+}
+
+fn parse_openmp_reduction_clause<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+) -> nom::IResult<&'a str, super::Clause<'a>> {
+    parse_openmp_reduction_like_clause(name, input, true)
+}
+
+fn parse_openmp_in_reduction_clause<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+) -> nom::IResult<&'a str, super::Clause<'a>> {
+    parse_openmp_reduction_like_clause(name, input, false)
+}
+
+fn parse_openmp_task_reduction_clause<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+) -> nom::IResult<&'a str, super::Clause<'a>> {
+    parse_openmp_reduction_like_clause(name, input, false)
+}
+
+fn parse_openmp_reduction_like_clause<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    allow_modifiers: bool,
+) -> nom::IResult<&'a str, super::Clause<'a>> {
+    use nom::error::{Error, ErrorKind};
+
+    let (rest, content) = parse_parenthesized_content(input)?;
+    let colon_idx = find_top_level_colon(&content)
+        .ok_or_else(|| nom::Err::Error(Error::new(rest, ErrorKind::Tag)))?;
+
+    let modifiers_segment = content[..colon_idx].trim();
+    let values_segment = &content[colon_idx + 1..];
+
+    let space_after_colon = values_segment.starts_with(|c: char| c.is_whitespace());
+    let variables = parse_variable_list(values_segment.trim())
+        .into_iter()
+        .map(|value| std::borrow::Cow::Owned(value.into_owned()))
+        .collect::<Vec<_>>();
+
+    if variables.is_empty() {
+        return Err(nom::Err::Error(Error::new(rest, ErrorKind::Tag)));
+    }
+
+    let tokens = split_top_level_commas(modifiers_segment);
+    if tokens.is_empty() {
+        return Err(nom::Err::Error(Error::new(rest, ErrorKind::Tag)));
+    }
+
+    let operator_token = tokens.last().unwrap().trim();
+    let modifier_tokens = if allow_modifiers && tokens.len() > 1 {
+        &tokens[..tokens.len() - 1]
+    } else if tokens.len() == 1 {
+        &[][..]
+    } else {
+        return Err(nom::Err::Error(Error::new(rest, ErrorKind::Tag)));
+    };
+
+    let mut modifiers = Vec::new();
+    for modifier_token in modifier_tokens {
+        let Some(modifier) = map_reduction_modifier(modifier_token.trim()) else {
+            return Err(nom::Err::Error(Error::new(rest, ErrorKind::Tag)));
+        };
+        modifiers.push(modifier);
+    }
+
+    let (operator, user_identifier) = map_reduction_operator(operator_token);
+
+    Ok((
+        rest,
+        super::Clause {
+            name,
+            kind: ClauseKind::ReductionClause {
+                modifiers,
+                operator,
+                user_defined_identifier: user_identifier.map(std::borrow::Cow::Owned),
+                variables,
+                space_after_colon,
+            },
+        },
+    ))
+}
+
+fn map_reduction_modifier(token: &str) -> Option<ReductionModifier> {
+    match token.to_ascii_lowercase().as_str() {
+        "task" => Some(ReductionModifier::Task),
+        "inscan" => Some(ReductionModifier::Inscan),
+        "default" => Some(ReductionModifier::Default),
+        _ => None,
+    }
+}
+
+fn map_reduction_operator(token: &str) -> (ReductionOperator, Option<String>) {
+    let normalized = token.trim();
+    let lower = normalized.to_ascii_lowercase();
+    let operator = match lower.as_str() {
+        "+" => ReductionOperator::Add,
+        "-" => ReductionOperator::Sub,
+        "*" => ReductionOperator::Mul,
+        "max" => ReductionOperator::Max,
+        "min" => ReductionOperator::Min,
+        "&" => ReductionOperator::BitAnd,
+        "|" => ReductionOperator::BitOr,
+        "^" => ReductionOperator::BitXor,
+        "&&" => ReductionOperator::LogAnd,
+        "||" => ReductionOperator::LogOr,
+        ".and." => ReductionOperator::FortAnd,
+        ".or." => ReductionOperator::FortOr,
+        ".eqv." => ReductionOperator::FortEqv,
+        ".neqv." => ReductionOperator::FortNeqv,
+        "iand" => ReductionOperator::FortIand,
+        "ior" => ReductionOperator::FortIor,
+        "ieor" => ReductionOperator::FortIeor,
+        _ => ReductionOperator::UserDefined,
+    };
+
+    if matches!(operator, ReductionOperator::UserDefined) {
+        (operator, Some(normalized.to_string()))
+    } else {
+        (operator, None)
+    }
+}
+
+fn find_top_level_colon(input: &str) -> Option<usize> {
+    let mut depth = 0;
+    for (idx, ch) in input.char_indices() {
+        match ch {
+            '(' | '[' => depth += 1,
+            ')' | ']' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+            }
+            ':' if depth == 0 => return Some(idx),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn split_top_level_commas(input: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0;
+
+    for ch in input.chars() {
+        match ch {
+            ',' if depth == 0 => {
+                if !current.trim().is_empty() {
+                    result.push(current.trim().to_string());
+                }
+                current.clear();
+            }
+            '(' | '[' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' | ']' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+                current.push(ch);
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if !current.trim().is_empty() {
+        result.push(current.trim().to_string());
+    }
+
+    result
 }
 
 // Custom parser for allocate directive: allocate(list) [clauses] or bare allocate
@@ -675,6 +930,41 @@ fn parse_cancel_directive<'a>(
     }
 }
 
+// Custom parser for cancellation point directive: cancellation point construct-type-clause
+fn parse_cancellation_point_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+    use crate::lexer::lex_identifier_token;
+
+    let input_trimmed = input.trim_start();
+
+    // Try to parse the construct type (parallel, sections, for, taskgroup)
+    if let Ok((rest, construct_type)) = lex_identifier_token(input_trimmed) {
+        // Parse any additional clauses (cancellation point doesn't accept clauses but parse anyway for robustness)
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        Ok((
+            rest,
+            Directive {
+                name: crate::parser::directive_kind::lookup_directive_name("cancellation point"),
+                // Store the construct type without a leading space; presentation spacing
+                // should be handled by the renderer that prints directives.
+                parameter: Some(std::borrow::Cow::Owned(construct_type.to_string())),
+                clauses,
+                wait_data: None,
+                cache_data: None,
+            },
+        ))
+    } else {
+        // Fall back to standard clause parsing (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive::new(name, None, clauses)))
+    }
+}
+
 // Custom parser for groupprivate directive: groupprivate(list) [clauses] or bare groupprivate
 fn parse_groupprivate_directive<'a>(
     name: std::borrow::Cow<'a, str>,
@@ -704,6 +994,176 @@ fn parse_groupprivate_directive<'a>(
     }
 }
 
+// Custom parser for critical directive: critical [(name)] [hint(...)] or bare critical
+fn parse_critical_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // Try to parse parenthesized name (optional)
+    if let Ok((rest, critical_name)) = parse_parenthesized_content(input) {
+        // After the parenthesized name, parse any clauses (like hint)
+        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+        Ok((
+            rest,
+            Directive {
+                name: crate::parser::directive_kind::lookup_directive_name("critical"),
+                parameter: Some(std::borrow::Cow::Owned(format!("({})", critical_name))),
+                clauses,
+                wait_data: None,
+                cache_data: None,
+            },
+        ))
+    } else {
+        // No parenthesized name - just parse clauses (bare form)
+        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        Ok((rest, Directive::new(name, None, clauses)))
+    }
+}
+
+// Custom parser for flush directive: flush [(list)] [memory-order-clause]
+// Special handling: memory-order clauses (acq_rel, release, acquire) are bare,
+// so if we see "acq_rel(list)", the (list) belongs to flush, not to acq_rel
+fn parse_flush_directive<'a>(
+    name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+    use crate::lexer::lex_identifier_token;
+
+    let input_trimmed = input.trim_start();
+
+    // Check if we have a memory-order clause keyword first
+    // These are: acq_rel, release, acquire
+    let has_memory_order_keyword = input_trimmed.starts_with("acq_rel")
+        || input_trimmed.starts_with("release")
+        || input_trimmed.starts_with("acquire");
+
+    if has_memory_order_keyword {
+        // Try to parse the keyword
+        if let Ok((rest_after_keyword, keyword)) = lex_identifier_token(input_trimmed) {
+            // Now check if there's a parenthesized list after the keyword
+            if let Ok((rest, list_content)) = parse_parenthesized_content(rest_after_keyword) {
+                // The parenthesized list belongs to flush, not to the keyword
+                // Create the flush directive with the list and the keyword as a clause
+                use std::borrow::Cow;
+                let clause = crate::parser::Clause {
+                    name: Cow::Borrowed(keyword),
+                    kind: crate::parser::ClauseKind::Bare,
+                };
+
+                Ok((
+                    rest,
+                    Directive {
+                        name: crate::parser::directive_kind::lookup_directive_name("flush"),
+                        parameter: Some(Cow::Owned(format!("({})", list_content))),
+                        clauses: vec![clause],
+                        wait_data: None,
+                        cache_data: None,
+                    },
+                ))
+            } else {
+                // No parenthesized list after keyword - parse normally as clause
+                let (rest, clauses) = clause_registry.parse_sequence(input)?;
+                Ok((rest, Directive::new(name, None, clauses)))
+            }
+        } else {
+            // Couldn't parse keyword - fall through to normal parsing
+            let (rest, clauses) = clause_registry.parse_sequence(input)?;
+            Ok((rest, Directive::new(name, None, clauses)))
+        }
+    } else {
+        // No memory-order keyword - try to parse parenthesized list first
+        if let Ok((rest, list_content)) = parse_parenthesized_content(input) {
+            // After the parenthesized list, parse memory-order clauses
+            let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+
+            Ok((
+                rest,
+                Directive {
+                    name: crate::parser::directive_kind::lookup_directive_name("flush"),
+                    parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
+                    clauses,
+                    wait_data: None,
+                    cache_data: None,
+                },
+            ))
+        } else {
+            // No parenthesized list - just parse clauses (bare form)
+            let (rest, clauses) = clause_registry.parse_sequence(input)?;
+            Ok((rest, Directive::new(name, None, clauses)))
+        }
+    }
+}
+
+// Custom parser for declare reduction directive
+// Syntax: declare reduction(operator : type-list : combiner) initializer(...)
+fn parse_declare_reduction_directive<'a>(
+    _name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    _clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    // The entire rest of the line is the parameter for declare reduction
+    // Format: (operator : type-list : combiner) initializer(...)
+    let trimmed = input.trim_start();
+
+    Ok((
+        "",
+        Directive {
+            name: crate::parser::directive_kind::lookup_directive_name("declare reduction"),
+            parameter: Some(std::borrow::Cow::Borrowed(trimmed)),
+            clauses: Vec::new(),
+            wait_data: None,
+            cache_data: None,
+        },
+    ))
+}
+
+// Custom parser for declare simd directive
+// Syntax: declare simd [(proc-name)] [clause[[,] clause]...]
+fn parse_declare_simd_directive<'a>(
+    _name: std::borrow::Cow<'a, str>,
+    input: &'a str,
+    clause_registry: &ClauseRegistry,
+) -> nom::IResult<&'a str, super::Directive<'a>> {
+    use super::Directive;
+
+    let trimmed = input.trim_start();
+
+    // Check if there's a parenthesized proc-name at the start
+    let (remaining, parameter) = if let Ok((rest, proc_name)) = parse_parenthesized_content(trimmed)
+    {
+        // Found proc-name, return it as the parameter and continue parsing clauses from rest
+        (
+            rest,
+            Some(std::borrow::Cow::Owned(format!("({})", proc_name))),
+        )
+    } else {
+        // No proc-name, parse clauses from the entire input
+        (trimmed, None)
+    };
+
+    // Parse clauses from the remaining input
+    let (rest, clauses) = clause_registry.parse_sequence(remaining)?;
+
+    Ok((
+        rest,
+        Directive {
+            name: crate::parser::directive_kind::lookup_directive_name("declare simd"),
+            parameter,
+            clauses,
+            wait_data: None,
+            cache_data: None,
+        },
+    ))
+}
+
 // Custom parser for target data directive (canonical form)
 // Preserve the canonical "target data" presentation; underscore-form
 // variants are forbidden and should not be registered.
@@ -726,10 +1186,15 @@ const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
     "declare target",
     "declare mapper",
     "declare variant",
+    "declare reduction",
+    "declare simd",
     "depobj",
     "scan",
     "cancel",
+    "cancellation point",
     "groupprivate",
+    "critical",
+    "flush",
 ];
 
 pub fn directive_registry() -> DirectiveRegistry {
@@ -741,10 +1206,15 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("declare target", parse_declare_target_extended);
     builder = builder.register_custom("declare mapper", parse_declare_mapper_directive);
     builder = builder.register_custom("declare variant", parse_declare_variant_directive);
+    builder = builder.register_custom("declare reduction", parse_declare_reduction_directive);
+    builder = builder.register_custom("declare simd", parse_declare_simd_directive);
     builder = builder.register_custom("depobj", parse_depobj_directive);
     builder = builder.register_custom("scan", parse_scan_directive);
     builder = builder.register_custom("cancel", parse_cancel_directive);
+    builder = builder.register_custom("cancellation point", parse_cancellation_point_directive);
     builder = builder.register_custom("groupprivate", parse_groupprivate_directive);
+    builder = builder.register_custom("critical", parse_critical_directive);
+    builder = builder.register_custom("flush", parse_flush_directive);
 
     // Register the canonical space-separated form "target data" and also
     // explicitly register the underscore variant "target_data" for test-suite
@@ -761,9 +1231,134 @@ pub fn directive_registry() -> DirectiveRegistry {
         }
     }
 
+    // Register no-space Fortran end directive variants
+    // These are aliases that map to the same DirectiveName enum variants
+    builder = builder.register_generic("endparallel");
+    builder = builder.register_generic("enddo");
+    builder = builder.register_generic("endsimd");
+    builder = builder.register_generic("endsections");
+    builder = builder.register_generic("endsingle");
+    builder = builder.register_generic("endworkshare");
+    builder = builder.register_generic("endordered");
+    builder = builder.register_generic("endloop");
+    builder = builder.register_generic("enddistribute");
+    builder = builder.register_generic("endteams");
+    builder = builder.register_generic("endtaskloop");
+    builder = builder.register_generic("endtask");
+    builder = builder.register_generic("endtaskgroup");
+    builder = builder.register_generic("endmaster");
+    builder = builder.register_generic("endcritical");
+    builder = builder.register_generic("endatomic");
+    builder = builder.register_generic("endparalleldo");
+    builder = builder.register_generic("endparallelsections");
+    builder = builder.register_generic("endparallelworkshare");
+    builder = builder.register_generic("endparallelmaster");
+    builder = builder.register_generic("enddosimd");
+    builder = builder.register_generic("endparalleldosimd");
+    builder = builder.register_generic("enddistributesimd");
+    builder = builder.register_generic("enddistributeparalleldo");
+    builder = builder.register_generic("enddistributeparalleldosimd");
+
     builder.build()
 }
 
 pub fn parser() -> Parser {
     Parser::new(directive_registry(), clause_registry())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_directive_registry_has_end_atomic() {
+        // Check that "end atomic" is in the OpenMpDirective enum
+        let found = OpenMpDirective::ALL
+            .iter()
+            .any(|d| d.as_str() == "end atomic");
+        assert!(found, "end atomic not found in OpenMpDirective::ALL");
+    }
+
+    #[test]
+    fn test_end_atomic_directive() {
+        use crate::parser::Language;
+        let parser = parser().with_language(Language::FortranFree);
+        let input = "!$omp end atomic";
+        let result = parser.parse(input);
+        if let Err(ref e) = result {
+            eprintln!("Parse error for '{}': {:?}", input, e);
+        }
+        assert!(result.is_ok(), "Failed to parse: {}", input);
+        let (_, directive) = result.unwrap();
+        assert_eq!(directive.name.as_str(), "end atomic");
+    }
+
+    #[test]
+    fn test_end_critical_directive() {
+        use crate::parser::Language;
+        let parser = parser().with_language(Language::FortranFree);
+        let input = "!$omp end critical";
+        let result = parser.parse(input);
+        assert!(result.is_ok(), "Failed to parse: {}", input);
+        let (_, directive) = result.unwrap();
+        assert_eq!(directive.name.as_str(), "end critical");
+    }
+
+    #[test]
+    fn test_end_distribute_directive() {
+        use crate::parser::Language;
+        let parser = parser().with_language(Language::FortranFree);
+        let input = "!$omp end distribute";
+        let result = parser.parse(input);
+        assert!(result.is_ok(), "Failed to parse: {}", input);
+        let (_, directive) = result.unwrap();
+        assert_eq!(directive.name.as_str(), "end distribute");
+    }
+
+    #[test]
+    fn test_end_parallel_directive() {
+        use crate::parser::Language;
+        let parser = parser().with_language(Language::FortranFree);
+        let input = "!$omp end parallel";
+        let result = parser.parse(input);
+        assert!(result.is_ok(), "Failed to parse: {}", input);
+        let (_, directive) = result.unwrap();
+        assert_eq!(directive.name.as_str(), "end parallel");
+    }
+
+    #[test]
+    fn test_end_target_directive() {
+        use crate::parser::Language;
+        let parser = parser().with_language(Language::C);
+        let input = "#pragma omp end target";
+        let result = parser.parse(input);
+        assert!(result.is_ok(), "Failed to parse: {}", input);
+        let (_, directive) = result.unwrap();
+        assert_eq!(directive.name.as_str(), "end target");
+    }
+
+    #[test]
+    fn test_end_do_directive() {
+        use crate::parser::Language;
+        let parser = parser().with_language(Language::FortranFree);
+        let input = "!$omp end do";
+        let result = parser.parse(input);
+        assert!(result.is_ok(), "Failed to parse: {}", input);
+        let (_, directive) = result.unwrap();
+        assert_eq!(directive.name.as_str(), "end do");
+    }
+
+    #[test]
+    fn test_masked_directive() {
+        use crate::parser::Language;
+        let parser = parser().with_language(Language::FortranFree);
+        let input = "!$omp masked";
+        let result = parser.parse(input);
+        if let Err(ref e) = result {
+            eprintln!("Parse error for '{}': {:?}", input, e);
+        }
+        assert!(result.is_ok(), "Failed to parse: {}", input);
+        let (_, directive) = result.unwrap();
+        assert_eq!(directive.name.as_str(), "masked");
+    }
 }

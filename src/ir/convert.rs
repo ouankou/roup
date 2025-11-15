@@ -711,7 +711,7 @@ pub fn parse_clause_data<'a>(
             }
         }
 
-        // depend(dependence-type: list)
+        // depend(dependence-type: list) or depend(source) or depend(sink)
         "depend" => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
@@ -725,9 +725,15 @@ pub fn parse_clause_data<'a>(
 
                     Ok(ClauseData::Depend { depend_type, items })
                 } else {
-                    Err(ConversionError::InvalidClauseSyntax(
-                        "depend clause requires 'type: list' format".to_string(),
-                    ))
+                    // No colon found - could be depend(source) or depend(sink) without items
+                    let type_str = content.trim();
+                    let depend_type = parse_depend_type(type_str)?;
+
+                    // Empty items list for source/sink without variables
+                    Ok(ClauseData::Depend {
+                        depend_type,
+                        items: vec![],
+                    })
                 }
             } else {
                 Err(ConversionError::InvalidClauseSyntax(

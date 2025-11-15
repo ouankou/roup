@@ -4,6 +4,7 @@ use super::{
     ClauseRegistry, ClauseRegistryBuilder, ClauseRule, DirectiveRegistry, DirectiveRegistryBuilder,
     Parser,
 };
+use crate::parser::clause::parse_variable_list;
 
 const OPENACC_DEFAULT_CLAUSE_RULE: ClauseRule = ClauseRule::Flexible;
 
@@ -528,47 +529,6 @@ fn parse_parenthesized_content_inner(input: &str) -> nom::IResult<&str, String> 
     Ok((rest, content.to_string()))
 }
 
-/// Parse a comma-separated list of variable names/expressions
-/// Handles: m, n, p
-///          x[0:N], y[1:10]
-///          max::x, readonly::y (C++ scope resolution)
-fn parse_variable_list(input: &str) -> Vec<Cow<'_, str>> {
-    let mut variables = Vec::new();
-    let mut current = String::new();
-    let mut depth = 0; // Track parenthesis/bracket depth for array sections
-
-    for ch in input.chars() {
-        match ch {
-            ',' if depth == 0 => {
-                let trimmed = current.trim();
-                if !trimmed.is_empty() {
-                    variables.push(Cow::Owned(trimmed.to_string()));
-                }
-                current.clear();
-            }
-            '(' | '[' => {
-                depth += 1;
-                current.push(ch);
-            }
-            ')' | ']' => {
-                depth -= 1;
-                current.push(ch);
-            }
-            _ => {
-                current.push(ch);
-            }
-        }
-    }
-
-    // Don't forget the last variable
-    let trimmed = current.trim();
-    if !trimmed.is_empty() {
-        variables.push(Cow::Owned(trimmed.to_string()));
-    }
-
-    variables
-}
-
 /// Parse copyin clause: copyin(readonly: m, n) or copyin(m, n)
 fn parse_copyin_clause<'a>(
     name: Cow<'a, str>,
@@ -616,7 +576,10 @@ fn parse_copyin_clause<'a>(
     })?;
 
     let var_list_str = &input[..end_idx];
-    let variables = parse_variable_list(var_list_str);
+    let variables = parse_variable_list(var_list_str)
+        .into_iter()
+        .map(|v| Cow::Owned(v.into_owned()))
+        .collect();
     let rest = &input[end_idx + 1..];
 
     Ok((
@@ -834,7 +797,9 @@ fn parse_reduction_clause<'a>(
         super::Clause {
             name,
             kind: ClauseKind::ReductionClause {
+                modifiers: Vec::new(),
                 operator,
+                user_defined_identifier: None,
                 variables,
                 space_after_colon,
             },

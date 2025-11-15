@@ -183,7 +183,15 @@ if [ -d "compat/ompparser" ] && [ -f "compat/ompparser/build.sh" ]; then
     echo -n "Running compat tests... "
     cd compat/ompparser
     if ./build.sh > /tmp/compat_test.log 2>&1; then
-        echo -e "${GREEN}✓ PASS${NC}"
+        cd build
+        if ctest --output-on-failure -j$(nproc) > /tmp/ompparser_compat_ctest.log 2>&1; then
+            echo -e "${GREEN}✓ PASS${NC}"
+        else
+            echo -e "${RED}✗ FAIL - ctest failures${NC}"
+            tail -200 /tmp/ompparser_compat_ctest.log || true
+            cd ../../..
+            exit 1
+        fi
     else
         echo -e "${RED}✗ FAIL${NC}"
         cat /tmp/compat_test.log

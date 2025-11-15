@@ -1,4 +1,4 @@
-mod clause;
+pub mod clause;
 mod directive;
 pub mod directive_kind;
 pub mod openacc;
@@ -28,6 +28,27 @@ pub struct Parser {
 pub enum Dialect {
     OpenMp,
     OpenAcc,
+}
+
+/// Skip duplicate prefix keyword after sentinel (e.g., "omp" after "!$omp")
+/// This provides forgiving parsing for malformed directives like "!$omp omp teams"
+fn skip_duplicate_keyword<'a>(input: &'a str, prefix: &str) -> &'a str {
+    // Check if the input starts with the prefix (case-insensitive)
+    // followed by whitespace or end of string
+    if input.len() >= prefix.len()
+        && input[..prefix.len()].eq_ignore_ascii_case(prefix)
+        && (input.len() == prefix.len()
+            || input
+                .chars()
+                .nth(prefix.len())
+                .map_or(false, |c| c.is_whitespace()))
+    {
+        // Skip the prefix and any following whitespace
+        let after_prefix = &input[prefix.len()..];
+        after_prefix.trim_start()
+    } else {
+        input
+    }
 }
 
 impl Parser {
@@ -83,7 +104,7 @@ impl Parser {
                 input
             }
             Language::FortranFree => {
-                let (input, _) = (
+                let (mut input, _) = (
                     |i| match self.dialect {
                         Dialect::OpenMp => lexer::lex_fortran_free_sentinel_with_prefix(i, "omp"),
                         Dialect::OpenAcc => lexer::lex_fortran_free_sentinel_with_prefix(i, "acc"),
@@ -91,10 +112,18 @@ impl Parser {
                     lexer::skip_space1_and_comments,
                 )
                     .parse(input)?;
+
+                // Skip duplicate prefix keyword if present (e.g., "!$omp omp teams" -> "!$omp teams")
+                // This provides forgiving parsing for malformed directives
+                let prefix = match self.dialect {
+                    Dialect::OpenMp => "omp",
+                    Dialect::OpenAcc => "acc",
+                };
+                input = skip_duplicate_keyword(input, prefix);
                 input
             }
             Language::FortranFixed => {
-                let (input, _) = (
+                let (mut input, _) = (
                     |i| match self.dialect {
                         Dialect::OpenMp => lexer::lex_fortran_fixed_sentinel_with_prefix(i, "omp"),
                         Dialect::OpenAcc => lexer::lex_fortran_fixed_sentinel_with_prefix(i, "acc"),
@@ -102,6 +131,14 @@ impl Parser {
                     lexer::skip_space1_and_comments,
                 )
                     .parse(input)?;
+
+                // Skip duplicate prefix keyword if present (e.g., "!$omp omp teams" -> "!$omp teams")
+                // This provides forgiving parsing for malformed directives
+                let prefix = match self.dialect {
+                    Dialect::OpenMp => "omp",
+                    Dialect::OpenAcc => "acc",
+                };
+                input = skip_duplicate_keyword(input, prefix);
                 input
             }
         };
