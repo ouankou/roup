@@ -155,7 +155,7 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
     // The ROUP C API may return either the reduced directive kind (small
     // integers like 0..N) or the full macro values (offset by ACC_DIRECTIVE_BASE,
     // e.g., 10000+). Normalize here to the full macro values so the switch
-    // statements using `ROUP_ACC_DIRECTIVE_*` macros match correctly.
+    // statements using `ROUP_ACCD_*` macros match correctly.
     // Expect ROUP to publish canonical ACC namespace values (ACC_DIRECTIVE_BASE + raw).
     // Any reduced 0..N values or otherwise out-of-range values indicate a producer bug
     // and must be treated as a fatal error rather than normalized silently.
@@ -175,33 +175,33 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
     //     not accepted by the ROUP canonical mapping used here)
     //   - "wait" and "wait(... )" both map to ACCD_wait
     switch (full_kind) {
-        case ROUP_ACC_DIRECTIVE_PARALLEL:    return ACCD_parallel;     // 0 = "parallel"
-        case ROUP_ACC_DIRECTIVE_LOOP:        return ACCD_loop;         // 1 = "loop"
-        case ROUP_ACC_DIRECTIVE_KERNELS:     return ACCD_kernels;      // 2 = "kernels"
-    case ROUP_ACC_DIRECTIVE_DATA:                 return ACCD_data;         // 3 = "data"
-    case ROUP_ACC_DIRECTIVE_ENTER_DATA:           return ACCD_enter_data;   // 4 = "enter data" (space)
-    case ROUP_ACC_DIRECTIVE_EXIT_DATA:            return ACCD_exit_data;    // 5 = "exit data" (space)
-        case ROUP_ACC_DIRECTIVE_ATOMIC:      return ACCD_atomic;       // 7 = "atomic"
-        case ROUP_ACC_DIRECTIVE_DECLARE:     return ACCD_declare;      // 8 = "declare"
-        case ROUP_ACC_DIRECTIVE_WAIT:        return ACCD_wait;         // 9 = "wait"
-        case ROUP_ACC_DIRECTIVE_END:         return ACCD_end;          // 10 = "end"
-    case ROUP_ACC_DIRECTIVE_HOST_DATA:   return ACCD_host_data;    // host_data (underscore form)
-    case ROUP_ACC_DIRECTIVE_UPDATE:      return ACCD_update;       // 12 = "update"
+        case ROUP_ACCD_parallel:    return ACCD_parallel;     // 0 = "parallel"
+        case ROUP_ACCD_loop:        return ACCD_loop;         // 1 = "loop"
+        case ROUP_ACCD_kernels:     return ACCD_kernels;      // 2 = "kernels"
+    case ROUP_ACCD_data:                 return ACCD_data;         // 3 = "data"
+    case ROUP_ACCD_enter_data:           return ACCD_enter_data;   // 4 = "enter data" (space)
+    case ROUP_ACCD_exit_data:            return ACCD_exit_data;    // 5 = "exit data" (space)
+        case ROUP_ACCD_atomic:      return ACCD_atomic;       // 7 = "atomic"
+        case ROUP_ACCD_declare:     return ACCD_declare;      // 8 = "declare"
+        case ROUP_ACCD_wait:        return ACCD_wait;         // 9 = "wait"
+        case ROUP_ACCD_end:         return ACCD_end;          // 10 = "end"
+    case ROUP_ACCD_host_data:   return ACCD_host_data;    // host_data (underscore form)
+    case ROUP_ACCD_update:      return ACCD_update;       // 12 = "update"
     // Note: ROUP previously emitted target/teams/distribute family aliases
     // in the OpenACC mapping. These constructs do not appear in the
     // accparser OpenACCKinds.h header, so the ROUP constants for them are
     // no longer generated. Do not attempt to map them here.
 
     // Preserve earlier per-directive loop/kernels mappings for other kinds
-    case ROUP_ACC_DIRECTIVE_KERNELS_LOOP:         return ACCD_kernels_loop; // 10016 = "kernels loop"
-    case ROUP_ACC_DIRECTIVE_PARALLEL_LOOP:        return ACCD_parallel_loop;// 10017 = "parallel loop"
-    case ROUP_ACC_DIRECTIVE_SERIAL_LOOP:          return ACCD_serial_loop;  // 10018 = "serial loop"
-        case ROUP_ACC_DIRECTIVE_SERIAL:      return ACCD_serial;       // 17 = "serial"
-        case ROUP_ACC_DIRECTIVE_ROUTINE:     return ACCD_routine;      // 18 = "routine"
-        case ROUP_ACC_DIRECTIVE_SET:         return ACCD_set;          // 19 = "set"
-        case ROUP_ACC_DIRECTIVE_INIT:        return ACCD_init;         // 20 = "init"
-        case ROUP_ACC_DIRECTIVE_SHUTDOWN:    return ACCD_shutdown;     // 21 = "shutdown"
-    case ROUP_ACC_DIRECTIVE_CACHE:       return ACCD_cache;        // 23 = "cache(... )" with content
+    case ROUP_ACCD_kernels_loop:         return ACCD_kernels_loop; // 10016 = "kernels loop"
+    case ROUP_ACCD_parallel_loop:        return ACCD_parallel_loop;// 10017 = "parallel loop"
+    case ROUP_ACCD_serial_loop:          return ACCD_serial_loop;  // 10018 = "serial loop"
+        case ROUP_ACCD_serial:      return ACCD_serial;       // 17 = "serial"
+        case ROUP_ACCD_routine:     return ACCD_routine;      // 18 = "routine"
+        case ROUP_ACCD_set:         return ACCD_set;          // 19 = "set"
+        case ROUP_ACCD_init:        return ACCD_init;         // 20 = "init"
+        case ROUP_ACCD_shutdown:    return ACCD_shutdown;     // 21 = "shutdown"
+    case ROUP_ACCD_cache:       return ACCD_cache;        // 23 = "cache(... )" with content
     // underscore-form variants removed from ROUP OpenACC mapping
         default:                        return ACCD_unknown;
     }
@@ -211,51 +211,51 @@ static OpenACCClauseKind mapRoupToAccparserClause(int32_t roup_kind) {
     // ROUP clause kind mapping using named constants from roup_constants.h
     // Single source of truth: src/c_api.rs:convert_acc_clause()
     switch (roup_kind) {
-        case ROUP_ACC_CLAUSE_ASYNC:           return ACCC_async;
-        case ROUP_ACC_CLAUSE_WAIT:            return ACCC_wait;
-        case ROUP_ACC_CLAUSE_NUM_GANGS:       return ACCC_num_gangs;
-        case ROUP_ACC_CLAUSE_NUM_WORKERS:     return ACCC_num_workers;
-        case ROUP_ACC_CLAUSE_VECTOR_LENGTH:   return ACCC_vector_length;
-        case ROUP_ACC_CLAUSE_GANG:            return ACCC_gang;
-        case ROUP_ACC_CLAUSE_WORKER:          return ACCC_worker;
-        case ROUP_ACC_CLAUSE_VECTOR:          return ACCC_vector;
-        case ROUP_ACC_CLAUSE_SEQ:             return ACCC_seq;
-        case ROUP_ACC_CLAUSE_INDEPENDENT:     return ACCC_independent;
-        case ROUP_ACC_CLAUSE_AUTO:            return ACCC_auto;
-        case ROUP_ACC_CLAUSE_COLLAPSE:        return ACCC_collapse;
-        case ROUP_ACC_CLAUSE_DEVICE_TYPE:     return ACCC_device_type;
-        case ROUP_ACC_CLAUSE_BIND:            return ACCC_bind;
-        case ROUP_ACC_CLAUSE_IF:              return ACCC_if;
-        case ROUP_ACC_CLAUSE_DEFAULT:         return ACCC_default;
-        case ROUP_ACC_CLAUSE_FIRSTPRIVATE:    return ACCC_firstprivate;
-        case ROUP_ACC_CLAUSE_DEFAULT_ASYNC:   return ACCC_default_async;
-        case ROUP_ACC_CLAUSE_LINK:            return ACCC_link;
-        case ROUP_ACC_CLAUSE_NO_CREATE:       return ACCC_no_create;
-        case ROUP_ACC_CLAUSE_NOHOST:          return ACCC_nohost;
-        case ROUP_ACC_CLAUSE_PRESENT:         return ACCC_present;
-        case ROUP_ACC_CLAUSE_PRIVATE:         return ACCC_private;
-        case ROUP_ACC_CLAUSE_REDUCTION:       return ACCC_reduction;
-        case ROUP_ACC_CLAUSE_READ:            return ACCC_read;
-        case ROUP_ACC_CLAUSE_SELF:            return ACCC_self;
-        case ROUP_ACC_CLAUSE_TILE:            return ACCC_tile;
-        case ROUP_ACC_CLAUSE_USE_DEVICE:      return ACCC_use_device;
-        case ROUP_ACC_CLAUSE_ATTACH:          return ACCC_attach;
-        case ROUP_ACC_CLAUSE_DETACH:          return ACCC_detach;
-        case ROUP_ACC_CLAUSE_FINALIZE:        return ACCC_finalize;
-        case ROUP_ACC_CLAUSE_IF_PRESENT:      return ACCC_if_present;
-        case ROUP_ACC_CLAUSE_CAPTURE:         return ACCC_capture;
-        case ROUP_ACC_CLAUSE_WRITE:           return ACCC_write;
-        case ROUP_ACC_CLAUSE_UPDATE:          return ACCC_update;
-        case ROUP_ACC_CLAUSE_COPY:            return ACCC_copy;
-        case ROUP_ACC_CLAUSE_COPYIN:          return ACCC_copyin;
-        case ROUP_ACC_CLAUSE_COPYOUT:         return ACCC_copyout;
-        case ROUP_ACC_CLAUSE_CREATE:          return ACCC_create;
-        case ROUP_ACC_CLAUSE_DELETE:          return ACCC_delete;
-        case ROUP_ACC_CLAUSE_DEVICE:          return ACCC_device;
-        case ROUP_ACC_CLAUSE_DEVICEPTR:       return ACCC_deviceptr;
-        case ROUP_ACC_CLAUSE_DEVICE_NUM:      return ACCC_device_num;
-        case ROUP_ACC_CLAUSE_DEVICE_RESIDENT: return ACCC_device_resident;
-        case ROUP_ACC_CLAUSE_HOST:            return ACCC_host;
+        case ROUP_ACCC_async:           return ACCC_async;
+        case ROUP_ACCC_wait:            return ACCC_wait;
+        case ROUP_ACCC_num_gangs:       return ACCC_num_gangs;
+        case ROUP_ACCC_num_workers:     return ACCC_num_workers;
+        case ROUP_ACCC_vector_length:   return ACCC_vector_length;
+        case ROUP_ACCC_gang:            return ACCC_gang;
+        case ROUP_ACCC_worker:          return ACCC_worker;
+        case ROUP_ACCC_vector:          return ACCC_vector;
+        case ROUP_ACCC_seq:             return ACCC_seq;
+        case ROUP_ACCC_independent:     return ACCC_independent;
+        case ROUP_ACCC_auto:            return ACCC_auto;
+        case ROUP_ACCC_collapse:        return ACCC_collapse;
+        case ROUP_ACCC_device_type:     return ACCC_device_type;
+        case ROUP_ACCC_bind:            return ACCC_bind;
+        case ROUP_ACCC_if:              return ACCC_if;
+        case ROUP_ACCC_default:         return ACCC_default;
+        case ROUP_ACCC_firstprivate:    return ACCC_firstprivate;
+        case ROUP_ACCC_default_async:   return ACCC_default_async;
+        case ROUP_ACCC_link:            return ACCC_link;
+        case ROUP_ACCC_no_create:       return ACCC_no_create;
+        case ROUP_ACCC_nohost:          return ACCC_nohost;
+        case ROUP_ACCC_present:         return ACCC_present;
+        case ROUP_ACCC_private:         return ACCC_private;
+        case ROUP_ACCC_reduction:       return ACCC_reduction;
+        case ROUP_ACCC_read:            return ACCC_read;
+        case ROUP_ACCC_self:            return ACCC_self;
+        case ROUP_ACCC_tile:            return ACCC_tile;
+        case ROUP_ACCC_use_device:      return ACCC_use_device;
+        case ROUP_ACCC_attach:          return ACCC_attach;
+        case ROUP_ACCC_detach:          return ACCC_detach;
+        case ROUP_ACCC_finalize:        return ACCC_finalize;
+        case ROUP_ACCC_if_present:      return ACCC_if_present;
+        case ROUP_ACCC_capture:         return ACCC_capture;
+        case ROUP_ACCC_write:           return ACCC_write;
+        case ROUP_ACCC_update:          return ACCC_update;
+        case ROUP_ACCC_copy:            return ACCC_copy;
+        case ROUP_ACCC_copyin:          return ACCC_copyin;
+        case ROUP_ACCC_copyout:         return ACCC_copyout;
+        case ROUP_ACCC_create:          return ACCC_create;
+        case ROUP_ACCC_delete:          return ACCC_delete;
+        case ROUP_ACCC_device:          return ACCC_device;
+        case ROUP_ACCC_deviceptr:       return ACCC_deviceptr;
+        case ROUP_ACCC_device_num:      return ACCC_device_num;
+        case ROUP_ACCC_device_resident: return ACCC_device_resident;
+        case ROUP_ACCC_host:            return ACCC_host;
         default:                         return ACCC_unknown;
     }
 }

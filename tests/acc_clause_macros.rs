@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 // This test verifies that the generated header `src/roup_constants.h` contains
-// all expected `ROUP_ACC_CLAUSE_*` macro definitions and none are left as the
+// all expected `ROUP_ACCC_*` macro definitions and none are left as the
 // UNKNOWN_KIND sentinel (-1). This provides fast feedback when adding new
 // OpenACC clauses or changing the generator.
 
@@ -19,52 +19,52 @@ fn generated_header_has_all_acc_clauses() {
 
     // These names must match the list in src/constants_gen.rs expected list.
     let expected = [
-        "ROUP_ACC_CLAUSE_ASYNC",
-        "ROUP_ACC_CLAUSE_WAIT",
-        "ROUP_ACC_CLAUSE_NUM_GANGS",
-        "ROUP_ACC_CLAUSE_NUM_WORKERS",
-        "ROUP_ACC_CLAUSE_VECTOR_LENGTH",
-        "ROUP_ACC_CLAUSE_GANG",
-        "ROUP_ACC_CLAUSE_WORKER",
-        "ROUP_ACC_CLAUSE_VECTOR",
-        "ROUP_ACC_CLAUSE_SEQ",
-        "ROUP_ACC_CLAUSE_INDEPENDENT",
-        "ROUP_ACC_CLAUSE_AUTO",
-        "ROUP_ACC_CLAUSE_COLLAPSE",
-        "ROUP_ACC_CLAUSE_DEVICE_TYPE",
-        "ROUP_ACC_CLAUSE_BIND",
-        "ROUP_ACC_CLAUSE_IF",
-        "ROUP_ACC_CLAUSE_DEFAULT",
-        "ROUP_ACC_CLAUSE_FIRSTPRIVATE",
-        "ROUP_ACC_CLAUSE_DEFAULT_ASYNC",
-        "ROUP_ACC_CLAUSE_LINK",
-        "ROUP_ACC_CLAUSE_NO_CREATE",
-        "ROUP_ACC_CLAUSE_NOHOST",
-        "ROUP_ACC_CLAUSE_PRESENT",
-        "ROUP_ACC_CLAUSE_PRIVATE",
-        "ROUP_ACC_CLAUSE_REDUCTION",
-        "ROUP_ACC_CLAUSE_READ",
-        "ROUP_ACC_CLAUSE_SELF",
-        "ROUP_ACC_CLAUSE_TILE",
-        "ROUP_ACC_CLAUSE_USE_DEVICE",
-        "ROUP_ACC_CLAUSE_ATTACH",
-        "ROUP_ACC_CLAUSE_DETACH",
-        "ROUP_ACC_CLAUSE_FINALIZE",
-        "ROUP_ACC_CLAUSE_IF_PRESENT",
-        "ROUP_ACC_CLAUSE_CAPTURE",
-        "ROUP_ACC_CLAUSE_WRITE",
-        "ROUP_ACC_CLAUSE_UPDATE",
-        "ROUP_ACC_CLAUSE_COPY",
-        "ROUP_ACC_CLAUSE_COPYIN",
-        "ROUP_ACC_CLAUSE_COPYOUT",
-        "ROUP_ACC_CLAUSE_CREATE",
-        "ROUP_ACC_CLAUSE_DELETE",
-        "ROUP_ACC_CLAUSE_DEVICE",
-        "ROUP_ACC_CLAUSE_DEVICEPTR",
-        "ROUP_ACC_CLAUSE_DEVICE_NUM",
-        "ROUP_ACC_CLAUSE_DEVICE_RESIDENT",
-        "ROUP_ACC_CLAUSE_HOST",
-        "ROUP_ACC_CLAUSE_NUM_THREADS",
+        "ROUP_ACCC_async",
+        "ROUP_ACCC_wait",
+        "ROUP_ACCC_num_gangs",
+        "ROUP_ACCC_num_workers",
+        "ROUP_ACCC_vector_length",
+        "ROUP_ACCC_gang",
+        "ROUP_ACCC_worker",
+        "ROUP_ACCC_vector",
+        "ROUP_ACCC_seq",
+        "ROUP_ACCC_independent",
+        "ROUP_ACCC_auto",
+        "ROUP_ACCC_collapse",
+        "ROUP_ACCC_device_type",
+        "ROUP_ACCC_bind",
+        "ROUP_ACCC_if",
+        "ROUP_ACCC_default",
+        "ROUP_ACCC_firstprivate",
+        "ROUP_ACCC_default_async",
+        "ROUP_ACCC_link",
+        "ROUP_ACCC_no_create",
+        "ROUP_ACCC_nohost",
+        "ROUP_ACCC_present",
+        "ROUP_ACCC_private",
+        "ROUP_ACCC_reduction",
+        "ROUP_ACCC_read",
+        "ROUP_ACCC_self",
+        "ROUP_ACCC_tile",
+        "ROUP_ACCC_use_device",
+        "ROUP_ACCC_attach",
+        "ROUP_ACCC_detach",
+        "ROUP_ACCC_finalize",
+        "ROUP_ACCC_if_present",
+        "ROUP_ACCC_capture",
+        "ROUP_ACCC_write",
+        "ROUP_ACCC_update",
+        "ROUP_ACCC_copy",
+        "ROUP_ACCC_copyin",
+        "ROUP_ACCC_copyout",
+        "ROUP_ACCC_create",
+        "ROUP_ACCC_delete",
+        "ROUP_ACCC_device",
+        "ROUP_ACCC_deviceptr",
+        "ROUP_ACCC_device_num",
+        "ROUP_ACCC_device_resident",
+        "ROUP_ACCC_host",
+        "ROUP_ACCC_num_threads",
     ];
 
     // Map from macro name -> numeric value (as i64) for later duplicate-checks
@@ -122,10 +122,10 @@ fn generated_header_has_all_acc_clauses() {
     let duplicates: Vec<(&i64, &Vec<String>)> =
         rev.iter().filter(|(_, names)| names.len() > 1).collect();
     if !duplicates.is_empty() {
-        eprintln!("Found duplicate ROUP_ACC_CLAUSE_* numeric values:");
+        eprintln!("Found duplicate ROUP_ACCC_* numeric values:");
         for (val, names) in &duplicates {
             eprintln!("  {} -> {:?}", val, names);
         }
-        panic!("Duplicate ROUP_ACC_CLAUSE_* numeric values found in generated header");
+        panic!("Duplicate ROUP_ACCC_* numeric values found in generated header");
     }
 }

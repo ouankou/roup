@@ -2,20 +2,20 @@ use std::ffi::CString;
 use std::os::raw::c_char;
 
 /// This integration test ensures the OpenACC C API returns the same numeric
-/// directive kind values that the generated `ROUP_ACC_DIRECTIVE_*` macros
+/// directive kind values that the generated `ROUP_ACCD_*` macros
 /// expose in `src/roup_constants.h`. It prevents regressions where the
 /// C API returned reduced values (0..N) while the generated macros used the
 /// ACC_DIRECTIVE_BASE offset.
 #[test]
 fn acc_directive_kind_matches_generated_macro() {
     // Read the generated header and extract the numeric macro value for
-    // ROUP_ACC_DIRECTIVE_PARALLEL so we can compare runtime outputs against it.
+    // ROUP_ACCD_parallel so we can compare runtime outputs against it.
     let header =
         std::fs::read_to_string("src/roup_constants.h").expect("failed to read generated header");
-    let re = regex::Regex::new(r"#define\s+ROUP_ACC_DIRECTIVE_PARALLEL\s+(\-?\d+)").unwrap();
+    let re = regex::Regex::new(r"#define\s+ROUP_ACCD_parallel\s+(\-?\d+)").unwrap();
     let caps = re
         .captures(&header)
-        .expect("ROUP_ACC_DIRECTIVE_PARALLEL not found in header");
+        .expect("ROUP_ACCD_parallel not found in header");
     let expected: i32 = caps.get(1).unwrap().as_str().parse().unwrap();
 
     // Prepare a simple OpenACC directive string

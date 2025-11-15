@@ -34,37 +34,37 @@ fn generate_header(
     // Generate OpenMP directive constants
     let mut directive_defs = String::new();
     for (name, num) in directives {
-        directive_defs.push_str(&format!("#define ROUP_DIRECTIVE_{name:<20} {num}\n"));
+        directive_defs.push_str(&format!("#define ROUP_OMPD_{name:<30} {num}\n"));
     }
     directive_defs.push_str(&format!(
-        "#define ROUP_DIRECTIVE_UNKNOWN       {UNKNOWN_KIND}\n"
+        "#define ROUP_OMPD_unknown                   {UNKNOWN_KIND}\n"
     ));
 
     // Generate OpenMP clause constants
     let mut clause_defs = String::new();
     for (name, num) in clauses {
-        clause_defs.push_str(&format!("#define ROUP_CLAUSE_{name:<15} {num}\n"));
+        clause_defs.push_str(&format!("#define ROUP_OMPC_{name:<30} {num}\n"));
     }
     clause_defs.push_str(&format!(
-        "#define ROUP_CLAUSE_UNKNOWN      {UNKNOWN_KIND}\n"
+        "#define ROUP_OMPC_unknown                   {UNKNOWN_KIND}\n"
     ));
 
     // Generate OpenACC directive constants with ROUP_ACC_ prefix
     let mut acc_directive_defs = String::new();
     for (name, num) in acc_directives {
-        acc_directive_defs.push_str(&format!("#define ROUP_ACC_DIRECTIVE_{name:<20} {num}\n"));
+        acc_directive_defs.push_str(&format!("#define ROUP_ACCD_{name:<30} {num}\n"));
     }
     acc_directive_defs.push_str(&format!(
-        "#define ROUP_ACC_DIRECTIVE_UNKNOWN        {UNKNOWN_KIND}\n"
+        "#define ROUP_ACCD_unknown                    {UNKNOWN_KIND}\n"
     ));
 
     // Generate OpenACC clause constants with ROUP_ACC_ prefix
     let mut acc_clause_defs = String::new();
     for (name, num) in acc_clauses {
-        acc_clause_defs.push_str(&format!("#define ROUP_ACC_CLAUSE_{name:<15} {num}\n"));
+        acc_clause_defs.push_str(&format!("#define ROUP_ACCC_{name:<30} {num}\n"));
     }
     acc_clause_defs.push_str(&format!(
-        "#define ROUP_ACC_CLAUSE_UNKNOWN       {UNKNOWN_KIND}\n"
+        "#define ROUP_ACCC_unknown                  {UNKNOWN_KIND}\n"
     ));
 
     // Generate checksum for validation (includes both OpenMP and OpenACC)
@@ -115,28 +115,28 @@ extern "C" {{
 #define ROUP_LANG_FORTRAN_FIXED             2  // Fortran fixed-form (!$OMP/!$ACC or C$OMP/C$ACC)
 
 // ============================================================================
-// OpenMP Directive Kind Constants
+// OpenMP Directive Kind Constants (ROUP_OMPD_*)
 // ============================================================================
 // Auto-generated from src/c_api.rs:directive_name_to_kind()
 
 {directive_defs}
 
 // ============================================================================
-// OpenMP Clause Kind Constants
+// OpenMP Clause Kind Constants (ROUP_OMPC_*)
 // ============================================================================
 // Auto-generated from src/c_api.rs:convert_clause()
 
 {clause_defs}
 
 // ============================================================================
-// OpenACC Directive Kind Constants
+// OpenACC Directive Kind Constants (ROUP_ACCD_*)
 // ============================================================================
 // Auto-generated from src/c_api.rs:acc_directive_name_to_kind()
 
 {acc_directive_defs}
 
 // ============================================================================
-// OpenACC Clause Kind Constants
+// OpenACC Clause Kind Constants (ROUP_ACCC_*)
 // ============================================================================
 // Auto-generated from src/c_api.rs:convert_acc_clause()
 

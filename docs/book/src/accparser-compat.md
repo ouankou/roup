@@ -176,7 +176,7 @@ Returns: OpenACCDirective with accparser methods
 See `compat/accparser/src/roup_constants.h` (and the auto-generated
 `src/roup_constants.h`) for the complete list of generated macros. Note that
 generated OpenACC macros now use the `ROUP_ACC_*` prefix (for example
-`ROUP_ACC_DIRECTIVE_PARALLEL` and `ROUP_ACC_CLAUSE_ASYNC`). The legacy
+`ROUP_ACCD_parallel` and `ROUP_ACCC_async`). The legacy
 `ACC_*` aliases are not emitted by the generator.
 
 ## Known Limitations

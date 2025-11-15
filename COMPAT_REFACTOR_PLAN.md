@@ -52,7 +52,7 @@
 
 8. **Validation & Regression Testing (continuous, final full day)**
    - Run targeted suites (`ctest -R declare`, `ctest -R fortran`, `ctest -R openacc`) after each milestone.
-   - Ensure `test.sh` invokes the full compat-layer `ctest` run (all 1,527 OpenMP tests plus the AccParser suite) and stops immediately if any test fails, reporting counts/rates so CI requires a 100% pass rate.
+   - Update `test.sh` so the compat-layer `ctest` (all 1,527 OpenMP tests plus the AccParser suite) runs before later sections, reports failure rates, and aborts immediately on any failure; the rest of the script executes only if compat suites pass 100%.
    - Final verification: from a clean clone run `compat/ompparser` (and `compat/accparser` as applicable) build steps and ensure all upstream tests pass without touching the submodules.
 
 ## Deliverables

@@ -29,7 +29,7 @@ Platform-specific notes live in the [building guide](https://roup.ouankou.com/bu
 - **OpenACC 3.4** support with the matrix documented in [`docs/OPENACC_SUPPORT.md`](docs/OPENACC_SUPPORT.md).
   
     Note: generated OpenACC C macros (used by compatibility layers and C/C++ consumers)
-    use the `ROUP_ACC_*` prefix (for example `ROUP_ACC_DIRECTIVE_PARALLEL`). The
+    use the `ROUP_ACC_*` prefix (for example `ROUP_ACCD_parallel`). The
     older `ACC_*` aliases are intentionally removed from generated headers; please
     update any downstream code or documentation that depended on the legacy names.
 - **Rust, C, and C++17 APIs** with a narrow unsafe boundary confined to FFI bindings.
