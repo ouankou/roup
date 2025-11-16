@@ -249,6 +249,8 @@ const CLAUSE_KIND_USE_DEVICE_PTR: i32 = 62;
 const CLAUSE_KIND_USE_DEVICE_ADDR: i32 = 64;
 const CLAUSE_KIND_IS_DEVICE_PTR: i32 = 66;
 const CLAUSE_KIND_HAS_DEVICE_ADDR: i32 = 91;
+const CLAUSE_KIND_COMPARE: i32 = 86;
+const CLAUSE_KIND_COMPARE_CAPTURE: i32 = 87;
 // Temporary numeric OpenMP clause IDs; matches compat/ompparser expectations.
 // These live here until the generated header exports prefixed constants for every clause.
 const CLAUSE_KIND_NOWAIT: i32 = 17;
@@ -1455,161 +1457,200 @@ fn atomic_directive_info(kind: DirectiveName) -> (String, Option<&'static str>) 
 }
 
 fn convert_atomic_suffix_clause(name: &str) -> OmpClause {
-    let clause = Clause {
-        name: Cow::Owned(name.to_string()),
-        kind: ClauseKind::Bare,
+    let kind = match name {
+        "read" => CLAUSE_KIND_ATOMIC_READ,
+        "write" => CLAUSE_KIND_ATOMIC_WRITE,
+        "update" => CLAUSE_KIND_ATOMIC_UPDATE,
+        "capture" => CLAUSE_KIND_ATOMIC_CAPTURE,
+        "compare capture" => CLAUSE_KIND_COMPARE_CAPTURE,
+        _ => panic!("unexpected atomic suffix clause: {name}"),
     };
-    convert_clause(&clause)
+
+    OmpClause {
+        kind,
+        arguments: ptr::null(),
+        data: ClauseData { default: 0 },
+    }
 }
 
 fn convert_clause_from_ast(kind: OmpClauseKind, payload: &IrClauseData) -> OmpClause {
     use crate::parser::ClauseName::*;
     let clause_name: ClauseName = kind.into();
     match clause_name {
-        Default => convert_default_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Defaultmap => convert_defaultmap_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        If => convert_if_clause_from_ast(payload).unwrap_or_else(|| {
-            // TODO(compat/ast): remove legacy fallback once all clauses run on the enum AST.
-            convert_clause_from_legacy(kind, payload)
-        }),
-        NumThreads => convert_num_threads_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Private => convert_private_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Firstprivate => convert_firstprivate_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Shared => convert_shared_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Lastprivate => convert_lastprivate_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        CopyIn => convert_copyin_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Nowait => convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOWAIT)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Nogroup => convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOGROUP)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Untied => convert_bare_clause_from_ast(payload, CLAUSE_KIND_UNTIED)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Mergeable => convert_bare_clause_from_ast(payload, CLAUSE_KIND_MERGEABLE)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        SeqCst => convert_bare_clause_from_ast(payload, CLAUSE_KIND_SEQ_CST)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Relaxed => convert_bare_clause_from_ast(payload, CLAUSE_KIND_RELAXED)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Release => convert_bare_clause_from_ast(payload, CLAUSE_KIND_RELEASE)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Acquire => convert_bare_clause_from_ast(payload, CLAUSE_KIND_ACQUIRE)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        AcqRel => convert_bare_clause_from_ast(payload, CLAUSE_KIND_ACQ_REL)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        ProcBind => convert_proc_bind_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        NumTeams => convert_num_teams_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        ThreadLimit => convert_thread_limit_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Collapse => convert_collapse_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Ordered => convert_ordered_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Linear => convert_linear_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Safelen => convert_safelen_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Simdlen => convert_simdlen_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Aligned => convert_aligned_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Reduction => convert_reduction_clause_from_ast(CLAUSE_KIND_REDUCTION, payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        InReduction => convert_reduction_clause_from_ast(CLAUSE_KIND_IN_REDUCTION, payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        TaskReduction => convert_reduction_clause_from_ast(CLAUSE_KIND_TASK_REDUCTION, payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Requires => convert_requires_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Schedule => convert_schedule_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        DistSchedule => convert_dist_schedule_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Map => convert_map_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        UseDevicePtr => convert_use_device_ptr_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        UseDeviceAddr => convert_use_device_addr_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        IsDevicePtr => convert_is_device_ptr_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        HasDeviceAddr => convert_has_device_addr_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        UsesAllocators => convert_uses_allocators_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Depend => convert_depend_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Device => convert_device_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        DeviceType => convert_device_type_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Allocate => convert_allocate_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Allocator => convert_allocator_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Copyprivate => convert_copyprivate_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Affinity => convert_affinity_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Priority => convert_priority_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Grainsize => convert_grainsize_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        NumTasks => convert_num_tasks_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Filter => convert_filter_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Order => convert_order_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        AtomicDefaultMemOrder => convert_atomic_default_mem_order_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Read => convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_READ, payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Write => convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_WRITE, payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Update => convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_UPDATE, payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Capture => convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_CAPTURE, payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Nontemporal => convert_bare_clause_from_ast(payload, CLAUSE_KIND_NONTEMPORAL)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Uniform => convert_bare_clause_from_ast(payload, CLAUSE_KIND_UNIFORM)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Inbranch => convert_bare_clause_from_ast(payload, CLAUSE_KIND_INBRANCH)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Notinbranch => convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOTINBRANCH)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Inclusive => convert_bare_clause_from_ast(payload, CLAUSE_KIND_INCLUSIVE)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        Exclusive => convert_bare_clause_from_ast(payload, CLAUSE_KIND_EXCLUSIVE)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        ReverseOffload => convert_requires_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        UnifiedAddress => convert_requires_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        UnifiedSharedMemory => convert_requires_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        DynamicAllocators => convert_requires_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        ExtImplementationDefinedRequirement => convert_requires_clause_from_ast(payload)
-            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
-        _ => {
-            let rendered = payload.to_string();
-            let legacy = Clause {
-                name: Cow::Owned(kind.as_str().to_string()),
-                kind: extract_clause_kind(&rendered),
-            };
-            convert_clause(&legacy)
+        Default => expect_clause(convert_default_clause_from_ast(payload), "default"),
+        Defaultmap => expect_clause(convert_defaultmap_clause_from_ast(payload), "defaultmap"),
+        If => expect_clause(convert_if_clause_from_ast(payload), "if"),
+        NumThreads => expect_clause(convert_num_threads_clause_from_ast(payload), "num_threads"),
+        Private => expect_clause(convert_private_clause_from_ast(payload), "private"),
+        Firstprivate => expect_clause(
+            convert_firstprivate_clause_from_ast(payload),
+            "firstprivate",
+        ),
+        Shared => expect_clause(convert_shared_clause_from_ast(payload), "shared"),
+        Lastprivate => expect_clause(convert_lastprivate_clause_from_ast(payload), "lastprivate"),
+        CopyIn => expect_clause(convert_copyin_clause_from_ast(payload), "copyin"),
+        Nowait => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOWAIT),
+            "nowait",
+        ),
+        Nogroup => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOGROUP),
+            "nogroup",
+        ),
+        Untied => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_UNTIED),
+            "untied",
+        ),
+        Mergeable => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_MERGEABLE),
+            "mergeable",
+        ),
+        SeqCst => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_SEQ_CST),
+            "seq_cst",
+        ),
+        Relaxed => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_RELAXED),
+            "relaxed",
+        ),
+        Release => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_RELEASE),
+            "release",
+        ),
+        Acquire => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_ACQUIRE),
+            "acquire",
+        ),
+        AcqRel => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_ACQ_REL),
+            "acq_rel",
+        ),
+        ProcBind => expect_clause(convert_proc_bind_clause_from_ast(payload), "proc_bind"),
+        NumTeams => expect_clause(convert_num_teams_clause_from_ast(payload), "num_teams"),
+        ThreadLimit => expect_clause(
+            convert_thread_limit_clause_from_ast(payload),
+            "thread_limit",
+        ),
+        Collapse => expect_clause(convert_collapse_clause_from_ast(payload), "collapse"),
+        Ordered => expect_clause(convert_ordered_clause_from_ast(payload), "ordered"),
+        Linear => expect_clause(convert_linear_clause_from_ast(payload), "linear"),
+        Safelen => expect_clause(convert_safelen_clause_from_ast(payload), "safelen"),
+        Simdlen => expect_clause(convert_simdlen_clause_from_ast(payload), "simdlen"),
+        Aligned => expect_clause(convert_aligned_clause_from_ast(payload), "aligned"),
+        Reduction => expect_clause(
+            convert_reduction_clause_from_ast(CLAUSE_KIND_REDUCTION, payload),
+            "reduction",
+        ),
+        InReduction => expect_clause(
+            convert_reduction_clause_from_ast(CLAUSE_KIND_IN_REDUCTION, payload),
+            "in_reduction",
+        ),
+        TaskReduction => expect_clause(
+            convert_reduction_clause_from_ast(CLAUSE_KIND_TASK_REDUCTION, payload),
+            "task_reduction",
+        ),
+        Requires => expect_clause(convert_requires_clause_from_ast(payload), "requires"),
+        Schedule => expect_clause(convert_schedule_clause_from_ast(payload), "schedule"),
+        DistSchedule => expect_clause(
+            convert_dist_schedule_clause_from_ast(payload),
+            "dist_schedule",
+        ),
+        Map => expect_clause(convert_map_clause_from_ast(payload), "map"),
+        UseDevicePtr => expect_clause(
+            convert_use_device_ptr_clause_from_ast(payload),
+            "use_device_ptr",
+        ),
+        UseDeviceAddr => expect_clause(
+            convert_use_device_addr_clause_from_ast(payload),
+            "use_device_addr",
+        ),
+        IsDevicePtr => expect_clause(
+            convert_is_device_ptr_clause_from_ast(payload),
+            "is_device_ptr",
+        ),
+        HasDeviceAddr => expect_clause(
+            convert_has_device_addr_clause_from_ast(payload),
+            "has_device_addr",
+        ),
+        UsesAllocators => expect_clause(
+            convert_uses_allocators_clause_from_ast(payload),
+            "uses_allocators",
+        ),
+        Depend => expect_clause(convert_depend_clause_from_ast(payload), "depend"),
+        Device => expect_clause(convert_device_clause_from_ast(payload), "device"),
+        DeviceType => expect_clause(convert_device_type_clause_from_ast(payload), "device_type"),
+        Allocate => expect_clause(convert_allocate_clause_from_ast(payload), "allocate"),
+        Allocator => expect_clause(convert_allocator_clause_from_ast(payload), "allocator"),
+        Copyprivate => expect_clause(convert_copyprivate_clause_from_ast(payload), "copyprivate"),
+        Affinity => expect_clause(convert_affinity_clause_from_ast(payload), "affinity"),
+        Priority => expect_clause(convert_priority_clause_from_ast(payload), "priority"),
+        Grainsize => expect_clause(convert_grainsize_clause_from_ast(payload), "grainsize"),
+        NumTasks => expect_clause(convert_num_tasks_clause_from_ast(payload), "num_tasks"),
+        Filter => expect_clause(convert_filter_clause_from_ast(payload), "filter"),
+        Order => expect_clause(convert_order_clause_from_ast(payload), "order"),
+        AtomicDefaultMemOrder => expect_clause(
+            convert_atomic_default_mem_order_clause_from_ast(payload),
+            "atomic_default_mem_order",
+        ),
+        Read => expect_clause(
+            convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_READ, payload),
+            "read",
+        ),
+        Write => expect_clause(
+            convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_WRITE, payload),
+            "write",
+        ),
+        Update => expect_clause(
+            convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_UPDATE, payload),
+            "update",
+        ),
+        Capture => expect_clause(
+            convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_CAPTURE, payload),
+            "capture",
+        ),
+        Nontemporal => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_NONTEMPORAL),
+            "nontemporal",
+        ),
+        Uniform => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_UNIFORM),
+            "uniform",
+        ),
+        Inbranch => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_INBRANCH),
+            "inbranch",
+        ),
+        Notinbranch => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOTINBRANCH),
+            "notinbranch",
+        ),
+        Inclusive => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_INCLUSIVE),
+            "inclusive",
+        ),
+        Exclusive => expect_clause(
+            convert_bare_clause_from_ast(payload, CLAUSE_KIND_EXCLUSIVE),
+            "exclusive",
+        ),
+        ReverseOffload => {
+            expect_clause(convert_requires_clause_from_ast(payload), "reverse_offload")
         }
+        UnifiedAddress => {
+            expect_clause(convert_requires_clause_from_ast(payload), "unified_address")
+        }
+        UnifiedSharedMemory => expect_clause(
+            convert_requires_clause_from_ast(payload),
+            "unified_shared_memory",
+        ),
+        DynamicAllocators => expect_clause(
+            convert_requires_clause_from_ast(payload),
+            "dynamic_allocators",
+        ),
+        ExtImplementationDefinedRequirement => expect_clause(
+            convert_requires_clause_from_ast(payload),
+            "ext_implementation_defined_requirement",
+        ),
+        _ => panic!("unhandled clause variant in AST: {clause_name:?}"),
     }
 }
 
@@ -1625,25 +1666,8 @@ fn convert_bare_clause_from_ast(payload: &IrClauseData, kind: i32) -> Option<Omp
     }
 }
 
-fn convert_clause_from_legacy(kind: OmpClauseKind, payload: &IrClauseData) -> OmpClause {
-    let rendered = payload.to_string();
-    let legacy = Clause {
-        name: Cow::Owned(kind.as_str().to_string()),
-        kind: extract_clause_kind(&rendered),
-    };
-    convert_clause(&legacy)
-}
-
-fn extract_clause_kind(rendered: &str) -> ClauseKind<'static> {
-    if let Some(start) = rendered.find('(') {
-        if let Some(end) = rendered.rfind(')') {
-            if end > start {
-                let args = rendered[start + 1..end].trim().to_string();
-                return ClauseKind::Parenthesized(Cow::Owned(args));
-            }
-        }
-    }
-    ClauseKind::Bare
+fn expect_clause(value: Option<OmpClause>, clause: &'static str) -> OmpClause {
+    value.unwrap_or_else(|| panic!("AST payload mismatch for clause '{clause}'"))
 }
 
 /// Convert Rust Clause to C-compatible OmpClause.
