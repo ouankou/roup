@@ -996,14 +996,7 @@ fn clause_name_to_kind(name: &str) -> i32 {
         ClauseName::DeviceNum => 2031,
         ClauseName::DeviceResident => 2032,
         ClauseName::Host => 2033,
-        ClauseName::Other(ref s) => {
-            // Unknown clause names remain unmapped for OpenACC C API
-            eprintln!(
-                "[acc_c_api] unknown clause mapping requested: {}",
-                s.as_ref()
-            );
-            -1
-        }
+        ClauseName::Other(ref s) => panic!("Unknown OpenACC clause: {}", s),
         ClauseName::NumThreads => 0,
         ClauseName::If => 14,
         ClauseName::Private => 22,
