@@ -30,6 +30,7 @@ fn generate_header(
     clauses: &[(String, i32)],
     acc_directives: &[(String, i32)],
     acc_clauses: &[(String, i32)],
+    uses_alloc: &[(String, i32)],
 ) -> String {
     // Generate OpenMP directive constants
     let mut directive_defs = String::new();
@@ -67,12 +68,24 @@ fn generate_header(
         "#define ROUP_ACCC_unknown                  {UNKNOWN_KIND}\n"
     ));
 
+    let mut uses_alloc_defs = String::new();
+    for (name, num) in uses_alloc {
+        uses_alloc_defs.push_str(&format!("#define ROUP_OMPA_USESALLOC_{name:<24} {num}\n"));
+    }
+
     // Generate checksum for validation (includes both OpenMP and OpenACC)
-    let checksum = calculate_combined_checksum(directives, clauses, acc_directives, acc_clauses);
+    let checksum = calculate_combined_checksum_with_uses_alloc(
+        &directives,
+        &clauses,
+        &acc_directives,
+        &acc_clauses,
+        &uses_alloc,
+    );
     let dir_count = directives.len();
     let clause_count = clauses.len();
     let acc_dir_count = acc_directives.len();
     let acc_clause_count = acc_clauses.len();
+    let uses_alloc_len = uses_alloc.len();
 
     format!(
         r#"/*
@@ -102,7 +115,7 @@ extern "C" {{
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP ({dir_count} directives + {clause_count} clauses) + OpenACC ({acc_dir_count} directives + {acc_clause_count} clauses) = 0x{checksum:016X}
+// Auto-generated checksum: FNV-1a hash of OpenMP ({dir_count} directives + {clause_count} clauses) + OpenACC ({acc_dir_count} directives + {acc_clause_count} clauses) + uses_allocators ({uses_alloc_len} kinds) = 0x{checksum:016X}
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
 #define ROUP_CONSTANTS_CHECKSUM 0x{checksum:016X}
 
@@ -138,9 +151,16 @@ extern "C" {{
 // ============================================================================
 // OpenACC Clause Kind Constants (ROUP_ACCC_*)
 // ============================================================================
-// Auto-generated from src/c_api.rs:convert_acc_clause()
+// Auto-generated from src/c_api/openacc.rs:clause_name_to_kind()
 
 {acc_clause_defs}
+
+// ============================================================================
+// Uses Allocators Kind Constants (ROUP_USEALLOC_*)
+// ============================================================================
+// Auto-generated from src/c_api.rs uses_allocators mapping
+
+
 
 // ============================================================================
 // Validation Constants
@@ -164,13 +184,20 @@ fn main() {
     // Parse OpenACC constants from source
     let acc_directives = parse_acc_directive_mappings();
     let acc_clauses = parse_acc_clause_mappings();
+    let uses_alloc = constants_gen::parse_uses_allocators_mappings();
 
     // Get the output directory
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("roup_constants.h");
 
     // Generate the header with both OpenMP and OpenACC constants
-    let header = generate_header(&directives, &clauses, &acc_directives, &acc_clauses);
+    let header = generate_header(
+        &directives,
+        &clauses,
+        &acc_directives,
+        &acc_clauses,
+        &uses_alloc,
+    );
 
     // Write to OUT_DIR
     fs::write(&dest_path, &header).expect("Failed to write to OUT_DIR");
@@ -184,8 +211,13 @@ fn main() {
         fs::read_to_string(&src_dest).expect("Failed to read generated header for validation");
 
     let extracted_checksum = extract_checksum_from_header(&generated_content);
-    let expected_checksum =
-        calculate_combined_checksum(&directives, &clauses, &acc_directives, &acc_clauses);
+    let expected_checksum = calculate_combined_checksum_with_uses_alloc(
+        &directives,
+        &clauses,
+        &acc_directives,
+        &acc_clauses,
+        &uses_alloc,
+    );
 
     let dir_count = directives.len();
     let clause_count = clauses.len();

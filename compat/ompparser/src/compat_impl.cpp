@@ -22,6 +22,19 @@ static constexpr uint32_t ROUP_REDUCTION_MODIFIER_TASK = 1u << 0;
 static constexpr uint32_t ROUP_REDUCTION_MODIFIER_INSCAN = 1u << 1;
 static constexpr uint32_t ROUP_REDUCTION_MODIFIER_DEFAULT = 1u << 2;
 
+// Uses-allocators codes returned by ROUP C API (mirror src/c_api.rs ordering)
+enum RoupUsesAllocatorsKind {
+    ROUPO_USES_ALLOC_DEFAULT = 0,
+    ROUPO_USES_ALLOC_LARGE_CAP = 1,
+    ROUPO_USES_ALLOC_CONST = 2,
+    ROUPO_USES_ALLOC_HIGH_BW = 3,
+    ROUPO_USES_ALLOC_LOW_LAT = 4,
+    ROUPO_USES_ALLOC_CGROUP = 5,
+    ROUPO_USES_ALLOC_PTEAM = 6,
+    ROUPO_USES_ALLOC_THREAD = 7,
+    ROUPO_USES_ALLOC_USER = 8,
+};
+
 // ============================================================================
 // ROUP C API Forward Declarations
 // ============================================================================
@@ -61,6 +74,13 @@ extern "C" {
     int32_t roup_string_list_len(const OmpStringList* list);
     const char* roup_string_list_get(const OmpStringList* list, int32_t index);
     void roup_string_list_free(OmpStringList* list);
+
+    int32_t roup_clause_defaultmap_behavior(const OmpClause* clause);
+    int32_t roup_clause_defaultmap_category(const OmpClause* clause);
+    int32_t roup_clause_uses_allocators_count(const OmpClause* clause);
+    int32_t roup_clause_uses_allocator_kind(const OmpClause* clause, int32_t index);
+    const char* roup_clause_uses_allocator_user(const OmpClause* clause, int32_t index);
+    const char* roup_clause_uses_allocator_traits(const OmpClause* clause, int32_t index);
 }
 
 // Helper function to extract string after directive name for clause data
@@ -2687,55 +2707,15 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
                 }
             } else if (clause_kind == OMPC_defaultmap) {
                 // Defaultmap clause: defaultmap(behavior[:category])
-                // Examples: defaultmap(alloc), defaultmap(alloc:pointer), defaultmap(to:scalar)
+                // Pull strongly-typed values from ROUP instead of re-parsing strings.
                 OpenMPDefaultmapClauseBehavior behavior = OMPC_DEFAULTMAP_BEHAVIOR_unspecified;
                 OpenMPDefaultmapClauseCategory category = OMPC_DEFAULTMAP_CATEGORY_unspecified;
 
-                if (args != nullptr && args[0] != '\0') {
-                    std::string args_str(args);
-                    size_t colon_pos = args_str.find(':');
-
-                    if (colon_pos != std::string::npos) {
-                        // Has behavior:category
-                        std::string behavior_str = args_str.substr(0, colon_pos);
-                        behavior_str.erase(0, behavior_str.find_first_not_of(" \t"));
-                        behavior_str.erase(behavior_str.find_last_not_of(" \t") + 1);
-
-                        std::string category_str = args_str.substr(colon_pos + 1);
-                        category_str.erase(0, category_str.find_first_not_of(" \t"));
-                        category_str.erase(category_str.find_last_not_of(" \t") + 1);
-
-                        // Map behavior
-                        if (behavior_str == "alloc") behavior = OMPC_DEFAULTMAP_BEHAVIOR_alloc;
-                        else if (behavior_str == "to") behavior = OMPC_DEFAULTMAP_BEHAVIOR_to;
-                        else if (behavior_str == "from") behavior = OMPC_DEFAULTMAP_BEHAVIOR_from;
-                        else if (behavior_str == "tofrom") behavior = OMPC_DEFAULTMAP_BEHAVIOR_tofrom;
-                        else if (behavior_str == "firstprivate") behavior = OMPC_DEFAULTMAP_BEHAVIOR_firstprivate;
-                        else if (behavior_str == "none") behavior = OMPC_DEFAULTMAP_BEHAVIOR_none;
-                        else if (behavior_str == "default") behavior = OMPC_DEFAULTMAP_BEHAVIOR_default;
-                        else if (behavior_str == "present") behavior = OMPC_DEFAULTMAP_BEHAVIOR_present;
-
-                        // Map category
-                        if (category_str == "scalar") category = OMPC_DEFAULTMAP_CATEGORY_scalar;
-                        else if (category_str == "aggregate") category = OMPC_DEFAULTMAP_CATEGORY_aggregate;
-                        else if (category_str == "pointer") category = OMPC_DEFAULTMAP_CATEGORY_pointer;
-                        else if (category_str == "all") category = OMPC_DEFAULTMAP_CATEGORY_all;
-                        else if (category_str == "allocatable") category = OMPC_DEFAULTMAP_CATEGORY_allocatable;
-                    } else {
-                        // Just behavior, no category
-                        std::string behavior_str = args_str;
-                        behavior_str.erase(0, behavior_str.find_first_not_of(" \t"));
-                        behavior_str.erase(behavior_str.find_last_not_of(" \t") + 1);
-
-                        if (behavior_str == "alloc") behavior = OMPC_DEFAULTMAP_BEHAVIOR_alloc;
-                        else if (behavior_str == "to") behavior = OMPC_DEFAULTMAP_BEHAVIOR_to;
-                        else if (behavior_str == "from") behavior = OMPC_DEFAULTMAP_BEHAVIOR_from;
-                        else if (behavior_str == "tofrom") behavior = OMPC_DEFAULTMAP_BEHAVIOR_tofrom;
-                        else if (behavior_str == "firstprivate") behavior = OMPC_DEFAULTMAP_BEHAVIOR_firstprivate;
-                        else if (behavior_str == "none") behavior = OMPC_DEFAULTMAP_BEHAVIOR_none;
-                        else if (behavior_str == "default") behavior = OMPC_DEFAULTMAP_BEHAVIOR_default;
-                        else if (behavior_str == "present") behavior = OMPC_DEFAULTMAP_BEHAVIOR_present;
-                    }
+                if (const OmpClause* c = roup_clause_iterator_current(roup_clause)) {
+                    int32_t b = roup_clause_defaultmap_behavior(c);
+                    int32_t cat = roup_clause_defaultmap_category(c);
+                    if (b >= 0) behavior = static_cast<OpenMPDefaultmapClauseBehavior>(b);
+                    if (cat >= 0) category = static_cast<OpenMPDefaultmapClauseCategory>(cat);
                 }
 
                 // Create clause with proper enums
@@ -2782,80 +2762,34 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
             } else if (clause_kind == OMPC_uses_allocators) {
                 // Uses_allocators clause: uses_allocators(allocator[(traits)], allocator[(traits)], ...)
                 // Example: uses_allocators(omp_default_mem_alloc(1234567),omp_const_mem_alloc(234))
-
                 OpenMPClause* uses_alloc_clause = OpenMPUsesAllocatorsClause::addUsesAllocatorsClause(dir);
 
-                if (uses_alloc_clause != nullptr && args != nullptr && args[0] != '\0') {
+                if (uses_alloc_clause != nullptr && roup_clause_uses_allocators_count(roup_clause) > 0) {
                     OpenMPUsesAllocatorsClause* typed_clause = static_cast<OpenMPUsesAllocatorsClause*>(uses_alloc_clause);
-                    std::string args_str(args);
 
-                    // Parse comma-separated list of allocators
-                    size_t pos = 0;
-                    while (pos < args_str.length()) {
-                        // Skip whitespace
-                        while (pos < args_str.length() && std::isspace(args_str[pos])) pos++;
-                        if (pos >= args_str.length()) break;
+                    int32_t count = roup_clause_uses_allocators_count(roup_clause);
+                    for (int32_t i = 0; i < count; ++i) {
+                        int32_t kind_code = roup_clause_uses_allocator_kind(roup_clause, i);
+                        const char* user_name = roup_clause_uses_allocator_user(roup_clause, i);
+                        const char* traits = roup_clause_uses_allocator_traits(roup_clause, i);
 
-                        // Find next comma at top level (not inside parentheses)
-                        int paren_depth = 0;
-                        size_t start = pos;
-                        while (pos < args_str.length()) {
-                            if (args_str[pos] == '(') paren_depth++;
-                            else if (args_str[pos] == ')') paren_depth--;
-                            else if (args_str[pos] == ',' && paren_depth == 0) break;
-                            pos++;
-                        }
-
-                        std::string one_allocator = args_str.substr(start, pos - start);
-                        // Trim
-                        one_allocator.erase(0, one_allocator.find_first_not_of(" \t"));
-                        one_allocator.erase(one_allocator.find_last_not_of(" \t") + 1);
-
-                        // Parse allocator: "allocator_name" or "allocator_name(traits)"
                         OpenMPUsesAllocatorsClauseAllocator allocator = OMPC_USESALLOCATORS_ALLOCATOR_unspecified;
-                        std::string traits;
-
-                        size_t lparen = one_allocator.find('(');
-                        std::string allocator_name;
-                        if (lparen != std::string::npos) {
-                            allocator_name = one_allocator.substr(0, lparen);
-                            size_t rparen = one_allocator.rfind(')');
-                            if (rparen != std::string::npos && rparen > lparen) {
-                                traits = one_allocator.substr(lparen + 1, rparen - lparen - 1);
-                            }
-                        } else {
-                            allocator_name = one_allocator;
+                        switch (kind_code) {
+                            case ROUPO_USES_ALLOC_DEFAULT: allocator = OMPC_USESALLOCATORS_ALLOCATOR_default; break;
+                            case ROUPO_USES_ALLOC_LARGE_CAP: allocator = OMPC_USESALLOCATORS_ALLOCATOR_large_cap; break;
+                            case ROUPO_USES_ALLOC_CONST: allocator = OMPC_USESALLOCATORS_ALLOCATOR_cons_mem; break;
+                            case ROUPO_USES_ALLOC_HIGH_BW: allocator = OMPC_USESALLOCATORS_ALLOCATOR_high_bw; break;
+                            case ROUPO_USES_ALLOC_LOW_LAT: allocator = OMPC_USESALLOCATORS_ALLOCATOR_low_lat; break;
+                            case ROUPO_USES_ALLOC_CGROUP: allocator = OMPC_USESALLOCATORS_ALLOCATOR_cgroup; break;
+                            case ROUPO_USES_ALLOC_PTEAM: allocator = OMPC_USESALLOCATORS_ALLOCATOR_pteam; break;
+                            case ROUPO_USES_ALLOC_THREAD: allocator = OMPC_USESALLOCATORS_ALLOCATOR_thread; break;
+                            case ROUPO_USES_ALLOC_USER: allocator = OMPC_USESALLOCATORS_ALLOCATOR_user; break;
+                            default: allocator = OMPC_USESALLOCATORS_ALLOCATOR_unspecified; break;
                         }
 
-                        // Map allocator name to enum
-                        if (allocator_name == "omp_default_mem_alloc") {
-                            allocator = OMPC_USESALLOCATORS_ALLOCATOR_default;
-                        } else if (allocator_name == "omp_large_cap_mem_alloc") {
-                            allocator = OMPC_USESALLOCATORS_ALLOCATOR_large_cap;
-                        } else if (allocator_name == "omp_const_mem_alloc") {
-                            allocator = OMPC_USESALLOCATORS_ALLOCATOR_cons_mem;
-                        } else if (allocator_name == "omp_high_bw_mem_alloc") {
-                            allocator = OMPC_USESALLOCATORS_ALLOCATOR_high_bw;
-                        } else if (allocator_name == "omp_low_lat_mem_alloc") {
-                            allocator = OMPC_USESALLOCATORS_ALLOCATOR_low_lat;
-                        } else if (allocator_name == "omp_cgroup_mem_alloc") {
-                            allocator = OMPC_USESALLOCATORS_ALLOCATOR_cgroup;
-                        } else if (allocator_name == "omp_pteam_mem_alloc") {
-                            allocator = OMPC_USESALLOCATORS_ALLOCATOR_pteam;
-                        } else if (allocator_name == "omp_thread_mem_alloc") {
-                            allocator = OMPC_USESALLOCATORS_ALLOCATOR_thread;
-                        } else {
-                            // User-defined allocator
-                            allocator = OMPC_USESALLOCATORS_ALLOCATOR_user;
-                        }
-
-                        // Add allocator sequence
-                        typed_clause->addUsesAllocatorsAllocatorSequence(allocator, traits, "");
-
-                        // Move to next allocator
-                        if (pos < args_str.length() && args_str[pos] == ',') {
-                            pos++;
-                        }
+                        std::string traits_str = (traits != nullptr) ? std::string(traits) : std::string();
+                        std::string user_str = (user_name != nullptr) ? std::string(user_name) : std::string();
+                        typed_clause->addUsesAllocatorsAllocatorSequence(allocator, traits_str, user_str);
                     }
                 }
 

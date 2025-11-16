@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::ptr;
@@ -8,16 +7,15 @@ use bitflags::bitflags;
 use crate::ast::{
     AccClause as AstAccClause, AccClauseKind as AstAccClauseKind,
     AccClausePayload as AstAccClausePayload, AccCopyKind, AccCopyModifier, AccCreateModifier,
-    AccDirective as AstAccDirective, AccDirectiveParameter, AccGangClause, ClauseNormalizationMode,
-    DirectiveBody,
+    AccDefaultKind, AccDirective as AstAccDirective, AccDirectiveParameter, AccGangClause,
+    ClauseNormalizationMode, DirectiveBody,
 };
 use crate::ir::ParserConfig;
 use crate::lexer::Language;
 use crate::parser::{
-    ast_builder::build_roup_directive, openacc as openacc_parser,
-    CacheDirectiveData as ParserCacheDirectiveData, Clause, ClauseKind, CopyinModifier,
-    CopyoutModifier, CreateModifier, Directive, GangModifier, ReductionOperator, VectorModifier,
-    WaitDirectiveData as ParserWaitDirectiveData, WorkerModifier,
+    ast_builder::{build_roup_directive, AstBuildError},
+    openacc as openacc_parser, CacheDirectiveData as ParserCacheDirectiveData, Directive,
+    WaitDirectiveData as ParserWaitDirectiveData,
 };
 
 use super::{ROUP_LANG_C, ROUP_LANG_FORTRAN_FIXED, ROUP_LANG_FORTRAN_FREE};
@@ -149,51 +147,49 @@ fn parse_openacc_internal(input: *const c_char, language: Language) -> *mut AccD
             Err(_) => return ptr::null_mut(),
         };
 
-        let ast = build_openacc_ast(&directive, language);
+        let ast = match build_openacc_ast(&directive, language) {
+            Ok(ast) => ast,
+            Err(_) => return ptr::null_mut(),
+        };
 
-        let converted = build_acc_directive(directive, ast, language);
+        let converted = build_acc_directive(directive, &ast, language);
         Box::into_raw(Box::new(converted))
     }
 }
 
-fn build_openacc_ast(directive: &Directive<'_>, language: Language) -> Option<AstAccDirective> {
+fn build_openacc_ast(
+    directive: &Directive<'_>,
+    language: Language,
+) -> Result<AstAccDirective, AstBuildError> {
     let ir_language = match language {
         Language::C => crate::ir::Language::C,
         Language::FortranFree | Language::FortranFixed => crate::ir::Language::Fortran,
     };
 
     let parser_config = ParserConfig::default();
-    match build_roup_directive(
+    let roup = build_roup_directive(
         directive,
         crate::parser::Dialect::OpenAcc,
         ClauseNormalizationMode::ParserParity,
         &parser_config,
         ir_language,
-    ) {
-        Ok(roup) => match roup.body {
-            DirectiveBody::OpenAcc(acc) => Some(acc),
-            _ => None,
-        },
-        Err(_) => None,
+    )?;
+
+    match roup.body {
+        DirectiveBody::OpenAcc(acc) => Ok(acc),
+        _ => Err(AstBuildError::UnsupportedDirective(
+            "expected an OpenACC directive body".to_string(),
+        )),
     }
 }
 
 fn build_acc_directive(
     parsed: Directive<'_>,
-    ast: Option<AstAccDirective>,
+    ast: &AstAccDirective,
     language: Language,
 ) -> AccDirective {
-    let (clauses, ast_parameter) = if let Some(ref acc_ast) = ast {
-        (
-            build_clauses_from_ast(acc_ast, &parsed),
-            acc_ast.parameter.clone(),
-        )
-    } else {
-        (
-            parsed.clauses.iter().map(convert_acc_clause).collect(),
-            None,
-        )
-    };
+    let clauses = build_clauses_from_ast(ast);
+    let ast_parameter = ast.parameter.clone();
 
     let mut result = AccDirective {
         name: make_c_string(parsed.name.as_ref()),
@@ -291,18 +287,11 @@ fn apply_ast_parameters(result: &mut AccDirective, parameter: Option<AccDirectiv
     }
 }
 
-fn build_clauses_from_ast(ast: &AstAccDirective, parsed: &Directive<'_>) -> Vec<AccClause> {
-    let mut clauses = Vec::with_capacity(parsed.clauses.len());
-    for (idx, clause) in parsed.clauses.iter().enumerate() {
-        if let Some(ast_clause) = ast.clauses.get(idx) {
-            if let Some(converted) = convert_acc_clause_from_ast(ast_clause) {
-                clauses.push(converted);
-                continue;
-            }
-        }
-        clauses.push(convert_acc_clause(clause));
-    }
-    clauses
+fn build_clauses_from_ast(ast: &AstAccDirective) -> Vec<AccClause> {
+    ast.clauses
+        .iter()
+        .map(convert_acc_clause_from_ast)
+        .collect()
 }
 
 fn convert_cache_directive_data(data: &ParserCacheDirectiveData<'_>) -> CacheData {
@@ -748,123 +737,7 @@ pub extern "C" fn acc_directive_end_paired_kind(directive: *const AccDirective) 
     unsafe { (*directive).end_paired_kind.unwrap_or(-1) }
 }
 
-fn convert_acc_clause(clause: &Clause) -> AccClause {
-    let normalized_name = clause.name.to_ascii_lowercase();
-    let original_keyword = if clause.name.as_ref().eq_ignore_ascii_case(&normalized_name) {
-        None
-    } else {
-        Some(make_c_string(clause.name.as_ref()))
-    };
-
-    let clause_kind = clause_name_to_kind(&normalized_name);
-    let clause_content = clause_content_from_kind(&clause.kind);
-    let clause_content_str = clause_content.as_deref();
-
-    let mut modifier = 0;
-    let mut wait_devnum = None;
-    let mut flags = AccClauseFlags::empty();
-    let mut expressions: Vec<String> = Vec::new();
-
-    match normalized_name.as_str() {
-        "copyin" | "pcopyin" | "present_or_copyin" => {
-            let (mod_value, exprs) = parse_prefixed_values(
-                clause_content_str,
-                "readonly",
-                ACC_COPYIN_MODIFIER_READONLY,
-                ACC_COPYIN_MODIFIER_UNSPECIFIED,
-            );
-            modifier = mod_value;
-            expressions = exprs;
-        }
-        "copyout" | "pcopyout" | "present_or_copyout" => {
-            let (mod_value, exprs) = parse_prefixed_values(
-                clause_content_str,
-                "zero",
-                ACC_COPYOUT_MODIFIER_ZERO,
-                ACC_COPYOUT_MODIFIER_UNSPECIFIED,
-            );
-            modifier = mod_value;
-            expressions = exprs;
-        }
-        "copy" | "pcopy" | "present_or_copy" | "present" | "attach" | "detach" | "use_device"
-        | "link" | "device_resident" | "host" | "device" | "deviceptr" | "delete" | "private"
-        | "firstprivate" | "device_type" | "dtype" => {
-            if let Some(clause_text) = clause_content_str {
-                expressions = split_arguments(clause_text);
-            }
-        }
-        "create" | "pcreate" | "present_or_create" => {
-            let (mod_value, exprs) = parse_prefixed_values(
-                clause_content_str,
-                "zero",
-                ACC_CREATE_MODIFIER_ZERO,
-                ACC_CREATE_MODIFIER_UNSPECIFIED,
-            );
-            modifier = mod_value;
-            expressions = exprs;
-        }
-        "default" => {
-            modifier = parse_default_modifier(clause_content_str);
-        }
-        "reduction" => {
-            let (op, exprs) = parse_reduction_clause(clause_content_str);
-            modifier = op;
-            expressions = exprs;
-        }
-        "vector" => {
-            let (mod_value, exprs) = parse_prefixed_values(
-                clause_content_str,
-                "length",
-                ACC_VECTOR_MODIFIER_LENGTH,
-                ACC_VECTOR_MODIFIER_UNSPECIFIED,
-            );
-            modifier = mod_value;
-            expressions = exprs;
-        }
-        "worker" => {
-            let (mod_value, exprs) = parse_prefixed_values(
-                clause_content_str,
-                "num",
-                ACC_WORKER_MODIFIER_NUM,
-                ACC_WORKER_MODIFIER_UNSPECIFIED,
-            );
-            modifier = mod_value;
-            expressions = exprs;
-        }
-        "wait" => {
-            let (devnum_value, has_queues, exprs) = parse_wait_clause(clause_content_str);
-            if let Some(devnum) = devnum_value {
-                wait_devnum = Some(devnum);
-                flags.insert(AccClauseFlags::WAIT_HAS_DEVNUM);
-            }
-            if has_queues {
-                flags.insert(AccClauseFlags::WAIT_HAS_QUEUES);
-            }
-            expressions = exprs;
-        }
-        _ => {
-            if let Some(value) = clause_content_str {
-                expressions = split_arguments(value);
-            }
-        }
-    }
-
-    let expression_strings = expressions
-        .into_iter()
-        .map(|expr| make_c_string(&expr))
-        .collect();
-
-    AccClause {
-        kind: clause_kind,
-        modifier,
-        original_keyword,
-        expressions: expression_strings,
-        wait_devnum,
-        flags,
-    }
-}
-
-fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> Option<AccClause> {
+fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
     let kind_code = clause_name_to_kind(ast_clause.kind.as_str());
     let mut clause = AccClause {
         kind: kind_code,
@@ -877,14 +750,12 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> Option<AccClause> {
 
     use AstAccClausePayload::*;
     match &ast_clause.payload {
-        Bare => Some(clause),
+        Bare => {}
         Expression(expr) => {
             clause.expressions.push(make_c_string(&expr.to_string()));
-            Some(clause)
         }
         IdentifierList(items) => {
             clause.expressions = identifiers_to_cstrings(items);
-            Some(clause)
         }
         Copy(copy) => {
             clause.expressions = identifiers_to_cstrings(&copy.variables);
@@ -904,7 +775,6 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> Option<AccClause> {
                 }
                 _ => ACC_COPYIN_MODIFIER_UNSPECIFIED,
             };
-            Some(clause)
         }
         Create(create) => {
             clause.expressions = identifiers_to_cstrings(&create.variables);
@@ -912,20 +782,23 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> Option<AccClause> {
                 Some(AccCreateModifier::Zero) => ACC_CREATE_MODIFIER_ZERO,
                 _ => ACC_CREATE_MODIFIER_UNSPECIFIED,
             };
-            Some(clause)
         }
         Reduction(reduction) => {
             clause.expressions = identifiers_to_cstrings(&reduction.variables);
             clause.modifier = acc_reduction_operator_code(&reduction.operator);
-            Some(clause)
         }
         Data(data) => {
             clause.expressions = identifiers_to_cstrings(&data.variables);
-            Some(clause)
         }
         DeviceType(values) => {
             clause.expressions = values.iter().map(|v| make_c_string(v)).collect();
-            Some(clause)
+        }
+        Default(kind) => {
+            clause.modifier = match kind {
+                AccDefaultKind::Unspecified => ACC_DEFAULT_KIND_UNSPECIFIED,
+                AccDefaultKind::None => ACC_DEFAULT_KIND_NONE,
+                AccDefaultKind::Present => ACC_DEFAULT_KIND_PRESENT,
+            };
         }
         Wait(wait) => {
             clause.wait_devnum = wait
@@ -943,18 +816,19 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> Option<AccClause> {
             if clause.wait_devnum.is_some() {
                 clause.flags.insert(AccClauseFlags::WAIT_HAS_DEVNUM);
             }
-            Some(clause)
         }
         Vector(data) => {
             set_vector_worker_payload(&mut clause, data, AstAccClauseKind::Vector);
-            Some(clause)
         }
         Worker(data) => {
             set_vector_worker_payload(&mut clause, data, AstAccClauseKind::Worker);
-            Some(clause)
         }
-        _ => None,
+        Gang(data) => {
+            clause.expressions = gang_clause_expressions(data);
+        }
     }
+
+    clause
 }
 
 fn identifiers_to_cstrings(items: &[crate::ir::Identifier]) -> Vec<CString> {
@@ -965,11 +839,7 @@ fn identifiers_to_cstrings(items: &[crate::ir::Identifier]) -> Vec<CString> {
 }
 
 fn set_vector_worker_payload(clause: &mut AccClause, data: &AccGangClause, kind: AstAccClauseKind) {
-    clause.expressions = data
-        .values
-        .iter()
-        .map(|expr| make_c_string(&expr.to_string()))
-        .collect();
+    clause.expressions = clause_expressions_with_modifier(&data.values, data.modifier.as_deref());
 
     match kind {
         AstAccClauseKind::Vector => {
@@ -986,6 +856,54 @@ fn set_vector_worker_payload(clause: &mut AccClause, data: &AccGangClause, kind:
         }
         _ => {}
     }
+}
+
+fn gang_clause_expressions(data: &AccGangClause) -> Vec<CString> {
+    clause_expressions_with_modifier(&data.values, data.modifier.as_deref())
+}
+
+fn clause_expressions_with_modifier(
+    values: &[crate::ir::Expression],
+    modifier: Option<&str>,
+) -> Vec<CString> {
+    let rendered_values: Vec<String> = values.iter().map(|expr| expr.to_string()).collect();
+
+    if let Some(prefix) = modifier {
+        let joined = join_expression_list(&rendered_values);
+        let formatted = if joined.is_empty() {
+            prefix.to_string()
+        } else {
+            format!("{prefix}: {joined}")
+        };
+        vec![make_c_string(&formatted)]
+    } else {
+        rendered_values
+            .into_iter()
+            .filter_map(|value| {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(make_c_string(trimmed))
+                }
+            })
+            .collect()
+    }
+}
+
+fn join_expression_list(values: &[String]) -> String {
+    let mut result = String::new();
+    for value in values {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !result.is_empty() {
+            result.push_str(", ");
+        }
+        result.push_str(trimmed);
+    }
+    result
 }
 
 fn acc_reduction_operator_code(token: &str) -> i32 {
@@ -1010,375 +928,6 @@ fn acc_reduction_operator_code(token: &str) -> i32 {
         "ieor" => ACC_REDUCTION_OP_FORT_IEOR,
         _ => ACC_REDUCTION_OP_UNSPECIFIED,
     }
-}
-
-fn parse_wait_clause(content: Option<&str>) -> (Option<CString>, bool, Vec<String>) {
-    let Some(raw) = content else {
-        return (None, false, Vec::new());
-    };
-
-    let (devnum, has_queues, exprs, parsed) = parse_wait_components(raw);
-    if parsed {
-        (devnum.map(|value| make_c_string(&value)), has_queues, exprs)
-    } else {
-        (None, false, split_arguments(raw))
-    }
-}
-
-fn parse_wait_components(input: &str) -> (Option<String>, bool, Vec<String>, bool) {
-    let mut rest = input.trim();
-    let mut devnum = None;
-    let mut has_queues = false;
-    let mut parsed = false;
-
-    if let Some((value, remaining)) = strip_named_section(rest, "devnum") {
-        devnum = Some(value.trim().to_string());
-        rest = remaining;
-        parsed = true;
-    }
-
-    if let Some(after_queues) = strip_named_section_simple(rest, "queues") {
-        has_queues = true;
-        rest = after_queues;
-        parsed = true;
-    }
-
-    let expressions = split_arguments(rest);
-    (devnum, has_queues, expressions, parsed)
-}
-
-fn strip_named_section<'a>(input: &'a str, keyword: &str) -> Option<(&'a str, &'a str)> {
-    let trimmed = input.trim_start();
-    if !trimmed.to_ascii_lowercase().starts_with(keyword) {
-        return None;
-    }
-
-    let mut rest = &trimmed[keyword.len()..];
-    rest = rest.trim_start();
-    if !rest.starts_with(':') {
-        return None;
-    }
-    rest = rest[1..].trim_start();
-    if rest.starts_with(':') {
-        // Fortran-style double colon: treat as literal content
-        return None;
-    }
-
-    let (value, remaining) = split_once_outside_double_colon(rest, ':').unwrap_or((rest, ""));
-    Some((value.trim(), remaining.trim_start()))
-}
-
-fn strip_named_section_simple<'a>(input: &'a str, keyword: &str) -> Option<&'a str> {
-    let trimmed = input.trim_start();
-    if !trimmed.to_ascii_lowercase().starts_with(keyword) {
-        return None;
-    }
-
-    let mut rest = &trimmed[keyword.len()..];
-    rest = rest.trim_start();
-    if !rest.starts_with(':') {
-        return None;
-    }
-    rest = rest[1..].trim_start();
-    if rest.starts_with(':') {
-        // Fortran syntax - treat as literal
-        return None;
-    }
-
-    Some(rest)
-}
-
-fn clause_content_from_kind<'a>(kind: &'a ClauseKind<'a>) -> Option<Cow<'a, str>> {
-    match kind {
-        ClauseKind::Parenthesized(value) => Some(Cow::Borrowed(value.as_ref())),
-        ClauseKind::VariableList(values) => Some(Cow::Owned(join_variable_list(values))),
-        ClauseKind::GangClause {
-            modifier,
-            variables,
-        } => Some(Cow::Owned(format_gang_clause(*modifier, variables))),
-        ClauseKind::WorkerClause {
-            modifier,
-            variables,
-        } => Some(Cow::Owned(format_worker_clause(*modifier, variables))),
-        ClauseKind::VectorClause {
-            modifier,
-            variables,
-        } => Some(Cow::Owned(format_vector_clause(*modifier, variables))),
-        ClauseKind::CopyinClause {
-            modifier,
-            variables,
-        } => Some(Cow::Owned(format_copyin_clause(*modifier, variables))),
-        ClauseKind::CopyoutClause {
-            modifier,
-            variables,
-        } => Some(Cow::Owned(format_copyout_clause(*modifier, variables))),
-        ClauseKind::CreateClause {
-            modifier,
-            variables,
-        } => Some(Cow::Owned(format_create_clause(*modifier, variables))),
-        ClauseKind::ReductionClause {
-            operator,
-            variables,
-            ..
-        } => Some(Cow::Owned(format_reduction_clause(*operator, variables))),
-        ClauseKind::Bare => None,
-    }
-}
-
-fn join_variable_list(values: &[Cow<'_, str>]) -> String {
-    let mut result = String::new();
-    for value in values {
-        let trimmed = value.as_ref().trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        if !result.is_empty() {
-            result.push_str(", ");
-        }
-        result.push_str(trimmed);
-    }
-    result
-}
-
-fn format_with_optional_prefix(
-    prefix: &str,
-    has_prefix: bool,
-    variables: &[Cow<'_, str>],
-) -> String {
-    let joined = join_variable_list(variables);
-    if has_prefix {
-        if joined.is_empty() {
-            prefix.to_string()
-        } else {
-            format!("{prefix}: {joined}")
-        }
-    } else {
-        joined
-    }
-}
-
-fn format_gang_clause(modifier: Option<GangModifier>, variables: &[Cow<'_, str>]) -> String {
-    match modifier {
-        Some(GangModifier::Num) => format_with_optional_prefix("num", true, variables),
-        Some(GangModifier::Static) => format_with_optional_prefix("static", true, variables),
-        None => join_variable_list(variables),
-    }
-}
-
-fn format_worker_clause(modifier: Option<WorkerModifier>, variables: &[Cow<'_, str>]) -> String {
-    let has_prefix = matches!(modifier, Some(WorkerModifier::Num));
-    format_with_optional_prefix("num", has_prefix, variables)
-}
-
-fn format_vector_clause(modifier: Option<VectorModifier>, variables: &[Cow<'_, str>]) -> String {
-    let has_prefix = matches!(modifier, Some(VectorModifier::Length));
-    format_with_optional_prefix("length", has_prefix, variables)
-}
-
-fn format_copyin_clause(modifier: Option<CopyinModifier>, variables: &[Cow<'_, str>]) -> String {
-    let has_prefix = matches!(modifier, Some(CopyinModifier::Readonly));
-    format_with_optional_prefix("readonly", has_prefix, variables)
-}
-
-fn format_copyout_clause(modifier: Option<CopyoutModifier>, variables: &[Cow<'_, str>]) -> String {
-    let has_prefix = matches!(modifier, Some(CopyoutModifier::Zero));
-    format_with_optional_prefix("zero", has_prefix, variables)
-}
-
-fn format_create_clause(modifier: Option<CreateModifier>, variables: &[Cow<'_, str>]) -> String {
-    let has_prefix = matches!(modifier, Some(CreateModifier::Zero));
-    format_with_optional_prefix("zero", has_prefix, variables)
-}
-
-fn format_reduction_clause(operator: ReductionOperator, variables: &[Cow<'_, str>]) -> String {
-    let token = reduction_operator_token(operator);
-    let joined = join_variable_list(variables);
-    if token.is_empty() {
-        joined
-    } else if joined.is_empty() {
-        token.to_string()
-    } else {
-        format!("{token}: {joined}")
-    }
-}
-
-fn reduction_operator_token(operator: ReductionOperator) -> &'static str {
-    match operator {
-        ReductionOperator::Add => "+",
-        ReductionOperator::Sub => "-",
-        ReductionOperator::Mul => "*",
-        ReductionOperator::Max => "max",
-        ReductionOperator::Min => "min",
-        ReductionOperator::BitAnd => "&",
-        ReductionOperator::BitOr => "|",
-        ReductionOperator::BitXor => "^",
-        ReductionOperator::LogAnd => "&&",
-        ReductionOperator::LogOr => "||",
-        ReductionOperator::FortAnd => "and",
-        ReductionOperator::FortOr => "or",
-        ReductionOperator::FortEqv => "eqv",
-        ReductionOperator::FortNeqv => "neqv",
-        ReductionOperator::FortIand => "iand",
-        ReductionOperator::FortIor => "ior",
-        ReductionOperator::FortIeor => "ieor",
-        ReductionOperator::UserDefined => "user",
-    }
-}
-
-fn parse_prefixed_values(
-    content: Option<&str>,
-    modifier_keyword: &str,
-    modifier_value: i32,
-    unspecified_value: i32,
-) -> (i32, Vec<String>) {
-    let Some(raw_content) = content else {
-        return (unspecified_value, Vec::new());
-    };
-
-    if raw_content.is_empty() {
-        return (unspecified_value, Vec::new());
-    }
-
-    if let Some(rest) = strip_modifier_prefix(raw_content, modifier_keyword) {
-        return (modifier_value, split_arguments(rest));
-    }
-
-    (unspecified_value, split_arguments(raw_content))
-}
-
-fn strip_modifier_prefix<'a>(content: &'a str, keyword: &str) -> Option<&'a str> {
-    let trimmed = content.trim_start();
-    if trimmed.len() < keyword.len() {
-        return None;
-    }
-
-    if !trimmed[..keyword.len()].eq_ignore_ascii_case(keyword) {
-        return None;
-    }
-
-    let mut rest = &trimmed[keyword.len()..];
-    rest = rest.trim_start();
-    if rest.starts_with(':') {
-        rest = rest[1..].trim_start();
-    } else {
-        return None;
-    }
-
-    Some(rest)
-}
-
-fn parse_default_modifier(content: Option<&str>) -> i32 {
-    let Some(clause_content) = content else {
-        return ACC_DEFAULT_KIND_UNSPECIFIED;
-    };
-
-    let value = clause_content.trim().to_ascii_lowercase();
-    match value.as_str() {
-        "none" => ACC_DEFAULT_KIND_NONE,
-        "present" => ACC_DEFAULT_KIND_PRESENT,
-        _ => ACC_DEFAULT_KIND_UNSPECIFIED,
-    }
-}
-
-fn parse_reduction_clause(content: Option<&str>) -> (i32, Vec<String>) {
-    let Some(raw_content) = content else {
-        return (ACC_REDUCTION_OP_UNSPECIFIED, Vec::new());
-    };
-
-    let mut operator = ACC_REDUCTION_OP_UNSPECIFIED;
-    let mut rest = raw_content.trim();
-    if let Some((op, remaining)) = split_once_outside_double_colon(rest, ':') {
-        operator = match op.trim().to_ascii_lowercase().as_str() {
-            "readonly" => ACC_REDUCTION_OP_READONLY,
-            "+" => ACC_REDUCTION_OP_ADD,
-            "-" => ACC_REDUCTION_OP_SUB,
-            "*" => ACC_REDUCTION_OP_MUL,
-            "max" => ACC_REDUCTION_OP_MAX,
-            "min" => ACC_REDUCTION_OP_MIN,
-            "&" => ACC_REDUCTION_OP_BITAND,
-            "|" => ACC_REDUCTION_OP_BITOR,
-            "^" => ACC_REDUCTION_OP_BITXOR,
-            "&&" => ACC_REDUCTION_OP_LOGAND,
-            "||" => ACC_REDUCTION_OP_LOGOR,
-            "and" => ACC_REDUCTION_OP_FORT_AND,
-            "or" => ACC_REDUCTION_OP_FORT_OR,
-            "eqv" => ACC_REDUCTION_OP_FORT_EQV,
-            "neqv" => ACC_REDUCTION_OP_FORT_NEQV,
-            "iand" => ACC_REDUCTION_OP_FORT_IAND,
-            "ior" => ACC_REDUCTION_OP_FORT_IOR,
-            "ieor" => ACC_REDUCTION_OP_FORT_IEOR,
-            _ => ACC_REDUCTION_OP_UNSPECIFIED,
-        };
-        rest = remaining.trim();
-    }
-
-    (operator, split_arguments(rest))
-}
-
-fn split_arguments(input: &str) -> Vec<String> {
-    let mut args = Vec::new();
-    let mut current = String::new();
-    let mut paren_depth = 0;
-    let mut bracket_depth = 0;
-
-    for ch in input.chars() {
-        match ch {
-            '(' => {
-                paren_depth += 1;
-                current.push(ch);
-            }
-            ')' => {
-                if paren_depth > 0 {
-                    paren_depth -= 1;
-                }
-                current.push(ch);
-            }
-            '[' => {
-                bracket_depth += 1;
-                current.push(ch);
-            }
-            ']' => {
-                if bracket_depth > 0 {
-                    bracket_depth -= 1;
-                }
-                current.push(ch);
-            }
-            ',' if paren_depth == 0 && bracket_depth == 0 => {
-                let trimmed = current.trim();
-                if !trimmed.is_empty() {
-                    args.push(trimmed.to_string());
-                }
-                current.clear();
-            }
-            _ => current.push(ch),
-        }
-    }
-
-    let trimmed = current.trim();
-    if !trimmed.is_empty() {
-        args.push(trimmed.to_string());
-    }
-
-    args
-}
-
-fn split_once_outside_double_colon(input: &str, needle: char) -> Option<(&str, &str)> {
-    let mut idx = 0usize;
-    let chars: Vec<char> = input.chars().collect();
-    while idx < chars.len() {
-        if chars[idx] == needle {
-            let next = chars.get(idx + 1);
-            if next == Some(&':') {
-                idx += 2;
-                continue;
-            }
-            let left = &input[..idx];
-            let right = &input[idx + 1..];
-            return Some((left, right));
-        }
-        idx += 1;
-    }
-    None
 }
 
 fn make_c_string(value: &str) -> CString {

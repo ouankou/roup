@@ -42,11 +42,14 @@
 //! ```
 
 use super::{
-    lang, ClauseData, ClauseItem, ConversionError, DefaultKind, DependType, DirectiveIR,
-    DirectiveKind, Expression, Identifier, Language, MapType, ParserConfig, ProcBind,
-    ReductionOperator, ScheduleKind, ScheduleModifier, SourceLocation,
+    lang, AtomicOp, ClauseData, ClauseItem, ConversionError, DefaultKind, DefaultmapBehavior,
+    DefaultmapCategory, DependType, DeviceType, DirectiveIR, DirectiveKind, Expression, Identifier,
+    Language, LastprivateModifier, MapType, MemoryOrder, OrderKind, ParserConfig, ProcBind,
+    ReductionOperator, RequireModifier, ScheduleKind, ScheduleModifier, SourceLocation,
+    UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
 };
-use crate::parser::{Clause, ClauseKind, Directive};
+use crate::ast::OmpDirective;
+use crate::parser::{directive_kind::DirectiveName, Clause, ClauseKind, Directive};
 
 /// Convert a directive name string to DirectiveKind
 ///
@@ -523,6 +526,260 @@ pub fn parse_linear_clause(
     }
 }
 
+fn parse_defaultmap_clause(kind: &ClauseKind<'_>) -> Result<ClauseData, ConversionError> {
+    if let ClauseKind::Parenthesized(ref content) = kind {
+        let text = content.as_ref().trim();
+        if text.is_empty() {
+            return Ok(ClauseData::Defaultmap {
+                behavior: DefaultmapBehavior::Unspecified,
+                category: None,
+            });
+        }
+
+        let (behavior_str, category_str) =
+            if let Some((behavior, rest)) = lang::split_once_top_level(text, ':') {
+                (behavior.trim(), Some(rest.trim()))
+            } else {
+                (text, None)
+            };
+
+        let behavior = parse_defaultmap_behavior(behavior_str)?;
+        let category = match category_str {
+            Some(value) if !value.is_empty() => Some(parse_defaultmap_category(value)?),
+            _ => None,
+        };
+
+        Ok(ClauseData::Defaultmap { behavior, category })
+    } else {
+        Err(ConversionError::InvalidClauseSyntax(
+            "defaultmap clause requires parenthesized content".to_string(),
+        ))
+    }
+}
+
+fn parse_defaultmap_behavior(value: &str) -> Result<DefaultmapBehavior, ConversionError> {
+    let normalized = value.trim().to_ascii_lowercase();
+    let behavior = match normalized.as_str() {
+        "" | "unspecified" => DefaultmapBehavior::Unspecified,
+        "alloc" => DefaultmapBehavior::Alloc,
+        "to" => DefaultmapBehavior::To,
+        "from" => DefaultmapBehavior::From,
+        "tofrom" => DefaultmapBehavior::Tofrom,
+        "firstprivate" => DefaultmapBehavior::Firstprivate,
+        "none" => DefaultmapBehavior::None,
+        "default" => DefaultmapBehavior::Default,
+        "present" => DefaultmapBehavior::Present,
+        other => {
+            return Err(ConversionError::InvalidClauseSyntax(format!(
+                "Unknown defaultmap behavior: {other}"
+            )))
+        }
+    };
+    Ok(behavior)
+}
+
+fn parse_defaultmap_category(value: &str) -> Result<DefaultmapCategory, ConversionError> {
+    let normalized = value.trim().to_ascii_lowercase();
+    let category = match normalized.as_str() {
+        "" | "unspecified" => DefaultmapCategory::Unspecified,
+        "scalar" => DefaultmapCategory::Scalar,
+        "aggregate" => DefaultmapCategory::Aggregate,
+        "pointer" => DefaultmapCategory::Pointer,
+        "all" => DefaultmapCategory::All,
+        "allocatable" => DefaultmapCategory::Allocatable,
+        other => {
+            return Err(ConversionError::InvalidClauseSyntax(format!(
+                "Unknown defaultmap category: {other}"
+            )))
+        }
+    };
+    Ok(category)
+}
+
+fn parse_uses_allocators_clause(
+    kind: &ClauseKind<'_>,
+    config: &ParserConfig,
+) -> Result<ClauseData, ConversionError> {
+    if let ClauseKind::Parenthesized(ref content) = kind {
+        let entries = split_top_level_items(content.as_ref());
+        let mut allocators = Vec::new();
+        for raw in entries {
+            let entry = raw.trim();
+            if entry.is_empty() {
+                continue;
+            }
+            let (name, traits_expr) = split_allocator_entry(entry)?;
+            let allocator_kind = classify_allocator_name(name);
+            let traits = match traits_expr {
+                Some(expr_text) if !expr_text.trim().is_empty() => {
+                    Some(Expression::new(expr_text.trim(), config))
+                }
+                _ => None,
+            };
+            allocators.push(UsesAllocatorSpec {
+                allocator: allocator_kind,
+                traits,
+            });
+        }
+
+        Ok(ClauseData::UsesAllocators { allocators })
+    } else {
+        Err(ConversionError::InvalidClauseSyntax(
+            "uses_allocators clause requires parenthesized content".to_string(),
+        ))
+    }
+}
+
+fn parse_requires_clause(
+    kind: &ClauseKind<'_>,
+    _config: &ParserConfig,
+) -> Result<ClauseData, ConversionError> {
+    if let ClauseKind::Parenthesized(ref content) = kind {
+        let items = split_top_level_items(content.as_ref());
+        let mut requirements = Vec::new();
+        for raw in items {
+            let token = raw.trim();
+            if token.is_empty() {
+                continue;
+            }
+            let normalized = token.to_ascii_lowercase();
+            match normalized.as_str() {
+                "reverse_offload" => requirements.push(RequireModifier::ReverseOffload),
+                "unified_address" => requirements.push(RequireModifier::UnifiedAddress),
+                "unified_shared_memory" => requirements.push(RequireModifier::UnifiedSharedMemory),
+                "dynamic_allocators" => requirements.push(RequireModifier::DynamicAllocators),
+                "atomic_default_mem_order" => {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "atomic_default_mem_order requires a value".to_string(),
+                    ))
+                }
+                value if value.starts_with("atomic_default_mem_order") => {
+                    if let Some((_, order)) = value.split_once('(') {
+                        let order = order.trim_end_matches(')').trim();
+                        let mo = parse_memory_order(order)?;
+                        requirements.push(RequireModifier::AtomicDefaultMemOrder(mo));
+                    } else {
+                        return Err(ConversionError::InvalidClauseSyntax(
+                            "atomic_default_mem_order requires a value".to_string(),
+                        ));
+                    }
+                }
+                "ext_implementation_defined_requirement" => {
+                    requirements.push(RequireModifier::ExtImplementationDefinedRequirement)
+                }
+                other => {
+                    // Treat unknown tokens as implementation-defined requirement names
+                    let mo = parse_memory_order(other).ok();
+                    if let Some(order) = mo {
+                        requirements.push(RequireModifier::AtomicDefaultMemOrder(order));
+                    } else {
+                        requirements.push(RequireModifier::ExtImplementationDefinedRequirement);
+                    }
+                }
+            }
+        }
+        if requirements.is_empty() {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "requires clause must specify at least one requirement".to_string(),
+            ));
+        }
+        Ok(ClauseData::Requires { requirements })
+    } else {
+        Err(ConversionError::InvalidClauseSyntax(
+            "requires clause requires parenthesized content".to_string(),
+        ))
+    }
+}
+
+fn parse_memory_order(value: &str) -> Result<MemoryOrder, ConversionError> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "seq_cst" => Ok(MemoryOrder::SeqCst),
+        "acq_rel" => Ok(MemoryOrder::AcqRel),
+        "release" => Ok(MemoryOrder::Release),
+        "acquire" => Ok(MemoryOrder::Acquire),
+        "relaxed" => Ok(MemoryOrder::Relaxed),
+        other => Err(ConversionError::InvalidClauseSyntax(format!(
+            "Unknown memory order: {other}"
+        ))),
+    }
+}
+
+fn split_allocator_entry(input: &str) -> Result<(&str, Option<&str>), ConversionError> {
+    if let Some(start) = input.find('(') {
+        let mut depth = 0;
+        let mut end = None;
+        for (idx, ch) in input.char_indices().skip(start) {
+            match ch {
+                '(' => {
+                    depth += 1;
+                }
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = Some(idx);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let end_idx = end.ok_or_else(|| {
+            ConversionError::InvalidClauseSyntax(
+                "uses_allocators clause has unmatched parentheses".to_string(),
+            )
+        })?;
+
+        let name = input[..start].trim();
+        let traits = input[start + 1..end_idx].trim();
+        Ok((name, Some(traits)))
+    } else {
+        Ok((input.trim(), None))
+    }
+}
+
+fn split_top_level_items(input: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0;
+    let mut start = 0;
+    let mut iter = input.char_indices().peekable();
+    while let Some((idx, ch)) = iter.next() {
+        match ch {
+            '(' | '[' => depth += 1,
+            ')' | ']' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+            }
+            ',' if depth == 0 => {
+                parts.push(&input[start..idx]);
+                start = idx + ch.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    if start < input.len() {
+        parts.push(&input[start..]);
+    }
+    parts
+}
+
+fn classify_allocator_name(name: &str) -> UsesAllocatorKind {
+    let trimmed = name.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    match lower.as_str() {
+        "omp_default_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::Default),
+        "omp_large_cap_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::LargeCap),
+        "omp_const_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::Const),
+        "omp_high_bw_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::HighBw),
+        "omp_low_lat_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::LowLat),
+        "omp_cgroup_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::Cgroup),
+        "omp_pteam_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::Pteam),
+        "omp_thread_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::Thread),
+        _ => UsesAllocatorKind::Custom(Identifier::new(trimmed)),
+    }
+}
+
 /// Convert a parser Clause to IR ClauseData
 ///
 /// This is the main conversion function that handles all clause types.
@@ -565,6 +822,9 @@ pub fn parse_clause_data<'a>(
                 ))
             }
         }
+
+        // defaultmap(behavior[:category])
+        "defaultmap" => parse_defaultmap_clause(&clause.kind),
 
         // private(list)
         "private" => {
@@ -778,6 +1038,444 @@ pub fn parse_clause_data<'a>(
             }
         }
 
+        // lastprivate([modifier:] list)
+        "lastprivate" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let (modifier, list_str) =
+                    if let Some((modifier, rest)) = lang::split_once_top_level(content, ':') {
+                        (Some(modifier.trim()), rest)
+                    } else {
+                        (None, content)
+                    };
+
+                let modifier = match modifier {
+                    Some("") => None,
+                    Some("conditional") => Some(LastprivateModifier::Conditional),
+                    Some(other) => {
+                        return Err(ConversionError::InvalidClauseSyntax(format!(
+                            "Unknown lastprivate modifier: {other}"
+                        )))
+                    }
+                    None => None,
+                };
+
+                let items = parse_identifier_list(list_str.trim(), config)?;
+                Ok(ClauseData::Lastprivate { modifier, items })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "lastprivate clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // copyin(list)
+        "copyin" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let items = parse_identifier_list(content.as_ref(), config)?;
+                Ok(ClauseData::Copyin { items })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "copyin clause requires a variable list".to_string(),
+                ))
+            }
+        }
+
+        // copyprivate(list)
+        "copyprivate" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let items = parse_identifier_list(content.as_ref(), config)?;
+                Ok(ClauseData::Copyprivate { items })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "copyprivate clause requires a variable list".to_string(),
+                ))
+            }
+        }
+
+        // num_teams(expr)
+        "num_teams" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::NumTeams {
+                    num: Expression::new(content.as_ref().trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "num_teams clause requires parenthesized expression".to_string(),
+                ))
+            }
+        }
+
+        // thread_limit(expr)
+        "thread_limit" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::ThreadLimit {
+                    limit: Expression::new(content.as_ref().trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "thread_limit clause requires parenthesized expression".to_string(),
+                ))
+            }
+        }
+
+        // aligned(list[:alignment])
+        "aligned" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let (items_part, alignment_part) =
+                    if let Some((items, alignment)) = lang::split_once_top_level(content, ':') {
+                        (items, Some(alignment))
+                    } else {
+                        (content, None)
+                    };
+
+                let items = parse_identifier_list(items_part.trim(), config)?;
+                let alignment = alignment_part.map(|value| Expression::new(value.trim(), config));
+                Ok(ClauseData::Aligned { items, alignment })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "aligned clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // safelen(length)
+        "safelen" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::Safelen {
+                    length: Expression::new(content.as_ref().trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "safelen clause requires parenthesized expression".to_string(),
+                ))
+            }
+        }
+
+        // simdlen(length)
+        "simdlen" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::Simdlen {
+                    length: Expression::new(content.as_ref().trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "simdlen clause requires parenthesized expression".to_string(),
+                ))
+            }
+        }
+
+        // in_reduction/task_reduction share the reduction parser
+        "in_reduction" | "task_reduction" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                if let Some((op_str, items_str)) = lang::split_once_top_level(content, ':') {
+                    let operator = parse_reduction_operator(op_str.trim())?;
+                    let items = parse_identifier_list(items_str.trim(), config)?;
+                    Ok(ClauseData::Reduction { operator, items })
+                } else {
+                    Err(ConversionError::InvalidClauseSyntax(
+                        "reduction-style clauses require 'operator: list' syntax".to_string(),
+                    ))
+                }
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "reduction-style clauses require parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // dist_schedule(kind[, chunk])
+        "dist_schedule" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let parts: Vec<&str> = content
+                    .as_ref()
+                    .split(',')
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if parts.is_empty() {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "dist_schedule requires a schedule kind".to_string(),
+                    ));
+                }
+                let kind = match parts[0] {
+                    "static" => ScheduleKind::Static,
+                    "dynamic" => ScheduleKind::Dynamic,
+                    "guided" => ScheduleKind::Guided,
+                    other => {
+                        return Err(ConversionError::InvalidClauseSyntax(format!(
+                            "Unknown dist_schedule kind: {other}"
+                        )))
+                    }
+                };
+                let chunk_size = parts
+                    .get(1)
+                    .map(|value| Expression::new(value.trim(), config));
+                Ok(ClauseData::DistSchedule { kind, chunk_size })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "dist_schedule clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // grainsize(expression)
+        "grainsize" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::Grainsize {
+                    grain: Expression::new(content.as_ref().trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "grainsize clause requires parenthesized expression".to_string(),
+                ))
+            }
+        }
+
+        // num_tasks(expression)
+        "num_tasks" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::NumTasks {
+                    num: Expression::new(content.as_ref().trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "num_tasks clause requires parenthesized expression".to_string(),
+                ))
+            }
+        }
+
+        // filter(expression)
+        "filter" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::Filter {
+                    thread_num: Expression::new(content.as_ref().trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "filter clause requires parenthesized expression".to_string(),
+                ))
+            }
+        }
+
+        // affinity(list)
+        "affinity" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let items = parse_identifier_list(content.as_ref(), config)?;
+                Ok(ClauseData::Affinity { items })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "affinity clause requires a variable list".to_string(),
+                ))
+            }
+        }
+
+        // priority(expression)
+        "priority" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::Priority {
+                    priority: Expression::new(content.as_ref().trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "priority clause requires parenthesized expression".to_string(),
+                ))
+            }
+        }
+
+        // device(expression)
+        "device" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::Device {
+                    device_num: Expression::new(content.as_ref().trim(), config),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "device clause requires parenthesized expression".to_string(),
+                ))
+            }
+        }
+
+        // device_type(host|nohost|any)
+        "device_type" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let value = content.as_ref().trim();
+                let device_type = match value {
+                    "host" => DeviceType::Host,
+                    "nohost" => DeviceType::Nohost,
+                    "any" => DeviceType::Any,
+                    other => {
+                        return Err(ConversionError::InvalidClauseSyntax(format!(
+                            "Unknown device_type value: {other}"
+                        )))
+                    }
+                };
+                Ok(ClauseData::DeviceType(device_type))
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "device_type clause requires parenthesized value".to_string(),
+                ))
+            }
+        }
+
+        // use_device_ptr(list)
+        "use_device_ptr" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let items = parse_identifier_list(content.as_ref(), config)?;
+                Ok(ClauseData::UseDevicePtr { items })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "use_device_ptr clause requires a variable list".to_string(),
+                ))
+            }
+        }
+
+        // use_device_addr(list)
+        "use_device_addr" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let items = parse_identifier_list(content.as_ref(), config)?;
+                Ok(ClauseData::UseDeviceAddr { items })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "use_device_addr clause requires a variable list".to_string(),
+                ))
+            }
+        }
+
+        // is_device_ptr(list)
+        "is_device_ptr" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let items = parse_identifier_list(content.as_ref(), config)?;
+                Ok(ClauseData::IsDevicePtr { items })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "is_device_ptr clause requires a variable list".to_string(),
+                ))
+            }
+        }
+
+        // has_device_addr(list)
+        "has_device_addr" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let items = parse_identifier_list(content.as_ref(), config)?;
+                Ok(ClauseData::HasDeviceAddr { items })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "has_device_addr clause requires a variable list".to_string(),
+                ))
+            }
+        }
+
+        // allocate([allocator:] list)
+        "allocate" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let content = content.as_ref();
+                let (allocator_part, list_part) =
+                    if let Some((alloc, rest)) = lang::split_once_top_level(content, ':') {
+                        (Some(alloc.trim()), rest)
+                    } else {
+                        (None, content)
+                    };
+                let allocator = allocator_part
+                    .filter(|value| !value.is_empty())
+                    .map(Identifier::new);
+                let items = parse_identifier_list(list_part.trim(), config)?;
+                Ok(ClauseData::Allocate { allocator, items })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "allocate clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // allocator(allocator-handle)
+        "allocator" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::Allocator {
+                    allocator: Identifier::new(content.as_ref().trim()),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "allocator clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // order(concurrent)
+        "order" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let value = content.as_ref().trim();
+                if value.eq_ignore_ascii_case("concurrent") {
+                    Ok(ClauseData::Order(OrderKind::Concurrent))
+                } else {
+                    Err(ConversionError::InvalidClauseSyntax(format!(
+                        "Unknown order value: {value}"
+                    )))
+                }
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "order clause requires parenthesized value".to_string(),
+                ))
+            }
+        }
+
+        // atomic_default_mem_order(seq_cst|acq_rel|...)
+        "atomic_default_mem_order" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let order = match content.as_ref().trim() {
+                    "seq_cst" => MemoryOrder::SeqCst,
+                    "acq_rel" => MemoryOrder::AcqRel,
+                    "release" => MemoryOrder::Release,
+                    "acquire" => MemoryOrder::Acquire,
+                    "relaxed" => MemoryOrder::Relaxed,
+                    other => {
+                        return Err(ConversionError::InvalidClauseSyntax(format!(
+                            "Unknown atomic default memory order: {other}"
+                        )))
+                    }
+                };
+                Ok(ClauseData::AtomicDefaultMemOrder(order))
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "atomic_default_mem_order clause requires parenthesized value".to_string(),
+                ))
+            }
+        }
+
+        // atomic operation clauses (read/write/update/capture)
+        "read" => Ok(ClauseData::AtomicOperation {
+            op: AtomicOp::Read,
+            memory_order: None,
+        }),
+        "write" => Ok(ClauseData::AtomicOperation {
+            op: AtomicOp::Write,
+            memory_order: None,
+        }),
+        "update" => Ok(ClauseData::AtomicOperation {
+            op: AtomicOp::Update,
+            memory_order: None,
+        }),
+        "capture" => Ok(ClauseData::AtomicOperation {
+            op: AtomicOp::Capture,
+            memory_order: None,
+        }),
+
+        // branch hints and SIMD modifiers
+        "nontemporal" => Ok(ClauseData::Bare(Identifier::new("nontemporal"))),
+        "uniform" => Ok(ClauseData::Bare(Identifier::new("uniform"))),
+        "inbranch" => Ok(ClauseData::Bare(Identifier::new("inbranch"))),
+        "notinbranch" => Ok(ClauseData::Bare(Identifier::new("notinbranch"))),
+        "inclusive" => Ok(ClauseData::Bare(Identifier::new("inclusive"))),
+        "exclusive" => Ok(ClauseData::Bare(Identifier::new("exclusive"))),
+
+        // uses_allocators(allocator[(traits)], ...)
+        "uses_allocators" => parse_uses_allocators_clause(&clause.kind, config),
+
+        // requires(...) with modifiers
+        "requires" => parse_requires_clause(&clause.kind, config),
+
         // For unsupported clauses, return a generic representation
         _ => Ok(ClauseData::Generic {
             name: Identifier::new(clause_name),
@@ -842,6 +1540,29 @@ pub fn convert_directive<'a>(
     ))
 }
 
+/// Convert a structured OpenMP directive AST into DirectiveIR.
+pub fn convert_from_omp_ast(
+    directive: &OmpDirective,
+    location: SourceLocation,
+    language: Language,
+) -> Result<DirectiveIR, ConversionError> {
+    let directive_name: DirectiveName = directive.kind.into();
+    let kind = parse_directive_kind(directive_name)?;
+    let clauses = directive
+        .clauses
+        .iter()
+        .map(|clause| clause.payload.clone())
+        .collect();
+
+    Ok(DirectiveIR::new(
+        kind,
+        directive.kind.as_str(),
+        clauses,
+        location,
+        language,
+    ))
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -849,6 +1570,7 @@ pub fn convert_directive<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::{OmpClause, OmpClauseKind, OmpDirective, OmpDirectiveKind};
 
     #[test]
     fn test_parse_directive_kind_parallel() {
@@ -885,6 +1607,24 @@ mod tests {
     #[test]
     fn test_parse_directive_kind_unknown() {
         assert!(parse_directive_kind_from_str("unknown_directive").is_err());
+    }
+
+    #[test]
+    fn convert_from_omp_ast_parallel_nowait() {
+        let directive = OmpDirective {
+            kind: OmpDirectiveKind::Parallel,
+            parameter: None,
+            clauses: vec![OmpClause {
+                kind: OmpClauseKind::Nowait,
+                payload: ClauseData::Bare(Identifier::new("nowait")),
+            }],
+        };
+
+        let ir = convert_from_omp_ast(&directive, SourceLocation::start(), Language::C)
+            .expect("conversion should succeed");
+
+        assert!(ir.kind().is_parallel());
+        assert_eq!(ir.clauses().len(), 1);
     }
 
     #[test]

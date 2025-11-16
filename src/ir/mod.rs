@@ -46,9 +46,10 @@
 // Re-export main types
 pub use builder::DirectiveBuilder;
 pub use clause::{
-    AtomicOp, ClauseData, ClauseItem, DefaultKind, DependType, DeviceType, LastprivateModifier,
-    LinearModifier, MapType, MemoryOrder, OrderKind, ProcBind, ReductionOperator, ScheduleKind,
-    ScheduleModifier,
+    AtomicOp, ClauseData, ClauseItem, DefaultKind, DefaultmapBehavior, DefaultmapCategory,
+    DependType, DeviceType, LastprivateModifier, LinearModifier, MapType, MemoryOrder, OrderKind,
+    ProcBind, ReductionOperator, RequireModifier, ScheduleKind, ScheduleModifier,
+    UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
 };
 pub use convert::convert_directive;
 pub use directive::{DirectiveIR, DirectiveKind};

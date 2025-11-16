@@ -8,6 +8,14 @@ Build a ROUP parser/IR/C API/compat stack that:
 - Allows a fresh checkout (with submodules) to build `compat/ompparser` & `compat/accparser`, run `cmake .. && make -j && ctest -j`, and pass *all* 1,527 OpenMP + all OpenACC suites.
 - Enforces that `test.sh` executes the full compat `ctest` up front, aborts immediately with failure counts on any error, and only continues when compat suites are clean.
 
+## Current Status (Apr 2025)
+- **AST & Parser:** `src/ast/mod.rs` now defines the OpenMP + OpenACC directive/clause enums plus payload structs. `src/parser/ast_builder.rs` converts OpenMP directives end-to-end and partially handles OpenACC (copy/copyin/copyout/create/reduction/wait/vector/worker). Clause normalization mode hooks exist but only parser call sites exercise the default `ParserParity`.
+- **IR / Internal Consumers:** Core IR still stores `ClauseData`; no module outside the parser consumes the new AST yet. The debugger/stepper are untouched.
+- **C API (OpenMP):** `src/c_api.rs` converts a large subset of clauses directly from `ClauseData`, but many clause kinds still fall back to `convert_clause`. Numeric literal TODOs (e.g., clause IDs) remain.
+- **C API (OpenACC):** `src/c_api/openacc.rs` now parses once and keeps a copy of the typed AST only to populate directive-level parameters (cache/wait/routine/end). Clause conversion still uses the legacy parser-string helpers; the new `AccClause` wrapper is unused externally.
+- **Compat Layer:** `compat/ompparser` and `compat/accparser` still rely entirely on textual helpers. No AST data flows across the FFI boundary yet.
+- **Testing Harness:** `test.sh` continues to run the original sequence; compat `ctest` gating and failure-rate reporting are still outstanding.
+
 ## What Needs Fixing
 1. **AST & Constants**
    - Replace the mixed string/int directive + clause representation with strongly-typed enums defined in `src/ast/mod.rs`.
@@ -68,6 +76,12 @@ Build a ROUP parser/IR/C API/compat stack that:
    - Run full `cargo test`, `ctest` for OpenMP + OpenACC via `test.sh`.
    - Address regressions until `test.sh` passes with 0 failures.
 
+## Near-Term Priorities (Nov 2025)
+1. **Validate OpenACC AST consumption** *(DONE Nov 2025, keep auditing)*: the C API now builds every clause exclusively from the enum AST and `convert_acc_clause` is gone. Add regression tests around tricky clauses (async/bind/default/wait) and watch for places that might still expect the legacy `split_arguments` format.
+2. **Remove OpenMP clause fallbacks**: eliminate `convert_clause_from_legacy` after each remaining OpenMP clause uses typed converters; replace hard-coded clause IDs with generated enums. *Status (Nov 2025):* `parse_clause_data` now produces structured payloads for the bulk of OpenMP clauses (data-sharing, teams, device, atomic, etc.) and the C API consumes those for both variable and expression clauses. Loop-control bare clauses (`nontemporal`, `uniform`, `inbranch`, `notinbranch`, `inclusive`, `exclusive`) now flow through the AST as well, and `requires(...)` keeps its modifiers. Outstanding work covers the remaining long tail (`defaultmap`, `uses_allocators` cleanup, and other clause families still using the legacy fallback) plus removing the temporary numeric IDs once the constants generator can emit the prefixed enums.
+3. **Refactor compat layers**: begin migrating `compat/ompparser`/`compat/accparser` to consume the new C API getters (target reduction/affinity first), removing text-based helpers as features move over while preserving the ABI.
+4. **Gate `test.sh` on compat ctest**: update the harness so compat `ctest` runs first, reports failure counts/rates, and aborts before other suites when anything fails.
+
 ## Verification Method
 - **Unit / Integration Tests:** Expand Rust parser and IR tests to cover every directive/clause combination. Include normalization-mode fixtures to verify both merged and non-merged behavior.
 - **Compat Suites:** After each major milestone, run `compat/ompparser` and `compat/accparser` builds followed by targeted `ctest -R <pattern>` runs. Final acceptance requires `ctest -j` for all 1,527 OpenMP + OpenACC tests with 0 failures.
@@ -77,4 +91,3 @@ Build a ROUP parser/IR/C API/compat stack that:
 ## Notes on Temporary Bridges
 - Any legacy helper that still relies on raw numeric clause IDs or string parsing must carry a TODO referencing this plan and the cleanup step number. These bridges exist *only* to keep the build green while the compat layer is being migrated; they must be removed during Step 6.
 - Track bridge locations in `src/c_api.rs` and compat sources so we do not forget them. Once a clause/directive is handled via the enum AST end-to-end, delete the corresponding bridge immediately.
-

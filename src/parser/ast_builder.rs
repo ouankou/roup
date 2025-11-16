@@ -1,9 +1,10 @@
 use crate::ast::{
     AccCacheDirective, AccClause, AccClauseKind, AccClausePayload, AccCopyClause, AccCopyKind,
     AccCopyModifier, AccCreateClause, AccCreateKind, AccCreateModifier, AccDataClause, AccDataKind,
-    AccDirective, AccDirectiveKind, AccDirectiveParameter, AccGangClause, AccReductionClause,
-    AccRoutineDirective, AccWaitClause, AccWaitDirective, ClauseNormalizationMode, DirectiveBody,
-    OmpClause, OmpClauseKind, OmpDirective, OmpDirectiveKind, RoupDirective, RoupLanguage,
+    AccDefaultKind, AccDirective, AccDirectiveKind, AccDirectiveParameter, AccGangClause,
+    AccReductionClause, AccRoutineDirective, AccWaitClause, AccWaitDirective,
+    ClauseNormalizationMode, DirectiveBody, OmpClause, OmpClauseKind, OmpDirective,
+    OmpDirectiveKind, RoupDirective, RoupLanguage,
 };
 use crate::ir::{
     convert::parse_clause_data, Expression, Identifier, Language, ParserConfig, SourceLocation,
@@ -234,9 +235,11 @@ fn build_acc_clause_payload(
         Copy | CopyIn | CopyOut => build_acc_copy_clause(clause, parser_config),
         Create => build_acc_create_clause(clause, parser_config),
         Reduction => build_acc_reduction_clause(clause, parser_config),
+        Default => build_acc_default_clause(clause),
         Wait => build_acc_wait_clause(clause, parser_config),
         Vector => build_acc_vector_clause(clause, parser_config),
         Worker => build_acc_worker_clause(clause, parser_config),
+        Gang => build_acc_gang_clause(clause, parser_config),
         Attach => build_acc_data_clause(clause, AccDataKind::Attach),
         Detach => build_acc_data_clause(clause, AccDataKind::Detach),
         UseDevice => build_acc_data_clause(clause, AccDataKind::UseDevice),
@@ -246,11 +249,31 @@ fn build_acc_clause_payload(
         Device => build_acc_data_clause(clause, AccDataKind::Device),
         Delete => build_acc_data_clause(clause, AccDataKind::Delete),
         DeviceType => Ok(build_acc_device_type_clause(clause)),
-        Async | Bind | Collapse | NumGangs | NumWorkers | VectorLength | Gang | Seq
-        | Independent | Auto | DefaultAsync | NoCreate | NoHost | SelfClause | Tile | Finalize
-        | IfPresent | DevicePtr | DeviceNum => Ok(build_identifier_list_payload(clause)),
+        Async | Bind | Collapse | NumGangs | NumWorkers | VectorLength | Seq | Independent
+        | Auto | DefaultAsync | NoCreate | NoHost | SelfClause | Tile | Finalize | IfPresent
+        | DevicePtr | DeviceNum => Ok(build_identifier_list_payload(clause)),
         _ => Ok(build_fallback_clause_payload(clause, parser_config)),
     }
+}
+
+fn build_acc_default_clause(clause: &Clause<'_>) -> Result<AccClausePayload, AstBuildError> {
+    let value = match &clause.kind {
+        ClauseKind::Parenthesized(content) => content.as_ref().trim(),
+        ClauseKind::VariableList(items) => items
+            .first()
+            .map(|item| item.as_ref().trim())
+            .unwrap_or_default(),
+        ClauseKind::Bare => "",
+        _ => "",
+    };
+
+    let kind = match value.to_ascii_lowercase().as_str() {
+        "none" => AccDefaultKind::None,
+        "present" => AccDefaultKind::Present,
+        _ => AccDefaultKind::Unspecified,
+    };
+
+    Ok(AccClausePayload::Default(kind))
 }
 
 fn build_acc_copy_clause(
@@ -519,6 +542,32 @@ fn build_acc_worker_clause(
     Ok(AccClausePayload::IdentifierList(clause_variable_list(
         &clause.kind,
     )))
+}
+
+fn build_acc_gang_clause(
+    clause: &Clause<'_>,
+    parser_config: &ParserConfig,
+) -> Result<AccClausePayload, AstBuildError> {
+    if let ClauseKind::GangClause {
+        modifier,
+        variables,
+    } = &clause.kind
+    {
+        let label = modifier.map(|m| match m {
+            GangModifier::Num => "num".to_string(),
+            GangModifier::Static => "static".to_string(),
+        });
+        let values = variables
+            .iter()
+            .map(|value| Expression::new(value.as_ref(), parser_config))
+            .collect();
+        return Ok(AccClausePayload::Gang(AccGangClause {
+            modifier: label,
+            values,
+        }));
+    }
+
+    Ok(build_identifier_list_payload(clause))
 }
 
 fn build_acc_data_clause(

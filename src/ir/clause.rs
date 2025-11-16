@@ -330,6 +330,68 @@ impl fmt::Display for DefaultKind {
 }
 
 // ============================================================================
+// Defaultmap Clause Attributes (OpenMP 5.2 spec section 2.21.7)
+// ============================================================================
+
+/// Behavior applied to implicit data mappings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum DefaultmapBehavior {
+    Unspecified = 0,
+    Alloc = 1,
+    To = 2,
+    From = 3,
+    Tofrom = 4,
+    Firstprivate = 5,
+    None = 6,
+    Default = 7,
+    Present = 8,
+}
+
+impl fmt::Display for DefaultmapBehavior {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match self {
+            DefaultmapBehavior::Unspecified => "unspecified",
+            DefaultmapBehavior::Alloc => "alloc",
+            DefaultmapBehavior::To => "to",
+            DefaultmapBehavior::From => "from",
+            DefaultmapBehavior::Tofrom => "tofrom",
+            DefaultmapBehavior::Firstprivate => "firstprivate",
+            DefaultmapBehavior::None => "none",
+            DefaultmapBehavior::Default => "default",
+            DefaultmapBehavior::Present => "present",
+        };
+        write!(f, "{text}")
+    }
+}
+
+/// Category of data to which the defaultmap clause applies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum DefaultmapCategory {
+    Unspecified = 0,
+    Scalar = 1,
+    Aggregate = 2,
+    Pointer = 3,
+    All = 4,
+    Allocatable = 5,
+}
+
+impl fmt::Display for DefaultmapCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match self {
+            DefaultmapCategory::Unspecified => "unspecified",
+            DefaultmapCategory::Scalar => "scalar",
+            DefaultmapCategory::Aggregate => "aggregate",
+            DefaultmapCategory::Pointer => "pointer",
+            DefaultmapCategory::All => "all",
+            DefaultmapCategory::Allocatable => "allocatable",
+        };
+        write!(f, "{text}")
+    }
+}
+
+// ============================================================================
 // Proc Bind (OpenMP 5.2 spec section 2.6.2)
 // ============================================================================
 
@@ -476,6 +538,79 @@ pub enum DeviceType {
     Nohost = 1,
     /// Any device
     Any = 2,
+}
+
+// ============================================================================
+// Uses Allocators Clause Helpers (OpenMP 5.2 spec section 2.11.5)
+// ============================================================================
+
+/// Built-in allocator identifiers recognized by the specification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum UsesAllocatorBuiltin {
+    Default = 0,
+    LargeCap = 1,
+    Const = 2,
+    HighBw = 3,
+    LowLat = 4,
+    Cgroup = 5,
+    Pteam = 6,
+    Thread = 7,
+}
+
+impl UsesAllocatorBuiltin {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UsesAllocatorBuiltin::Default => "omp_default_mem_alloc",
+            UsesAllocatorBuiltin::LargeCap => "omp_large_cap_mem_alloc",
+            UsesAllocatorBuiltin::Const => "omp_const_mem_alloc",
+            UsesAllocatorBuiltin::HighBw => "omp_high_bw_mem_alloc",
+            UsesAllocatorBuiltin::LowLat => "omp_low_lat_mem_alloc",
+            UsesAllocatorBuiltin::Cgroup => "omp_cgroup_mem_alloc",
+            UsesAllocatorBuiltin::Pteam => "omp_pteam_mem_alloc",
+            UsesAllocatorBuiltin::Thread => "omp_thread_mem_alloc",
+        }
+    }
+}
+
+impl fmt::Display for UsesAllocatorBuiltin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// Kind of allocator referenced by a `uses_allocators` clause entry.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum UsesAllocatorKind {
+    Builtin(UsesAllocatorBuiltin),
+    Custom(Identifier),
+}
+
+impl UsesAllocatorKind {
+    pub fn canonical_name(&self) -> &str {
+        match self {
+            UsesAllocatorKind::Builtin(builtin) => builtin.as_str(),
+            UsesAllocatorKind::Custom(identifier) => identifier.as_str(),
+        }
+    }
+}
+
+/// Parsed `uses_allocators` clause entry.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UsesAllocatorSpec {
+    pub allocator: UsesAllocatorKind,
+    pub traits: Option<Expression>,
+}
+
+/// Requires clause modifiers (OpenMP 5.x)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum RequireModifier {
+    ReverseOffload,
+    UnifiedAddress,
+    UnifiedSharedMemory,
+    DynamicAllocators,
+    AtomicDefaultMemOrder(MemoryOrder),
+    ExtImplementationDefinedRequirement,
 }
 
 impl fmt::Display for DeviceType {
@@ -753,6 +888,12 @@ pub enum ClauseData {
     /// `default(shared|none|...)` - Default data-sharing attribute
     Default(DefaultKind),
 
+    /// `defaultmap(behavior[:category])` - Default mapping semantics
+    Defaultmap {
+        behavior: DefaultmapBehavior,
+        category: Option<DefaultmapCategory>,
+    },
+
     // ========================================================================
     // Reduction clause
     // ========================================================================
@@ -927,6 +1068,12 @@ pub enum ClauseData {
     /// `filter(thread-num)` - Thread filter for masked construct
     Filter { thread_num: Expression },
 
+    /// `uses_allocators(list)` - Allocator selection
+    UsesAllocators { allocators: Vec<UsesAllocatorSpec> },
+
+    /// `requires(...)` - Implementation requirements
+    Requires { requirements: Vec<RequireModifier> },
+
     /// Generic clause with unparsed data (fallback for unknown clauses)
     Generic {
         name: Identifier,
@@ -992,6 +1139,13 @@ impl fmt::Display for ClauseData {
                 write!(f, ")")
             }
             ClauseData::Default(kind) => write!(f, "default({kind})"),
+            ClauseData::Defaultmap { behavior, category } => {
+                if let Some(cat) = category {
+                    write!(f, "defaultmap({behavior}: {cat})")
+                } else {
+                    write!(f, "defaultmap({behavior})")
+                }
+            }
             ClauseData::Reduction { operator, items } => {
                 write!(f, "reduction({operator}: ")?;
                 for (i, item) in items.iter().enumerate() {
@@ -1100,7 +1254,43 @@ impl fmt::Display for ClauseData {
                     write!(f, ")")
                 }
             }
-            // Simplified Display for remaining variants (can be expanded as needed)
+            ClauseData::UsesAllocators { allocators } => {
+                write!(f, "uses_allocators(")?;
+                for (idx, spec) in allocators.iter().enumerate() {
+                    if idx > 0 {
+                        write!(f, ", ")?;
+                    }
+                    match &spec.allocator {
+                        UsesAllocatorKind::Builtin(kind) => write!(f, "{kind}")?,
+                        UsesAllocatorKind::Custom(name) => write!(f, "{name}")?,
+                    }
+                    if let Some(traits) = spec.traits.as_ref() {
+                        write!(f, "({traits})")?;
+                    }
+                }
+                write!(f, ")")
+            }
+            ClauseData::Requires { requirements } => {
+                write!(f, "requires(")?;
+                for (idx, req) in requirements.iter().enumerate() {
+                    if idx > 0 {
+                        write!(f, ", ")?;
+                    }
+                    match req {
+                        RequireModifier::ReverseOffload => write!(f, "reverse_offload")?,
+                        RequireModifier::UnifiedAddress => write!(f, "unified_address")?,
+                        RequireModifier::UnifiedSharedMemory => write!(f, "unified_shared_memory")?,
+                        RequireModifier::DynamicAllocators => write!(f, "dynamic_allocators")?,
+                        RequireModifier::ExtImplementationDefinedRequirement => {
+                            write!(f, "ext_implementation_defined_requirement")?
+                        }
+                        RequireModifier::AtomicDefaultMemOrder(order) => {
+                            write!(f, "atomic_default_mem_order({order})")?
+                        }
+                    }
+                }
+                write!(f, ")")
+            }
             _ => write!(f, "<clause>"),
         }
     }

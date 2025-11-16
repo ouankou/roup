@@ -174,6 +174,52 @@ pub fn parse_clause_mappings() -> Vec<(String, i32)> {
     mappings
 }
 
+/// Parse uses_allocators kind codes from src/c_api.rs (uses_allocator_builtin_code)
+pub fn parse_uses_allocators_mappings() -> Vec<(String, i32)> {
+    let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
+    let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
+
+    let mut mappings = Vec::new();
+    for item in &ast.items {
+        if let Item::Fn(ItemFn { sig, block, .. }) = item {
+            if sig.ident == "uses_allocator_builtin_code" {
+                find_matches_in_stmts(&block.stmts, &mut |arms| {
+                    for arm in arms {
+                        if let Some((variant, num)) = parse_enum_arm_with_literal(arm) {
+                            mappings.push((variant_to_snake(&variant), num));
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    // Inject the user-defined code if not present (mapped in c_api.rs as USES_ALLOCATOR_KIND_USER)
+    if !mappings.iter().any(|(name, _)| name == "user") {
+        mappings.push(("user".to_string(), 8));
+    }
+
+    mappings.sort_by_key(|(_, num)| *num);
+    mappings
+}
+
+/// Compute combined checksum for OpenMP + OpenACC + uses_allocators mappings
+pub fn calculate_combined_checksum_with_uses_alloc(
+    directives: &[(String, i32)],
+    clauses: &[(String, i32)],
+    acc_directives: &[(String, i32)],
+    acc_clauses: &[(String, i32)],
+    uses_alloc: &[(String, i32)],
+) -> u64 {
+    let directive_hash = calculate_checksum(directives, &[]);
+    let clause_hash = calculate_checksum(clauses, &[]);
+    let acc_directive_hash = calculate_checksum(acc_directives, &[]);
+    let acc_clause_hash = calculate_checksum(acc_clauses, &[]);
+    let uses_alloc_hash = calculate_checksum(uses_alloc, &[]);
+
+    directive_hash ^ clause_hash ^ acc_directive_hash ^ acc_clause_hash ^ uses_alloc_hash
+}
+
 /// Parse OpenACC directive mappings from c_api.rs acc_directive_name_to_kind() using AST
 pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     let c_api =
@@ -429,7 +475,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     final_mappings
 }
 
-/// Parse OpenACC clause mappings from c_api.rs convert_acc_clause() using AST
+/// Parse OpenACC clause mappings from c_api.rs clause_name_to_kind() using AST
 pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read openacc c_api");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse src/c_api/openacc.rs");
@@ -918,6 +964,26 @@ fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
     }
 
     results
+}
+
+fn parse_enum_arm_with_literal(arm: &syn::Arm) -> Option<(String, i32)> {
+    let Some(num) = extract_num_from_expr(&arm.body) else {
+        return None;
+    };
+    let Some(var) = extract_variant_from_pat(&arm.pat) else {
+        return None;
+    };
+    Some((var, num))
+}
+
+fn extract_num_from_expr(expr: &syn::Expr) -> Option<i32> {
+    match expr {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(li),
+            ..
+        }) => li.base10_parse::<i32>().ok(),
+        _ => None,
+    }
 }
 
 // String-based helpers removed: generator is AST-only

@@ -59,16 +59,23 @@
 // The C callers are responsible for upholding safety invariants (documented above).
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
+use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::mem::ManuallyDrop;
 use std::os::raw::c_char;
 use std::ptr;
 
-use crate::ir::{convert_directive, Language as IrLanguage, ParserConfig, SourceLocation};
+use crate::ast::{ClauseNormalizationMode, DirectiveBody, OmpClauseKind};
+use crate::ir::{
+    convert_directive, AtomicOp, ClauseData as IrClauseData, ClauseItem, DefaultKind,
+    DefaultmapBehavior, DefaultmapCategory, Language as IrLanguage, ParserConfig,
+    ReductionOperator, RequireModifier, ScheduleKind as IrScheduleKind, SourceLocation,
+    UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
+};
 use crate::lexer::Language;
 use crate::parser::directive_kind::{lookup_directive_name, DirectiveName};
 use crate::parser::lookup_clause_name;
-use crate::parser::{openmp, parse_omp_directive, Clause, ClauseKind};
+use crate::parser::{openmp, Clause, ClauseKind, ClauseName};
 
 mod openacc;
 pub use openacc::*;
@@ -156,6 +163,8 @@ union ClauseData {
     reduction: ManuallyDrop<ReductionData>,
     default: i32,
     variables: *mut OmpStringList,
+    defaultmap: ManuallyDrop<DefaultmapData>,
+    uses_allocators: *mut UsesAllocatorsData,
 }
 
 /// Schedule clause data (static, dynamic, guided, etc.)
@@ -176,12 +185,64 @@ struct ReductionData {
     space_after_colon: bool,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct DefaultmapData {
+    behavior: i32,
+    category: i32,
+}
+
+#[repr(C)]
+struct UsesAllocatorEntryData {
+    kind: i32,
+    user_name: *const c_char,
+    traits: *const c_char,
+}
+
+#[repr(C)]
+struct UsesAllocatorsData {
+    entries: Vec<UsesAllocatorEntryData>,
+}
+
 const REDUCTION_MODIFIER_TASK: u32 = 1 << 0;
 const REDUCTION_MODIFIER_INSCAN: u32 = 1 << 1;
 const REDUCTION_MODIFIER_DEFAULT: u32 = 1 << 2;
 const CLAUSE_KIND_REDUCTION: i32 = 8;
 const CLAUSE_KIND_IN_REDUCTION: i32 = 45;
 const CLAUSE_KIND_TASK_REDUCTION: i32 = 75;
+const CLAUSE_KIND_DEFAULTMAP: i32 = 68;
+const CLAUSE_KIND_USES_ALLOCATORS: i32 = 71;
+// Temporary numeric OpenMP clause IDs; matches compat/ompparser expectations.
+// These live here until the generated header exports prefixed constants for every clause.
+const CLAUSE_KIND_NOWAIT: i32 = 17;
+const CLAUSE_KIND_NOGROUP: i32 = 52;
+const CLAUSE_KIND_UNTIED: i32 = 42;
+const CLAUSE_KIND_MERGEABLE: i32 = 44;
+const CLAUSE_KIND_SEQ_CST: i32 = 83;
+const CLAUSE_KIND_RELAXED: i32 = 84;
+const CLAUSE_KIND_RELEASE: i32 = 77;
+const CLAUSE_KIND_ACQUIRE: i32 = 78;
+const CLAUSE_KIND_ACQ_REL: i32 = 76;
+const CLAUSE_KIND_ATOMIC_READ: i32 = 79;
+const CLAUSE_KIND_ATOMIC_WRITE: i32 = 80;
+const CLAUSE_KIND_ATOMIC_UPDATE: i32 = 81;
+const CLAUSE_KIND_ATOMIC_CAPTURE: i32 = 82;
+const CLAUSE_KIND_NONTEMPORAL: i32 = 25;
+const CLAUSE_KIND_UNIFORM: i32 = 26;
+const CLAUSE_KIND_INBRANCH: i32 = 27;
+const CLAUSE_KIND_NOTINBRANCH: i32 = 28;
+const CLAUSE_KIND_INCLUSIVE: i32 = 31;
+const CLAUSE_KIND_EXCLUSIVE: i32 = 32;
+const ROUP_OMPA_USES_ALLOCATOR_DEFAULT: i32 = 0;
+const ROUP_OMPA_USES_ALLOCATOR_LARGE_CAP: i32 = 1;
+const ROUP_OMPA_USES_ALLOCATOR_CONST: i32 = 2;
+const ROUP_OMPA_USES_ALLOCATOR_HIGH_BW: i32 = 3;
+const ROUP_OMPA_USES_ALLOCATOR_LOW_LAT: i32 = 4;
+const ROUP_OMPA_USES_ALLOCATOR_CGROUP: i32 = 5;
+const ROUP_OMPA_USES_ALLOCATOR_PTEAM: i32 = 6;
+const ROUP_OMPA_USES_ALLOCATOR_THREAD: i32 = 7;
+const ROUP_OMPA_USES_ALLOCATOR_USER: i32 = 8;
+const CLAUSE_KIND_REQUIRES: i32 = 43;
 
 /// Iterator over clauses
 ///
@@ -243,57 +304,23 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
         Err(_) => return ptr::null_mut(), // Invalid UTF-8
     };
 
-    // Parse using safe Rust parser
-    let mut directive = match parse_omp_directive(rust_str) {
-        Ok((_, dir)) => dir,
-        Err(_) => return ptr::null_mut(), // Parse error
+    let parser = openmp::parser();
+    let ast = match parser.parse_ast(
+        rust_str,
+        ClauseNormalizationMode::ParserParity,
+        &ParserConfig::default(),
+    ) {
+        Ok(dir) => dir,
+        Err(_) => return ptr::null_mut(),
     };
 
-    // ompparser compatibility fix: Handle atomic variants
-    // ROUP parses "atomic read" as compound directive DirectiveName::AtomicRead
-    // but ompparser expects directive "atomic" with clause "read"
-    let directive_name_str = directive.name.as_ref();
-    let (final_name, extra_clause) = if directive_name_str.starts_with("atomic ") {
-        let suffix = &directive_name_str[7..]; // Skip "atomic "
-        match suffix {
-            "read" | "write" | "update" | "capture" | "compare" | "compare capture" => {
-                // Add the atomic variant as a clause
-                use crate::parser::{Clause, ClauseKind};
-                use std::borrow::Cow;
-                let clause = Clause {
-                    name: Cow::Borrowed(suffix),
-                    kind: ClauseKind::Bare,
-                };
-                ("atomic", Some(clause))
-            }
-            _ => (directive_name_str, None),
-        }
-    } else {
-        (directive_name_str, None)
+    let omp_ast = match ast.body {
+        DirectiveBody::OpenMp(d) => d,
+        _ => return ptr::null_mut(),
     };
 
-    // Add the extra clause if needed
-    if let Some(clause) = extra_clause {
-        directive.clauses.insert(0, clause);
-    }
+    let c_directive = build_c_api_directive_from_ast(&omp_ast);
 
-    // Convert to C-compatible format
-    let c_directive = OmpDirective {
-        name: allocate_c_string(final_name),
-        parameter: directive
-            .parameter
-            .as_ref()
-            .map(|p| allocate_c_string(p.as_ref()))
-            .unwrap_or(ptr::null()),
-        clauses: directive
-            .clauses
-            .into_iter()
-            .map(|c| convert_clause(&c))
-            .collect(),
-    };
-
-    // UNSAFE BLOCK 2: Convert Box to raw pointer for C
-    // Safety: Caller will call roup_directive_free() to deallocate
     Box::into_raw(Box::new(c_directive))
 }
 
@@ -398,57 +425,22 @@ pub extern "C" fn roup_parse_with_language(
         Err(_) => return ptr::null_mut(),
     };
 
-    // Create parser with specified language
     let parser = openmp::parser().with_language(lang);
-
-    // Parse using language-aware parser
-    let mut directive = match parser.parse(rust_str) {
-        Ok((_, dir)) => dir,
+    let ast = match parser.parse_ast(
+        rust_str,
+        ClauseNormalizationMode::ParserParity,
+        &ParserConfig::default(),
+    ) {
+        Ok(dir) => dir,
         Err(_) => return ptr::null_mut(),
     };
 
-    // ompparser compatibility fix: Handle atomic variants
-    // ROUP parses "atomic read" as compound directive DirectiveName::AtomicRead
-    // but ompparser expects directive "atomic" with clause "read"
-    let directive_name_str = directive.name.as_ref();
-    let (final_name, extra_clause) = if directive_name_str.starts_with("atomic ") {
-        let suffix = &directive_name_str[7..]; // Skip "atomic "
-        match suffix {
-            "read" | "write" | "update" | "capture" | "compare" | "compare capture" => {
-                // Add the atomic variant as a clause
-                use crate::parser::{Clause, ClauseKind};
-                use std::borrow::Cow;
-                let clause = Clause {
-                    name: Cow::Borrowed(suffix),
-                    kind: ClauseKind::Bare,
-                };
-                ("atomic", Some(clause))
-            }
-            _ => (directive_name_str, None),
-        }
-    } else {
-        (directive_name_str, None)
+    let omp_ast = match ast.body {
+        DirectiveBody::OpenMp(d) => d,
+        _ => return ptr::null_mut(),
     };
 
-    // Add the extra clause if needed
-    if let Some(clause) = extra_clause {
-        directive.clauses.insert(0, clause);
-    }
-
-    // Convert to C-compatible format
-    let c_directive = OmpDirective {
-        name: allocate_c_string(final_name),
-        parameter: directive
-            .parameter
-            .as_ref()
-            .map(|p| allocate_c_string(p.as_ref()))
-            .unwrap_or(ptr::null()),
-        clauses: directive
-            .clauses
-            .into_iter()
-            .map(|c| convert_clause(&c))
-            .collect(),
-    };
+    let c_directive = build_c_api_directive_from_ast(&omp_ast);
 
     Box::into_raw(Box::new(c_directive))
 }
@@ -935,6 +927,111 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
     }
 }
 
+#[no_mangle]
+pub extern "C" fn roup_clause_defaultmap_behavior(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        if let Some(data) = get_defaultmap_data(&*clause) {
+            data.behavior
+        } else {
+            -1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_defaultmap_category(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        if let Some(data) = get_defaultmap_data(&*clause) {
+            data.category
+        } else {
+            -1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_uses_allocators_count(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        if let Some(data) = get_uses_allocators_data(&*clause) {
+            data.entries.len() as i32
+        } else {
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_uses_allocator_kind(clause: *const OmpClause, index: i32) -> i32 {
+    if clause.is_null() || index < 0 {
+        return -1;
+    }
+
+    unsafe {
+        if let Some(data) = get_uses_allocators_data(&*clause) {
+            data.entries
+                .get(index as usize)
+                .map(|entry| entry.kind)
+                .unwrap_or(-1)
+        } else {
+            -1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_uses_allocator_user(
+    clause: *const OmpClause,
+    index: i32,
+) -> *const c_char {
+    if clause.is_null() || index < 0 {
+        return ptr::null();
+    }
+
+    unsafe {
+        if let Some(data) = get_uses_allocators_data(&*clause) {
+            data.entries
+                .get(index as usize)
+                .map(|entry| entry.user_name)
+                .unwrap_or(ptr::null())
+        } else {
+            ptr::null()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_uses_allocator_traits(
+    clause: *const OmpClause,
+    index: i32,
+) -> *const c_char {
+    if clause.is_null() || index < 0 {
+        return ptr::null();
+    }
+
+    unsafe {
+        if let Some(data) = get_uses_allocators_data(&*clause) {
+            data.entries
+                .get(index as usize)
+                .map(|entry| entry.traits)
+                .unwrap_or(ptr::null())
+        } else {
+            ptr::null()
+        }
+    }
+}
+
 /// Get clause arguments as a string.
 ///
 /// Returns NULL if clause is NULL or has no arguments.
@@ -1257,6 +1354,259 @@ unsafe fn get_reduction_data<'a>(clause: &'a OmpClause) -> Option<&'a ReductionD
     } else {
         None
     }
+}
+
+fn is_defaultmap_clause_kind(kind: i32) -> bool {
+    kind == CLAUSE_KIND_DEFAULTMAP
+}
+
+unsafe fn get_defaultmap_data<'a>(clause: &'a OmpClause) -> Option<&'a DefaultmapData> {
+    if is_defaultmap_clause_kind(clause.kind) {
+        Some(&*clause.data.defaultmap)
+    } else {
+        None
+    }
+}
+
+fn is_uses_allocators_clause_kind(kind: i32) -> bool {
+    kind == CLAUSE_KIND_USES_ALLOCATORS
+}
+
+unsafe fn get_uses_allocators_data<'a>(clause: &'a OmpClause) -> Option<&'a UsesAllocatorsData> {
+    if is_uses_allocators_clause_kind(clause.kind) {
+        let ptr = clause.data.uses_allocators;
+        if ptr.is_null() {
+            None
+        } else {
+            Some(&*ptr)
+        }
+    } else {
+        None
+    }
+}
+
+fn build_c_api_directive_from_ast(directive: &crate::ast::OmpDirective) -> OmpDirective {
+    let directive_name: DirectiveName = directive.kind.into();
+    let (name, extra_clause) = atomic_directive_info(directive_name);
+
+    let mut clauses: Vec<OmpClause> = directive
+        .clauses
+        .iter()
+        .map(|clause| convert_clause_from_ast(clause.kind, &clause.payload))
+        .collect();
+
+    if let Some(clause_name) = extra_clause {
+        clauses.insert(0, convert_atomic_suffix_clause(clause_name));
+    }
+
+    OmpDirective {
+        name: allocate_c_string(&name),
+        parameter: ptr::null(),
+        clauses,
+    }
+}
+
+fn atomic_directive_info(kind: DirectiveName) -> (String, Option<&'static str>) {
+    match kind {
+        DirectiveName::AtomicRead => ("atomic".to_string(), Some("read")),
+        DirectiveName::AtomicWrite => ("atomic".to_string(), Some("write")),
+        DirectiveName::AtomicUpdate => ("atomic".to_string(), Some("update")),
+        DirectiveName::AtomicCapture => ("atomic".to_string(), Some("capture")),
+        DirectiveName::AtomicCompareCapture => ("atomic".to_string(), Some("compare capture")),
+        _ => (kind.as_ref().to_string(), None),
+    }
+}
+
+fn convert_atomic_suffix_clause(name: &str) -> OmpClause {
+    let clause = Clause {
+        name: Cow::Owned(name.to_string()),
+        kind: ClauseKind::Bare,
+    };
+    convert_clause(&clause)
+}
+
+fn convert_clause_from_ast(kind: OmpClauseKind, payload: &IrClauseData) -> OmpClause {
+    use crate::parser::ClauseName::*;
+    let clause_name: ClauseName = kind.into();
+    match clause_name {
+        Default => convert_default_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Defaultmap => convert_defaultmap_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        If => convert_if_clause_from_ast(payload).unwrap_or_else(|| {
+            // TODO(compat/ast): remove legacy fallback once all clauses run on the enum AST.
+            convert_clause_from_legacy(kind, payload)
+        }),
+        NumThreads => convert_num_threads_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Private => convert_private_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Firstprivate => convert_firstprivate_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Shared => convert_shared_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Lastprivate => convert_lastprivate_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        CopyIn => convert_copyin_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Nowait => convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOWAIT)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Nogroup => convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOGROUP)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Untied => convert_bare_clause_from_ast(payload, CLAUSE_KIND_UNTIED)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Mergeable => convert_bare_clause_from_ast(payload, CLAUSE_KIND_MERGEABLE)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        SeqCst => convert_bare_clause_from_ast(payload, CLAUSE_KIND_SEQ_CST)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Relaxed => convert_bare_clause_from_ast(payload, CLAUSE_KIND_RELAXED)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Release => convert_bare_clause_from_ast(payload, CLAUSE_KIND_RELEASE)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Acquire => convert_bare_clause_from_ast(payload, CLAUSE_KIND_ACQUIRE)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        AcqRel => convert_bare_clause_from_ast(payload, CLAUSE_KIND_ACQ_REL)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        ProcBind => convert_proc_bind_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        NumTeams => convert_num_teams_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        ThreadLimit => convert_thread_limit_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Collapse => convert_collapse_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Ordered => convert_ordered_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Linear => convert_linear_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Safelen => convert_safelen_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Simdlen => convert_simdlen_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Aligned => convert_aligned_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Reduction => convert_reduction_clause_from_ast(CLAUSE_KIND_REDUCTION, payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        InReduction => convert_reduction_clause_from_ast(CLAUSE_KIND_IN_REDUCTION, payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        TaskReduction => convert_reduction_clause_from_ast(CLAUSE_KIND_TASK_REDUCTION, payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Requires => convert_requires_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Schedule => convert_schedule_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        DistSchedule => convert_dist_schedule_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Map => convert_map_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        UseDevicePtr => convert_use_device_ptr_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        UseDeviceAddr => convert_use_device_addr_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        IsDevicePtr => convert_is_device_ptr_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        HasDeviceAddr => convert_has_device_addr_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        UsesAllocators => convert_uses_allocators_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Depend => convert_depend_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Device => convert_device_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        DeviceType => convert_device_type_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Allocate => convert_allocate_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Allocator => convert_allocator_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Copyprivate => convert_copyprivate_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Affinity => convert_affinity_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Priority => convert_priority_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Grainsize => convert_grainsize_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        NumTasks => convert_num_tasks_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Filter => convert_filter_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Order => convert_order_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        AtomicDefaultMemOrder => convert_atomic_default_mem_order_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Read => convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_READ, payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Write => convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_WRITE, payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Update => convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_UPDATE, payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Capture => convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_CAPTURE, payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Nontemporal => convert_bare_clause_from_ast(payload, CLAUSE_KIND_NONTEMPORAL)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Uniform => convert_bare_clause_from_ast(payload, CLAUSE_KIND_UNIFORM)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Inbranch => convert_bare_clause_from_ast(payload, CLAUSE_KIND_INBRANCH)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Notinbranch => convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOTINBRANCH)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Inclusive => convert_bare_clause_from_ast(payload, CLAUSE_KIND_INCLUSIVE)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        Exclusive => convert_bare_clause_from_ast(payload, CLAUSE_KIND_EXCLUSIVE)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        ReverseOffload => convert_requires_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        UnifiedAddress => convert_requires_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        UnifiedSharedMemory => convert_requires_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        DynamicAllocators => convert_requires_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        ExtImplementationDefinedRequirement => convert_requires_clause_from_ast(payload)
+            .unwrap_or_else(|| convert_clause_from_legacy(kind, payload)),
+        _ => {
+            let rendered = payload.to_string();
+            let legacy = Clause {
+                name: Cow::Owned(kind.as_str().to_string()),
+                kind: extract_clause_kind(&rendered),
+            };
+            convert_clause(&legacy)
+        }
+    }
+}
+
+fn convert_bare_clause_from_ast(payload: &IrClauseData, kind: i32) -> Option<OmpClause> {
+    if matches!(payload, IrClauseData::Bare(_)) {
+        Some(OmpClause {
+            kind,
+            arguments: ptr::null(),
+            data: ClauseData { default: 0 },
+        })
+    } else {
+        None
+    }
+}
+
+fn convert_clause_from_legacy(kind: OmpClauseKind, payload: &IrClauseData) -> OmpClause {
+    let rendered = payload.to_string();
+    let legacy = Clause {
+        name: Cow::Owned(kind.as_str().to_string()),
+        kind: extract_clause_kind(&rendered),
+    };
+    convert_clause(&legacy)
+}
+
+fn extract_clause_kind(rendered: &str) -> ClauseKind<'static> {
+    if let Some(start) = rendered.find('(') {
+        if let Some(end) = rendered.rfind(')') {
+            if end > start {
+                let args = rendered[start + 1..end].trim().to_string();
+                return ClauseKind::Parenthesized(Cow::Owned(args));
+            }
+        }
+    }
+    ClauseKind::Bare
 }
 
 /// Convert Rust Clause to C-compatible OmpClause.
@@ -1713,6 +2063,794 @@ fn convert_clause(clause: &Clause) -> OmpClause {
     }
 }
 
+fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Default(kind) = payload {
+        let value = match kind {
+            DefaultKind::Shared => 0,
+            DefaultKind::None => 1,
+            DefaultKind::Private => 2,
+            DefaultKind::Firstprivate => 3,
+        };
+        return Some(OmpClause {
+            kind: 2,
+            arguments: allocate_c_string(&kind.to_string()),
+            data: ClauseData { default: value },
+        });
+    }
+    None
+}
+
+fn convert_defaultmap_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Defaultmap { behavior, category } = payload {
+        let behavior_code = defaultmap_behavior_code(*behavior);
+        let category_code = category
+            .map(defaultmap_category_code)
+            .unwrap_or(defaultmap_category_code(DefaultmapCategory::Unspecified));
+        let args = format_defaultmap_arguments(*behavior, *category);
+        return Some(OmpClause {
+            kind: CLAUSE_KIND_DEFAULTMAP,
+            arguments: if args.is_empty() {
+                ptr::null()
+            } else {
+                allocate_c_string(&args)
+            },
+            data: ClauseData {
+                defaultmap: ManuallyDrop::new(DefaultmapData {
+                    behavior: behavior_code,
+                    category: category_code,
+                }),
+            },
+        });
+    }
+    None
+}
+
+fn convert_num_threads_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::NumThreads { num } = payload {
+        return Some(OmpClause {
+            kind: 1,
+            arguments: allocate_c_string(&num.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_if_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::If {
+        directive_name,
+        condition,
+    } = payload
+    {
+        let mut args = String::new();
+        if let Some(name) = directive_name {
+            args.push_str(&name.to_string());
+            args.push_str(": ");
+        }
+        args.push_str(&condition.to_string());
+        return Some(OmpClause {
+            kind: 0,
+            arguments: allocate_c_string(&args),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_private_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Private { items } = payload {
+        return Some(build_variable_clause(3, items));
+    }
+    None
+}
+
+fn convert_firstprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Firstprivate { items } = payload {
+        return Some(build_variable_clause(4, items));
+    }
+    None
+}
+
+fn convert_shared_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Shared { items } = payload {
+        return Some(build_variable_clause(5, items));
+    }
+    None
+}
+
+fn convert_lastprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Lastprivate { items, .. } = payload {
+        return Some(build_variable_clause(13, items));
+    }
+    None
+}
+
+fn convert_collapse_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Collapse { n } = payload {
+        return Some(OmpClause {
+            kind: 14,
+            arguments: allocate_c_string(&n.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_ordered_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Ordered { n } = payload {
+        return Some(OmpClause {
+            kind: 15,
+            arguments: n
+                .as_ref()
+                .map(|expr| allocate_c_string(&expr.to_string()))
+                .unwrap_or(ptr::null()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_reduction_clause_from_ast(
+    clause_kind: i32,
+    payload: &IrClauseData,
+) -> Option<OmpClause> {
+    if let IrClauseData::Reduction { operator, items } = payload {
+        let data = build_reduction_data_from_ast(*operator, items);
+        return Some(OmpClause {
+            kind: clause_kind,
+            arguments: format_reduction_arguments(operator, items),
+            data: ClauseData {
+                reduction: ManuallyDrop::new(data),
+            },
+        });
+    }
+    None
+}
+
+fn convert_schedule_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Schedule {
+        kind, chunk_size, ..
+    } = payload
+    {
+        let args = format_schedule_arguments(*kind, chunk_size.as_ref());
+        let data = ClauseData {
+            schedule: ManuallyDrop::new(ScheduleData {
+                kind: schedule_kind_code(*kind),
+            }),
+        };
+        return Some(OmpClause {
+            kind: 21,
+            arguments: allocate_c_string(&args),
+            data,
+        });
+    }
+    None
+}
+
+fn convert_dist_schedule_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::DistSchedule { kind, chunk_size } = payload {
+        let mut args = kind.to_string();
+        if let Some(expr) = chunk_size {
+            args.push_str(", ");
+            args.push_str(&expr.to_string());
+        }
+        return Some(OmpClause {
+            kind: 29,
+            arguments: allocate_c_string(&args),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_map_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Map {
+        map_type,
+        mapper,
+        items,
+    } = payload
+    {
+        let mut parts = Vec::new();
+        if let Some(mapper_id) = mapper {
+            parts.push(format!("mapper({mapper_id})"));
+        }
+        if let Some(mt) = map_type {
+            parts.push(format!("{mt}:"));
+        }
+        if let Some(list) = format_clause_items(items) {
+            parts.push(list);
+        }
+        let args = parts.join(" ");
+        return Some(OmpClause {
+            kind: 61,
+            arguments: if args.is_empty() {
+                ptr::null()
+            } else {
+                allocate_c_string(&args)
+            },
+            data: ClauseData {
+                variables: build_string_list_from_items(items),
+            },
+        });
+    }
+    None
+}
+
+fn convert_depend_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Depend { depend_type, items } = payload {
+        let mut args = depend_type.to_string();
+        if let Some(list) = format_clause_items(items) {
+            args.push(':');
+            args.push(' ');
+            args.push_str(&list);
+        }
+        return Some(OmpClause {
+            kind: 46,
+            arguments: allocate_c_string(&args),
+            data: ClauseData {
+                variables: build_string_list_from_items(items),
+            },
+        });
+    }
+    None
+}
+
+fn convert_copyin_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Copyin { items } = payload {
+        return Some(build_variable_clause(6, items));
+    }
+    None
+}
+
+fn convert_proc_bind_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::ProcBind(policy) = payload {
+        return Some(OmpClause {
+            kind: 9,
+            arguments: allocate_c_string(&policy.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_num_teams_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::NumTeams { num } = payload {
+        return Some(OmpClause {
+            kind: 11,
+            arguments: allocate_c_string(&num.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_thread_limit_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::ThreadLimit { limit } = payload {
+        return Some(OmpClause {
+            kind: 12,
+            arguments: allocate_c_string(&limit.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_linear_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Linear {
+        modifier,
+        items,
+        step,
+    } = payload
+    {
+        let mut args = String::new();
+        if let Some(m) = modifier {
+            args.push_str(&m.to_string());
+            args.push_str(": ");
+        }
+        if let Some(list) = format_clause_items(items) {
+            args.push_str(&list);
+        }
+        if let Some(expr) = step {
+            if !args.is_empty() {
+                args.push_str(": ");
+            }
+            args.push_str(&expr.to_string());
+        }
+        return Some(OmpClause {
+            kind: 20,
+            arguments: if args.is_empty() {
+                ptr::null()
+            } else {
+                allocate_c_string(&args)
+            },
+            data: ClauseData {
+                variables: build_string_list_from_items(items),
+            },
+        });
+    }
+    None
+}
+
+fn convert_aligned_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Aligned { items, alignment } = payload {
+        let mut args = String::new();
+        if let Some(list) = format_clause_items(items) {
+            args.push_str(&list);
+        }
+        if let Some(expr) = alignment {
+            if !args.is_empty() {
+                args.push_str(": ");
+            }
+            args.push_str(&expr.to_string());
+        }
+        return Some(OmpClause {
+            kind: 24,
+            arguments: if args.is_empty() {
+                ptr::null()
+            } else {
+                allocate_c_string(&args)
+            },
+            data: ClauseData {
+                variables: build_string_list_from_items(items),
+            },
+        });
+    }
+    None
+}
+
+fn convert_safelen_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Safelen { length } = payload {
+        return Some(OmpClause {
+            kind: 22,
+            arguments: allocate_c_string(&length.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_simdlen_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Simdlen { length } = payload {
+        return Some(OmpClause {
+            kind: 23,
+            arguments: allocate_c_string(&length.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_use_device_ptr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::UseDevicePtr { items } = payload {
+        return Some(build_variable_clause(62, items));
+    }
+    None
+}
+
+fn convert_use_device_addr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::UseDeviceAddr { items } = payload {
+        return Some(build_variable_clause(64, items));
+    }
+    None
+}
+
+fn convert_is_device_ptr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::IsDevicePtr { items } = payload {
+        return Some(build_variable_clause(66, items));
+    }
+    None
+}
+
+fn convert_has_device_addr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::HasDeviceAddr { items } = payload {
+        return Some(build_variable_clause(91, items));
+    }
+    None
+}
+
+fn convert_uses_allocators_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::UsesAllocators { allocators } = payload {
+        let args = format_uses_allocators_arguments(allocators);
+        let data_ptr = build_uses_allocators_data_from_ast(allocators);
+        return Some(OmpClause {
+            kind: CLAUSE_KIND_USES_ALLOCATORS,
+            arguments: if args.is_empty() {
+                ptr::null()
+            } else {
+                allocate_c_string(&args)
+            },
+            data: ClauseData {
+                uses_allocators: data_ptr,
+            },
+        });
+    }
+    None
+}
+
+fn convert_requires_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Requires { requirements } = payload {
+        let args = format_requires_arguments(requirements);
+        return Some(OmpClause {
+            kind: CLAUSE_KIND_REQUIRES,
+            arguments: args.map_or(ptr::null(), |s| allocate_c_string(&s)),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_allocate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Allocate { allocator, items } = payload {
+        let mut args = String::new();
+        if let Some(alloc) = allocator {
+            args.push_str(&alloc.to_string());
+            if !items.is_empty() {
+                args.push_str(": ");
+            }
+        }
+        if let Some(list) = format_clause_items(items) {
+            args.push_str(&list);
+        }
+        return Some(OmpClause {
+            kind: 10,
+            arguments: if args.is_empty() {
+                ptr::null()
+            } else {
+                allocate_c_string(&args)
+            },
+            data: ClauseData {
+                variables: build_string_list_from_items(items),
+            },
+        });
+    }
+    None
+}
+
+fn convert_allocator_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Allocator { allocator } = payload {
+        return Some(OmpClause {
+            kind: 39,
+            arguments: allocate_c_string(&allocator.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_copyprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Copyprivate { items } = payload {
+        return Some(build_variable_clause(33, items));
+    }
+    None
+}
+
+fn convert_affinity_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Affinity { items } = payload {
+        return Some(build_variable_clause(48, items));
+    }
+    None
+}
+
+fn convert_priority_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Priority { priority } = payload {
+        return Some(OmpClause {
+            kind: 90,
+            arguments: allocate_c_string(&priority.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_grainsize_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Grainsize { grain } = payload {
+        return Some(OmpClause {
+            kind: 50,
+            arguments: allocate_c_string(&grain.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_num_tasks_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::NumTasks { num } = payload {
+        return Some(OmpClause {
+            kind: 51,
+            arguments: allocate_c_string(&num.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_filter_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Filter { thread_num } = payload {
+        return Some(OmpClause {
+            kind: 135,
+            arguments: allocate_c_string(&thread_num.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_device_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Device { device_num } = payload {
+        return Some(OmpClause {
+            kind: 60,
+            arguments: allocate_c_string(&device_num.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_device_type_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::DeviceType(device_type) = payload {
+        return Some(OmpClause {
+            kind: 74,
+            arguments: allocate_c_string(&device_type.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_order_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Order(order_kind) = payload {
+        return Some(OmpClause {
+            kind: 19,
+            arguments: allocate_c_string(&order_kind.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_atomic_default_mem_order_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::AtomicDefaultMemOrder(order) = payload {
+        return Some(OmpClause {
+            kind: 56,
+            arguments: allocate_c_string(&order.to_string()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn convert_atomic_operation_clause_from_ast(
+    clause_kind: i32,
+    payload: &IrClauseData,
+) -> Option<OmpClause> {
+    if let IrClauseData::AtomicOperation { op, memory_order } = payload {
+        let matches_kind = match clause_kind {
+            79 => *op == AtomicOp::Read,
+            80 => *op == AtomicOp::Write,
+            81 => *op == AtomicOp::Update,
+            82 => *op == AtomicOp::Capture,
+            _ => true,
+        };
+        if !matches_kind {
+            return None;
+        }
+        return Some(OmpClause {
+            kind: clause_kind,
+            arguments: memory_order
+                .as_ref()
+                .map(|order| allocate_c_string(&order.to_string()))
+                .unwrap_or(ptr::null()),
+            data: ClauseData { default: 0 },
+        });
+    }
+    None
+}
+
+fn build_variable_clause(code: i32, items: &[ClauseItem]) -> OmpClause {
+    OmpClause {
+        kind: code,
+        arguments: format_clause_items(items)
+            .map(|s| allocate_c_string(&s))
+            .unwrap_or(ptr::null()),
+        data: ClauseData {
+            variables: build_string_list_from_items(items),
+        },
+    }
+}
+
+fn format_clause_items(items: &[ClauseItem]) -> Option<String> {
+    if items.is_empty() {
+        return None;
+    }
+    let rendered: Vec<String> = items.iter().map(|item| item.to_string()).collect();
+    Some(rendered.join(", "))
+}
+
+fn build_string_list_from_items(items: &[ClauseItem]) -> *mut OmpStringList {
+    if items.is_empty() {
+        return ptr::null_mut();
+    }
+    let cows: Vec<Cow<'_, str>> = items
+        .iter()
+        .map(|item| Cow::Owned(item.to_string()))
+        .collect();
+    build_string_list(&cows)
+}
+
+fn format_reduction_arguments(operator: &ReductionOperator, items: &[ClauseItem]) -> *const c_char {
+    let mut segments = vec![operator.to_string()];
+    if let Some(vars) = format_clause_items(items) {
+        segments.push(vars);
+    }
+    allocate_c_string(&segments.join(": "))
+}
+
+fn format_defaultmap_arguments(
+    behavior: DefaultmapBehavior,
+    category: Option<DefaultmapCategory>,
+) -> String {
+    if behavior == DefaultmapBehavior::Unspecified && category.is_none() {
+        String::new()
+    } else if let Some(cat) = category {
+        format!("{behavior}: {cat}")
+    } else {
+        behavior.to_string()
+    }
+}
+
+fn defaultmap_behavior_code(value: DefaultmapBehavior) -> i32 {
+    value as i32
+}
+
+fn defaultmap_category_code(value: DefaultmapCategory) -> i32 {
+    value as i32
+}
+
+fn format_schedule_arguments(
+    kind: IrScheduleKind,
+    chunk: Option<&crate::ir::Expression>,
+) -> String {
+    let mut result = kind.to_string();
+    if let Some(expr) = chunk {
+        result.push_str(", ");
+        result.push_str(&expr.to_string());
+    }
+    result
+}
+
+fn build_reduction_data_from_ast(
+    operator: ReductionOperator,
+    items: &[ClauseItem],
+) -> ReductionData {
+    ReductionData {
+        operator: reduction_operator_code_from_ir(operator),
+        modifier_mask: 0,
+        modifiers_text: ptr::null(),
+        user_identifier: ptr::null(),
+        variables: build_string_list_from_items(items),
+        space_after_colon: false,
+    }
+}
+
+fn schedule_kind_code(kind: IrScheduleKind) -> i32 {
+    match kind {
+        IrScheduleKind::Static => 0,
+        IrScheduleKind::Dynamic => 1,
+        IrScheduleKind::Guided => 2,
+        IrScheduleKind::Auto => 3,
+        IrScheduleKind::Runtime => 4,
+    }
+}
+
+fn reduction_operator_code_from_ir(op: ReductionOperator) -> i32 {
+    match op {
+        ReductionOperator::Add => 0,
+        ReductionOperator::Subtract => 1,
+        ReductionOperator::Multiply => 2,
+        ReductionOperator::BitwiseAnd => 3,
+        ReductionOperator::BitwiseOr => 4,
+        ReductionOperator::BitwiseXor => 5,
+        ReductionOperator::LogicalAnd => 6,
+        ReductionOperator::LogicalOr => 7,
+        ReductionOperator::Min => 8,
+        ReductionOperator::Max => 9,
+        ReductionOperator::MinusEqual => 15,
+        ReductionOperator::Custom => -1,
+    }
+}
+
+fn format_uses_allocators_arguments(specs: &[UsesAllocatorSpec]) -> String {
+    let mut parts = Vec::new();
+    for spec in specs {
+        let mut entry = spec.allocator.canonical_name().to_string();
+        if let Some(traits) = spec.traits.as_ref() {
+            entry.push('(');
+            entry.push_str(&traits.to_string());
+            entry.push(')');
+        }
+        parts.push(entry);
+    }
+    parts.join(", ")
+}
+
+fn format_requires_arguments(requirements: &[RequireModifier]) -> Option<String> {
+    if requirements.is_empty() {
+        return None;
+    }
+
+    let mut rendered = String::new();
+    for (idx, req) in requirements.iter().enumerate() {
+        if idx > 0 {
+            rendered.push_str(", ");
+        }
+        match req {
+            RequireModifier::ReverseOffload => rendered.push_str("reverse_offload"),
+            RequireModifier::UnifiedAddress => rendered.push_str("unified_address"),
+            RequireModifier::UnifiedSharedMemory => rendered.push_str("unified_shared_memory"),
+            RequireModifier::DynamicAllocators => rendered.push_str("dynamic_allocators"),
+            RequireModifier::AtomicDefaultMemOrder(order) => {
+                rendered.push_str("atomic_default_mem_order(");
+                rendered.push_str(&order.to_string());
+                rendered.push(')');
+            }
+            RequireModifier::ExtImplementationDefinedRequirement => {
+                rendered.push_str("ext_implementation_defined_requirement")
+            }
+        }
+    }
+
+    Some(rendered)
+}
+
+fn build_uses_allocators_data_from_ast(specs: &[UsesAllocatorSpec]) -> *mut UsesAllocatorsData {
+    if specs.is_empty() {
+        return ptr::null_mut();
+    }
+
+    let mut entries = Vec::with_capacity(specs.len());
+    for spec in specs {
+        let (kind_code, user_name) = uses_allocator_kind_code(&spec.allocator);
+        let user_ptr = match user_name {
+            Some(name) if !name.is_empty() => allocate_c_string(&name),
+            _ => ptr::null(),
+        };
+        let traits_ptr = spec
+            .traits
+            .as_ref()
+            .map(|expr| allocate_c_string(&expr.to_string()))
+            .unwrap_or(ptr::null());
+        entries.push(UsesAllocatorEntryData {
+            kind: kind_code,
+            user_name: user_ptr,
+            traits: traits_ptr,
+        });
+    }
+
+    Box::into_raw(Box::new(UsesAllocatorsData { entries }))
+}
+
+fn uses_allocator_kind_code(kind: &UsesAllocatorKind) -> (i32, Option<String>) {
+    match kind {
+        UsesAllocatorKind::Builtin(builtin) => (uses_allocator_builtin_code(*builtin), None),
+        UsesAllocatorKind::Custom(identifier) => {
+            (ROUP_OMPA_USES_ALLOCATOR_USER, Some(identifier.to_string()))
+        }
+    }
+}
+
+fn uses_allocator_builtin_code(kind: UsesAllocatorBuiltin) -> i32 {
+    match kind {
+        UsesAllocatorBuiltin::Default => ROUP_OMPA_USES_ALLOCATOR_DEFAULT,
+        UsesAllocatorBuiltin::LargeCap => ROUP_OMPA_USES_ALLOCATOR_LARGE_CAP,
+        UsesAllocatorBuiltin::Const => ROUP_OMPA_USES_ALLOCATOR_CONST,
+        UsesAllocatorBuiltin::HighBw => ROUP_OMPA_USES_ALLOCATOR_HIGH_BW,
+        UsesAllocatorBuiltin::LowLat => ROUP_OMPA_USES_ALLOCATOR_LOW_LAT,
+        UsesAllocatorBuiltin::Cgroup => ROUP_OMPA_USES_ALLOCATOR_CGROUP,
+        UsesAllocatorBuiltin::Pteam => ROUP_OMPA_USES_ALLOCATOR_PTEAM,
+        UsesAllocatorBuiltin::Thread => ROUP_OMPA_USES_ALLOCATOR_THREAD,
+    }
+}
+
 /// Parse schedule kind from clause arguments.
 ///
 /// Extracts schedule type from clause like "schedule(dynamic, 4)".
@@ -2060,6 +3198,8 @@ fn free_clause_data(clause: &OmpClause) {
         //   2 = default (uses .default field, NOT .variables)
         //   8 = reduction (uses .reduction field, NOT .variables)
         //   21 = schedule (uses .schedule field, NOT .variables)
+        //   68 = defaultmap (.defaultmap field)
+        //   71 = uses_allocators (uses_allocators pointer)
         if is_reduction_clause_kind(clause.kind) {
             if let Some(data) = get_reduction_data(clause) {
                 if !data.user_identifier.is_null() {
@@ -2076,6 +3216,19 @@ fn free_clause_data(clause: &OmpClause) {
             let vars_ptr = clause.data.variables;
             if !vars_ptr.is_null() {
                 roup_string_list_free(vars_ptr);
+            }
+        } else if is_uses_allocators_clause_kind(clause.kind) {
+            let data_ptr = clause.data.uses_allocators;
+            if !data_ptr.is_null() {
+                let boxed = Box::from_raw(data_ptr);
+                for entry in &boxed.entries {
+                    if !entry.user_name.is_null() {
+                        drop(CString::from_raw(entry.user_name as *mut c_char));
+                    }
+                    if !entry.traits.is_null() {
+                        drop(CString::from_raw(entry.traits as *mut c_char));
+                    }
+                }
             }
         }
     }

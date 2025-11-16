@@ -209,7 +209,7 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
 
 static OpenACCClauseKind mapRoupToAccparserClause(int32_t roup_kind) {
     // ROUP clause kind mapping using named constants from roup_constants.h
-    // Single source of truth: src/c_api.rs:convert_acc_clause()
+    // Single source of truth: src/c_api/openacc.rs:clause_name_to_kind()
     switch (roup_kind) {
         case ROUP_ACCC_async:           return ACCC_async;
         case ROUP_ACCC_wait:            return ACCC_wait;

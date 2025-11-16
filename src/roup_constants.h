@@ -25,9 +25,9 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (204 directives + 133 clauses) + OpenACC (21 directives + 52 clauses) = 0xFE5C314FA217018D
+// Auto-generated checksum: FNV-1a hash of OpenMP (204 directives + 133 clauses) + OpenACC (21 directives + 52 clauses) + uses_allocators (1 kinds) = 0x1C0BC31A25B7B42A
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0xFE5C314FA217018D
+#define ROUP_CONSTANTS_CHECKSUM 0x1C0BC31A25B7B42A
 
 // ============================================================================
 // Language Format Constants
@@ -422,7 +422,7 @@ extern "C" {
 // ============================================================================
 // OpenACC Clause Kind Constants (ROUP_ACCC_*)
 // ============================================================================
-// Auto-generated from src/c_api.rs:convert_acc_clause()
+// Auto-generated from src/c_api/openacc.rs:clause_name_to_kind()
 
 #define ROUP_ACCC_num_threads                    0
 #define ROUP_ACCC_collapse                       11
@@ -477,6 +477,13 @@ extern "C" {
 #define ROUP_ACCC_self_clause                    2018
 #define ROUP_ACCC_device_ptr                     2030
 #define ROUP_ACCC_unknown                  -1
+
+
+// ============================================================================
+// Uses Allocators Kind Constants (ROUP_USEALLOC_*)
+// ============================================================================
+// Auto-generated from src/c_api.rs uses_allocators mapping
+
 
 
 // ============================================================================

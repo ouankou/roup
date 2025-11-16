@@ -12,20 +12,20 @@ use crate::parser::directive_kind::DirectiveName;
 type DirectiveParserFn =
     for<'a> fn(Cow<'a, str>, &'a str, &ClauseRegistry) -> IResult<&'a str, Directive<'a>>;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WaitDirectiveData<'a> {
     pub devnum: Option<Cow<'a, str>>,
     pub has_queues: bool,
     pub queue_exprs: Vec<Cow<'a, str>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheDirectiveData<'a> {
     pub readonly: bool,
     pub variables: Vec<Cow<'a, str>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Directive<'a> {
     pub name: DirectiveName,
     pub parameter: Option<Cow<'a, str>>,

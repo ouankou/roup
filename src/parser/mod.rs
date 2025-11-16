@@ -1,8 +1,11 @@
+pub mod ast_builder;
 pub mod clause;
 mod directive;
 pub mod directive_kind;
 pub mod openacc;
 pub mod openmp;
+
+pub use ast_builder::AstBuildError;
 
 pub use clause::{
     lookup_clause_name, Clause, ClauseKind, ClauseName, ClauseRegistry, ClauseRegistryBuilder,
@@ -15,6 +18,8 @@ pub use directive::{
 };
 
 use super::lexer::{self, Language};
+use crate::ast::{ClauseNormalizationMode, RoupDirective};
+use crate::ir::{Language as IrLanguage, ParserConfig};
 use nom::{IResult, Parser as _};
 
 pub struct Parser {
@@ -144,6 +149,27 @@ impl Parser {
         };
         self.directive_registry.parse(input, &self.clause_registry)
     }
+
+    pub fn parse_ast<'a>(
+        &self,
+        input: &'a str,
+        normalization: ClauseNormalizationMode,
+        parser_config: &ParserConfig,
+    ) -> Result<RoupDirective, AstBuildError> {
+        let ir_language = ir_language_from_parser_language(self.language);
+        let config = parser_config.for_language(ir_language);
+        let (_, directive) = self
+            .parse(input)
+            .map_err(|err| AstBuildError::ParseFailure(format!("{err:?}")))?;
+
+        ast_builder::build_roup_directive(
+            &directive,
+            self.dialect,
+            normalization,
+            &config,
+            ir_language,
+        )
+    }
 }
 
 impl Default for Parser {
@@ -179,6 +205,13 @@ pub fn parse_omp_directive(input: &str) -> IResult<&str, Directive<'_>> {
 pub fn parse_acc_directive(input: &str) -> IResult<&str, Directive<'_>> {
     let parser = openacc::parser();
     parser.parse(input)
+}
+
+fn ir_language_from_parser_language(lang: Language) -> IrLanguage {
+    match lang {
+        Language::C => IrLanguage::C,
+        Language::FortranFree | Language::FortranFixed => IrLanguage::Fortran,
+    }
 }
 
 #[cfg(test)]
