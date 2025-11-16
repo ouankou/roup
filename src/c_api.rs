@@ -20,7 +20,7 @@
 //!
 //! ## Case-Insensitive Matching: String Allocation Tradeoff
 //!
-//! Functions `directive_name_to_kind()` and `convert_clause()` allocate a String
+//! Functions `directive_name_to_kind()` and `clause_name_to_kind_for_constants()` allocate a String
 //! for case-insensitive matching (Fortran uses uppercase, C uses lowercase).
 //!
 //! **Why not optimize with `eq_ignore_ascii_case()`?**
@@ -101,7 +101,7 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 //
 // The constants are defined in:
 // - directive_name_to_kind() function (directive codes 0-16)
-// - convert_clause() function (clause codes 0-11)
+// - clause_name_to_kind_for_constants() function (clause codes)
 //
 // For C/C++ usage:
 // - build.rs auto-generates src/roup_constants.h with #define macros
@@ -109,7 +109,7 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 // - Never modify roup_constants.h directly - edit this file instead
 //
 // Maintenance: When adding new directives/clauses:
-// 1. Update directive_name_to_kind() or convert_clause() in this file
+// 1. Update directive_name_to_kind() or clause_name_to_kind_for_constants() in this file
 // 2. Run `cargo build` to regenerate roup_constants.h
 // 3. The header will automatically include your new constants
 
@@ -1763,7 +1763,8 @@ fn expect_clause(value: Option<OmpClause>, clause: &'static str) -> OmpClause {
     value.unwrap_or_else(|| panic!("AST payload mismatch for clause '{clause}'"))
 }
 
-#[allow(dead_code)] // Kept for constants/header generation; runtime uses AST conversions
+// Legacy clause converter retained for header generation (constants_gen.rs).
+// Not used at runtime; all data flows through the AST-based converters.
 fn convert_clause(clause: &Clause) -> OmpClause {
     // Normalize clause name to lowercase for case-insensitive matching
     // (Fortran clauses are uppercase, C clauses are lowercase)
@@ -1852,173 +1853,30 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 reduction: ManuallyDrop::new(build_reduction_data(clause)),
             },
         ),
-        crate::parser::ClauseName::Depend => (46, ClauseData { default: 0 }),
-        // 47-65 (not in ROUP ClauseName yet, mapped via Other below)
-        crate::parser::ClauseName::IsDevicePtr => (66, ClauseData { default: 0 }),
-        // 67 (not in ROUP ClauseName yet, mapped via Other below)
-        crate::parser::ClauseName::Defaultmap => (68, ClauseData { default: 0 }),
-        // 69-70 (not in ROUP ClauseName yet, mapped via Other below)
+        crate::parser::ClauseName::Depend => (
+            46,
+            ClauseData {
+                variables: ptr::null_mut(),
+            },
+        ),
         crate::parser::ClauseName::UsesAllocators => (71, ClauseData { default: 0 }),
-        // Additional OpenMP clauses from spec
-        crate::parser::ClauseName::ProcBind => (9, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Allocate => (10, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Partial => (16, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Full => (18, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Order => (19, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Linear => (20, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Safelen => (22, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Simdlen => (23, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Aligned => (24, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Nontemporal => (25, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Uniform => (26, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Inbranch => (27, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Notinbranch => (28, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Bind => (30, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Inclusive => (31, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Exclusive => (32, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Copyprivate => (33, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Parallel => (34, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Sections => (35, ClauseData { default: 0 }),
-        crate::parser::ClauseName::For => (36, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Do => (37, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Taskgroup => (38, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Initializer => (40, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Final => (41, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Untied => (42, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Requires => (43, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Mergeable => (44, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Priority => (90, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Affinity => (48, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Detach => (49, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Grainsize => (50, ClauseData { default: 0 }),
-        crate::parser::ClauseName::NumTasks => (51, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Nogroup => (52, ClauseData { default: 0 }),
-        crate::parser::ClauseName::ReverseOffload => (53, ClauseData { default: 0 }),
-        crate::parser::ClauseName::UnifiedAddress => (54, ClauseData { default: 0 }),
-        crate::parser::ClauseName::UnifiedSharedMemory => (55, ClauseData { default: 0 }),
-        crate::parser::ClauseName::AtomicDefaultMemOrder => (56, ClauseData { default: 0 }),
-        crate::parser::ClauseName::DynamicAllocators => (57, ClauseData { default: 0 }),
-        crate::parser::ClauseName::SelfMaps => (58, ClauseData { default: 0 }),
-        crate::parser::ClauseName::ExtImplementationDefinedRequirement => {
-            (59, ClauseData { default: 0 })
-        }
-        crate::parser::ClauseName::UseDevicePtr => (62, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Sizes => (63, ClauseData { default: 0 }),
-        crate::parser::ClauseName::UseDeviceAddr => (64, ClauseData { default: 0 }),
-        crate::parser::ClauseName::HasDeviceAddr => (91, ClauseData { default: 0 }),
-        crate::parser::ClauseName::To => (92, ClauseData { default: 0 }),
-        crate::parser::ClauseName::From => (69, ClauseData { default: 0 }),
-        crate::parser::ClauseName::When => (70, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Match => (72, ClauseData { default: 0 }),
         crate::parser::ClauseName::TaskReduction => (
             75,
             ClauseData {
                 reduction: ManuallyDrop::new(build_reduction_data(clause)),
             },
         ),
-        crate::parser::ClauseName::Compare => (86, ClauseData { default: 0 }),
-        crate::parser::ClauseName::CompareCapture => (87, ClauseData { default: 0 }),
         crate::parser::ClauseName::Destroy => (88, ClauseData { default: 0 }),
         crate::parser::ClauseName::DepobjUpdate => (89, ClauseData { default: 0 }),
-        // OpenACC/OpenMP device clauses
-        crate::parser::ClauseName::Device => (60, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Map => (61, ClauseData { default: 0 }),
-        // OpenMP atomic memory order clauses (bare clauses, no parameters)
-        crate::parser::ClauseName::AcqRel => (76, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Release => (77, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Acquire => (78, ClauseData { default: 0 }),
-        // Note: Read, Write, Update, Capture are handled below (OpenMP codes 79-82)
-        crate::parser::ClauseName::SeqCst => (83, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Relaxed => (84, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Hint => (85, ClauseData { default: 0 }),
-        // OpenMP atomic operation clauses (these are used for both OpenMP and OpenACC)
         crate::parser::ClauseName::Read => (79, ClauseData { default: 0 }),
         crate::parser::ClauseName::Write => (80, ClauseData { default: 0 }),
         crate::parser::ClauseName::Update => (81, ClauseData { default: 0 }),
         crate::parser::ClauseName::Capture => (82, ClauseData { default: 0 }),
-        // OpenMP allocate directive clauses
-        crate::parser::ClauseName::Allocator => (39, ClauseData { default: 0 }),
-        // OpenMP clauses that are also in OpenACC (but with different codes)
-        crate::parser::ClauseName::Link => (73, ClauseData { default: 0 }),
-        crate::parser::ClauseName::DeviceType => (74, ClauseData { default: 0 }),
-        // OpenACC-only clause names map to -1 in the OpenMP C API layer
-        crate::parser::ClauseName::Copy
-        | crate::parser::ClauseName::CopyOut
-        | crate::parser::ClauseName::Create
-        | crate::parser::ClauseName::Present
-        | crate::parser::ClauseName::Async
-        | crate::parser::ClauseName::Wait
-        | crate::parser::ClauseName::NumGangs
-        | crate::parser::ClauseName::NumWorkers
-        | crate::parser::ClauseName::VectorLength
-        | crate::parser::ClauseName::Gang
-        | crate::parser::ClauseName::Worker
-        | crate::parser::ClauseName::Vector
-        | crate::parser::ClauseName::Seq
-        | crate::parser::ClauseName::Independent
-        | crate::parser::ClauseName::Auto
-        | crate::parser::ClauseName::DefaultAsync
-        | crate::parser::ClauseName::NoCreate
-        | crate::parser::ClauseName::NoHost
-        | crate::parser::ClauseName::SelfClause
-        | crate::parser::ClauseName::Tile
-        | crate::parser::ClauseName::UseDevice
-        | crate::parser::ClauseName::Attach
-        | crate::parser::ClauseName::Finalize
-        | crate::parser::ClauseName::IfPresent
-        | crate::parser::ClauseName::Delete
-        | crate::parser::ClauseName::DevicePtr
-        | crate::parser::ClauseName::DeviceNum
-        | crate::parser::ClauseName::DeviceResident
-        | crate::parser::ClauseName::Host => (-1, ClauseData { default: 0 }),
-
-        // Additional OpenMP clauses for ompparser compatibility
-        // Starting from 133 to avoid conflicts with existing clauses (highest is 132)
-        crate::parser::ClauseName::Threads => (133, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Simd => (134, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Filter => (135, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Fail => (93, ClauseData { default: 0 }), // Keep 93 (ROUP_OMPC_fail)
-        crate::parser::ClauseName::Weak => (136, ClauseData { default: 0 }),
-        crate::parser::ClauseName::At => (137, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Severity => (138, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Message => (139, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Doacross => (140, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Absent => (141, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Contains => (142, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Holds => (143, ClauseData { default: 0 }),
+        crate::parser::ClauseName::Compare => (86, ClauseData { default: 0 }),
+        crate::parser::ClauseName::CompareCapture => (87, ClauseData { default: 0 }),
         crate::parser::ClauseName::Otherwise => (144, ClauseData { default: 0 }),
-        crate::parser::ClauseName::GraphId => (145, ClauseData { default: 0 }),
-        crate::parser::ClauseName::GraphReset => (146, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Transparent => (147, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Replayable => (148, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Threadset => (149, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Indirect => (108, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Local => (109, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Init => (110, ClauseData { default: 0 }),
-        crate::parser::ClauseName::InitComplete => (111, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Safesync => (112, ClauseData { default: 0 }),
-        crate::parser::ClauseName::DeviceSafesync => (113, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Memscope => (114, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Looprange => (115, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Permutation => (116, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Counts => (117, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Induction => (118, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Inductor => (119, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Collector => (120, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Combiner => (121, ClauseData { default: 0 }),
-        crate::parser::ClauseName::AdjustArgs => (122, ClauseData { default: 0 }),
-        crate::parser::ClauseName::AppendArgs => (123, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Apply => (124, ClauseData { default: 0 }),
-        crate::parser::ClauseName::NoOpenmp => (125, ClauseData { default: 0 }),
-        crate::parser::ClauseName::NoOpenmpConstructs => (126, ClauseData { default: 0 }),
-        crate::parser::ClauseName::NoOpenmpRoutines => (127, ClauseData { default: 0 }),
-        crate::parser::ClauseName::NoParallelism => (128, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Nocontext => (129, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Novariants => (130, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Enter => (131, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Use => (132, ClauseData { default: 0 }),
-
         crate::parser::ClauseName::Other(ref s) => panic!("Unknown OpenMP clause: {}", s),
+        _ => panic!("convert_clause mapping incomplete for constants generation"),
     };
 
     // Extract clause arguments based on ClauseKind
@@ -2040,39 +1898,8 @@ fn convert_clause(clause: &Clause) -> OmpClause {
                 ptr::null()
             }
         }
-        ClauseKind::Parenthesized(ref args) => {
-            // For extension clauses with parentheses, prepend the clause name
-            // Format: "clause_name(args)" → "clause_name" as the argument
-            if kind == 59 {
-                // Include both name and arguments: "name(args)"
-                // Strip "ext_" prefix from the name, if present
-                let name = clause.name.as_ref();
-                let stripped_name = if name.starts_with("ext_") {
-                    &name[4..]
-                } else {
-                    name
-                };
-                let full_clause = format!("{}({})", stripped_name, args.as_ref());
-                allocate_c_string(&full_clause)
-            } else {
-                allocate_c_string(args.as_ref())
-            }
-        }
-        _ => {
-            // Use the Display implementation to get a string representation
-            let clause_str = clause.to_source_string();
-            // Extract content after clause name (inside parentheses)
-            if let Some(start) = clause_str.find('(') {
-                if let Some(end) = clause_str.rfind(')') {
-                    let args_str = &clause_str[start + 1..end];
-                    allocate_c_string(args_str)
-                } else {
-                    ptr::null()
-                }
-            } else {
-                ptr::null()
-            }
-        }
+        ClauseKind::Parenthesized(ref args) => allocate_c_string(args.as_ref()),
+        _ => ptr::null(),
     };
 
     OmpClause {
@@ -2832,7 +2659,9 @@ fn build_requires_data_from_ast(requirements: &[RequireModifier]) -> *mut Requir
         match req {
             RequireModifier::ReverseOffload => modifiers.push(REQUIRE_MOD_REVERSE_OFFLOAD),
             RequireModifier::UnifiedAddress => modifiers.push(REQUIRE_MOD_UNIFIED_ADDRESS),
-            RequireModifier::UnifiedSharedMemory => modifiers.push(REQUIRE_MOD_UNIFIED_SHARED_MEMORY),
+            RequireModifier::UnifiedSharedMemory => {
+                modifiers.push(REQUIRE_MOD_UNIFIED_SHARED_MEMORY)
+            }
             RequireModifier::DynamicAllocators => modifiers.push(REQUIRE_MOD_DYNAMIC_ALLOCATORS),
             RequireModifier::AtomicDefaultMemOrder(order) => {
                 modifiers.push(map_memory_order_to_require_kind(*order));
