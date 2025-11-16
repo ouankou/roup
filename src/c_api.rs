@@ -68,7 +68,7 @@ use std::ptr;
 use crate::ast::{ClauseNormalizationMode, DirectiveBody, OmpClauseKind};
 use crate::ir::{
     convert_directive, AtomicOp, ClauseData as IrClauseData, ClauseItem, DefaultKind,
-    DefaultmapBehavior, DefaultmapCategory, Language as IrLanguage, ParserConfig,
+    DefaultmapBehavior, DefaultmapCategory, Language as IrLanguage, MemoryOrder, ParserConfig,
     ReductionOperator, RequireModifier, ScheduleKind as IrScheduleKind, SourceLocation,
     UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
 };
@@ -165,6 +165,7 @@ union ClauseData {
     variables: *mut OmpStringList,
     defaultmap: ManuallyDrop<DefaultmapData>,
     uses_allocators: *mut UsesAllocatorsData,
+    requires: *mut RequiresData,
 }
 
 /// Schedule clause data (static, dynamic, guided, etc.)
@@ -203,6 +204,34 @@ struct UsesAllocatorEntryData {
 struct UsesAllocatorsData {
     entries: Vec<UsesAllocatorEntryData>,
 }
+
+#[repr(C)]
+struct RequiresData {
+    modifiers: Vec<i32>,
+}
+
+const REQUIRE_MOD_REVERSE_OFFLOAD: i32 = 0;
+const REQUIRE_MOD_UNIFIED_ADDRESS: i32 = 1;
+const REQUIRE_MOD_UNIFIED_SHARED_MEMORY: i32 = 2;
+const REQUIRE_MOD_DYNAMIC_ALLOCATORS: i32 = 3;
+const REQUIRE_MOD_ATOMIC_SEQ_CST: i32 = 4;
+const REQUIRE_MOD_ATOMIC_ACQ_REL: i32 = 5;
+const REQUIRE_MOD_ATOMIC_RELEASE: i32 = 6;
+const REQUIRE_MOD_ATOMIC_ACQUIRE: i32 = 7;
+const REQUIRE_MOD_ATOMIC_RELAXED: i32 = 8;
+const REQUIRE_MOD_EXT_IMPL_DEFINED: i32 = 9;
+const REQUIRE_MOD_NAMES: [&[u8]; 10] = [
+    b"reverse_offload\0",
+    b"unified_address\0",
+    b"unified_shared_memory\0",
+    b"dynamic_allocators\0",
+    b"atomic_default_mem_order(seq_cst)\0",
+    b"atomic_default_mem_order(acq_rel)\0",
+    b"atomic_default_mem_order(release)\0",
+    b"atomic_default_mem_order(acquire)\0",
+    b"atomic_default_mem_order(relaxed)\0",
+    b"ext_implementation_defined_requirement\0",
+];
 
 const REDUCTION_MODIFIER_TASK: u32 = 1 << 0;
 const REDUCTION_MODIFIER_INSCAN: u32 = 1 << 1;
@@ -249,7 +278,9 @@ const CLAUSE_KIND_USE_DEVICE_PTR: i32 = 62;
 const CLAUSE_KIND_USE_DEVICE_ADDR: i32 = 64;
 const CLAUSE_KIND_IS_DEVICE_PTR: i32 = 66;
 const CLAUSE_KIND_HAS_DEVICE_ADDR: i32 = 91;
+#[allow(dead_code)] // still used by header generation; runtime uses AST constants
 const CLAUSE_KIND_COMPARE: i32 = 86;
+#[allow(dead_code)] // still used by header generation; runtime uses AST constants
 const CLAUSE_KIND_COMPARE_CAPTURE: i32 = 87;
 // Temporary numeric OpenMP clause IDs; matches compat/ompparser expectations.
 // These live here until the generated header exports prefixed constants for every clause.
@@ -1012,6 +1043,47 @@ pub extern "C" fn roup_clause_uses_allocators_count(clause: *const OmpClause) ->
 }
 
 #[no_mangle]
+pub extern "C" fn roup_clause_requires_count(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        if let Some(data) = get_requires_data(&*clause) {
+            data.modifiers.len() as i32
+        } else {
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_requires_modifier(clause: *const OmpClause, index: i32) -> i32 {
+    if clause.is_null() || index < 0 {
+        return REQUIRE_MOD_EXT_IMPL_DEFINED;
+    }
+
+    unsafe {
+        if let Some(data) = get_requires_data(&*clause) {
+            data.modifiers
+                .get(index as usize)
+                .copied()
+                .unwrap_or(REQUIRE_MOD_EXT_IMPL_DEFINED)
+        } else {
+            REQUIRE_MOD_EXT_IMPL_DEFINED
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_requires_modifier_name(code: i32) -> *const c_char {
+    REQUIRE_MOD_NAMES
+        .get(code as usize)
+        .map(|bytes| bytes.as_ptr() as *const c_char)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
 pub extern "C" fn roup_clause_uses_allocator_kind(clause: *const OmpClause, index: i32) -> i32 {
     if clause.is_null() || index < 0 {
         return -1;
@@ -1233,6 +1305,7 @@ fn allocate_c_string(s: &str) -> *const c_char {
 }
 
 /// Find a top-level colon (:) not nested inside parentheses. Returns (left, right)
+#[allow(dead_code)] // retained for legacy parser paths used by generators
 fn split_once_top_level_colon(input: &str) -> Option<(&str, &str)> {
     let mut depth: isize = 0;
     for (i, ch) in input.char_indices() {
@@ -1293,6 +1366,7 @@ unsafe fn clone_string_list(src: *mut OmpStringList) -> *mut OmpStringList {
     Box::into_raw(Box::new(list))
 }
 
+#[allow(dead_code)] // Kept for constants/header generation; runtime uses enum-based path
 fn reduction_operator_code(op: crate::parser::clause::ReductionOperator) -> i32 {
     match op {
         crate::parser::clause::ReductionOperator::Add => 0,
@@ -1316,6 +1390,7 @@ fn reduction_operator_code(op: crate::parser::clause::ReductionOperator) -> i32 
     }
 }
 
+#[allow(dead_code)] // Kept for constants/header generation; runtime uses enum-based path
 fn reduction_modifier_mask(modifiers: &[crate::parser::clause::ReductionModifier]) -> u32 {
     use crate::parser::clause::ReductionModifier;
     let mut mask = 0;
@@ -1329,6 +1404,7 @@ fn reduction_modifier_mask(modifiers: &[crate::parser::clause::ReductionModifier
     mask
 }
 
+#[allow(dead_code)] // Kept for constants/header generation; runtime uses enum-based path
 fn build_reduction_data(clause: &Clause) -> ReductionData {
     if let ClauseKind::ReductionClause {
         modifiers,
@@ -1414,6 +1490,23 @@ fn is_uses_allocators_clause_kind(kind: i32) -> bool {
 unsafe fn get_uses_allocators_data<'a>(clause: &'a OmpClause) -> Option<&'a UsesAllocatorsData> {
     if is_uses_allocators_clause_kind(clause.kind) {
         let ptr = clause.data.uses_allocators;
+        if ptr.is_null() {
+            None
+        } else {
+            Some(&*ptr)
+        }
+    } else {
+        None
+    }
+}
+
+fn is_requires_clause_kind(kind: i32) -> bool {
+    kind == CLAUSE_KIND_REQUIRES
+}
+
+unsafe fn get_requires_data<'a>(clause: &'a OmpClause) -> Option<&'a RequiresData> {
+    if is_requires_clause_kind(clause.kind) {
+        let ptr = clause.data.requires;
         if ptr.is_null() {
             None
         } else {
@@ -1670,19 +1763,7 @@ fn expect_clause(value: Option<OmpClause>, clause: &'static str) -> OmpClause {
     value.unwrap_or_else(|| panic!("AST payload mismatch for clause '{clause}'"))
 }
 
-/// Convert Rust Clause to C-compatible OmpClause.
-///
-/// Maps clause names to integer kind codes (C doesn't have Rust enums).
-/// Each clause type gets a unique ID and appropriate data representation.
-///
-/// ## Clause Kind Mapping:
-/// - 0 = num_threads    - 6 = reduction
-/// - 1 = if             - 7 = schedule
-/// - 2 = private        - 8 = collapse
-/// - 3 = shared         - 9 = ordered
-/// - 4 = firstprivate   - 10 = nowait
-/// - 5 = lastprivate    - 11 = default
-/// - 999 = unknown
+#[allow(dead_code)] // Kept for constants/header generation; runtime uses AST conversions
 fn convert_clause(clause: &Clause) -> OmpClause {
     // Normalize clause name to lowercase for case-insensitive matching
     // (Fortran clauses are uppercase, C clauses are lowercase)
@@ -2408,10 +2489,11 @@ fn convert_uses_allocators_clause_from_ast(payload: &IrClauseData) -> Option<Omp
 fn convert_requires_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Requires { requirements } = payload {
         let args = format_requires_arguments(requirements);
+        let data_ptr = build_requires_data_from_ast(requirements);
         return Some(OmpClause {
             kind: CLAUSE_KIND_REQUIRES,
             arguments: args.map_or(ptr::null(), |s| allocate_c_string(&s)),
-            data: ClauseData { default: 0 },
+            data: ClauseData { requires: data_ptr },
         });
     }
     None
@@ -2740,6 +2822,40 @@ fn format_requires_arguments(requirements: &[RequireModifier]) -> Option<String>
     Some(rendered)
 }
 
+fn build_requires_data_from_ast(requirements: &[RequireModifier]) -> *mut RequiresData {
+    if requirements.is_empty() {
+        return ptr::null_mut();
+    }
+
+    let mut modifiers = Vec::with_capacity(requirements.len());
+    for req in requirements {
+        match req {
+            RequireModifier::ReverseOffload => modifiers.push(REQUIRE_MOD_REVERSE_OFFLOAD),
+            RequireModifier::UnifiedAddress => modifiers.push(REQUIRE_MOD_UNIFIED_ADDRESS),
+            RequireModifier::UnifiedSharedMemory => modifiers.push(REQUIRE_MOD_UNIFIED_SHARED_MEMORY),
+            RequireModifier::DynamicAllocators => modifiers.push(REQUIRE_MOD_DYNAMIC_ALLOCATORS),
+            RequireModifier::AtomicDefaultMemOrder(order) => {
+                modifiers.push(map_memory_order_to_require_kind(*order));
+            }
+            RequireModifier::ExtImplementationDefinedRequirement => {
+                modifiers.push(REQUIRE_MOD_EXT_IMPL_DEFINED)
+            }
+        }
+    }
+
+    Box::into_raw(Box::new(RequiresData { modifiers }))
+}
+
+fn map_memory_order_to_require_kind(order: MemoryOrder) -> i32 {
+    match order {
+        MemoryOrder::SeqCst => REQUIRE_MOD_ATOMIC_SEQ_CST,
+        MemoryOrder::AcqRel => REQUIRE_MOD_ATOMIC_ACQ_REL,
+        MemoryOrder::Release => REQUIRE_MOD_ATOMIC_RELEASE,
+        MemoryOrder::Acquire => REQUIRE_MOD_ATOMIC_ACQUIRE,
+        MemoryOrder::Relaxed => REQUIRE_MOD_ATOMIC_RELAXED,
+    }
+}
+
 fn build_uses_allocators_data_from_ast(specs: &[UsesAllocatorSpec]) -> *mut UsesAllocatorsData {
     if specs.is_empty() {
         return ptr::null_mut();
@@ -2800,6 +2916,8 @@ fn uses_allocator_builtin_code(kind: UsesAllocatorBuiltin) -> i32 {
 /// - 2 = guided   (decreasing chunk sizes)
 /// - 3 = auto     (compiler decides)
 /// - 4 = runtime  (OMP_SCHEDULE environment variable)
+#[allow(dead_code)] // Used by constants/header generation tooling
+#[allow(dead_code)] // used by constants/header generation tooling
 fn parse_schedule_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
@@ -2829,6 +2947,8 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
 /// ## Default Codes:
 /// - 0 = shared (all variables shared by default)
 /// - 1 = none   (must explicitly declare all variables)
+#[allow(dead_code)] // Used by constants/header generation tooling
+#[allow(dead_code)] // used by constants/header generation tooling
 fn parse_default_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
@@ -3118,6 +3238,9 @@ fn directive_name_enum_to_kind(name: DirectiveName) -> i32 {
 ///   - `reduction: ReductionData` - used by kind 6 (reduction operator only, NO variables pointer)
 ///   - `schedule: ScheduleData` - used by kind 7 (schedule policy only)
 ///   - `default: i32` - used by other kinds
+///   - `defaultmap: DefaultmapData` - used by defaultmap clauses
+///   - `uses_allocators: UsesAllocatorsData*` - used by uses_allocators
+///   - `requires: RequiresData*` - used by requires
 ///
 /// Reduction clauses (kind 6) do NOT use the `variables` field. Trying to free
 /// clause.data.variables on a reduction clause would read garbage memory from the
@@ -3154,6 +3277,11 @@ fn free_clause_data(clause: &OmpClause) {
             let vars_ptr = clause.data.variables;
             if !vars_ptr.is_null() {
                 roup_string_list_free(vars_ptr);
+            }
+        } else if is_requires_clause_kind(clause.kind) {
+            let data_ptr = clause.data.requires;
+            if !data_ptr.is_null() {
+                drop(Box::from_raw(data_ptr));
             }
         } else if is_uses_allocators_clause_kind(clause.kind) {
             let data_ptr = clause.data.uses_allocators;
