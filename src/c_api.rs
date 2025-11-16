@@ -1367,94 +1367,8 @@ unsafe fn clone_string_list(src: *mut OmpStringList) -> *mut OmpStringList {
 }
 
 #[allow(dead_code)] // Kept for constants/header generation; runtime uses enum-based path
-fn reduction_operator_code(op: crate::parser::clause::ReductionOperator) -> i32 {
-    match op {
-        crate::parser::clause::ReductionOperator::Add => 0,
-        crate::parser::clause::ReductionOperator::Sub => 1,
-        crate::parser::clause::ReductionOperator::Mul => 2,
-        crate::parser::clause::ReductionOperator::BitAnd => 3,
-        crate::parser::clause::ReductionOperator::BitOr => 4,
-        crate::parser::clause::ReductionOperator::BitXor => 5,
-        crate::parser::clause::ReductionOperator::LogAnd => 6,
-        crate::parser::clause::ReductionOperator::LogOr => 7,
-        crate::parser::clause::ReductionOperator::Min => 8,
-        crate::parser::clause::ReductionOperator::Max => 9,
-        crate::parser::clause::ReductionOperator::FortAnd => 6,
-        crate::parser::clause::ReductionOperator::FortOr => 7,
-        crate::parser::clause::ReductionOperator::FortEqv => 10,
-        crate::parser::clause::ReductionOperator::FortNeqv => 11,
-        crate::parser::clause::ReductionOperator::FortIand => 12,
-        crate::parser::clause::ReductionOperator::FortIor => 13,
-        crate::parser::clause::ReductionOperator::FortIeor => 14,
-        crate::parser::clause::ReductionOperator::UserDefined => -1,
-    }
-}
-
 #[allow(dead_code)] // Kept for constants/header generation; runtime uses enum-based path
-fn reduction_modifier_mask(modifiers: &[crate::parser::clause::ReductionModifier]) -> u32 {
-    use crate::parser::clause::ReductionModifier;
-    let mut mask = 0;
-    for modifier in modifiers {
-        match modifier {
-            ReductionModifier::Task => mask |= REDUCTION_MODIFIER_TASK,
-            ReductionModifier::Inscan => mask |= REDUCTION_MODIFIER_INSCAN,
-            ReductionModifier::Default => mask |= REDUCTION_MODIFIER_DEFAULT,
-        }
-    }
-    mask
-}
-
 #[allow(dead_code)] // Kept for constants/header generation; runtime uses enum-based path
-fn build_reduction_data(clause: &Clause) -> ReductionData {
-    if let ClauseKind::ReductionClause {
-        modifiers,
-        operator,
-        user_defined_identifier,
-        variables,
-        space_after_colon,
-    } = &clause.kind
-    {
-        let user_identifier_ptr = user_defined_identifier
-            .as_ref()
-            .map(|value| CString::new(value.as_ref()).unwrap().into_raw())
-            .unwrap_or(ptr::null_mut()) as *const c_char;
-
-        let modifiers_text_ptr = if modifiers.is_empty() {
-            ptr::null()
-        } else {
-            let joined = modifiers
-                .iter()
-                .map(|m| match m {
-                    crate::parser::clause::ReductionModifier::Task => "task",
-                    crate::parser::clause::ReductionModifier::Inscan => "inscan",
-                    crate::parser::clause::ReductionModifier::Default => "default",
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            CString::new(joined).unwrap().into_raw()
-        };
-
-        let vars_ptr = build_string_list(variables);
-
-        ReductionData {
-            operator: reduction_operator_code(*operator),
-            modifier_mask: reduction_modifier_mask(modifiers),
-            modifiers_text: modifiers_text_ptr,
-            user_identifier: user_identifier_ptr,
-            variables: vars_ptr,
-            space_after_colon: *space_after_colon,
-        }
-    } else {
-        ReductionData {
-            operator: -1,
-            modifier_mask: 0,
-            modifiers_text: ptr::null(),
-            user_identifier: ptr::null(),
-            variables: ptr::null_mut(),
-            space_after_colon: true,
-        }
-    }
-}
 
 fn is_reduction_clause_kind(kind: i32) -> bool {
     matches!(
@@ -1810,12 +1724,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         // copyin is 6 in both OpenMP and OpenACC, but with different semantics
         crate::parser::ClauseName::CopyIn => (6, ClauseData { default: 0 }),
         crate::parser::ClauseName::Align => (7, ClauseData { default: 0 }),
-        crate::parser::ClauseName::Reduction => (
-            8,
-            ClauseData {
-                reduction: ManuallyDrop::new(build_reduction_data(clause)),
-            },
-        ),
+        crate::parser::ClauseName::Reduction => (8, ClauseData { default: 0 }),
         // proc_bind = 9 (not in ROUP ClauseName yet, mapped via Other below)
         // allocate = 10 (not in ROUP ClauseName yet, mapped via Other below)
         crate::parser::ClauseName::NumTeams => (11, ClauseData { default: 0 }),
@@ -1847,12 +1756,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
         // safelen to bind = 22-30
         crate::parser::ClauseName::DistSchedule => (29, ClauseData { default: 0 }),
         // 31-44 (not in ROUP ClauseName yet, mapped via Other below)
-        crate::parser::ClauseName::InReduction => (
-            45,
-            ClauseData {
-                reduction: ManuallyDrop::new(build_reduction_data(clause)),
-            },
-        ),
+        crate::parser::ClauseName::InReduction => (45, ClauseData { default: 0 }),
         crate::parser::ClauseName::Depend => (
             46,
             ClauseData {
@@ -1860,12 +1764,7 @@ fn convert_clause(clause: &Clause) -> OmpClause {
             },
         ),
         crate::parser::ClauseName::UsesAllocators => (71, ClauseData { default: 0 }),
-        crate::parser::ClauseName::TaskReduction => (
-            75,
-            ClauseData {
-                reduction: ManuallyDrop::new(build_reduction_data(clause)),
-            },
-        ),
+        crate::parser::ClauseName::TaskReduction => (75, ClauseData { default: 0 }),
         crate::parser::ClauseName::Destroy => (88, ClauseData { default: 0 }),
         crate::parser::ClauseName::DepobjUpdate => (89, ClauseData { default: 0 }),
         crate::parser::ClauseName::Read => (79, ClauseData { default: 0 }),
