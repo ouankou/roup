@@ -212,6 +212,43 @@ const CLAUSE_KIND_IN_REDUCTION: i32 = 45;
 const CLAUSE_KIND_TASK_REDUCTION: i32 = 75;
 const CLAUSE_KIND_DEFAULTMAP: i32 = 68;
 const CLAUSE_KIND_USES_ALLOCATORS: i32 = 71;
+const CLAUSE_KIND_IF: i32 = 0;
+const CLAUSE_KIND_NUM_THREADS: i32 = 1;
+const CLAUSE_KIND_DEFAULT: i32 = 2;
+const CLAUSE_KIND_PRIVATE: i32 = 3;
+const CLAUSE_KIND_FIRSTPRIVATE: i32 = 4;
+const CLAUSE_KIND_SHARED: i32 = 5;
+const CLAUSE_KIND_COPYIN: i32 = 6;
+const CLAUSE_KIND_LASTPRIVATE: i32 = 13;
+const CLAUSE_KIND_COLLAPSE: i32 = 14;
+const CLAUSE_KIND_ORDERED: i32 = 15;
+const CLAUSE_KIND_SCHEDULE: i32 = 21;
+const CLAUSE_KIND_LINEAR: i32 = 20;
+const CLAUSE_KIND_ALIGNED: i32 = 24;
+const CLAUSE_KIND_SAFELEN: i32 = 22;
+const CLAUSE_KIND_SIMDLEN: i32 = 23;
+const CLAUSE_KIND_DIST_SCHEDULE: i32 = 29;
+const CLAUSE_KIND_MAP: i32 = 61;
+const CLAUSE_KIND_DEPEND: i32 = 46;
+const CLAUSE_KIND_PROC_BIND: i32 = 9;
+const CLAUSE_KIND_NUM_TEAMS: i32 = 11;
+const CLAUSE_KIND_THREAD_LIMIT: i32 = 12;
+const CLAUSE_KIND_ALLOCATE: i32 = 10;
+const CLAUSE_KIND_ALLOCATOR: i32 = 39;
+const CLAUSE_KIND_COPYPRIVATE: i32 = 33;
+const CLAUSE_KIND_AFFINITY: i32 = 48;
+const CLAUSE_KIND_PRIORITY: i32 = 90;
+const CLAUSE_KIND_GRAINSIZE: i32 = 50;
+const CLAUSE_KIND_NUM_TASKS: i32 = 51;
+const CLAUSE_KIND_FILTER: i32 = 135;
+const CLAUSE_KIND_DEVICE: i32 = 60;
+const CLAUSE_KIND_DEVICE_TYPE: i32 = 74;
+const CLAUSE_KIND_ORDER: i32 = 19;
+const CLAUSE_KIND_ATOMIC_DEFAULT_MEM_ORDER: i32 = 56;
+const CLAUSE_KIND_USE_DEVICE_PTR: i32 = 62;
+const CLAUSE_KIND_USE_DEVICE_ADDR: i32 = 64;
+const CLAUSE_KIND_IS_DEVICE_PTR: i32 = 66;
+const CLAUSE_KIND_HAS_DEVICE_ADDR: i32 = 91;
 // Temporary numeric OpenMP clause IDs; matches compat/ompparser expectations.
 // These live here until the generated header exports prefixed constants for every clause.
 const CLAUSE_KIND_NOWAIT: i32 = 17;
@@ -2072,7 +2109,7 @@ fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
             DefaultKind::Firstprivate => 3,
         };
         return Some(OmpClause {
-            kind: 2,
+            kind: CLAUSE_KIND_DEFAULT,
             arguments: allocate_c_string(&kind.to_string()),
             data: ClauseData { default: value },
         });
@@ -2108,7 +2145,7 @@ fn convert_defaultmap_clause_from_ast(payload: &IrClauseData) -> Option<OmpClaus
 fn convert_num_threads_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::NumThreads { num } = payload {
         return Some(OmpClause {
-            kind: 1,
+            kind: CLAUSE_KIND_NUM_THREADS,
             arguments: allocate_c_string(&num.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2129,7 +2166,7 @@ fn convert_if_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
         }
         args.push_str(&condition.to_string());
         return Some(OmpClause {
-            kind: 0,
+            kind: CLAUSE_KIND_IF,
             arguments: allocate_c_string(&args),
             data: ClauseData { default: 0 },
         });
@@ -2139,28 +2176,28 @@ fn convert_if_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 
 fn convert_private_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Private { items } = payload {
-        return Some(build_variable_clause(3, items));
+        return Some(build_variable_clause(CLAUSE_KIND_PRIVATE, items));
     }
     None
 }
 
 fn convert_firstprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Firstprivate { items } = payload {
-        return Some(build_variable_clause(4, items));
+        return Some(build_variable_clause(CLAUSE_KIND_FIRSTPRIVATE, items));
     }
     None
 }
 
 fn convert_shared_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Shared { items } = payload {
-        return Some(build_variable_clause(5, items));
+        return Some(build_variable_clause(CLAUSE_KIND_SHARED, items));
     }
     None
 }
 
 fn convert_lastprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Lastprivate { items, .. } = payload {
-        return Some(build_variable_clause(13, items));
+        return Some(build_variable_clause(CLAUSE_KIND_LASTPRIVATE, items));
     }
     None
 }
@@ -2168,7 +2205,7 @@ fn convert_lastprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClau
 fn convert_collapse_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Collapse { n } = payload {
         return Some(OmpClause {
-            kind: 14,
+            kind: CLAUSE_KIND_COLLAPSE,
             arguments: allocate_c_string(&n.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2179,7 +2216,7 @@ fn convert_collapse_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
 fn convert_ordered_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Ordered { n } = payload {
         return Some(OmpClause {
-            kind: 15,
+            kind: CLAUSE_KIND_ORDERED,
             arguments: n
                 .as_ref()
                 .map(|expr| allocate_c_string(&expr.to_string()))
@@ -2219,7 +2256,7 @@ fn convert_schedule_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
             }),
         };
         return Some(OmpClause {
-            kind: 21,
+            kind: CLAUSE_KIND_SCHEDULE,
             arguments: allocate_c_string(&args),
             data,
         });
@@ -2235,7 +2272,7 @@ fn convert_dist_schedule_clause_from_ast(payload: &IrClauseData) -> Option<OmpCl
             args.push_str(&expr.to_string());
         }
         return Some(OmpClause {
-            kind: 29,
+            kind: CLAUSE_KIND_DIST_SCHEDULE,
             arguments: allocate_c_string(&args),
             data: ClauseData { default: 0 },
         });
@@ -2262,7 +2299,7 @@ fn convert_map_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
         }
         let args = parts.join(" ");
         return Some(OmpClause {
-            kind: 61,
+            kind: CLAUSE_KIND_MAP,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
@@ -2285,7 +2322,7 @@ fn convert_depend_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
             args.push_str(&list);
         }
         return Some(OmpClause {
-            kind: 46,
+            kind: CLAUSE_KIND_DEPEND,
             arguments: allocate_c_string(&args),
             data: ClauseData {
                 variables: build_string_list_from_items(items),
@@ -2297,7 +2334,7 @@ fn convert_depend_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 
 fn convert_copyin_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Copyin { items } = payload {
-        return Some(build_variable_clause(6, items));
+        return Some(build_variable_clause(CLAUSE_KIND_COPYIN, items));
     }
     None
 }
@@ -2305,7 +2342,7 @@ fn convert_copyin_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 fn convert_proc_bind_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::ProcBind(policy) = payload {
         return Some(OmpClause {
-            kind: 9,
+            kind: CLAUSE_KIND_PROC_BIND,
             arguments: allocate_c_string(&policy.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2316,7 +2353,7 @@ fn convert_proc_bind_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
 fn convert_num_teams_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::NumTeams { num } = payload {
         return Some(OmpClause {
-            kind: 11,
+            kind: CLAUSE_KIND_NUM_TEAMS,
             arguments: allocate_c_string(&num.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2327,7 +2364,7 @@ fn convert_num_teams_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
 fn convert_thread_limit_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::ThreadLimit { limit } = payload {
         return Some(OmpClause {
-            kind: 12,
+            kind: CLAUSE_KIND_THREAD_LIMIT,
             arguments: allocate_c_string(&limit.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2357,7 +2394,7 @@ fn convert_linear_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
             args.push_str(&expr.to_string());
         }
         return Some(OmpClause {
-            kind: 20,
+            kind: CLAUSE_KIND_LINEAR,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
@@ -2384,7 +2421,7 @@ fn convert_aligned_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
             args.push_str(&expr.to_string());
         }
         return Some(OmpClause {
-            kind: 24,
+            kind: CLAUSE_KIND_ALIGNED,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
@@ -2401,7 +2438,7 @@ fn convert_aligned_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
 fn convert_safelen_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Safelen { length } = payload {
         return Some(OmpClause {
-            kind: 22,
+            kind: CLAUSE_KIND_SAFELEN,
             arguments: allocate_c_string(&length.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2412,7 +2449,7 @@ fn convert_safelen_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
 fn convert_simdlen_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Simdlen { length } = payload {
         return Some(OmpClause {
-            kind: 23,
+            kind: CLAUSE_KIND_SIMDLEN,
             arguments: allocate_c_string(&length.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2422,28 +2459,28 @@ fn convert_simdlen_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
 
 fn convert_use_device_ptr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::UseDevicePtr { items } = payload {
-        return Some(build_variable_clause(62, items));
+        return Some(build_variable_clause(CLAUSE_KIND_USE_DEVICE_PTR, items));
     }
     None
 }
 
 fn convert_use_device_addr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::UseDeviceAddr { items } = payload {
-        return Some(build_variable_clause(64, items));
+        return Some(build_variable_clause(CLAUSE_KIND_USE_DEVICE_ADDR, items));
     }
     None
 }
 
 fn convert_is_device_ptr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::IsDevicePtr { items } = payload {
-        return Some(build_variable_clause(66, items));
+        return Some(build_variable_clause(CLAUSE_KIND_IS_DEVICE_PTR, items));
     }
     None
 }
 
 fn convert_has_device_addr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::HasDeviceAddr { items } = payload {
-        return Some(build_variable_clause(91, items));
+        return Some(build_variable_clause(CLAUSE_KIND_HAS_DEVICE_ADDR, items));
     }
     None
 }
@@ -2492,7 +2529,7 @@ fn convert_allocate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
             args.push_str(&list);
         }
         return Some(OmpClause {
-            kind: 10,
+            kind: CLAUSE_KIND_ALLOCATE,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
@@ -2509,7 +2546,7 @@ fn convert_allocate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
 fn convert_allocator_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Allocator { allocator } = payload {
         return Some(OmpClause {
-            kind: 39,
+            kind: CLAUSE_KIND_ALLOCATOR,
             arguments: allocate_c_string(&allocator.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2519,14 +2556,14 @@ fn convert_allocator_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
 
 fn convert_copyprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Copyprivate { items } = payload {
-        return Some(build_variable_clause(33, items));
+        return Some(build_variable_clause(CLAUSE_KIND_COPYPRIVATE, items));
     }
     None
 }
 
 fn convert_affinity_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Affinity { items } = payload {
-        return Some(build_variable_clause(48, items));
+        return Some(build_variable_clause(CLAUSE_KIND_AFFINITY, items));
     }
     None
 }
@@ -2534,7 +2571,7 @@ fn convert_affinity_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
 fn convert_priority_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Priority { priority } = payload {
         return Some(OmpClause {
-            kind: 90,
+            kind: CLAUSE_KIND_PRIORITY,
             arguments: allocate_c_string(&priority.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2545,7 +2582,7 @@ fn convert_priority_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
 fn convert_grainsize_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Grainsize { grain } = payload {
         return Some(OmpClause {
-            kind: 50,
+            kind: CLAUSE_KIND_GRAINSIZE,
             arguments: allocate_c_string(&grain.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2556,7 +2593,7 @@ fn convert_grainsize_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
 fn convert_num_tasks_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::NumTasks { num } = payload {
         return Some(OmpClause {
-            kind: 51,
+            kind: CLAUSE_KIND_NUM_TASKS,
             arguments: allocate_c_string(&num.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2567,7 +2604,7 @@ fn convert_num_tasks_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
 fn convert_filter_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Filter { thread_num } = payload {
         return Some(OmpClause {
-            kind: 135,
+            kind: CLAUSE_KIND_FILTER,
             arguments: allocate_c_string(&thread_num.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2578,7 +2615,7 @@ fn convert_filter_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 fn convert_device_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Device { device_num } = payload {
         return Some(OmpClause {
-            kind: 60,
+            kind: CLAUSE_KIND_DEVICE,
             arguments: allocate_c_string(&device_num.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2589,7 +2626,7 @@ fn convert_device_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 fn convert_device_type_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::DeviceType(device_type) = payload {
         return Some(OmpClause {
-            kind: 74,
+            kind: CLAUSE_KIND_DEVICE_TYPE,
             arguments: allocate_c_string(&device_type.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2600,7 +2637,7 @@ fn convert_device_type_clause_from_ast(payload: &IrClauseData) -> Option<OmpClau
 fn convert_order_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Order(order_kind) = payload {
         return Some(OmpClause {
-            kind: 19,
+            kind: CLAUSE_KIND_ORDER,
             arguments: allocate_c_string(&order_kind.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2611,7 +2648,7 @@ fn convert_order_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 fn convert_atomic_default_mem_order_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::AtomicDefaultMemOrder(order) = payload {
         return Some(OmpClause {
-            kind: 56,
+            kind: CLAUSE_KIND_ATOMIC_DEFAULT_MEM_ORDER,
             arguments: allocate_c_string(&order.to_string()),
             data: ClauseData { default: 0 },
         });
@@ -2625,10 +2662,10 @@ fn convert_atomic_operation_clause_from_ast(
 ) -> Option<OmpClause> {
     if let IrClauseData::AtomicOperation { op, memory_order } = payload {
         let matches_kind = match clause_kind {
-            79 => *op == AtomicOp::Read,
-            80 => *op == AtomicOp::Write,
-            81 => *op == AtomicOp::Update,
-            82 => *op == AtomicOp::Capture,
+            CLAUSE_KIND_ATOMIC_READ => *op == AtomicOp::Read,
+            CLAUSE_KIND_ATOMIC_WRITE => *op == AtomicOp::Write,
+            CLAUSE_KIND_ATOMIC_UPDATE => *op == AtomicOp::Update,
+            CLAUSE_KIND_ATOMIC_CAPTURE => *op == AtomicOp::Capture,
             _ => true,
         };
         if !matches_kind {
