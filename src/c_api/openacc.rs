@@ -5,11 +5,19 @@ use std::ptr;
 
 use bitflags::bitflags;
 
+use crate::ast::{
+    AccClause as AstAccClause, AccClauseKind as AstAccClauseKind,
+    AccClausePayload as AstAccClausePayload, AccCopyKind, AccCopyModifier, AccCreateModifier,
+    AccDirective as AstAccDirective, AccDirectiveParameter, AccGangClause, ClauseNormalizationMode,
+    DirectiveBody,
+};
+use crate::ir::ParserConfig;
 use crate::lexer::Language;
 use crate::parser::{
-    openacc as openacc_parser, CacheDirectiveData as ParserCacheDirectiveData, Clause, ClauseKind,
-    CopyinModifier, CopyoutModifier, CreateModifier, Directive, GangModifier, ReductionOperator,
-    VectorModifier, WaitDirectiveData as ParserWaitDirectiveData, WorkerModifier,
+    ast_builder::build_roup_directive, openacc as openacc_parser,
+    CacheDirectiveData as ParserCacheDirectiveData, Clause, ClauseKind, CopyinModifier,
+    CopyoutModifier, CreateModifier, Directive, GangModifier, ReductionOperator, VectorModifier,
+    WaitDirectiveData as ParserWaitDirectiveData, WorkerModifier,
 };
 
 use super::{ROUP_LANG_C, ROUP_LANG_FORTRAN_FIXED, ROUP_LANG_FORTRAN_FREE};
@@ -141,57 +149,160 @@ fn parse_openacc_internal(input: *const c_char, language: Language) -> *mut AccD
             Err(_) => return ptr::null_mut(),
         };
 
-        let converted = build_acc_directive(directive, language);
+        let ast = build_openacc_ast(&directive, language);
+
+        let converted = build_acc_directive(directive, ast, language);
         Box::into_raw(Box::new(converted))
     }
 }
 
-fn build_acc_directive(parsed: Directive<'_>, language: Language) -> AccDirective {
+fn build_openacc_ast(directive: &Directive<'_>, language: Language) -> Option<AstAccDirective> {
+    let ir_language = match language {
+        Language::C => crate::ir::Language::C,
+        Language::FortranFree | Language::FortranFixed => crate::ir::Language::Fortran,
+    };
+
+    let parser_config = ParserConfig::default();
+    match build_roup_directive(
+        directive,
+        crate::parser::Dialect::OpenAcc,
+        ClauseNormalizationMode::ParserParity,
+        &parser_config,
+        ir_language,
+    ) {
+        Ok(roup) => match roup.body {
+            DirectiveBody::OpenAcc(acc) => Some(acc),
+            _ => None,
+        },
+        Err(_) => None,
+    }
+}
+
+fn build_acc_directive(
+    parsed: Directive<'_>,
+    ast: Option<AstAccDirective>,
+    language: Language,
+) -> AccDirective {
+    let (clauses, ast_parameter) = if let Some(ref acc_ast) = ast {
+        (
+            build_clauses_from_ast(acc_ast, &parsed),
+            acc_ast.parameter.clone(),
+        )
+    } else {
+        (
+            parsed.clauses.iter().map(convert_acc_clause).collect(),
+            None,
+        )
+    };
+
     let mut result = AccDirective {
         name: make_c_string(parsed.name.as_ref()),
         language: language_code(language),
-        clauses: parsed.clauses.iter().map(convert_acc_clause).collect(),
+        clauses,
         cache_data: None,
         wait_data: None,
         routine_name: None,
         end_paired_kind: None,
     };
 
-    let name = parsed.name.as_ref();
-
-    if let Some(cache) = parsed.cache_data.as_ref() {
-        result.cache_data = Some(convert_cache_directive_data(cache));
+    if ast_parameter.is_some() {
+        apply_ast_parameters(&mut result, ast_parameter);
     }
 
-    if let Some(wait_data) = parsed.wait_data.as_ref() {
-        result.wait_data = Some(convert_wait_directive_data(wait_data));
+    let name = parsed.name.as_ref();
+
+    if result.cache_data.is_none() {
+        if let Some(cache) = parsed.cache_data.as_ref() {
+            result.cache_data = Some(convert_cache_directive_data(cache));
+        }
+    }
+
+    if result.wait_data.is_none() {
+        if let Some(wait_data) = parsed.wait_data.as_ref() {
+            result.wait_data = Some(convert_wait_directive_data(wait_data));
+        }
     }
 
     // Use parameter field directly for routine name (set by parse_routine_directive)
     // and for end directive paired kind (set by parse_end_directive)
-    if let Some(param) = parsed.parameter.as_ref() {
-        if name.eq_ignore_ascii_case("routine") {
-            // Strip parentheses from routine name for C API
-            let routine_name = param.as_ref().trim();
-            let routine_name = routine_name
-                .strip_prefix('(')
-                .and_then(|s| s.strip_suffix(')'))
-                .unwrap_or(routine_name);
-            result.routine_name = Some(make_c_string(routine_name));
-        } else if name.eq_ignore_ascii_case("end") {
-            // For "end" directives, parameter contains the directive being ended (e.g., "atomic")
-            // Use the canonical lookup to map to DirectiveName then to the OpenACC-specific
-            // integer kind. We must call the OpenACC mapping helper so OpenACC-only
-            // directive names (kernels, host_data, serial_loop, etc.) are handled.
-            let dname = lookup_directive_name(param.as_ref());
-            // Call the OpenACC-specific enum -> kind helper defined in this module
-            // so the returned value lives in the OpenACC numeric namespace.
-            let kind = acc_directive_name_to_kind(dname);
-            result.end_paired_kind = Some(kind);
+    if result.routine_name.is_none() || result.end_paired_kind.is_none() {
+        if let Some(param) = parsed.parameter.as_ref() {
+            if name.eq_ignore_ascii_case("routine") && result.routine_name.is_none() {
+                let routine_name = param.as_ref().trim();
+                let routine_name = routine_name
+                    .strip_prefix('(')
+                    .and_then(|s| s.strip_suffix(')'))
+                    .unwrap_or(routine_name);
+                result.routine_name = Some(make_c_string(routine_name));
+            } else if name.eq_ignore_ascii_case("end") && result.end_paired_kind.is_none() {
+                let dname = lookup_directive_name(param.as_ref());
+                let kind = acc_directive_name_to_kind(dname);
+                result.end_paired_kind = Some(kind);
+            }
         }
     }
 
     result
+}
+
+fn apply_ast_parameters(result: &mut AccDirective, parameter: Option<AccDirectiveParameter>) {
+    use AccDirectiveParameter::*;
+    if let Some(param) = parameter {
+        match param {
+            Cache(cache) => {
+                result.cache_data = Some(CacheData {
+                    modifier: if cache.readonly {
+                        ACC_CACHE_MODIFIER_READONLY
+                    } else {
+                        ACC_CACHE_MODIFIER_UNSPECIFIED
+                    },
+                    expressions: cache
+                        .variables
+                        .iter()
+                        .map(|ident| make_c_string(ident.as_str()))
+                        .collect(),
+                });
+            }
+            Wait(wait) => {
+                result.wait_data = Some(WaitDirectiveData {
+                    devnum: wait
+                        .devnum
+                        .as_ref()
+                        .map(|expr| make_c_string(&expr.to_string())),
+                    queues: wait.explicit_queues,
+                    expressions: wait
+                        .queues
+                        .iter()
+                        .map(|expr| make_c_string(&expr.to_string()))
+                        .collect(),
+                });
+            }
+            Routine(routine) => {
+                if let Some(name) = routine.name.as_ref() {
+                    result.routine_name = Some(make_c_string(name.as_str()));
+                }
+            }
+            End(kind) => {
+                result.end_paired_kind = Some(acc_directive_name_to_kind(
+                    crate::parser::directive_kind::DirectiveName::from(kind),
+                ));
+            }
+        }
+    }
+}
+
+fn build_clauses_from_ast(ast: &AstAccDirective, parsed: &Directive<'_>) -> Vec<AccClause> {
+    let mut clauses = Vec::with_capacity(parsed.clauses.len());
+    for (idx, clause) in parsed.clauses.iter().enumerate() {
+        if let Some(ast_clause) = ast.clauses.get(idx) {
+            if let Some(converted) = convert_acc_clause_from_ast(ast_clause) {
+                clauses.push(converted);
+                continue;
+            }
+        }
+        clauses.push(convert_acc_clause(clause));
+    }
+    clauses
 }
 
 fn convert_cache_directive_data(data: &ParserCacheDirectiveData<'_>) -> CacheData {
@@ -750,6 +861,154 @@ fn convert_acc_clause(clause: &Clause) -> AccClause {
         expressions: expression_strings,
         wait_devnum,
         flags,
+    }
+}
+
+fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> Option<AccClause> {
+    let kind_code = clause_name_to_kind(ast_clause.kind.as_str());
+    let mut clause = AccClause {
+        kind: kind_code,
+        modifier: 0,
+        original_keyword: None,
+        expressions: Vec::new(),
+        wait_devnum: None,
+        flags: AccClauseFlags::empty(),
+    };
+
+    use AstAccClausePayload::*;
+    match &ast_clause.payload {
+        Bare => Some(clause),
+        Expression(expr) => {
+            clause.expressions.push(make_c_string(&expr.to_string()));
+            Some(clause)
+        }
+        IdentifierList(items) => {
+            clause.expressions = identifiers_to_cstrings(items);
+            Some(clause)
+        }
+        Copy(copy) => {
+            clause.expressions = identifiers_to_cstrings(&copy.variables);
+            clause.modifier = match copy.kind {
+                AccCopyKind::CopyIn
+                | AccCopyKind::PCopyIn
+                | AccCopyKind::PresentOrCopyIn
+                | AccCopyKind::Copy => match copy.modifier {
+                    Some(AccCopyModifier::Readonly) => ACC_COPYIN_MODIFIER_READONLY,
+                    _ => ACC_COPYIN_MODIFIER_UNSPECIFIED,
+                },
+                AccCopyKind::CopyOut | AccCopyKind::PCopyOut | AccCopyKind::PresentOrCopyOut => {
+                    match copy.modifier {
+                        Some(AccCopyModifier::Zero) => ACC_COPYOUT_MODIFIER_ZERO,
+                        _ => ACC_COPYOUT_MODIFIER_UNSPECIFIED,
+                    }
+                }
+                _ => ACC_COPYIN_MODIFIER_UNSPECIFIED,
+            };
+            Some(clause)
+        }
+        Create(create) => {
+            clause.expressions = identifiers_to_cstrings(&create.variables);
+            clause.modifier = match create.modifier {
+                Some(AccCreateModifier::Zero) => ACC_CREATE_MODIFIER_ZERO,
+                _ => ACC_CREATE_MODIFIER_UNSPECIFIED,
+            };
+            Some(clause)
+        }
+        Reduction(reduction) => {
+            clause.expressions = identifiers_to_cstrings(&reduction.variables);
+            clause.modifier = acc_reduction_operator_code(&reduction.operator);
+            Some(clause)
+        }
+        Data(data) => {
+            clause.expressions = identifiers_to_cstrings(&data.variables);
+            Some(clause)
+        }
+        DeviceType(values) => {
+            clause.expressions = values.iter().map(|v| make_c_string(v)).collect();
+            Some(clause)
+        }
+        Wait(wait) => {
+            clause.wait_devnum = wait
+                .devnum
+                .as_ref()
+                .map(|expr| make_c_string(&expr.to_string()));
+            clause.expressions = wait
+                .queues
+                .iter()
+                .map(|expr| make_c_string(&expr.to_string()))
+                .collect();
+            if wait.explicit_queues {
+                clause.flags.insert(AccClauseFlags::WAIT_HAS_QUEUES);
+            }
+            if clause.wait_devnum.is_some() {
+                clause.flags.insert(AccClauseFlags::WAIT_HAS_DEVNUM);
+            }
+            Some(clause)
+        }
+        Vector(data) => {
+            set_vector_worker_payload(&mut clause, data, AstAccClauseKind::Vector);
+            Some(clause)
+        }
+        Worker(data) => {
+            set_vector_worker_payload(&mut clause, data, AstAccClauseKind::Worker);
+            Some(clause)
+        }
+        _ => None,
+    }
+}
+
+fn identifiers_to_cstrings(items: &[crate::ir::Identifier]) -> Vec<CString> {
+    items
+        .iter()
+        .map(|ident| make_c_string(ident.as_str()))
+        .collect()
+}
+
+fn set_vector_worker_payload(clause: &mut AccClause, data: &AccGangClause, kind: AstAccClauseKind) {
+    clause.expressions = data
+        .values
+        .iter()
+        .map(|expr| make_c_string(&expr.to_string()))
+        .collect();
+
+    match kind {
+        AstAccClauseKind::Vector => {
+            clause.modifier = match data.modifier.as_deref() {
+                Some("length") => ACC_VECTOR_MODIFIER_LENGTH,
+                _ => ACC_VECTOR_MODIFIER_UNSPECIFIED,
+            };
+        }
+        AstAccClauseKind::Worker => {
+            clause.modifier = match data.modifier.as_deref() {
+                Some("num") => ACC_WORKER_MODIFIER_NUM,
+                _ => ACC_WORKER_MODIFIER_UNSPECIFIED,
+            };
+        }
+        _ => {}
+    }
+}
+
+fn acc_reduction_operator_code(token: &str) -> i32 {
+    match token.to_ascii_lowercase().as_str() {
+        "readonly" => ACC_REDUCTION_OP_READONLY,
+        "+" => ACC_REDUCTION_OP_ADD,
+        "-" => ACC_REDUCTION_OP_SUB,
+        "*" => ACC_REDUCTION_OP_MUL,
+        "max" => ACC_REDUCTION_OP_MAX,
+        "min" => ACC_REDUCTION_OP_MIN,
+        "&" => ACC_REDUCTION_OP_BITAND,
+        "|" => ACC_REDUCTION_OP_BITOR,
+        "^" => ACC_REDUCTION_OP_BITXOR,
+        "&&" => ACC_REDUCTION_OP_LOGAND,
+        "||" => ACC_REDUCTION_OP_LOGOR,
+        "and" | ".and." => ACC_REDUCTION_OP_FORT_AND,
+        "or" | ".or." => ACC_REDUCTION_OP_FORT_OR,
+        "eqv" | ".eqv." => ACC_REDUCTION_OP_FORT_EQV,
+        "neqv" | ".neqv." => ACC_REDUCTION_OP_FORT_NEQV,
+        "iand" => ACC_REDUCTION_OP_FORT_IAND,
+        "ior" => ACC_REDUCTION_OP_FORT_IOR,
+        "ieor" => ACC_REDUCTION_OP_FORT_IEOR,
+        _ => ACC_REDUCTION_OP_UNSPECIFIED,
     }
 }
 
