@@ -82,6 +82,13 @@ Build a ROUP parser/IR/C API/compat stack that:
 3. **Refactor compat layers**: begin migrating `compat/ompparser`/`compat/accparser` to consume the new C API getters (target reduction/affinity first), removing text-based helpers as features move over while preserving the ABI.
 4. **Gate `test.sh` on compat ctest**: update the harness so compat `ctest` runs first, reports failure counts/rates, and aborts before other suites when anything fails.
 
+## Missing Coverage Checklist (blocking a pure enum AST + 0 ctest failures)
+- **Header generation still depends on legacy `convert_clause`**: add an enum-based, literal-number mapping function (or teach `constants_gen.rs` to parse consts) so `convert_clause` can be deleted entirely without losing `roup_constants.h`.
+- **Compat string parsing still present**: device clause now has typed getters (modifier + expr) and depobj_update has a dependence getter wired through compat; remaining hotspots include grainsize/num_tasks modifiers and any other long-tail clauses still reading `arguments`.
+- **Directive/clause completeness audit**: ensure every `ClauseName` variant in `src/parser/clause.rs` is either supported end-to-end or intentionally rejected (panic); add tests for any newly wired getters (requires modifiers, uses_allocators, device, depobj_update, defaultmap) to keep them stable.
+- **Normalization toggles**: plumb normalization controls to match ompparser/accparser expectations per test group (openmp_vv/openacc_vv).
+- **test.sh gating**: make compat `ctest` the first step with an early exit on failure, reporting fail counts.
+
 ## Verification Method
 - **Unit / Integration Tests:** Expand Rust parser and IR tests to cover every directive/clause combination. Include normalization-mode fixtures to verify both merged and non-merged behavior.
 - **Compat Suites:** After each major milestone, run `compat/ompparser` and `compat/accparser` builds followed by targeted `ctest -R <pattern>` runs. Final acceptance requires `ctest -j` for all 1,527 OpenMP + OpenACC tests with 0 failures.
