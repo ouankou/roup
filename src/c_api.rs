@@ -140,7 +140,7 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         ClauseName::Allocate => CLAUSE_KIND_ALLOCATE,
         ClauseName::Copy => CLAUSE_KIND_MAP, // alias if needed
         ClauseName::CopyOut => CLAUSE_KIND_MAP, // alias if needed
-        _ => todo!(),
+        other => clause_name_enum_to_kind(other),
     }
 }
 
