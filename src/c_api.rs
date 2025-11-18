@@ -170,7 +170,7 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         | ClauseName::Capture
         | ClauseName::Write
         | ClauseName::Detach => UNKNOWN_KIND,
-        other => clause_name_enum_to_kind(other),
+        other => panic!("unmapped ClauseName in constants mapping: {:?}", other),
     }
 }
 
