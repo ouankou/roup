@@ -2,7 +2,7 @@
 //!
 //! **Usage:** Runs automatically during `cargo build`
 //!
-//! **Source of truth:** `src/c_api.rs` (directive_name_to_kind, convert_clause)
+//! **Source of truth:** `src/c_api.rs` (directive_name_to_kind, clause_name_to_kind_for_constants)
 //!
 //! For design rationale and maintenance instructions:
 //! See [`docs/BUILD_SCRIPT_RATIONALE.md`](../docs/BUILD_SCRIPT_RATIONALE.md)
@@ -90,7 +90,7 @@ fn generate_header(
  *
  * Single source of truth: src/c_api.rs
  * - directive_name_to_kind() for directives
- * - convert_clause() for clauses
+ * - clause_name_to_kind_for_constants() for clauses
  *
  * Copyright (c) 2025 ROUP Project
  * SPDX-License-Identifier: BSD-3-Clause
@@ -132,7 +132,7 @@ extern "C" {{
 // ============================================================================
 // OpenMP Clause Kind Constants (ROUP_OMPC_*)
 // ============================================================================
-// Auto-generated from src/c_api.rs:convert_clause()
+// Auto-generated from src/c_api.rs:clause_name_to_kind_for_constants()
 
 {clause_defs}
 

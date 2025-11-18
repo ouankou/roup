@@ -6,7 +6,7 @@
  *
  * Single source of truth: src/c_api.rs
  * - directive_name_to_kind() for directives
- * - convert_clause() for clauses
+ * - clause_name_to_kind_for_constants() for clauses
  *
  * Copyright (c) 2025 ROUP Project
  * SPDX-License-Identifier: BSD-3-Clause
@@ -253,7 +253,7 @@ extern "C" {
 // ============================================================================
 // OpenMP Clause Kind Constants (ROUP_OMPC_*)
 // ============================================================================
-// Auto-generated from src/c_api.rs:convert_clause()
+// Auto-generated from src/c_api.rs:clause_name_to_kind_for_constants()
 
 #define ROUP_OMPC_if                             1
 #define ROUP_OMPC_num_threads                    2
