@@ -90,6 +90,16 @@ pub use openacc::*;
 // Mapping used only by constants_gen/header generation; runtime uses AST converters.
 fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
     match name {
+        ClauseName::If => CLAUSE_KIND_IF,
+        ClauseName::NumThreads => CLAUSE_KIND_NUM_THREADS,
+        ClauseName::Default => CLAUSE_KIND_DEFAULT,
+        ClauseName::Private => CLAUSE_KIND_PRIVATE,
+        ClauseName::Firstprivate => CLAUSE_KIND_FIRSTPRIVATE,
+        ClauseName::Shared => CLAUSE_KIND_SHARED,
+        ClauseName::CopyIn => CLAUSE_KIND_COPYIN,
+        ClauseName::Align => CLAUSE_KIND_ALIGNED,
+        ClauseName::Reduction => CLAUSE_KIND_REDUCTION,
+        ClauseName::ProcBind => CLAUSE_KIND_PROC_BIND,
         _ => todo!(),
     }
 }
