@@ -120,6 +120,26 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         ClauseName::Priority => CLAUSE_KIND_PRIORITY,
         ClauseName::Grainsize => CLAUSE_KIND_GRAINSIZE,
         ClauseName::NumTasks => CLAUSE_KIND_NUM_TASKS,
+        ClauseName::Order => CLAUSE_KIND_ORDER,
+        ClauseName::AtomicDefaultMemOrder => CLAUSE_KIND_ATOMIC_DEFAULT_MEM_ORDER,
+        ClauseName::UseDevicePtr => CLAUSE_KIND_USE_DEVICE_PTR,
+        ClauseName::UseDeviceAddr => CLAUSE_KIND_USE_DEVICE_ADDR,
+        ClauseName::IsDevicePtr => CLAUSE_KIND_IS_DEVICE_PTR,
+        ClauseName::HasDeviceAddr => CLAUSE_KIND_HAS_DEVICE_ADDR,
+        ClauseName::DeviceType => CLAUSE_KIND_DEVICE_TYPE,
+        ClauseName::DepobjUpdate => CLAUSE_KIND_DEPOBJ_UPDATE,
+        ClauseName::Nontemporal => CLAUSE_KIND_NONTEMPORAL,
+        ClauseName::Uniform => CLAUSE_KIND_UNIFORM,
+        ClauseName::Inbranch => CLAUSE_KIND_INBRANCH,
+        ClauseName::Notinbranch => CLAUSE_KIND_NOTINBRANCH,
+        ClauseName::Inclusive => CLAUSE_KIND_INCLUSIVE,
+        ClauseName::Exclusive => CLAUSE_KIND_EXCLUSIVE,
+        ClauseName::Compare => CLAUSE_KIND_COMPARE,
+        ClauseName::CompareCapture => CLAUSE_KIND_COMPARE_CAPTURE,
+        ClauseName::Allocator => CLAUSE_KIND_ALLOCATOR,
+        ClauseName::Allocate => CLAUSE_KIND_ALLOCATE,
+        ClauseName::Copy => CLAUSE_KIND_MAP, // alias if needed
+        ClauseName::CopyOut => CLAUSE_KIND_MAP, // alias if needed
         _ => todo!(),
     }
 }
@@ -5106,14 +5126,6 @@ fn clause_name_enum_to_kind(name: ClauseName) -> i32 {
         Use => CLAUSE_KIND_USE,
         _ => UNKNOWN_KIND,
     }
-}
-
-/// Wrapper used by the header generator (keeps match-based mapping for syn).
-#[allow(dead_code)] // Only invoked by build scripts / constants generation
-fn clause_name_to_kind_for_constants(name: &str) -> i32 {
-    let normalized_name = name.to_ascii_lowercase();
-    let clause_enum = lookup_clause_name(&normalized_name);
-    clause_name_enum_to_kind(clause_enum)
 }
 
 /// Convert directive name to kind enum code.
