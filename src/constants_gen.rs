@@ -24,7 +24,7 @@
 //!
 //! See: <https://github.com/rust-lang/rust/blob/master/compiler/rustc_span/src/symbol.rs>
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -146,22 +146,17 @@ fn ensure_no_underscore_variants(mappings: &[(String, i32)]) {
 pub fn parse_clause_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
+    let const_values = collect_const_i32_values(&ast);
 
     let mut mappings = Vec::new();
-    let mut seen_numbers: HashSet<i32> = HashSet::new();
-
-    // Find the convert_clause function (AST-only enum-patterns)
     for item in &ast.items {
         if let Item::Fn(ItemFn { sig, block, .. }) = item {
-            if sig.ident == "convert_clause" {
-                // Recursively find match expressions in the function body
+            if sig.ident == "clause_name_to_kind_for_constants" {
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        // AST-only: handle enum-pattern arms mapping ClauseName::Variant => num
-                        for (variant, num) in parse_enum_clause_arm(arm) {
-                            if num != UNKNOWN_KIND && seen_numbers.insert(num) {
-                                let const_name = variant_to_snake(&variant);
-                                mappings.push((const_name, num));
+                        for (variant, num) in parse_enum_clause_arm(arm, &const_values) {
+                            if num != UNKNOWN_KIND {
+                                mappings.push((variant_to_snake(&variant), num));
                             }
                         }
                     }
@@ -170,11 +165,16 @@ pub fn parse_clause_mappings() -> Vec<(String, i32)> {
         }
     }
 
+    if mappings.is_empty() {
+        panic!("No clause mapping function found (expected clause_name_to_kind_for_constants)");
+    }
+
     mappings.sort_by_key(|(_, num)| *num);
     mappings
 }
 
 /// Parse uses_allocators kind codes from src/c_api.rs (uses_allocator_builtin_code)
+#[allow(dead_code)]
 pub fn parse_uses_allocators_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
@@ -204,6 +204,7 @@ pub fn parse_uses_allocators_mappings() -> Vec<(String, i32)> {
 }
 
 /// Compute combined checksum for OpenMP + OpenACC + uses_allocators mappings
+#[allow(dead_code)]
 pub fn calculate_combined_checksum_with_uses_alloc(
     directives: &[(String, i32)],
     clauses: &[(String, i32)],
@@ -479,6 +480,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
 pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read openacc c_api");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse src/c_api/openacc.rs");
+    let const_values = collect_const_i32_values(&ast);
 
     let mut mappings = Vec::new();
 
@@ -488,7 +490,7 @@ pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
             if sig.ident == "clause_name_to_kind" {
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        for (variant, num) in parse_enum_clause_arm(arm) {
+                        for (variant, num) in parse_enum_clause_arm(arm, &const_values) {
                             if num != UNKNOWN_KIND {
                                 mappings.push((variant_to_snake(&variant), num));
                             }
@@ -692,6 +694,7 @@ pub fn calculate_checksum(directives: &[(String, i32)], clauses: &[(String, i32)
 /// Calculate combined FNV-1a hash checksum of OpenMP and OpenACC mappings.
 ///
 /// Used to verify the generated header matches c_api.rs for both APIs.
+#[allow(dead_code)]
 pub fn calculate_combined_checksum(
     omp_directives: &[(String, i32)],
     omp_clauses: &[(String, i32)],
@@ -902,12 +905,40 @@ fn parse_enum_directive_arm(arm: &Arm) -> Vec<(String, i32)> {
     results
 }
 
+/// Collect `const NAME: i32 = <literal>;` values from the parsed c_api.rs AST.
+fn collect_const_i32_values(ast: &File) -> HashMap<String, i32> {
+    let mut values = HashMap::new();
+    for item in &ast.items {
+        if let Item::Const(item_const) = item {
+            if let syn::Type::Path(type_path) = &*item_const.ty {
+                if type_path
+                    .path
+                    .segments
+                    .last()
+                    .map(|seg| seg.ident == "i32")
+                    .unwrap_or(false)
+                {
+                    if let Expr::Lit(ExprLit {
+                        lit: Lit::Int(li), ..
+                    }) = &*item_const.expr
+                    {
+                        if let Ok(num) = li.base10_parse::<i32>() {
+                            values.insert(item_const.ident.to_string(), num);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    values
+}
+
 /// Parse an arm that maps a ClauseName enum variant to an integer
 /// e.g. `ClauseName::NumThreads => 0,` returning Some(("NumThreads", 0))
-fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
+fn parse_enum_clause_arm(arm: &Arm, const_values: &HashMap<String, i32>) -> Vec<(String, i32)> {
     let mut results = Vec::new();
     // Helper: recursively extract an integer tag from expression bodies (AST-only)
-    fn extract_num_from_expr(expr: &Expr) -> Option<i32> {
+    fn extract_num_from_expr(expr: &Expr, const_values: &HashMap<String, i32>) -> Option<i32> {
         match expr {
             Expr::Lit(ExprLit {
                 lit: Lit::Int(li), ..
@@ -922,9 +953,14 @@ fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
                     None
                 }
             }
+            Expr::Path(path) => path
+                .path
+                .segments
+                .last()
+                .and_then(|seg| const_values.get(&seg.ident.to_string()).copied()),
             Expr::Return(ret) => {
                 if let Some(e) = &ret.expr {
-                    extract_num_from_expr(e)
+                    extract_num_from_expr(e, const_values)
                 } else {
                     None
                 }
@@ -933,7 +969,7 @@ fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
                 // Scan statements for an expression or semi containing a tuple/literal
                 for stmt in &block.block.stmts {
                     if let syn::Stmt::Expr(e, _) = stmt {
-                        if let Some(n) = extract_num_from_expr(e) {
+                        if let Some(n) = extract_num_from_expr(e, const_values) {
                             return Some(n);
                         }
                     }
@@ -944,7 +980,7 @@ fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
         }
     }
 
-    let Some(num) = extract_num_from_expr(&arm.body) else {
+    let Some(num) = extract_num_from_expr(&arm.body, const_values) else {
         return results;
     };
 
@@ -966,16 +1002,14 @@ fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
     results
 }
 
+#[allow(dead_code)]
 fn parse_enum_arm_with_literal(arm: &syn::Arm) -> Option<(String, i32)> {
-    let Some(num) = extract_num_from_expr(&arm.body) else {
-        return None;
-    };
-    let Some(var) = extract_variant_from_pat(&arm.pat) else {
-        return None;
-    };
+    let num = extract_num_from_expr(&arm.body)?;
+    let var = extract_variant_from_pat(&arm.pat)?;
     Some((var, num))
 }
 
+#[allow(dead_code)]
 fn extract_num_from_expr(expr: &syn::Expr) -> Option<i32> {
     match expr {
         syn::Expr::Lit(syn::ExprLit {
