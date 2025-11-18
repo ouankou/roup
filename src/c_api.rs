@@ -2218,6 +2218,21 @@ pub extern "C" fn roup_clause_depobj_update_dependence(clause: *const OmpClause)
 }
 
 #[no_mangle]
+pub extern "C" fn roup_clause_bind_modifier(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        match (*clause).kind {
+            // bind clause uses the default field to store the enum code in this mapping
+            CLAUSE_KIND_BIND => (*clause).data.default,
+            _ => -1,
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn roup_clause_lastprivate_modifier(clause: *const OmpClause) -> i32 {
     if clause.is_null() {
         return -1;
