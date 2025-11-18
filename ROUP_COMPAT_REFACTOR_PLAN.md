@@ -6,7 +6,7 @@
 - 100% `ctest` pass (OpenMP + OpenACC) and `test.sh` gating.
 - `unsafe` only at FFI boundary.
 
-## Current Status (Feb 2026)
+## Current Status (Nov 2025)
 - AST/IR: Unknown clauses are fatal; device modifiers and depobj_update dependences are typed enums; requires/uses_allocators/reduction are structured. No Generic fallback.
 - C API (runtime): All clauses use AST; typed getters exist for reduction, defaultmap, uses_allocators, requires (modifier list), device (modifier + expr), depobj_update (dependence). Unknown clauses panic. Reduction legacy helpers removed.
 - Compat: uses_allocators, requires, device, depobj_update consume typed getters (no string parsing for these). Other clauses (bind, grainsize/num_tasks modifiers, order/device_type/atomic_default_mem_order, etc.) still parse `arguments` strings.
