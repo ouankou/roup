@@ -110,6 +110,16 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         ClauseName::DistSchedule => CLAUSE_KIND_DIST_SCHEDULE,
         ClauseName::InReduction => CLAUSE_KIND_IN_REDUCTION,
         ClauseName::Depend => CLAUSE_KIND_DEPEND,
+        ClauseName::UsesAllocators => CLAUSE_KIND_USES_ALLOCATORS,
+        ClauseName::TaskReduction => CLAUSE_KIND_TASK_REDUCTION,
+        ClauseName::Device => CLAUSE_KIND_DEVICE,
+        ClauseName::Map => CLAUSE_KIND_MAP,
+        ClauseName::Defaultmap => CLAUSE_KIND_DEFAULTMAP,
+        ClauseName::Copyprivate => CLAUSE_KIND_COPYPRIVATE,
+        ClauseName::Affinity => CLAUSE_KIND_AFFINITY,
+        ClauseName::Priority => CLAUSE_KIND_PRIORITY,
+        ClauseName::Grainsize => CLAUSE_KIND_GRAINSIZE,
+        ClauseName::NumTasks => CLAUSE_KIND_NUM_TASKS,
         _ => todo!(),
     }
 }
