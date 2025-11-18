@@ -140,6 +140,36 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         ClauseName::Allocate => CLAUSE_KIND_ALLOCATE,
         ClauseName::Copy => CLAUSE_KIND_MAP, // alias if needed
         ClauseName::CopyOut => CLAUSE_KIND_MAP, // alias if needed
+        // OpenACC-only clauses are not part of the OpenMP kind space; return UNKNOWN_KIND.
+        ClauseName::Async
+        | ClauseName::Wait
+        | ClauseName::NumGangs
+        | ClauseName::NumWorkers
+        | ClauseName::VectorLength
+        | ClauseName::Gang
+        | ClauseName::Worker
+        | ClauseName::Vector
+        | ClauseName::Seq
+        | ClauseName::Independent
+        | ClauseName::Auto
+        | ClauseName::Bind
+        | ClauseName::DefaultAsync
+        | ClauseName::Link
+        | ClauseName::NoCreate
+        | ClauseName::NoHost
+        | ClauseName::Read
+        | ClauseName::SelfClause
+        | ClauseName::Tile
+        | ClauseName::Update
+        | ClauseName::Delete
+        | ClauseName::DevicePtr
+        | ClauseName::DeviceNum
+        | ClauseName::DeviceResident
+        | ClauseName::Host
+        | ClauseName::IfPresent
+        | ClauseName::Capture
+        | ClauseName::Write
+        | ClauseName::Detach => UNKNOWN_KIND,
         other => clause_name_enum_to_kind(other),
     }
 }
