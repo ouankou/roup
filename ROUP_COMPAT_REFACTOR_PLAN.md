@@ -1,100 +1,25 @@
-# ROUP Compat Refactor Plan
+# ROUP → compat Refactor Plan (enum AST, no post-parse strings)
 
-## Objective & Final Goal
-Build a ROUP parser/IR/C API/compat stack that:
-- Emits a fully enum-based AST for every OpenMP/OpenACC directive, clause, modifier, and keyword with distinct language-prefixed identifiers (`ROUP_OMPD_*`, `ROUP_OMPC_*`, `ROUP_ACCD_*`, `ROUP_ACCC_*`).
-- Performs all parsing exactly once inside the parser layer; downstream IR, C API, and compat glue operate solely on enums + structured payloads (no raw strings/numbers/chars).
-- Mirrors ompparser/accparser clause normalization behavior per test group through configurable parser options.
-- Allows a fresh checkout (with submodules) to build `compat/ompparser` & `compat/accparser`, run `cmake .. && make -j && ctest -j`, and pass *all* 1,527 OpenMP + all OpenACC suites.
-- Enforces that `test.sh` executes the full compat `ctest` up front, aborts immediately with failure counts on any error, and only continues when compat suites are clean.
+## Goals (unchanged)
+- Single parse → typed enum AST (OpenMP/OpenACC); no post-parse string/number parsing.
+- Drop-in compat: keep upstream ompparser/accparser ABI/headers (`parseOpenMP`/`parseOpenACC` only), no submodule edits.
+- 100% `ctest` pass (OpenMP + OpenACC) and `test.sh` gating.
+- `unsafe` only at FFI boundary.
 
-## Current Status (Apr 2025)
-- **AST & Parser:** `src/ast/mod.rs` now defines the OpenMP + OpenACC directive/clause enums plus payload structs. `src/parser/ast_builder.rs` converts OpenMP directives end-to-end and partially handles OpenACC (copy/copyin/copyout/create/reduction/wait/vector/worker). Clause normalization mode hooks exist but only parser call sites exercise the default `ParserParity`.
-- **IR / Internal Consumers:** Core IR still stores `ClauseData`; no module outside the parser consumes the new AST yet. The debugger/stepper are untouched.
-- **C API (OpenMP):** `src/c_api.rs` converts a large subset of clauses directly from `ClauseData`, but many clause kinds still fall back to `convert_clause`. Numeric literal TODOs (e.g., clause IDs) remain.
-- **C API (OpenACC):** `src/c_api/openacc.rs` now parses once and keeps a copy of the typed AST only to populate directive-level parameters (cache/wait/routine/end). Clause conversion still uses the legacy parser-string helpers; the new `AccClause` wrapper is unused externally.
-- **Compat Layer:** `compat/ompparser` and `compat/accparser` still rely entirely on textual helpers. No AST data flows across the FFI boundary yet.
-- **Testing Harness:** `test.sh` continues to run the original sequence; compat `ctest` gating and failure-rate reporting are still outstanding.
+## Current Status (Feb 2026)
+- AST/IR: Unknown clauses are fatal; device modifiers and depobj_update dependences are typed enums; requires/uses_allocators/reduction are structured. No Generic fallback.
+- C API (runtime): All clauses use AST; typed getters exist for reduction, defaultmap, uses_allocators, requires (modifier list), device (modifier + expr), depobj_update (dependence). Unknown clauses panic. Reduction legacy helpers removed.
+- Compat: uses_allocators, requires, device, depobj_update consume typed getters (no string parsing for these). Other clauses (bind, grainsize/num_tasks modifiers, order/device_type/atomic_default_mem_order, etc.) still parse `arguments` strings.
+- Legacy: `convert_clause` remains only for header generation; `constants_gen.rs` still scrapes it. Dead-code warnings persist.
+- Harness: `test.sh` not yet gating on compat `ctest` first.
 
-## What Needs Fixing
-1. **AST & Constants**
-   - Replace the mixed string/int directive + clause representation with strongly-typed enums defined in `src/ast/mod.rs`.
-   - Generate the corresponding numeric constants in `src/constants_gen.rs`/`build.rs` so `src/roup_constants.h` exposes the prefixes while staying ABI-compatible.
+## Immediate Work (priority order)
+1) **Header generation off legacy:** Add an enum-based clause→kind mapping (or parse literal consts) for `constants_gen.rs`, regenerate `src/roup_constants.h`, then delete `convert_clause` and related dead code.
+2) **Finish compat string-free migration:** Expose getters for remaining clause payloads (bind enum, order enum, atomic_default_mem_order enum, grainsize/num_tasks strict modifiers, device_type enum, etc.) and update compat to consume them; remove all `arguments`-based parsing.
+3) **Normalization & gating:** Wire normalization toggles to match ompparser/accparser expectations per test group; update `test.sh` to run compat `ctest` first, report failures, and abort early.
+4) **Coverage audit/tests:** Ensure every `ClauseName` is supported or explicitly rejected; add regression tests for new getters (requires/device/depobj_update/uses_allocators/defaultmap, etc.). Add validation for new enums in `ir/validate.rs` and fix `ClauseData::Display` gaps (e.g., depobj_update).
 
-2. **Parser & IR**
-   - Rewrite `src/parser/openmp.rs`, `src/parser/openacc.rs`, and clause helpers to emit the new enum values (one per language + keyword) plus typed payload structs (lists, expressions, reduction ops, map kinds, etc.).
-   - Update `src/ir` to store/propagate the structured data without lossy conversions; debugger/stepper must consume the enums directly.
-   - Introduce parser configuration for clause normalization (off / ompparser-parity / accparser-parity).
-
-3. **C API Surface**
-   - Rebuild `src/c_api.rs` and `src/c_api/openacc.rs` so every exported directive/clause struct is filled from the enum AST (no parsing, trimming, or raw numeric literals).
-   - Unsafe Rust remains only inside FFI entry points; all helper logic stays safe Rust operating on enums.
-
-4. **Compat Layer**
-   - Refactor `compat/ompparser` and `compat/accparser` to construct ompparser/accparser IR nodes purely from the enums/payloads supplied by the C API.
-   - Remove any helper that inspects raw text, guesses clause kinds by strings, or normalizes via ad-hoc parsing.
-   - Keep the public interface identical to upstream: consumers still call `parseOpenMP`/`parseOpenACC` and include only the original ompparser headers. No new headers or ABI changes.
-
-5. **Testing Harness**
-   - Harden `test.sh` to run the full compat `ctest` suites first, print the failing count/rate when non-zero, and exit immediately without running anything else.
-   - Provide local convenience targets for focused subsets, but CI always executes the full gate.
-
-## Challenges & Mitigations
-- **Enum Explosion:** Hundreds of variants increase boilerplate. Use macro helpers/build-script generation to keep definitions consistent and eliminate manual numeric assignments.
-- **Parser Parity:** Ompparser’s grammar (including Fortran forms, directive aliases, and constructs with spaces/underscores) is the source of truth. Mirror their behavior via keyword tables autogenerated from `keywords_analysis.json` and add parser tests covering `openmp_vv`/`openacc_vv` samples.
-- **Normalization Fidelity:** Ompparser conditionally merges clauses (e.g., `shared(a)` + `shared(b)` → `shared(a, b)`). Implement normalization stages that can be toggled per test group through the C API; avoid hardcoding a single behavior.
-- **Compat Drop-in Requirement:** `parseOpenMP`/`parseOpenACC` signatures and upstream headers must remain untouched. Temporary shims must preserve the current ABI while progressively moving logic into the AST.
-- **Transition Risk:** Some clause conversions still rely on raw numeric IDs (e.g., `kind = 14`). These are annotated with TODOs and must be eliminated before completion. Track them explicitly so nothing lingers.
-
-## Execution Schedule
-1. **Schema & Constants (Day 0.5)**
-   - Finalize the enum hierarchy in `src/ast/mod.rs`.
-   - Update `build.rs`/`src/constants_gen.rs` so `src/roup_constants.h` exposes the prefixed enums without overlaps between OpenMP/OpenACC.
-
-2. **Parser Upgrade (Days 0.5–2.0)**
-   - Convert OpenMP + OpenACC directive parsing to produce the enum AST (including clause payload data).
-   - Add parser-level tests validating each directive/clause pair found in `openmp_vv` and `openacc_vv`.
-   - Introduce normalization configuration knobs and plumb them through parser constructors.
-
-3. **IR/C API Alignment (Days 2.0–3.0)**
-   - Update `src/ir/*` modules and consumers to rely on the new AST data.
-   - Rewrite `src/c_api.rs` and `src/c_api/openacc.rs` conversions to read the enums and payloads directly; delete any helper that performs string parsing.
-   - Maintain compatibility with existing ompparser headers by keeping struct layouts and exported constants identical (only the internal population changes).
-   - Document any temporary bridge that still references legacy numeric IDs so they can be cleaned up in Step 6.
-
-4. **Compat Refactor (Days 3.0–4.5)**
-   - Update `compat/ompparser/src/compat_impl.cpp` and `compat/accparser/src/*.cpp` to consume the new C API data, build ompparser/accparser IR nodes, and toggle normalization per test group.
-   - Remove textual helpers (reduction parsing, clause formatting, etc.).
-   - Confirm that `parseOpenMP`/`parseOpenACC` remain the only exported entry points; no new headers introduced.
-
-5. **Testing Harness & Tooling (Day 4.5)**
-   - Modify `test.sh` to gate all subsequent steps on a successful compat `ctest` run; include failure count reporting and early exit.
-   - Provide developer docs on how to run focused suites during iteration.
-
-6. **Cleanup & Verification (Days 4.5–5.5)**
-   - Eliminate all temporary bridges (e.g., legacy clause converters, raw numeric IDs).
-   - Run full `cargo test`, `ctest` for OpenMP + OpenACC via `test.sh`.
-   - Address regressions until `test.sh` passes with 0 failures.
-
-## Near-Term Priorities (Nov 2025)
-1. **Validate OpenACC AST consumption** *(DONE Nov 2025, keep auditing)*: the C API now builds every clause exclusively from the enum AST and `convert_acc_clause` is gone. Add regression tests around tricky clauses (async/bind/default/wait) and watch for places that might still expect the legacy `split_arguments` format.
-2. **Remove OpenMP clause fallbacks**: eliminate `convert_clause_from_legacy` after each remaining OpenMP clause uses typed converters; replace hard-coded clause IDs with generated enums. *Status (Nov 2025):* `parse_clause_data` now produces structured payloads for the bulk of OpenMP clauses (data-sharing, teams, device, atomic, etc.) and the C API consumes those for both variable and expression clauses. Loop-control bare clauses (`nontemporal`, `uniform`, `inbranch`, `notinbranch`, `inclusive`, `exclusive`) now flow through the AST as well, and `requires(...)` keeps its modifiers. Outstanding work covers the remaining long tail (`defaultmap`, `uses_allocators` cleanup, and other clause families still using the legacy fallback) plus removing the temporary numeric IDs once the constants generator can emit the prefixed enums.
-3. **Refactor compat layers**: begin migrating `compat/ompparser`/`compat/accparser` to consume the new C API getters (target reduction/affinity first), removing text-based helpers as features move over while preserving the ABI.
-4. **Gate `test.sh` on compat ctest**: update the harness so compat `ctest` runs first, reports failure counts/rates, and aborts before other suites when anything fails.
-
-## Missing Coverage Checklist (blocking a pure enum AST + 0 ctest failures)
-- **Header generation still depends on legacy `convert_clause`**: add an enum-based, literal-number mapping function (or teach `constants_gen.rs` to parse consts) so `convert_clause` can be deleted entirely without losing `roup_constants.h`.
-- **Compat string parsing still present**: device clause now has typed getters (modifier + expr) and depobj_update has a dependence getter wired through compat; remaining hotspots include grainsize/num_tasks modifiers and any other long-tail clauses still reading `arguments`.
-- **Directive/clause completeness audit**: ensure every `ClauseName` variant in `src/parser/clause.rs` is either supported end-to-end or intentionally rejected (panic); add tests for any newly wired getters (requires modifiers, uses_allocators, device, depobj_update, defaultmap) to keep them stable.
-- **Normalization toggles**: plumb normalization controls to match ompparser/accparser expectations per test group (openmp_vv/openacc_vv).
-- **test.sh gating**: make compat `ctest` the first step with an early exit on failure, reporting fail counts.
-
-## Verification Method
-- **Unit / Integration Tests:** Expand Rust parser and IR tests to cover every directive/clause combination. Include normalization-mode fixtures to verify both merged and non-merged behavior.
-- **Compat Suites:** After each major milestone, run `compat/ompparser` and `compat/accparser` builds followed by targeted `ctest -R <pattern>` runs. Final acceptance requires `ctest -j` for all 1,527 OpenMP + OpenACC tests with 0 failures.
-- **CI Gate:** `test.sh` must abort immediately on incompatibilities, logging the failing count/rate. Success condition is a fully passing run from a clean checkout with submodules.
-- **Manual Spot Checks:** Compare AST dumps between ROUP and ompparser for tricky directives (e.g., `target teams distribute parallel for simd collapse(2)` with combined clauses) to ensure enum fidelity.
-
-## Notes on Temporary Bridges
-- Any legacy helper that still relies on raw numeric clause IDs or string parsing must carry a TODO referencing this plan and the cleanup step number. These bridges exist *only* to keep the build green while the compat layer is being migrated; they must be removed during Step 6.
-- Track bridge locations in `src/c_api.rs` and compat sources so we do not forget them. Once a clause/directive is handled via the enum AST end-to-end, delete the corresponding bridge immediately.
+## Risks / Notes
+- Leaving `constants_gen.rs` tied to `convert_clause` blocks removal of legacy code and risks missing new clauses in `roup_constants.h`.
+- Remaining compat string parsing can diverge from the AST and break `ctest` despite typed payloads.
+- Normalization behavior not plumbed may cause mismatches with ompparser expectations.
