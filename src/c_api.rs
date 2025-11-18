@@ -100,6 +100,16 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         ClauseName::Align => CLAUSE_KIND_ALIGNED,
         ClauseName::Reduction => CLAUSE_KIND_REDUCTION,
         ClauseName::ProcBind => CLAUSE_KIND_PROC_BIND,
+        ClauseName::NumTeams => CLAUSE_KIND_NUM_TEAMS,
+        ClauseName::ThreadLimit => CLAUSE_KIND_THREAD_LIMIT,
+        ClauseName::Lastprivate => CLAUSE_KIND_LASTPRIVATE,
+        ClauseName::Collapse => CLAUSE_KIND_COLLAPSE,
+        ClauseName::Ordered => CLAUSE_KIND_ORDERED,
+        ClauseName::Nowait => CLAUSE_KIND_NOWAIT,
+        ClauseName::Schedule => CLAUSE_KIND_SCHEDULE,
+        ClauseName::DistSchedule => CLAUSE_KIND_DIST_SCHEDULE,
+        ClauseName::InReduction => CLAUSE_KIND_IN_REDUCTION,
+        ClauseName::Depend => CLAUSE_KIND_DEPEND,
         _ => todo!(),
     }
 }
