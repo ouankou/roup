@@ -334,6 +334,13 @@ pub struct Variable {
     /// - `matrix[i][j]` → 2 sections
     /// - `tensor[i][j][k]` → 3 sections
     pub array_sections: Vec<ArraySection>,
+
+    /// Original source spelling (when available).
+    ///
+    /// The parser preserves the exact textual form for languages with
+    /// different array notation (e.g., Fortran). Consumers can use this
+    /// to render language-specific strings without reparsing.
+    original: Option<String>,
 }
 
 impl Variable {
@@ -353,6 +360,7 @@ impl Variable {
         Self {
             name: name.trim().to_string(),
             array_sections: Vec::new(),
+            original: None,
         }
     }
 
@@ -375,12 +383,24 @@ impl Variable {
         Self {
             name: name.trim().to_string(),
             array_sections: sections,
+            original: None,
         }
+    }
+
+    /// Attach the original source spelling for language-specific rendering.
+    pub fn with_original(mut self, original: impl Into<String>) -> Self {
+        self.original = Some(original.into());
+        self
     }
 
     /// Get the variable name
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Get the preserved source spelling if available.
+    pub fn original(&self) -> Option<&str> {
+        self.original.as_deref()
     }
 
     /// Check if this is a scalar (no array sections)

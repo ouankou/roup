@@ -33,8 +33,10 @@ pub fn parse_clause_item_list(
         // Detect C-like array sections by splitting on top-level '[' (pairs empty
         // so '[' is recognized unless inside quotes/templates).
         if split_top_level(trimmed, '[', &[] as &[(char, char)]).len() > 1 {
-            let variable = parse_c_like_variable(trimmed, config)?;
-            items.push(ClauseItem::Variable(variable));
+            match parse_c_like_variable(trimmed, config) {
+                Ok(variable) => items.push(ClauseItem::Variable(variable)),
+                Err(_) => items.push(ClauseItem::Expression(Expression::new(trimmed, config))),
+            }
             continue;
         }
 
@@ -42,9 +44,16 @@ pub fn parse_clause_item_list(
         // ends_with check and let parse_fortran_variable handle nesting properly.
         if matches!(language, Language::Fortran) && trimmed.contains('(') && trimmed.ends_with(')')
         {
-            if let Some(variable) = parse_fortran_variable(trimmed, config)? {
-                items.push(ClauseItem::Variable(variable));
-                continue;
+            match parse_fortran_variable(trimmed, config) {
+                Ok(Some(variable)) => {
+                    items.push(ClauseItem::Variable(variable));
+                    continue;
+                }
+                Ok(None) => {}
+                Err(_) => {
+                    items.push(ClauseItem::Expression(Expression::new(trimmed, config)));
+                    continue;
+                }
             }
         }
 
@@ -134,11 +143,13 @@ fn parse_fortran_variable(
         }
     }
 
-    if sections.is_empty() {
-        return Ok(Some(Variable::new(name)));
-    }
+    let variable = if sections.is_empty() {
+        Variable::new(name)
+    } else {
+        Variable::with_sections(name, sections)
+    };
 
-    Ok(Some(Variable::with_sections(name, sections)))
+    Ok(Some(variable.with_original(trimmed)))
 }
 
 fn parse_array_section(
@@ -636,6 +647,16 @@ mod tests {
                 assert!(var.array_sections[2].stride.is_some());
             }
             other => panic!("expected Fortran multi-dimensional array, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn preserves_fortran_variable_original_spelling() {
+        let config = config_for(Language::Fortran);
+        let items = parse_clause_item_list("val(a,b,c)", &config).unwrap();
+        match &items[0] {
+            ClauseItem::Variable(var) => assert_eq!(var.original(), Some("val(a,b,c)")),
+            other => panic!("expected variable with preserved spelling, got {other:?}"),
         }
     }
 

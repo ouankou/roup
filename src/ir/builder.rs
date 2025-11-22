@@ -194,7 +194,13 @@ impl<'a> DirectiveBuilder {
             .iter()
             .map(|&v| ClauseItem::Identifier(Identifier::new(v)))
             .collect();
-        self.clauses.push(ClauseData::Reduction { operator, items });
+        self.clauses.push(ClauseData::Reduction {
+            modifiers: Vec::new(),
+            operator,
+            user_identifier: None,
+            items,
+            space_after_colon: true,
+        });
         self
     }
 
@@ -307,7 +313,9 @@ impl<'a> DirectiveBuilder {
             .collect();
         self.clauses.push(ClauseData::Map {
             map_type: Some(map_type),
+            modifiers: Vec::new(),
             mapper: None,
+            iterators: Vec::new(),
             items,
         });
         self
@@ -319,7 +327,11 @@ impl<'a> DirectiveBuilder {
             .iter()
             .map(|&v| ClauseItem::Identifier(Identifier::new(v)))
             .collect();
-        self.clauses.push(ClauseData::Depend { depend_type, items });
+        self.clauses.push(ClauseData::Depend {
+            depend_type,
+            items,
+            iterators: Vec::new(),
+        });
         self
     }
 

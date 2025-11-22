@@ -27,6 +27,7 @@
 //! ```
 
 use super::{ClauseData, DirectiveIR, DirectiveKind};
+use crate::ir::{DepobjUpdateDependence, DeviceModifier};
 use std::fmt;
 
 /// Validation error types
@@ -204,6 +205,30 @@ impl ValidationContext {
                 }
             }
 
+            // device is for target constructs; modifier must be a known variant
+            ClauseData::Device { modifier, .. } => {
+                if !self.directive.is_target() {
+                    Err(ValidationError::ClauseNotAllowed {
+                        clause_name,
+                        directive: self.directive.to_string(),
+                        reason: "device only allowed on target constructs".to_string(),
+                    })
+                } else if matches!(
+                    modifier,
+                    DeviceModifier::Unspecified
+                        | DeviceModifier::Ancestor
+                        | DeviceModifier::DeviceNum
+                ) {
+                    Ok(())
+                } else {
+                    Err(ValidationError::ClauseNotAllowed {
+                        clause_name,
+                        directive: self.directive.to_string(),
+                        reason: "unknown device modifier".to_string(),
+                    })
+                }
+            }
+
             // linear is for simd/loop constructs
             ClauseData::Linear { .. } => {
                 if self.directive.is_simd() || self.directive.is_loop() {
@@ -281,6 +306,50 @@ impl ValidationContext {
             // Generic clauses we don't validate yet
             ClauseData::Generic { .. } => Ok(()),
 
+            // depobj_update only on depobj directive with supported dependence kinds
+            ClauseData::DepobjUpdate { dependence } => {
+                if self.directive != DirectiveKind::Depobj {
+                    Err(ValidationError::ClauseNotAllowed {
+                        clause_name,
+                        directive: self.directive.to_string(),
+                        reason: "depobj_update only allowed on depobj directives".to_string(),
+                    })
+                } else if matches!(
+                    dependence,
+                    DepobjUpdateDependence::In
+                        | DepobjUpdateDependence::Out
+                        | DepobjUpdateDependence::Inout
+                        | DepobjUpdateDependence::Inoutset
+                        | DepobjUpdateDependence::Mutexinoutset
+                ) {
+                    Ok(())
+                } else {
+                    Err(ValidationError::ClauseNotAllowed {
+                        clause_name,
+                        directive: self.directive.to_string(),
+                        reason: "unsupported depobj_update dependence (must be in/out/inout/inoutset/mutexinoutset)".to_string(),
+                    })
+                }
+            }
+
+            // metadirective selectors only valid on (begin_)metadirective directives
+            ClauseData::MetadirectiveSelector { .. } => {
+                if matches!(
+                    self.directive,
+                    DirectiveKind::Metadirective | DirectiveKind::BeginMetadirective
+                ) {
+                    Ok(())
+                } else {
+                    Err(ValidationError::ClauseNotAllowed {
+                        clause_name,
+                        directive: self.directive.to_string(),
+                        reason:
+                            "metadirective selectors are only allowed on metadirective constructs"
+                                .to_string(),
+                    })
+                }
+            }
+
             // Other clauses default to allowed
             _ => Ok(()),
         }
@@ -297,6 +366,8 @@ impl ValidationContext {
             ClauseData::Default(_) => "default".to_string(),
             ClauseData::Reduction { .. } => "reduction".to_string(),
             ClauseData::Map { .. } => "map".to_string(),
+            ClauseData::Device { .. } => "device".to_string(),
+            ClauseData::DepobjUpdate { .. } => "depobj_update".to_string(),
             ClauseData::Schedule { .. } => "schedule".to_string(),
             ClauseData::Linear { .. } => "linear".to_string(),
             ClauseData::If { .. } => "if".to_string(),
@@ -305,6 +376,7 @@ impl ValidationContext {
             ClauseData::Collapse { .. } => "collapse".to_string(),
             ClauseData::Ordered { .. } => "ordered".to_string(),
             ClauseData::Depend { .. } => "depend".to_string(),
+            ClauseData::MetadirectiveSelector { .. } => "metadirective_selector".to_string(),
             ClauseData::Generic { name, .. } => name.to_string(),
             _ => "<unknown>".to_string(),
         }
@@ -427,8 +499,8 @@ impl DirectiveIR {
 mod tests {
     use super::*;
     use crate::ir::{
-        ClauseItem, DefaultKind, DependType, Identifier, Language, MapType, ReductionOperator,
-        ScheduleKind, SourceLocation,
+        ClauseItem, DefaultKind, DependType, DepobjUpdateDependence, DeviceModifier, Identifier,
+        Language, MapType, ReductionOperator, ScheduleKind, SourceLocation,
     };
 
     #[test]
@@ -449,8 +521,11 @@ mod tests {
     fn test_reduction_allowed_on_parallel() {
         let context = ValidationContext::new(DirectiveKind::Parallel);
         let clause = ClauseData::Reduction {
+            modifiers: Vec::new(),
             operator: ReductionOperator::Add,
+            user_identifier: None,
             items: vec![ClauseItem::Identifier(Identifier::new("sum"))],
+            space_after_colon: true,
         };
         assert!(context.is_clause_allowed(&clause).is_ok());
     }
@@ -459,8 +534,11 @@ mod tests {
     fn test_reduction_allowed_on_for() {
         let context = ValidationContext::new(DirectiveKind::For);
         let clause = ClauseData::Reduction {
+            modifiers: Vec::new(),
             operator: ReductionOperator::Add,
+            user_identifier: None,
             items: vec![ClauseItem::Identifier(Identifier::new("sum"))],
+            space_after_colon: true,
         };
         assert!(context.is_clause_allowed(&clause).is_ok());
     }
@@ -510,7 +588,9 @@ mod tests {
         let context = ValidationContext::new(DirectiveKind::Target);
         let clause = ClauseData::Map {
             map_type: Some(MapType::To),
+            modifiers: vec![],
             mapper: None,
+            iterators: Vec::new(),
             items: vec![ClauseItem::Identifier(Identifier::new("arr"))],
         };
         assert!(context.is_clause_allowed(&clause).is_ok());
@@ -521,8 +601,57 @@ mod tests {
         let context = ValidationContext::new(DirectiveKind::Parallel);
         let clause = ClauseData::Map {
             map_type: Some(MapType::To),
+            modifiers: vec![],
             mapper: None,
+            iterators: Vec::new(),
             items: vec![ClauseItem::Identifier(Identifier::new("arr"))],
+        };
+        assert!(context.is_clause_allowed(&clause).is_err());
+    }
+
+    #[test]
+    fn test_device_allowed_on_target() {
+        let context = ValidationContext::new(DirectiveKind::Target);
+        let clause = ClauseData::Device {
+            modifier: DeviceModifier::Unspecified,
+            device_num: crate::ir::Expression::unparsed("1"),
+        };
+        assert!(context.is_clause_allowed(&clause).is_ok());
+    }
+
+    #[test]
+    fn test_device_rejected_off_target() {
+        let context = ValidationContext::new(DirectiveKind::Parallel);
+        let clause = ClauseData::Device {
+            modifier: DeviceModifier::Ancestor,
+            device_num: crate::ir::Expression::unparsed("1"),
+        };
+        assert!(context.is_clause_allowed(&clause).is_err());
+    }
+
+    #[test]
+    fn test_depobj_update_allowed_on_depobj() {
+        let context = ValidationContext::new(DirectiveKind::Depobj);
+        let clause = ClauseData::DepobjUpdate {
+            dependence: DepobjUpdateDependence::In,
+        };
+        assert!(context.is_clause_allowed(&clause).is_ok());
+    }
+
+    #[test]
+    fn test_depobj_update_rejected_off_depobj() {
+        let context = ValidationContext::new(DirectiveKind::Target);
+        let clause = ClauseData::DepobjUpdate {
+            dependence: DepobjUpdateDependence::In,
+        };
+        assert!(context.is_clause_allowed(&clause).is_err());
+    }
+
+    #[test]
+    fn test_depobj_update_rejects_unknown_dependence() {
+        let context = ValidationContext::new(DirectiveKind::Depobj);
+        let clause = ClauseData::DepobjUpdate {
+            dependence: DepobjUpdateDependence::Unknown,
         };
         assert!(context.is_clause_allowed(&clause).is_err());
     }
@@ -533,6 +662,7 @@ mod tests {
         let clause = ClauseData::Depend {
             depend_type: DependType::In,
             items: vec![ClauseItem::Identifier(Identifier::new("x"))],
+            iterators: Vec::new(),
         };
         assert!(context.is_clause_allowed(&clause).is_ok());
     }
@@ -543,6 +673,7 @@ mod tests {
         let clause = ClauseData::Depend {
             depend_type: DependType::Out,
             items: vec![ClauseItem::Identifier(Identifier::new("y"))],
+            iterators: Vec::new(),
         };
         assert!(context.is_clause_allowed(&clause).is_ok());
     }
@@ -553,6 +684,7 @@ mod tests {
         let clause = ClauseData::Depend {
             depend_type: DependType::Inout,
             items: vec![ClauseItem::Identifier(Identifier::new("z"))],
+            iterators: Vec::new(),
         };
         assert!(context.is_clause_allowed(&clause).is_ok());
     }
@@ -649,8 +781,11 @@ mod tests {
     fn test_reduction_allowed_on_workdistribute() {
         let context = ValidationContext::new(DirectiveKind::Workdistribute);
         let clause = ClauseData::Reduction {
+            modifiers: Vec::new(),
             operator: ReductionOperator::Add,
+            user_identifier: None,
             items: vec![ClauseItem::Identifier(Identifier::new("sum"))],
+            space_after_colon: true,
         };
         assert!(context.is_clause_allowed(&clause).is_ok());
     }

@@ -152,6 +152,7 @@ pub enum DirectiveName {
     EndParallelLoop,
     EndTargetLoop,
     EndSection,
+    EndScope,
     EndUnroll,
     EndTile,
     Update,
@@ -560,6 +561,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("end parallel loop", DirectiveName::EndParallelLoop);
     insert!("end target loop", DirectiveName::EndTargetLoop);
     insert!("end section", DirectiveName::EndSection);
+    insert!("end scope", DirectiveName::EndScope);
     insert!("end unroll", DirectiveName::EndUnroll);
     insert!("end tile", DirectiveName::EndTile);
     insert!("update", DirectiveName::Update);
@@ -704,13 +706,43 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     m
 });
 
+/// Normalize directive names by trimming, replacing underscores with spaces,
+/// and collapsing repeated whitespace.
+fn normalize_directive_key(name: &str) -> String {
+    let replaced = name.trim().replace('_', " ");
+    replaced.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// Lookup a DirectiveName from a normalized name string. If not found, returns Other variant
 pub fn lookup_directive_name(name: &str) -> DirectiveName {
-    let key = name.trim().to_ascii_lowercase();
+    // Some OpenACC directives intentionally require underscores rather than
+    // accepting space-separated aliases (e.g., `host_data`). Recognize the
+    // canonical underscore form before the general normalization that replaces
+    // underscores with spaces.
+    if name.trim().eq_ignore_ascii_case("host_data") {
+        return DirectiveName::HostData;
+    }
+
+    let normalized = normalize_directive_key(name);
+    let key = normalized.to_ascii_lowercase();
+
+    // Gracefully accept block-ending aliases even when the dedicated enum
+    // variant does not exist yet. Treat them as their opening directive so
+    // downstream conversion can proceed instead of aborting the parse.
+    if key == "end metadirective" {
+        return DirectiveName::Metadirective;
+    }
+    if key == "end scope" {
+        return DirectiveName::EndScope;
+    }
+    if key == "end parallel single" {
+        return DirectiveName::EndParallel;
+    }
+
     DIRECTIVE_MAP
         .get(key.as_str())
         .cloned()
-        .unwrap_or(DirectiveName::Other(Cow::Owned(name.to_string())))
+        .unwrap_or(DirectiveName::Other(Cow::Owned(normalized)))
 }
 
 impl DirectiveName {
@@ -932,6 +964,7 @@ impl DirectiveName {
             DirectiveName::EndParallelLoop => "end parallel loop",
             DirectiveName::EndTargetLoop => "end target loop",
             DirectiveName::EndSection => "end section",
+            DirectiveName::EndScope => "end scope",
             DirectiveName::EndUnroll => "end unroll",
             DirectiveName::EndTile => "end tile",
             DirectiveName::Update => "update",

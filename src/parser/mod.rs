@@ -46,7 +46,7 @@ fn skip_duplicate_keyword<'a>(input: &'a str, prefix: &str) -> &'a str {
             || input
                 .chars()
                 .nth(prefix.len())
-                .map_or(false, |c| c.is_whitespace()))
+                .is_some_and(|c| c.is_whitespace()))
     {
         // Skip the prefix and any following whitespace
         let after_prefix = &input[prefix.len()..];
@@ -150,17 +150,36 @@ impl Parser {
         self.directive_registry.parse(input, &self.clause_registry)
     }
 
-    pub fn parse_ast<'a>(
+    pub fn parse_ast(
         &self,
-        input: &'a str,
+        input: &str,
         normalization: ClauseNormalizationMode,
         parser_config: &ParserConfig,
     ) -> Result<RoupDirective, AstBuildError> {
         let ir_language = ir_language_from_parser_language(self.language);
         let config = parser_config.for_language(ir_language);
-        let (_, directive) = self
+        let (rest, directive) = self
             .parse(input)
             .map_err(|err| AstBuildError::ParseFailure(format!("{err:?}")))?;
+
+        // Reject trailing tokens once a directive has been parsed to prevent
+        // accidentally accepting malformed pragmas like "safelen" (missing
+        // parentheses) or bare branch hints with leftover text.
+        let rest = crate::lexer::skip_space_and_comments(rest)
+            .map(|(remaining, _)| remaining)
+            .unwrap_or(rest);
+        let trimmed_rest = rest.trim();
+        if !trimmed_rest.is_empty() {
+            // Ompparser is permissive about trailing commas; tolerate them but
+            // reject any other leftover tokens to avoid silently accepting
+            // malformed pragmas.
+            let without_commas = trimmed_rest.trim_matches(',');
+            if !without_commas.trim().is_empty() {
+                return Err(AstBuildError::ParseFailure(format!(
+                    "unexpected trailing tokens: {trimmed_rest:?}"
+                )));
+            }
+        }
 
         ast_builder::build_roup_directive(
             &directive,
@@ -217,6 +236,8 @@ fn ir_language_from_parser_language(lang: Language) -> IrLanguage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::ClauseNormalizationMode;
+    use crate::ir::ParserConfig;
     use crate::lexer::{self, Language};
     use std::borrow::Cow;
 
@@ -236,6 +257,20 @@ mod tests {
         );
         assert_eq!(directive.clauses[1].name, "nowait");
         assert_eq!(directive.clauses[1].kind, ClauseKind::Bare);
+    }
+
+    #[test]
+    fn parse_ast_accepts_hint_clause() {
+        let parser = Parser::default();
+        let config = ParserConfig::default();
+
+        let result = parser.parse_ast(
+            "#pragma omp critical(test1) hint(test2)",
+            ClauseNormalizationMode::ParserParity,
+            &config,
+        );
+
+        assert!(result.is_ok(), "parse_ast error: {:?}", result.err());
     }
 
     #[test]

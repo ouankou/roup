@@ -176,11 +176,11 @@ else
 fi
 
 # ===================================================================
-# 9. ompparser Compatibility Tests
+# 9. ompparser Compatibility Tests (gating)
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. ompparser Compat Tests ==="
 if [ -d "compat/ompparser" ] && [ -f "compat/ompparser/build.sh" ]; then
-    echo -n "Running compat tests... "
+    echo -n "Running compat tests (ctest gating)... "
     cd compat/ompparser
     if ./build.sh > /tmp/compat_test.log 2>&1; then
         cd build
@@ -198,7 +198,7 @@ if [ -d "compat/ompparser" ] && [ -f "compat/ompparser/build.sh" ]; then
         cd ../..
         exit 1
     fi
-    cd ../..
+    cd ../../..
 else
     echo -e "${RED}✗ FAIL - ompparser compatibility layer is MANDATORY but not found${NC}"
     echo "   Expected: compat/ompparser/build.sh"

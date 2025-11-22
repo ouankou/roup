@@ -1203,11 +1203,14 @@ impl DirectiveIR {
     /// ## Example
     ///
     /// ```
-    /// # use roup::ir::{DirectiveIR, DirectiveKind, ClauseData, ReductionOperator, Identifier, Language, SourceLocation};
+    /// # use roup::ir::{DirectiveIR, DirectiveKind, ClauseData, ReductionModifier, ReductionOperator, Identifier, Language, SourceLocation};
     /// let clauses = vec![
     ///     ClauseData::Reduction {
+    ///         modifiers: vec![ReductionModifier::Task],
     ///         operator: ReductionOperator::Add,
+    ///         user_identifier: None,
     ///         items: vec![Identifier::new("sum").into()],
+    ///         space_after_colon: true,
     ///     },
     /// ];
     ///
@@ -1759,8 +1762,11 @@ mod tests {
     #[test]
     fn test_directive_ir_display_with_reduction() {
         let clauses = vec![ClauseData::Reduction {
+            modifiers: Vec::new(),
             operator: ReductionOperator::Add,
+            user_identifier: None,
             items: vec![ClauseItem::Identifier(Identifier::new("sum"))],
+            space_after_colon: true,
         }];
 
         let dir = DirectiveIR::new(

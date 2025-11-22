@@ -11,6 +11,7 @@ fn parser() -> Parser {
 enum ExpectedClauseKind {
     Bare,
     Parenthesized,
+    Reduction,
 }
 
 #[test]
@@ -49,10 +50,18 @@ fn parses_all_registered_clauses() {
                     ExpectedClauseKind::Parenthesized,
                 ),
             ],
-            ClauseRule::Custom(_) => vec![(
-                format!("{}(value)", clause.name()),
-                ExpectedClauseKind::Parenthesized,
-            )],
+            ClauseRule::Custom(_) => match clause {
+                OpenMpClause::Reduction
+                | OpenMpClause::InReduction
+                | OpenMpClause::TaskReduction => vec![(
+                    format!("{}(+:{})", clause.name(), "value"),
+                    ExpectedClauseKind::Reduction,
+                )],
+                _ => vec![(
+                    format!("{}(value)", clause.name()),
+                    ExpectedClauseKind::Parenthesized,
+                )],
+            },
             ClauseRule::Unsupported => {
                 panic!("clause `{}` should not report Unsupported", clause.name())
             }
@@ -79,6 +88,7 @@ fn parses_all_registered_clauses() {
             match (expected_kind, &directive.clauses[0].kind) {
                 (ExpectedClauseKind::Bare, ClauseKind::Bare) => {}
                 (ExpectedClauseKind::Parenthesized, ClauseKind::Parenthesized(_)) => {}
+                (ExpectedClauseKind::Reduction, ClauseKind::ReductionClause { .. }) => {}
                 _ => panic!(
                     "clause `{}` did not parse with the expected kind",
                     clause.name()

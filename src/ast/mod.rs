@@ -28,20 +28,15 @@ pub enum RoupLanguage {
 }
 
 /// Clause normalization strategy (mirrors ompparser/accparser behavior).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ClauseNormalizationMode {
     /// Keep clauses exactly as written (no merging).
     Disabled,
     /// Merge compatible clauses by concatenating their variable lists.
     MergeVariableLists,
     /// Match the upstream ompparser/accparser defaults.
+    #[default]
     ParserParity,
-}
-
-impl Default for ClauseNormalizationMode {
-    fn default() -> Self {
-        ClauseNormalizationMode::ParserParity
-    }
 }
 
 /// Top-level directive wrapper that records the language and source location.
@@ -60,7 +55,7 @@ pub enum DirectiveBody {
 }
 
 /// Fully structured OpenMP directive.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OmpDirective {
     pub kind: OmpDirectiveKind,
     pub parameter: Option<OmpDirectiveParameter>,
@@ -68,7 +63,7 @@ pub struct OmpDirective {
 }
 
 /// Fully structured OpenACC directive.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccDirective {
     pub kind: AccDirectiveKind,
     pub parameter: Option<AccDirectiveParameter>,
@@ -76,26 +71,84 @@ pub struct AccDirective {
 }
 
 /// Typed OpenMP clause record.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OmpClause {
     pub kind: OmpClauseKind,
     pub payload: OmpClausePayload,
 }
 
 /// Typed OpenACC clause record.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccClause {
     pub kind: AccClauseKind,
     pub payload: AccClausePayload,
 }
 
+/// Metadirective selector payload (typed, no post-parse strings).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OmpSelector {
+    pub device: Option<OmpSelectorDevice>,
+    pub implementation: Option<OmpSelectorImpl>,
+    pub user: Option<OmpSelectorUser>,
+    pub constructs: Option<OmpSelectorConstructs>,
+    pub nested_directive: Option<Box<OmpDirective>>,
+    pub is_target_device: bool,
+    pub raw: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OmpSelectorDevice {
+    pub kind: Option<OmpSelectorScoredValue>,
+    pub isa: Vec<OmpSelectorScoredValue>,
+    pub arch: Vec<OmpSelectorScoredValue>,
+    pub device_num: Option<Expression>,
+    pub device_num_score: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OmpSelectorImpl {
+    pub vendor: Option<String>,
+    pub extensions: Vec<String>,
+    pub vendor_score: Option<String>,
+    pub extension_scores: Vec<Option<String>>,
+    pub user_expression: Option<String>,
+    pub user_expression_score: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OmpSelectorUser {
+    pub condition: Option<Expression>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct OmpSelectorConstructs {
+    pub constructs: Vec<OmpSelectorConstruct>,
+    pub scores: Vec<Option<String>>,
+}
+
+/// Selector value with optional score annotation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OmpSelectorScoredValue {
+    pub score: Option<String>,
+    pub value: String,
+}
+
+/// Construct selector entry with optional score.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OmpSelectorConstruct {
+    pub score: Option<String>,
+    pub kind: OmpDirectiveKind,
+    pub directive: Box<OmpDirective>,
+}
+
 /// Additional syntax carried by OpenMP directives that accept custom
 /// parameters outside the clause stream.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OmpDirectiveParameter {
     IdentifierList(Vec<OmpIdentifier>),
     Identifier(OmpIdentifier),
     Mapper(OmpIdentifier),
+    DeclareMapper(OmpDeclareMapper),
     VariantFunction(OmpIdentifier),
     Depobj(OmpIdentifier),
     Scan(OmpScanDirective),
@@ -117,7 +170,7 @@ pub enum OmpConstructType {
 }
 
 /// Structured data for `scan` directives.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OmpScanDirective {
     pub mode: OmpScanMode,
     pub variables: Vec<OmpIdentifier>,
@@ -131,7 +184,7 @@ pub enum OmpScanMode {
 }
 
 /// Declare reduction signature.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OmpDeclareReduction {
     pub operator: ReductionOperatorToken,
     pub type_names: Vec<String>,
@@ -140,20 +193,34 @@ pub struct OmpDeclareReduction {
 }
 
 /// Reduction operator token (builtin or user-defined identifier).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ReductionOperatorToken {
     Builtin(crate::ir::ReductionOperator),
     Identifier(OmpIdentifier),
 }
 
 /// Declare simd target (optional function identifier).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OmpSimdTarget {
     pub function: Option<OmpIdentifier>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum OmpDeclareMapperId {
+    Unspecified,
+    Default,
+    User(OmpIdentifier),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OmpDeclareMapper {
+    pub identifier: OmpDeclareMapperId,
+    pub type_name: String,
+    pub variable: String,
+}
+
 /// OpenACC directive parameter payloads.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AccDirectiveParameter {
     Cache(AccCacheDirective),
     Wait(AccWaitDirective),
@@ -162,14 +229,14 @@ pub enum AccDirectiveParameter {
 }
 
 /// `cache` directive payload.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccCacheDirective {
     pub readonly: bool,
     pub variables: Vec<Identifier>,
 }
 
 /// `wait` directive payload.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccWaitDirective {
     pub devnum: Option<Expression>,
     pub queues: Vec<Expression>,
@@ -177,13 +244,13 @@ pub struct AccWaitDirective {
 }
 
 /// `routine` directive payload (optional binding).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccRoutineDirective {
     pub name: Option<Identifier>,
 }
 
 /// OpenACC clause payloads covering the clauses that require structured data.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AccClausePayload {
     Bare,
     Expression(Expression),
@@ -201,7 +268,7 @@ pub enum AccClausePayload {
 }
 
 /// Copy-like clause payload (`copy`, `pcopy`, `present_or_copy`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccCopyClause {
     pub kind: AccCopyKind,
     pub modifier: Option<AccCopyModifier>,
@@ -209,7 +276,7 @@ pub struct AccCopyClause {
 }
 
 /// Create-like clause payload (`create`, `pcreate`, `present_or_create`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccCreateClause {
     pub kind: AccCreateKind,
     pub modifier: Option<AccCreateModifier>,
@@ -217,21 +284,21 @@ pub struct AccCreateClause {
 }
 
 /// Generic data movement clauses (`attach`, `detach`, `link`, etc.).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccDataClause {
     pub kind: AccDataKind,
     pub variables: Vec<Identifier>,
 }
 
 /// Gang/worker/vector clause payload with optional modifiers.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccGangClause {
     pub modifier: Option<String>,
     pub values: Vec<Expression>,
 }
 
 /// Wait clause payload (mirrors directive form).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccWaitClause {
     pub devnum: Option<Expression>,
     pub queues: Vec<Expression>,
@@ -239,7 +306,7 @@ pub struct AccWaitClause {
 }
 
 /// OpenACC reduction clause payload.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AccReductionClause {
     pub operator: String,
     pub variables: Vec<Identifier>,
@@ -459,6 +526,7 @@ define_omp_directive_kind! {
     Assumes => "assumes",
     Atomic => "atomic",
     AtomicCapture => "atomic capture",
+    AtomicCompareCapture => "atomic compare capture",
     AtomicRead => "atomic read",
     AtomicUpdate => "atomic update",
     AtomicWrite => "atomic write",
@@ -478,11 +546,18 @@ define_omp_directive_kind! {
     Depobj => "depobj",
     Dispatch => "dispatch",
     Distribute => "distribute",
+    DistributeParallelDo => "distribute parallel do",
+    DistributeParallelDoSimd => "distribute parallel do simd",
+    DistributeParallelFor => "distribute parallel for",
+    DistributeParallelForSimd => "distribute parallel for simd",
+    DistributeParallelLoop => "distribute parallel loop",
+    DistributeParallelLoopSimd => "distribute parallel loop simd",
     DistributeSimd => "distribute simd",
     Do => "do",
     DoSimd => "do simd",
     EndAssume => "end assume",
     EndAssumes => "end assumes",
+    End => "end",
     EndDeclareTarget => "end declare target",
     EndDeclareVariant => "end declare variant",
     EndParallel => "end parallel",
@@ -506,26 +581,53 @@ define_omp_directive_kind! {
     EndParallelDo => "end parallel do",
     EndParallelFor => "end parallel for",
     EndParallelSections => "end parallel sections",
+    EndParallelWorkshare => "end parallel workshare",
     EndParallelMaster => "end parallel master",
+    EndParallelMasterTaskloop => "end parallel master taskloop",
+    EndParallelMasterTaskloopSimd => "end parallel master taskloop simd",
     EndDoSimd => "end do simd",
     EndForSimd => "end for simd",
     EndParallelDoSimd => "end parallel do simd",
     EndParallelForSimd => "end parallel for simd",
     EndDistributeSimd => "end distribute simd",
+    EndDistributeParallelDo => "end distribute parallel do",
+    EndDistributeParallelDoSimd => "end distribute parallel do simd",
+    EndDistributeParallelFor => "end distribute parallel for",
+    EndDistributeParallelForSimd => "end distribute parallel for simd",
     EndTargetParallel => "end target parallel",
     EndTargetParallelDo => "end target parallel do",
+    EndTargetParallelDoSimd => "end target parallel do simd",
+    EndTargetParallelFor => "end target parallel for",
+    EndTargetParallelForSimd => "end target parallel for simd",
+    EndTargetParallelLoop => "end target parallel loop",
     EndTargetSimd => "end target simd",
     EndTargetTeams => "end target teams",
+    EndTargetTeamsDistribute => "end target teams distribute",
+    EndTargetTeamsDistributeParallelDo => "end target teams distribute parallel do",
+    EndTargetTeamsDistributeParallelDoSimd => "end target teams distribute parallel do simd",
+    EndTargetTeamsDistributeParallelFor => "end target teams distribute parallel for",
+    EndTargetTeamsDistributeParallelForSimd => "end target teams distribute parallel for simd",
+    EndTargetTeamsDistributeSimd => "end target teams distribute simd",
     EndTargetTeamsLoop => "end target teams loop",
     EndTeamsDistribute => "end teams distribute",
+    EndTeamsDistributeParallelDo => "end teams distribute parallel do",
+    EndTeamsDistributeParallelDoSimd => "end teams distribute parallel do simd",
+    EndTeamsDistributeParallelFor => "end teams distribute parallel for",
+    EndTeamsDistributeParallelForSimd => "end teams distribute parallel for simd",
+    EndTeamsDistributeSimd => "end teams distribute simd",
     EndTeamsLoop => "end teams loop",
     EndTaskloopSimd => "end taskloop simd",
     EndMasterTaskloop => "end master taskloop",
+    EndMasterTaskloopSimd => "end master taskloop simd",
     EndMaskedTaskloop => "end masked taskloop",
+    EndMaskedTaskloopSimd => "end masked taskloop simd",
     EndParallelMasked => "end parallel masked",
+    EndParallelMaskedTaskloop => "end parallel masked taskloop",
+    EndParallelMaskedTaskloopSimd => "end parallel masked taskloop simd",
     EndParallelLoop => "end parallel loop",
     EndTargetLoop => "end target loop",
     EndSection => "end section",
+    EndTile => "end tile",
     Error => "error",
     Flush => "flush",
     Fuse => "fuse",
@@ -554,7 +656,11 @@ define_omp_directive_kind! {
     ParallelLoop => "parallel loop",
     ParallelLoopSimd => "parallel loop simd",
     ParallelMasked => "parallel masked",
+    ParallelMaskedTaskloop => "parallel masked taskloop",
+    ParallelMaskedTaskloopSimd => "parallel masked taskloop simd",
     ParallelMaster => "parallel master",
+    ParallelMasterTaskloop => "parallel master taskloop",
+    ParallelMasterTaskloopSimd => "parallel master taskloop simd",
     ParallelSections => "parallel sections",
     ParallelSingle => "parallel single",
     ParallelWorkshare => "parallel workshare",
@@ -581,10 +687,21 @@ define_omp_directive_kind! {
     TargetLoopSimd => "target loop simd",
     TargetParallel => "target parallel",
     TargetParallelDo => "target parallel do",
+    TargetParallelDoSimd => "target parallel do simd",
     TargetParallelFor => "target parallel for",
+    TargetParallelForSimd => "target parallel for simd",
     TargetParallelLoop => "target parallel loop",
+    TargetParallelLoopSimd => "target parallel loop simd",
     TargetSimd => "target simd",
     TargetTeams => "target teams",
+    TargetTeamsDistribute => "target teams distribute",
+    TargetTeamsDistributeParallelDo => "target teams distribute parallel do",
+    TargetTeamsDistributeParallelDoSimd => "target teams distribute parallel do simd",
+    TargetTeamsDistributeParallelFor => "target teams distribute parallel for",
+    TargetTeamsDistributeParallelForSimd => "target teams distribute parallel for simd",
+    TargetTeamsDistributeParallelLoop => "target teams distribute parallel loop",
+    TargetTeamsDistributeParallelLoopSimd => "target teams distribute parallel loop simd",
+    TargetTeamsDistributeSimd => "target teams distribute simd",
     TargetTeamsLoop => "target teams loop",
     TargetTeamsLoopSimd => "target teams loop simd",
     TargetUpdate => "target update",
@@ -598,6 +715,12 @@ define_omp_directive_kind! {
     Taskyield => "taskyield",
     Teams => "teams",
     TeamsDistribute => "teams distribute",
+    TeamsDistributeParallelDo => "teams distribute parallel do",
+    TeamsDistributeParallelDoSimd => "teams distribute parallel do simd",
+    TeamsDistributeParallelFor => "teams distribute parallel for",
+    TeamsDistributeParallelForSimd => "teams distribute parallel for simd",
+    TeamsDistributeParallelLoop => "teams distribute parallel loop",
+    TeamsDistributeParallelLoopSimd => "teams distribute parallel loop simd",
     TeamsDistributeSimd => "teams distribute simd",
     TeamsLoop => "teams loop",
     TeamsLoopSimd => "teams loop simd",
@@ -704,6 +827,7 @@ define_omp_clause_kind! {
     Release => "release",
     Relaxed => "relaxed",
     Replayable => "replayable",
+    Requires => "requires",
     ReverseOffload => "reverse_offload",
     Safelen => "safelen",
     Safesync => "safesync",

@@ -44,11 +44,17 @@
 //! - `translate`: C/C++ ↔ Fortran directive translation
 
 // Re-export main types
+pub use crate::ast::{
+    OmpSelector, OmpSelectorConstruct, OmpSelectorConstructs, OmpSelectorDevice, OmpSelectorImpl,
+    OmpSelectorScoredValue, OmpSelectorUser,
+};
 pub use builder::DirectiveBuilder;
 pub use clause::{
-    AtomicOp, ClauseData, ClauseItem, DefaultKind, DefaultmapBehavior, DefaultmapCategory,
-    DependType, DeviceType, LastprivateModifier, LinearModifier, MapType, MemoryOrder, OrderKind,
-    ProcBind, ReductionOperator, RequireModifier, ScheduleKind, ScheduleModifier,
+    AffinityModifier, AtomicOp, BindModifier, ClauseData, ClauseItem, DefaultKind,
+    DefaultmapBehavior, DefaultmapCategory, DependIterator, DependType, DepobjUpdateDependence,
+    DeviceModifier, DeviceType, GrainsizeModifier, LastprivateModifier, LinearModifier,
+    MapModifier, MapType, MemoryOrder, NumTasksModifier, OrderKind, OrderModifier, ProcBind,
+    ReductionModifier, ReductionOperator, RequireModifier, ScheduleKind, ScheduleModifier,
     UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
 };
 pub use convert::convert_directive;

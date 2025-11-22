@@ -1,4 +1,5 @@
-use roup::parser::{ClauseKind, Parser};
+use roup::parser::{clause::ReductionOperator, ClauseKind, Parser};
+use std::borrow::Cow;
 
 fn parse(input: &str) -> roup::parser::Directive<'_> {
     let parser = Parser::default();
@@ -23,10 +24,19 @@ fn parses_teams_with_reductions() {
         ClauseKind::Parenthesized("32".into())
     );
     assert_eq!(directive.clauses[2].name, "reduction");
-    assert_eq!(
-        directive.clauses[2].kind,
-        ClauseKind::Parenthesized("+:total".into())
-    );
+    match &directive.clauses[2].kind {
+        ClauseKind::ReductionClause {
+            operator,
+            user_defined_identifier,
+            variables,
+            ..
+        } => {
+            assert_eq!(*operator, ReductionOperator::Add);
+            assert!(user_defined_identifier.is_none());
+            assert_eq!(variables, &vec![Cow::from("total")]);
+        }
+        other => panic!("expected reduction clause, got {other:?}"),
+    }
 }
 
 #[test]

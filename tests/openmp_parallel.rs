@@ -1,4 +1,5 @@
-use roup::parser::{ClauseKind, Parser};
+use roup::parser::{clause::ReductionOperator, ClauseKind, Parser};
+use std::borrow::Cow;
 
 fn parse(input: &str) -> roup::parser::Directive<'_> {
     let parser = Parser::default();
@@ -50,16 +51,29 @@ fn parses_parallel_for_simd_combination() {
         ClauseKind::Parenthesized("2".into())
     );
     assert_eq!(directive.clauses[3].name, "reduction");
-    assert_eq!(
-        directive.clauses[3].kind,
-        ClauseKind::Parenthesized("+:sum".into()),
-    );
+    match &directive.clauses[3].kind {
+        ClauseKind::ReductionClause {
+            operator,
+            user_defined_identifier,
+            variables,
+            ..
+        } => {
+            assert_eq!(*operator, ReductionOperator::Add);
+            assert!(user_defined_identifier.is_none());
+            assert_eq!(variables, &vec![Cow::from("sum")]);
+        }
+        other => panic!("expected reduction clause, got {other:?}"),
+    }
 }
 
 #[test]
 fn rejects_parallel_with_unknown_clause() {
     let parser = Parser::default();
-    let result = parser.parse("#pragma omp parallel unsupported_clause");
+    let (_, directive) = parser
+        .parse("#pragma omp parallel unsupported_clause")
+        .expect("parser should capture unknown clauses for forward compatibility");
 
-    assert!(result.is_err());
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "unsupported_clause");
+    assert_eq!(directive.clauses[0].kind, ClauseKind::Bare);
 }

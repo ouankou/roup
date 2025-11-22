@@ -21,6 +21,14 @@ fn roundtrips_all_openmp_directives_without_clauses() {
 }
 
 fn sample_clause(clause: openmp::OpenMpClause) -> Option<String> {
+    match clause {
+        openmp::OpenMpClause::Reduction
+        | openmp::OpenMpClause::InReduction
+        | openmp::OpenMpClause::TaskReduction => {
+            return Some(format!("{}(+:{})", clause.name(), "value"));
+        }
+        _ => {}
+    }
     match clause.rule() {
         ClauseRule::Bare => Some(clause.name().to_string()),
         ClauseRule::Parenthesized | ClauseRule::Flexible => {

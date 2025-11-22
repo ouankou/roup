@@ -8,7 +8,7 @@ use crate::ast::{
     AccClause as AstAccClause, AccClauseKind as AstAccClauseKind,
     AccClausePayload as AstAccClausePayload, AccCopyKind, AccCopyModifier, AccCreateModifier,
     AccDefaultKind, AccDirective as AstAccDirective, AccDirectiveParameter, AccGangClause,
-    ClauseNormalizationMode, DirectiveBody,
+    DirectiveBody,
 };
 use crate::ir::ParserConfig;
 use crate::lexer::Language;
@@ -144,12 +144,22 @@ fn parse_openacc_internal(input: *const c_char, language: Language) -> *mut AccD
         let parser = openacc_parser::parser().with_language(language);
         let directive = match parser.parse(rust_str) {
             Ok((_, dir)) => dir,
-            Err(_) => return ptr::null_mut(),
+            Err(err) => {
+                if std::env::var_os("ROUP_DEBUG_ACC").is_some() {
+                    eprintln!("acc_parse: parse failed for '{rust_str}': {err:?}");
+                }
+                return ptr::null_mut();
+            }
         };
 
         let ast = match build_openacc_ast(&directive, language) {
             Ok(ast) => ast,
-            Err(_) => return ptr::null_mut(),
+            Err(err) => {
+                if std::env::var_os("ROUP_DEBUG_ACC").is_some() {
+                    eprintln!("acc_parse: AST build failed for '{rust_str}': {err}");
+                }
+                return ptr::null_mut();
+            }
         };
 
         let converted = build_acc_directive(directive, &ast, language);
@@ -170,7 +180,7 @@ fn build_openacc_ast(
     let roup = build_roup_directive(
         directive,
         crate::parser::Dialect::OpenAcc,
-        ClauseNormalizationMode::ParserParity,
+        super::normalization_mode_from_env(),
         &parser_config,
         ir_language,
     )?;

@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashMap, fmt};
 
-use nom::{multi::separated_list0, IResult, Parser};
+use nom::{IResult, Parser};
 
 use crate::lexer;
 
@@ -758,31 +758,44 @@ impl ClauseRegistry {
     }
 
     pub fn parse_sequence<'a>(&self, input: &'a str) -> IResult<&'a str, Vec<Clause<'a>>> {
-        let (input, _) = crate::lexer::skip_space_and_comments(input)?;
+        let (mut rest, _) = crate::lexer::skip_space_and_comments(input)?;
         // Skip optional leading comma (for directives like "atomic read,seq_cst")
-        let (input, _) = nom::combinator::opt(nom::character::complete::char(',')).parse(input)?;
-        let (input, _) = crate::lexer::skip_space_and_comments(input)?;
-        let parse_clause = |input| self.parse_clause(input);
-        let separator = |i| {
-            let original = i;
-            let (i, _) = crate::lexer::skip_space_and_comments(i)?;
-            let consumed_ws = i.len() != original.len();
-            let (i, comma) = nom::combinator::opt(nom::character::complete::char(',')).parse(i)?;
-            if comma.is_some() {
-                let (i, _) = crate::lexer::skip_space_and_comments(i)?;
-                Ok((i, ()))
-            } else if consumed_ws {
-                Ok((i, ()))
-            } else {
-                Err(nom::Err::Error(nom::error::Error::new(
-                    i,
-                    nom::error::ErrorKind::Space,
-                )))
+        let (next, _) = nom::combinator::opt(nom::character::complete::char(',')).parse(rest)?;
+        rest = next;
+        let (next, _) = crate::lexer::skip_space_and_comments(rest)?;
+        rest = next;
+
+        let mut clauses = Vec::new();
+        loop {
+            let before = rest;
+            match self.parse_clause(rest) {
+                Ok((after_clause, clause)) => {
+                    // Ensure progress to avoid infinite loops
+                    if after_clause.len() == before.len() {
+                        break;
+                    }
+                    clauses.push(clause);
+                    // Prepare for the next clause: optional whitespace/comma
+                    let (after_ws, _) = crate::lexer::skip_space_and_comments(after_clause)?;
+                    let (after_sep, _) = nom::combinator::opt(nom::character::complete::char(','))
+                        .parse(after_ws)?;
+                    let (after_ws2, _) = crate::lexer::skip_space_and_comments(after_sep)?;
+                    rest = after_ws2;
+                }
+                Err(err) => {
+                    if rest.is_empty() {
+                        break;
+                    }
+                    if matches!(self.default_rule, ClauseRule::Unsupported) {
+                        return Err(err);
+                    }
+                    break;
+                }
             }
-        };
-        let (input, clauses) = separated_list0(separator, parse_clause).parse(input)?;
-        let (input, _) = crate::lexer::skip_space_and_comments(input)?;
-        Ok((input, clauses))
+        }
+
+        let (rest, _) = crate::lexer::skip_space_and_comments(rest)?;
+        Ok((rest, clauses))
     }
 
     fn parse_clause<'a>(&self, input: &'a str) -> IResult<&'a str, Clause<'a>> {

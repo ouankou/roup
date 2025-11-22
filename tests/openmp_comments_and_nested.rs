@@ -1,4 +1,5 @@
-use roup::parser::{ClauseKind, Parser};
+use roup::parser::{clause::ReductionOperator, ClauseKind, Parser};
+use std::borrow::Cow;
 
 fn parse(input: &str) -> roup::parser::Directive<'_> {
     let parser = Parser::default();
@@ -14,11 +15,19 @@ fn parses_clause_with_nested_parentheses() {
     assert_eq!(directive.name, "for");
     assert_eq!(directive.clauses.len(), 2);
     assert_eq!(directive.clauses[0].name, "reduction");
-    assert_eq!(
-        directive.clauses[0].kind,
-        ClauseKind::Parenthesized("max:(f(a), g(b))".into())
-    );
-    assert_eq!(directive.clauses[1].name, "private");
+    match &directive.clauses[0].kind {
+        ClauseKind::ReductionClause {
+            operator,
+            user_defined_identifier,
+            variables,
+            ..
+        } => {
+            assert_eq!(*operator, ReductionOperator::Max);
+            assert!(user_defined_identifier.is_none());
+            assert_eq!(variables, &vec![Cow::from("(f(a), g(b))")]);
+        }
+        other => panic!("expected reduction clause, got {other:?}"),
+    }
     assert_eq!(
         directive.clauses[1].kind,
         ClauseKind::Parenthesized("i".into())

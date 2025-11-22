@@ -1,4 +1,5 @@
-use roup::parser::{ClauseKind, Parser};
+use roup::parser::{clause::ReductionOperator, ClauseKind, Parser};
+use std::borrow::Cow;
 
 fn parse(input: &str) -> roup::parser::Directive<'_> {
     let parser = Parser::default();
@@ -52,10 +53,19 @@ fn parses_for_simd_with_linear_clause() {
         ClauseKind::Parenthesized("4".into())
     );
     assert_eq!(directive.clauses[3].name, "reduction");
-    assert_eq!(
-        directive.clauses[3].kind,
-        ClauseKind::Parenthesized("-:diff".into())
-    );
+    match &directive.clauses[3].kind {
+        ClauseKind::ReductionClause {
+            operator,
+            user_defined_identifier,
+            variables,
+            ..
+        } => {
+            assert_eq!(*operator, ReductionOperator::Sub);
+            assert!(user_defined_identifier.is_none());
+            assert_eq!(variables, &vec![Cow::from("diff")]);
+        }
+        other => panic!("expected reduction clause, got {other:?}"),
+    }
 }
 
 #[test]

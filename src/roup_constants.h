@@ -25,10 +25,10 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (204 directives + 50 clauses) + OpenACC (21 directives + 52 clauses) = 0x2ED8A7A6A8C9EDCF
+// Auto-generated checksum: FNV-1a hash of OpenMP (204 directives + 135 clauses) + OpenACC (21 directives + 52 clauses) = 0xA79F72859348C0A9
 // uses_allocators entries (not part of checksum): 1
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x2ED8A7A6A8C9EDCF
+#define ROUP_CONSTANTS_CHECKSUM 0xA79F72859348C0A9
 
 // ============================================================================
 // Language Format Constants
@@ -262,6 +262,7 @@ extern "C" {
 #define ROUP_OMPC_firstprivate                   5
 #define ROUP_OMPC_shared                         6
 #define ROUP_OMPC_copy_in                        7
+#define ROUP_OMPC_align                          8
 #define ROUP_OMPC_reduction                      9
 #define ROUP_OMPC_proc_bind                      10
 #define ROUP_OMPC_allocate                       11
@@ -270,41 +271,125 @@ extern "C" {
 #define ROUP_OMPC_lastprivate                    14
 #define ROUP_OMPC_collapse                       15
 #define ROUP_OMPC_ordered                        16
+#define ROUP_OMPC_partial                        17
 #define ROUP_OMPC_nowait                         18
+#define ROUP_OMPC_full                           19
 #define ROUP_OMPC_order                          20
+#define ROUP_OMPC_linear                         21
 #define ROUP_OMPC_schedule                       22
-#define ROUP_OMPC_align                          25
+#define ROUP_OMPC_safelen                        23
+#define ROUP_OMPC_simdlen                        24
+#define ROUP_OMPC_aligned                        25
 #define ROUP_OMPC_nontemporal                    26
 #define ROUP_OMPC_uniform                        27
 #define ROUP_OMPC_inbranch                       28
 #define ROUP_OMPC_notinbranch                    29
 #define ROUP_OMPC_dist_schedule                  30
+#define ROUP_OMPC_bind                           31
 #define ROUP_OMPC_inclusive                      32
 #define ROUP_OMPC_exclusive                      33
 #define ROUP_OMPC_copyprivate                    34
+#define ROUP_OMPC_parallel                       35
+#define ROUP_OMPC_sections                       36
+#define ROUP_OMPC_for                            37
+#define ROUP_OMPC_do                             38
+#define ROUP_OMPC_taskgroup                      39
 #define ROUP_OMPC_allocator                      40
+#define ROUP_OMPC_initializer                    41
+#define ROUP_OMPC_final                          42
+#define ROUP_OMPC_untied                         43
+#define ROUP_OMPC_requires                       44
+#define ROUP_OMPC_mergeable                      45
 #define ROUP_OMPC_in_reduction                   46
 #define ROUP_OMPC_depend                         47
 #define ROUP_OMPC_priority                       48
 #define ROUP_OMPC_affinity                       49
+#define ROUP_OMPC_detach                         50
 #define ROUP_OMPC_grainsize                      51
 #define ROUP_OMPC_num_tasks                      52
+#define ROUP_OMPC_nogroup                        53
+#define ROUP_OMPC_reverse_offload                54
+#define ROUP_OMPC_unified_address                55
+#define ROUP_OMPC_unified_shared_memory          56
 #define ROUP_OMPC_atomic_default_mem_order       57
+#define ROUP_OMPC_dynamic_allocators             58
+#define ROUP_OMPC_self_maps                      59
+#define ROUP_OMPC_ext_implementation_defined_requirement 60
 #define ROUP_OMPC_device                         61
 #define ROUP_OMPC_map                            62
 #define ROUP_OMPC_copy                           62
 #define ROUP_OMPC_copy_out                       62
 #define ROUP_OMPC_use_device_ptr                 63
+#define ROUP_OMPC_sizes                          64
 #define ROUP_OMPC_use_device_addr                65
 #define ROUP_OMPC_is_device_ptr                  66
 #define ROUP_OMPC_has_device_addr                67
 #define ROUP_OMPC_defaultmap                     68
+#define ROUP_OMPC_to                             69
+#define ROUP_OMPC_from                           70
 #define ROUP_OMPC_uses_allocators                71
+#define ROUP_OMPC_when                           72
+#define ROUP_OMPC_match                          73
+#define ROUP_OMPC_link                           74
 #define ROUP_OMPC_device_type                    75
 #define ROUP_OMPC_task_reduction                 76
+#define ROUP_OMPC_acq_rel                        77
+#define ROUP_OMPC_release                        78
+#define ROUP_OMPC_acquire                        79
+#define ROUP_OMPC_read                           80
+#define ROUP_OMPC_write                          81
+#define ROUP_OMPC_update                         82
+#define ROUP_OMPC_capture                        83
+#define ROUP_OMPC_seq_cst                        84
+#define ROUP_OMPC_relaxed                        85
+#define ROUP_OMPC_hint                           86
+#define ROUP_OMPC_destroy                        87
 #define ROUP_OMPC_depobj_update                  88
+#define ROUP_OMPC_threads                        89
+#define ROUP_OMPC_simd                           90
+#define ROUP_OMPC_filter                         91
 #define ROUP_OMPC_compare                        92
 #define ROUP_OMPC_compare_capture                92
+#define ROUP_OMPC_otherwise                      102
+#define ROUP_OMPC_fail                           103
+#define ROUP_OMPC_weak                           104
+#define ROUP_OMPC_at                             105
+#define ROUP_OMPC_severity                       106
+#define ROUP_OMPC_message                        107
+#define ROUP_OMPC_doacross                       108
+#define ROUP_OMPC_absent                         109
+#define ROUP_OMPC_contains                       110
+#define ROUP_OMPC_holds                          111
+#define ROUP_OMPC_graph_id                       112
+#define ROUP_OMPC_graph_reset                    113
+#define ROUP_OMPC_transparent                    114
+#define ROUP_OMPC_replayable                     115
+#define ROUP_OMPC_threadset                      116
+#define ROUP_OMPC_indirect                       117
+#define ROUP_OMPC_local                          118
+#define ROUP_OMPC_init                           119
+#define ROUP_OMPC_init_complete                  120
+#define ROUP_OMPC_safesync                       121
+#define ROUP_OMPC_device_safesync                122
+#define ROUP_OMPC_memscope                       123
+#define ROUP_OMPC_looprange                      124
+#define ROUP_OMPC_permutation                    125
+#define ROUP_OMPC_counts                         126
+#define ROUP_OMPC_induction                      127
+#define ROUP_OMPC_inductor                       128
+#define ROUP_OMPC_collector                      129
+#define ROUP_OMPC_combiner                       130
+#define ROUP_OMPC_adjust_args                    131
+#define ROUP_OMPC_append_args                    132
+#define ROUP_OMPC_apply                          133
+#define ROUP_OMPC_no_openmp                      134
+#define ROUP_OMPC_no_openmp_constructs           135
+#define ROUP_OMPC_no_openmp_routines             136
+#define ROUP_OMPC_no_parallelism                 137
+#define ROUP_OMPC_nocontext                      138
+#define ROUP_OMPC_novariants                     139
+#define ROUP_OMPC_enter                          140
+#define ROUP_OMPC_use                            141
 #define ROUP_OMPC_unknown                   -1
 
 

@@ -67,17 +67,17 @@ use std::os::raw::c_char;
 use std::ptr;
 
 use crate::ast::{
-    ClauseNormalizationMode, DirectiveBody, OmpClauseKind, OmpConstructType, OmpDirectiveParameter,
-    OmpScanMode, ReductionOperatorToken,
+    ClauseNormalizationMode, DirectiveBody, OmpClauseKind, OmpConstructType, OmpDeclareMapperId,
+    OmpDirectiveParameter, OmpScanMode, ReductionOperatorToken,
 };
 use crate::ir::{
     convert_directive, AffinityModifier, AtomicOp, ClauseData as IrClauseData, ClauseItem,
     DefaultKind, DefaultmapBehavior, DefaultmapCategory, DependIterator, DependType,
     DepobjUpdateDependence, DeviceModifier, GrainsizeModifier, Identifier, Language as IrLanguage,
     LastprivateModifier, LinearModifier, MapModifier, MapType, MemoryOrder, NumTasksModifier,
-    OrderModifier, ParserConfig, ReductionModifier, ReductionOperator, RequireModifier,
-    ScheduleKind as IrScheduleKind, ScheduleModifier, SourceLocation, UsesAllocatorBuiltin,
-    UsesAllocatorKind, UsesAllocatorSpec, Variable,
+    OmpSelector, OrderModifier, ParserConfig, ReductionModifier, ReductionOperator,
+    RequireModifier, ScheduleKind as IrScheduleKind, ScheduleModifier, SourceLocation,
+    UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec, Variable,
 };
 use crate::lexer::Language;
 use crate::parser::directive_kind::{lookup_directive_name, DirectiveName};
@@ -86,7 +86,23 @@ use crate::parser::{openmp, Clause, ClauseKind, ClauseName};
 mod openacc;
 pub use openacc::*;
 
+fn normalization_mode_from_env() -> ClauseNormalizationMode {
+    let mode = std::env::var("ROUP_NORMALIZE_CLAUSES")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    match mode.as_str() {
+        "merge" | "merge_lists" | "enabled" | "on" | "1" => {
+            ClauseNormalizationMode::MergeVariableLists
+        }
+        "parser_parity" | "parity" | "default" => ClauseNormalizationMode::ParserParity,
+        // default and unknown → disabled to preserve existing behavior
+        _ => ClauseNormalizationMode::Disabled,
+    }
+}
+
 // Mapping used only by constants_gen/header generation; runtime uses AST converters.
+// Kept in-source so the generator can parse match arms; not invoked at runtime.
+#[allow(dead_code)]
 fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
     match name {
         ClauseName::If => CLAUSE_KIND_IF,
@@ -96,7 +112,7 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         ClauseName::Firstprivate => CLAUSE_KIND_FIRSTPRIVATE,
         ClauseName::Shared => CLAUSE_KIND_SHARED,
         ClauseName::CopyIn => CLAUSE_KIND_COPYIN,
-        ClauseName::Align => CLAUSE_KIND_ALIGNED,
+        ClauseName::Align => CLAUSE_KIND_ALIGN,
         ClauseName::Reduction => CLAUSE_KIND_REDUCTION,
         ClauseName::ProcBind => CLAUSE_KIND_PROC_BIND,
         ClauseName::NumTeams => CLAUSE_KIND_NUM_TEAMS,
@@ -115,30 +131,117 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         ClauseName::Map => CLAUSE_KIND_MAP,
         ClauseName::Defaultmap => CLAUSE_KIND_DEFAULTMAP,
         ClauseName::Copyprivate => CLAUSE_KIND_COPYPRIVATE,
+        ClauseName::Linear => CLAUSE_KIND_LINEAR,
+        ClauseName::Safelen => CLAUSE_KIND_SAFELEN,
+        ClauseName::Simdlen => CLAUSE_KIND_SIMDLEN,
+        ClauseName::Aligned => CLAUSE_KIND_ALIGNED,
+        ClauseName::Parallel => CLAUSE_KIND_PARALLEL,
+        ClauseName::Sections => CLAUSE_KIND_SECTIONS,
+        ClauseName::For => CLAUSE_KIND_FOR,
+        ClauseName::Do => CLAUSE_KIND_DO,
+        ClauseName::Taskgroup => CLAUSE_KIND_TASKGROUP,
+        ClauseName::Initializer => CLAUSE_KIND_INITIALIZER,
+        ClauseName::Final => CLAUSE_KIND_FINAL,
+        ClauseName::Untied => CLAUSE_KIND_UNTIED,
+        ClauseName::Requires => CLAUSE_KIND_REQUIRES,
+        ClauseName::Mergeable => CLAUSE_KIND_MERGEABLE,
         ClauseName::Affinity => CLAUSE_KIND_AFFINITY,
         ClauseName::Priority => CLAUSE_KIND_PRIORITY,
+        ClauseName::Detach => CLAUSE_KIND_DETACH,
         ClauseName::Grainsize => CLAUSE_KIND_GRAINSIZE,
         ClauseName::NumTasks => CLAUSE_KIND_NUM_TASKS,
+        ClauseName::Nogroup => CLAUSE_KIND_NOGROUP,
+        ClauseName::ReverseOffload => CLAUSE_KIND_REVERSE_OFFLOAD,
+        ClauseName::UnifiedAddress => CLAUSE_KIND_UNIFIED_ADDRESS,
+        ClauseName::UnifiedSharedMemory => CLAUSE_KIND_UNIFIED_SHARED_MEMORY,
+        ClauseName::Link => CLAUSE_KIND_LINK,
+        ClauseName::Hint => CLAUSE_KIND_HINT,
+        ClauseName::SeqCst => CLAUSE_KIND_SEQ_CST,
+        ClauseName::AcqRel => CLAUSE_KIND_ACQ_REL,
+        ClauseName::Release => CLAUSE_KIND_RELEASE,
+        ClauseName::Acquire => CLAUSE_KIND_ACQUIRE,
+        ClauseName::Relaxed => CLAUSE_KIND_RELAXED,
+        ClauseName::Read => CLAUSE_KIND_ATOMIC_READ,
+        ClauseName::Write => CLAUSE_KIND_ATOMIC_WRITE,
+        ClauseName::Update => CLAUSE_KIND_ATOMIC_UPDATE,
+        ClauseName::Capture => CLAUSE_KIND_ATOMIC_CAPTURE,
         ClauseName::Order => CLAUSE_KIND_ORDER,
         ClauseName::AtomicDefaultMemOrder => CLAUSE_KIND_ATOMIC_DEFAULT_MEM_ORDER,
+        ClauseName::DynamicAllocators => CLAUSE_KIND_DYNAMIC_ALLOCATORS,
+        ClauseName::SelfMaps => CLAUSE_KIND_SELF,
+        ClauseName::ExtImplementationDefinedRequirement => {
+            CLAUSE_KIND_EXT_IMPLEMENTATION_DEFINED_REQUIREMENT
+        }
         ClauseName::UseDevicePtr => CLAUSE_KIND_USE_DEVICE_PTR,
         ClauseName::UseDeviceAddr => CLAUSE_KIND_USE_DEVICE_ADDR,
         ClauseName::IsDevicePtr => CLAUSE_KIND_IS_DEVICE_PTR,
         ClauseName::HasDeviceAddr => CLAUSE_KIND_HAS_DEVICE_ADDR,
         ClauseName::DeviceType => CLAUSE_KIND_DEVICE_TYPE,
         ClauseName::DepobjUpdate => CLAUSE_KIND_DEPOBJ_UPDATE,
+        ClauseName::Partial => CLAUSE_KIND_PARTIAL,
+        ClauseName::Full => CLAUSE_KIND_FULL,
         ClauseName::Nontemporal => CLAUSE_KIND_NONTEMPORAL,
         ClauseName::Uniform => CLAUSE_KIND_UNIFORM,
         ClauseName::Inbranch => CLAUSE_KIND_INBRANCH,
         ClauseName::Notinbranch => CLAUSE_KIND_NOTINBRANCH,
         ClauseName::Inclusive => CLAUSE_KIND_INCLUSIVE,
         ClauseName::Exclusive => CLAUSE_KIND_EXCLUSIVE,
+        ClauseName::Bind => CLAUSE_KIND_BIND,
         ClauseName::Compare => CLAUSE_KIND_COMPARE,
         ClauseName::CompareCapture => CLAUSE_KIND_COMPARE_CAPTURE,
         ClauseName::Allocator => CLAUSE_KIND_ALLOCATOR,
         ClauseName::Allocate => CLAUSE_KIND_ALLOCATE,
         ClauseName::Copy => CLAUSE_KIND_MAP, // alias if needed
         ClauseName::CopyOut => CLAUSE_KIND_MAP, // alias if needed
+        ClauseName::Sizes => CLAUSE_KIND_SIZES,
+        ClauseName::To => CLAUSE_KIND_TO,
+        ClauseName::From => CLAUSE_KIND_FROM,
+        ClauseName::When => CLAUSE_KIND_WHEN,
+        ClauseName::Match => CLAUSE_KIND_MATCH,
+        ClauseName::Destroy => CLAUSE_KIND_DESTROY,
+        ClauseName::Filter => CLAUSE_KIND_FILTER,
+        ClauseName::Fail => CLAUSE_KIND_FAIL,
+        ClauseName::Weak => CLAUSE_KIND_WEAK,
+        ClauseName::At => CLAUSE_KIND_AT,
+        ClauseName::Severity => CLAUSE_KIND_SEVERITY,
+        ClauseName::Message => CLAUSE_KIND_MESSAGE,
+        ClauseName::Doacross => CLAUSE_KIND_DOACROSS,
+        ClauseName::Absent => CLAUSE_KIND_ABSENT,
+        ClauseName::Contains => CLAUSE_KIND_CONTAINS,
+        ClauseName::Holds => CLAUSE_KIND_HOLDS,
+        ClauseName::Otherwise => CLAUSE_KIND_OTHERWISE,
+        ClauseName::GraphId => CLAUSE_KIND_GRAPH_ID,
+        ClauseName::GraphReset => CLAUSE_KIND_GRAPH_RESET,
+        ClauseName::Transparent => CLAUSE_KIND_TRANSPARENT,
+        ClauseName::Replayable => CLAUSE_KIND_REPLAYABLE,
+        ClauseName::Threadset => CLAUSE_KIND_THREADSET,
+        ClauseName::Indirect => CLAUSE_KIND_INDIRECT,
+        ClauseName::Local => CLAUSE_KIND_LOCAL,
+        ClauseName::Init => CLAUSE_KIND_INIT,
+        ClauseName::InitComplete => CLAUSE_KIND_INIT_COMPLETE,
+        ClauseName::Safesync => CLAUSE_KIND_SAFESYNC,
+        ClauseName::DeviceSafesync => CLAUSE_KIND_DEVICE_SAFESYNC,
+        ClauseName::Memscope => CLAUSE_KIND_MEMSCOPE,
+        ClauseName::Looprange => CLAUSE_KIND_LOOPRANGE,
+        ClauseName::Permutation => CLAUSE_KIND_PERMUTATION,
+        ClauseName::Counts => CLAUSE_KIND_COUNTS,
+        ClauseName::Induction => CLAUSE_KIND_INDUCTION,
+        ClauseName::Inductor => CLAUSE_KIND_INDUCTOR,
+        ClauseName::Collector => CLAUSE_KIND_COLLECTOR,
+        ClauseName::Combiner => CLAUSE_KIND_COMBINER,
+        ClauseName::AdjustArgs => CLAUSE_KIND_ADJUST_ARGS,
+        ClauseName::AppendArgs => CLAUSE_KIND_APPEND_ARGS,
+        ClauseName::Apply => CLAUSE_KIND_APPLY,
+        ClauseName::Threads => CLAUSE_KIND_THREADS,
+        ClauseName::Simd => CLAUSE_KIND_SIMD,
+        ClauseName::NoOpenmp => CLAUSE_KIND_NOOPENMP,
+        ClauseName::NoOpenmpConstructs => CLAUSE_KIND_NOOPENMP_CONSTRUCTS,
+        ClauseName::NoOpenmpRoutines => CLAUSE_KIND_NOOPENMP_ROUTINES,
+        ClauseName::NoParallelism => CLAUSE_KIND_NOPARALLELISM,
+        ClauseName::Nocontext => CLAUSE_KIND_NOCONTEXT,
+        ClauseName::Novariants => CLAUSE_KIND_NOVARIANTS,
+        ClauseName::Enter => CLAUSE_KIND_ENTER,
+        ClauseName::Use => CLAUSE_KIND_USE,
         // OpenACC-only clauses are not part of the OpenMP kind space; return UNKNOWN_KIND.
         ClauseName::Async
         | ClauseName::Wait
@@ -151,24 +254,22 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         | ClauseName::Seq
         | ClauseName::Independent
         | ClauseName::Auto
-        | ClauseName::Bind
         | ClauseName::DefaultAsync
-        | ClauseName::Link
         | ClauseName::NoCreate
         | ClauseName::NoHost
-        | ClauseName::Read
         | ClauseName::SelfClause
         | ClauseName::Tile
-        | ClauseName::Update
+        | ClauseName::UseDevice
+        | ClauseName::Attach
+        | ClauseName::Finalize
+        | ClauseName::IfPresent
         | ClauseName::Delete
         | ClauseName::DevicePtr
         | ClauseName::DeviceNum
         | ClauseName::DeviceResident
         | ClauseName::Host
-        | ClauseName::IfPresent
-        | ClauseName::Capture
-        | ClauseName::Write
-        | ClauseName::Detach => UNKNOWN_KIND,
+        | ClauseName::Present
+        | ClauseName::Create => UNKNOWN_KIND,
         other => panic!("unmapped ClauseName in constants mapping: {:?}", other),
     }
 }
@@ -270,6 +371,7 @@ union ClauseData {
     allocate: *mut AllocateData,
     affinity: *mut AffinityData,
     aligned: *mut AlignedData,
+    selector: *mut SelectorData,
 }
 
 /// Structured directive parameter information to avoid string parsing in compat.
@@ -280,6 +382,16 @@ struct DirectiveParameterData {
     scan_mode: i32,
     construct_type: i32,
     identifiers: *mut OmpStringList,
+    declare_mapper_identifier: i32,
+    declare_mapper_user_identifier: *const c_char,
+    declare_mapper_type: *const c_char,
+    declare_mapper_var: *const c_char,
+    declare_reduction_operator: i32,
+    declare_reduction_user_identifier: *const c_char,
+    declare_reduction_types: *mut OmpStringList,
+    declare_reduction_combiner: *const c_char,
+    declare_reduction_initializer: *const c_char,
+    declare_simd_target: *const c_char,
 }
 
 /// Schedule clause data (static, dynamic, guided, etc.)
@@ -407,6 +519,29 @@ struct AlignedData {
     alignment: *const c_char,
 }
 
+/// Typed metadirective selector payload exported via C API.
+#[repr(C)]
+struct SelectorData {
+    raw: *const c_char,
+    device_kind: *const c_char,
+    device_isa: *mut OmpStringList,
+    device_arch: *mut OmpStringList,
+    device_num: *const c_char,
+    device_num_score: *const c_char,
+    impl_vendor: *const c_char,
+    impl_extensions: *mut OmpStringList,
+    impl_vendor_score: *const c_char,
+    impl_extension_scores: *mut OmpStringList,
+    impl_user_expr: *const c_char,
+    impl_user_expr_score: *const c_char,
+    is_target_device: bool,
+    user_condition: *const c_char,
+    constructs: *mut OmpStringList,
+    construct_scores: *mut OmpStringList,
+    construct_directives: *mut OmpDirectiveList,
+    nested_directive: *mut OmpDirective,
+}
+
 const REQUIRE_MOD_REVERSE_OFFLOAD: i32 = 0;
 const REQUIRE_MOD_UNIFIED_ADDRESS: i32 = 1;
 const REQUIRE_MOD_UNIFIED_SHARED_MEMORY: i32 = 2;
@@ -445,6 +580,17 @@ const SCHEDULE_MODIFIER_MONOTONIC: u32 = 1 << 0;
 const SCHEDULE_MODIFIER_NONMONOTONIC: u32 = 1 << 1;
 const SCHEDULE_MODIFIER_SIMD: u32 = 1 << 2;
 const UNKNOWN_KIND: i32 = -1;
+const ORDER_KIND_NAMES: [&[u8]; 1] = [b"concurrent\0"];
+const ORDER_MODIFIER_NAMES: [&[u8]; 2] = [b"reproducible\0", b"unconstrained\0"];
+const MEMORY_ORDER_NAMES: [&[u8]; 5] = [
+    b"seq_cst\0",
+    b"acq_rel\0",
+    b"release\0",
+    b"acquire\0",
+    b"relaxed\0",
+];
+const STRICT_MODIFIER_NAMES: [&[u8]; 1] = [b"strict\0"];
+const DEVICE_TYPE_NAMES: [&[u8]; 3] = [b"host\0", b"nohost\0", b"any\0"];
 // OpenMP clause kind codes (match compat/ompparser OpenMPClauseKind order)
 const CLAUSE_KIND_IF: i32 = 1;
 const CLAUSE_KIND_NUM_THREADS: i32 = 2;
@@ -649,6 +795,12 @@ pub struct OmpStringList {
     items: Vec<*const c_char>, // NULL-terminated C strings
 }
 
+/// List of directives (for selector constructs/nested directives)
+#[repr(C)]
+pub struct OmpDirectiveList {
+    items: Vec<*mut OmpDirective>,
+}
+
 thread_local! {
     static CURRENT_CLAUSE_LANGUAGE: Cell<Language> = const { Cell::new(Language::C) };
 }
@@ -711,7 +863,7 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
     let parser = openmp::parser();
     let ast = match parser.parse_ast(
         rust_str,
-        ClauseNormalizationMode::Disabled,
+        normalization_mode_from_env(),
         &ParserConfig::default(),
     ) {
         Ok(dir) => dir,
@@ -762,6 +914,44 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
 
         if !boxed.parameter_data.identifiers.is_null() {
             roup_string_list_free(boxed.parameter_data.identifiers);
+        }
+        if !boxed.parameter_data.declare_mapper_user_identifier.is_null() {
+            drop(CString::from_raw(
+                boxed.parameter_data.declare_mapper_user_identifier as *mut c_char,
+            ));
+        }
+        if !boxed.parameter_data.declare_mapper_type.is_null() {
+            drop(CString::from_raw(
+                boxed.parameter_data.declare_mapper_type as *mut c_char,
+            ));
+        }
+        if !boxed.parameter_data.declare_mapper_var.is_null() {
+            drop(CString::from_raw(
+                boxed.parameter_data.declare_mapper_var as *mut c_char,
+            ));
+        }
+        if !boxed.parameter_data.declare_reduction_user_identifier.is_null() {
+            drop(CString::from_raw(
+                boxed.parameter_data.declare_reduction_user_identifier as *mut c_char,
+            ));
+        }
+        if !boxed.parameter_data.declare_reduction_types.is_null() {
+            roup_string_list_free(boxed.parameter_data.declare_reduction_types);
+        }
+        if !boxed.parameter_data.declare_reduction_combiner.is_null() {
+            drop(CString::from_raw(
+                boxed.parameter_data.declare_reduction_combiner as *mut c_char,
+            ));
+        }
+        if !boxed.parameter_data.declare_reduction_initializer.is_null() {
+            drop(CString::from_raw(
+                boxed.parameter_data.declare_reduction_initializer as *mut c_char,
+            ));
+        }
+        if !boxed.parameter_data.declare_simd_target.is_null() {
+            drop(CString::from_raw(
+                boxed.parameter_data.declare_simd_target as *mut c_char,
+            ));
         }
 
         // Free clause data
@@ -841,7 +1031,7 @@ pub extern "C" fn roup_parse_with_language(
     let parser = openmp::parser().with_language(lang);
     let ast = match parser.parse_ast(
         rust_str,
-        ClauseNormalizationMode::Disabled,
+        normalization_mode_from_env(),
         &ParserConfig::default(),
     ) {
         Ok(dir) => dir,
@@ -1144,12 +1334,146 @@ pub extern "C" fn roup_directive_parameter_identifiers(
 
     unsafe {
         let dir = &*directive;
-        if dir.parameter_data.identifiers.is_null() {
+
+        let original = dir.parameter_data.identifiers;
+        let cloned = if original.is_null() {
             ptr::null_mut()
         } else {
-            clone_string_list(dir.parameter_data.identifiers)
+            clone_string_list(original)
+        };
+        if cloned.is_null() && dir.parameter_data.kind == ROUP_DIRECTIVE_PARAM_IDENTIFIER_LIST {
+            // Fatal: parser failed to produce parameter identifiers
+            eprintln!("[roup c_api] fatal: missing identifier list for directive parameter while kind=IDENTIFIER_LIST");
+            std::process::abort();
+        }
+        cloned
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_declare_mapper_identifier_kind(
+    directive: *const OmpDirective,
+) -> i32 {
+    if directive.is_null() {
+        return 0;
+    }
+    unsafe { (&*directive).parameter_data.declare_mapper_identifier }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_declare_mapper_user_identifier(
+    directive: *const OmpDirective,
+) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+    unsafe { (&*directive).parameter_data.declare_mapper_user_identifier }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_declare_mapper_type(
+    directive: *const OmpDirective,
+) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+    unsafe { (&*directive).parameter_data.declare_mapper_type }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_declare_mapper_variable(
+    directive: *const OmpDirective,
+) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+    unsafe { (&*directive).parameter_data.declare_mapper_var }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_declare_reduction_operator(
+    directive: *const OmpDirective,
+) -> i32 {
+    if directive.is_null() {
+        return 0;
+    }
+    unsafe { (&*directive).parameter_data.declare_reduction_operator }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_declare_reduction_user_identifier(
+    directive: *const OmpDirective,
+) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+    unsafe { (&*directive).parameter_data.declare_reduction_user_identifier }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_declare_reduction_types(
+    directive: *const OmpDirective,
+) -> *mut OmpStringList {
+    if directive.is_null() {
+        return ptr::null_mut();
+    }
+    unsafe {
+        let ptr = (&*directive).parameter_data.declare_reduction_types;
+        if ptr.is_null() {
+            ptr::null_mut()
+        } else {
+            clone_string_list(ptr)
         }
     }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_declare_reduction_combiner(
+    directive: *const OmpDirective,
+) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+    unsafe { (&*directive).parameter_data.declare_reduction_combiner }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_declare_reduction_initializer(
+    directive: *const OmpDirective,
+) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+    unsafe { (&*directive).parameter_data.declare_reduction_initializer }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_directive_declare_simd_target(
+    directive: *const OmpDirective,
+) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+    unsafe { (&*directive).parameter_data.declare_simd_target }
+}
+
+/// Get critical directive hint clause argument (if present).
+#[no_mangle]
+pub extern "C" fn roup_directive_critical_hint(directive: *const OmpDirective) -> *const c_char {
+    if directive.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        let dir = &*directive;
+        for clause in dir.clauses.iter() {
+            if clause.kind == CLAUSE_KIND_HINT {
+                return clause.arguments;
+            }
+        }
+    }
+
+    ptr::null()
 }
 
 /// Get number of clauses in a directive.
@@ -1383,6 +1707,21 @@ pub extern "C" fn roup_clause_if_modifier(clause: *const OmpClause) -> i32 {
             return -1;
         }
         c.data.default
+    }
+}
+
+/// Get if-clause condition expression string (NULL if absent).
+#[no_mangle]
+pub extern "C" fn roup_clause_if_expression(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+    unsafe {
+        let c = &*clause;
+        if c.kind != CLAUSE_KIND_IF {
+            return ptr::null();
+        }
+        c.arguments
     }
 }
 
@@ -1647,6 +1986,21 @@ pub extern "C" fn roup_clause_grainsize_modifier(clause: *const OmpClause) -> i3
 }
 
 #[no_mangle]
+pub extern "C" fn roup_clause_grainsize_expr(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+    unsafe {
+        let c = &*clause;
+        if c.kind == CLAUSE_KIND_GRAINSIZE {
+            c.arguments
+        } else {
+            ptr::null()
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn roup_clause_num_tasks_modifier(clause: *const OmpClause) -> i32 {
     if clause.is_null() {
         return -1;
@@ -1657,6 +2011,21 @@ pub extern "C" fn roup_clause_num_tasks_modifier(clause: *const OmpClause) -> i3
             c.data.default
         } else {
             -1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_num_tasks_expr(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+    unsafe {
+        let c = &*clause;
+        if c.kind == CLAUSE_KIND_NUM_TASKS {
+            c.arguments
+        } else {
+            ptr::null()
         }
     }
 }
@@ -1978,6 +2347,26 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
     }
 }
 
+/// Get default clause variant directive text (NULL if not variant).
+#[no_mangle]
+pub extern "C" fn roup_clause_default_variant(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+    unsafe {
+        let c = &*clause;
+        if c.kind != CLAUSE_KIND_DEFAULT {
+            return ptr::null();
+        }
+        // Variant is encoded as default code 4 per compat expectations.
+        if c.data.default == 4 {
+            c.arguments
+        } else {
+            ptr::null()
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn roup_clause_defaultmap_behavior(clause: *const OmpClause) -> i32 {
     if clause.is_null() {
@@ -2128,6 +2517,66 @@ pub extern "C" fn roup_requires_modifier_name(code: i32) -> *const c_char {
 }
 
 #[no_mangle]
+pub extern "C" fn roup_order_kind_name(code: i32) -> *const c_char {
+    if code < 0 {
+        return ptr::null();
+    }
+    ORDER_KIND_NAMES
+        .get(code as usize)
+        .map(|bytes| bytes.as_ptr() as *const c_char)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_order_modifier_name(code: i32) -> *const c_char {
+    match code {
+        -1 => ptr::null(),
+        0 | 1 => ORDER_MODIFIER_NAMES[code as usize].as_ptr() as *const c_char,
+        _ => ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_atomic_default_mem_order_name(code: i32) -> *const c_char {
+    if code < 0 {
+        return ptr::null();
+    }
+    MEMORY_ORDER_NAMES
+        .get(code as usize)
+        .map(|bytes| bytes.as_ptr() as *const c_char)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_grainsize_modifier_name(code: i32) -> *const c_char {
+    match code {
+        0 => ptr::null(),
+        1 => STRICT_MODIFIER_NAMES[0].as_ptr() as *const c_char,
+        _ => ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_num_tasks_modifier_name(code: i32) -> *const c_char {
+    match code {
+        0 => ptr::null(),
+        1 => STRICT_MODIFIER_NAMES[0].as_ptr() as *const c_char,
+        _ => ptr::null(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_device_type_name(code: i32) -> *const c_char {
+    if code < 0 {
+        return ptr::null();
+    }
+    DEVICE_TYPE_NAMES
+        .get(code as usize)
+        .map(|bytes| bytes.as_ptr() as *const c_char)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
 pub extern "C" fn roup_clause_uses_allocator_kind(clause: *const OmpClause, index: i32) -> i32 {
     if clause.is_null() || index < 0 {
         return -1;
@@ -2262,6 +2711,14 @@ pub extern "C" fn roup_clause_arguments(clause: *const OmpClause) -> *const c_ch
 
     unsafe {
         let c = &*clause;
+        if c.arguments.is_null()
+            && (c.kind == CLAUSE_KIND_WHEN
+                || c.kind == CLAUSE_KIND_MATCH
+                || c.kind == CLAUSE_KIND_OTHERWISE)
+        {
+            // Provide a minimal non-empty marker to keep legacy compat paths alive while selectors are migrated.
+            return allocate_c_string(" ");
+        }
         c.arguments
     }
 }
@@ -2370,6 +2827,171 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
     }
 }
 
+fn selector_data_from_clause(clause: *const OmpClause) -> Option<&'static SelectorData> {
+    if clause.is_null() {
+        return None;
+    }
+    unsafe {
+        let c = &*clause;
+        if c.kind == CLAUSE_KIND_WHEN
+            || c.kind == CLAUSE_KIND_MATCH
+            || c.kind == CLAUSE_KIND_OTHERWISE
+        {
+            let ptr = c.data.selector;
+            if ptr.is_null() {
+                None
+            } else {
+                Some(&*ptr)
+            }
+        } else {
+            None
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_raw(clause: *const OmpClause) -> *const c_char {
+    selector_data_from_clause(clause)
+        .map(|s| s.raw)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_device_kind(clause: *const OmpClause) -> *const c_char {
+    selector_data_from_clause(clause)
+        .map(|s| s.device_kind)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_device_num(clause: *const OmpClause) -> *const c_char {
+    selector_data_from_clause(clause)
+        .map(|s| s.device_num)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_device_num_score(clause: *const OmpClause) -> *const c_char {
+    selector_data_from_clause(clause)
+        .map(|s| s.device_num_score)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_device_isa(clause: *const OmpClause) -> *mut OmpStringList {
+    selector_data_from_clause(clause)
+        .map(|s| s.device_isa)
+        .unwrap_or(ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_device_arch(clause: *const OmpClause) -> *mut OmpStringList {
+    selector_data_from_clause(clause)
+        .map(|s| s.device_arch)
+        .unwrap_or(ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_impl_vendor(clause: *const OmpClause) -> *const c_char {
+    selector_data_from_clause(clause)
+        .map(|s| s.impl_vendor)
+        .unwrap_or(ptr::null())
+}
+
+/// Get the vendor score for implementation selector (empty string if unspecified).
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_impl_vendor_score(
+    clause: *const OmpClause,
+) -> *const c_char {
+    selector_data_from_clause(clause)
+        .map(|s| s.impl_vendor_score)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_impl_user_expression(
+    clause: *const OmpClause,
+) -> *const c_char {
+    selector_data_from_clause(clause)
+        .map(|s| s.impl_user_expr)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_impl_user_expression_score(
+    clause: *const OmpClause,
+) -> *const c_char {
+    selector_data_from_clause(clause)
+        .map(|s| s.impl_user_expr_score)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_impl_extensions(
+    clause: *const OmpClause,
+) -> *mut OmpStringList {
+    selector_data_from_clause(clause)
+        .map(|s| s.impl_extensions)
+        .unwrap_or(ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_impl_extension_scores(
+    clause: *const OmpClause,
+) -> *mut OmpStringList {
+    selector_data_from_clause(clause)
+        .map(|s| s.impl_extension_scores)
+        .unwrap_or(ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_user_condition(clause: *const OmpClause) -> *const c_char {
+    selector_data_from_clause(clause)
+        .map(|s| s.user_condition)
+        .unwrap_or(ptr::null())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_constructs(clause: *const OmpClause) -> *mut OmpStringList {
+    selector_data_from_clause(clause)
+        .map(|s| s.constructs)
+        .unwrap_or(ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_construct_scores(
+    clause: *const OmpClause,
+) -> *mut OmpStringList {
+    selector_data_from_clause(clause)
+        .map(|s| s.construct_scores)
+        .unwrap_or(ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_construct_directives(
+    clause: *const OmpClause,
+) -> *mut OmpDirectiveList {
+    selector_data_from_clause(clause)
+        .map(|s| s.construct_directives)
+        .unwrap_or(ptr::null_mut())
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_is_target_device(clause: *const OmpClause) -> bool {
+    selector_data_from_clause(clause)
+        .map(|s| s.is_target_device)
+        .unwrap_or(false)
+}
+
+#[no_mangle]
+pub extern "C" fn roup_clause_selector_nested_directive(
+    clause: *const OmpClause,
+) -> *mut OmpDirective {
+    selector_data_from_clause(clause)
+        .map(|s| s.nested_directive)
+        .unwrap_or(ptr::null_mut())
+}
+
 /// Get length of string list.
 ///
 /// Returns 0 if list is NULL.
@@ -2382,6 +3004,53 @@ pub extern "C" fn roup_string_list_len(list: *const OmpStringList) -> i32 {
     unsafe {
         let l = &*list;
         l.items.len() as i32
+    }
+}
+
+/// Get length of directive list (selector constructs).
+///
+/// Returns 0 if list is NULL.
+#[no_mangle]
+pub extern "C" fn roup_directive_list_len(list: *const OmpDirectiveList) -> i32 {
+    if list.is_null() {
+        return 0;
+    }
+    unsafe { (&*list).items.len() as i32 }
+}
+
+/// Get directive at index (selector constructs). Returns NULL on OOB/NULL.
+#[no_mangle]
+pub extern "C" fn roup_directive_list_get(
+    list: *const OmpDirectiveList,
+    index: i32,
+) -> *mut OmpDirective {
+    if list.is_null() || index < 0 {
+        return ptr::null_mut();
+    }
+    unsafe {
+        let items = &(&*list).items;
+        let idx = index as usize;
+        if idx >= items.len() {
+            ptr::null_mut()
+        } else {
+            items[idx]
+        }
+    }
+}
+
+/// Free a directive list and contained directives.
+#[no_mangle]
+pub extern "C" fn roup_directive_list_free(list: *mut OmpDirectiveList) {
+    if list.is_null() {
+        return;
+    }
+    unsafe {
+        let boxed = Box::from_raw(list);
+        for dir in boxed.items {
+            if !dir.is_null() {
+                roup_directive_free(dir);
+            }
+        }
     }
 }
 
@@ -2766,10 +3435,34 @@ fn build_c_api_directive_from_ast(
 ) -> OmpDirective {
     with_clause_language(language, || {
         let directive_name: DirectiveName = directive.kind.into();
-        let (name, extra_clause) = atomic_directive_info(directive_name);
+        let (name, extra_clause) = atomic_directive_info(directive_name.clone());
 
-        let (parameter_text, parameter_data) =
+        let (parameter_text, mut parameter_data) =
             directive_parameter_data_from_ast(directive.parameter.as_ref(), language);
+
+        if matches!(
+            directive_name,
+            DirectiveName::Allocate | DirectiveName::Threadprivate | DirectiveName::Groupprivate
+        ) {
+            if parameter_data.identifiers.is_null() {
+                if let Some(param_text) = parameter_text.as_ref() {
+                    let trimmed = param_text.trim();
+                    if trimmed.starts_with('(') && trimmed.ends_with(')') {
+                        let inner = &trimmed[1..trimmed.len() - 1];
+                        let ids: Vec<String> = inner
+                            .split(',')
+                            .map(|s| s.trim())
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string())
+                            .collect();
+                        if !ids.is_empty() {
+                            parameter_data.kind = ROUP_DIRECTIVE_PARAM_IDENTIFIER_LIST;
+                            parameter_data.identifiers = build_string_list_from_strings(&ids);
+                        }
+                    }
+                }
+            }
+        }
 
         let mut clauses: Vec<OmpClause> = directive
             .clauses
@@ -2846,9 +3539,17 @@ fn format_directive_parameter(param: &OmpDirectiveParameter) -> String {
     match param {
         IdentifierList(list) => format!("({})", join_identifiers(list)),
         Identifier(name) => name.name().to_string(),
-        Mapper(id) | VariantFunction(id) | Depobj(id) | CriticalSection(id) => {
-            format!("({})", id.name())
-        }
+        Mapper(id) | VariantFunction(id) | Depobj(id) => format!("({})", id.name()),
+        DeclareMapper(dm) => match &dm.identifier {
+            OmpDeclareMapperId::Default => {
+                format!("(default : {} {})", dm.type_name, dm.variable)
+            }
+            OmpDeclareMapperId::User(id) => {
+                format!("({} : {} {})", id.name(), dm.type_name, dm.variable)
+            }
+            OmpDeclareMapperId::Unspecified => format!("({} {})", dm.type_name, dm.variable),
+        },
+        CriticalSection(id) => id.name().to_string(),
         Scan(scan) => {
             let vars = join_identifiers(&scan.variables);
             let prefix = match scan.mode {
@@ -2880,10 +3581,10 @@ fn format_directive_parameter(param: &OmpDirectiveParameter) -> String {
             }
             out
         }
-        DeclareSimd(target) => target
+        DeclareSimd(ds) => ds
             .function
             .as_ref()
-            .map(|f| format!("({})", f.name()))
+            .map(|id| format!("({})", id.name()))
             .unwrap_or_default(),
     }
 }
@@ -2898,9 +3599,68 @@ fn directive_parameter_data_from_ast(
         scan_mode: ROUP_SCAN_MODE_UNSPECIFIED,
         construct_type: ROUP_CONSTRUCT_TYPE_UNKNOWN,
         identifiers: ptr::null_mut(),
+        declare_mapper_identifier: 0,
+        declare_mapper_user_identifier: ptr::null(),
+        declare_mapper_type: ptr::null(),
+        declare_mapper_var: ptr::null(),
+        declare_reduction_operator: 0,
+        declare_reduction_user_identifier: ptr::null(),
+        declare_reduction_types: ptr::null_mut(),
+        declare_reduction_combiner: ptr::null(),
+        declare_reduction_initializer: ptr::null(),
+        declare_simd_target: ptr::null(),
     };
 
+    if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
+        eprintln!(
+            "[c_api] param (raw display) = {:?}",
+            parameter
+                .as_ref()
+                .map(|p| format_directive_parameter(p))
+        );
+    }
+
+    // Helper to parse a parenthesized identifier list parameter into identifiers.
+    fn parse_param_identifier_list(
+        raw: &str,
+        _language: Language,
+    ) -> Option<(*mut OmpStringList, i32)> {
+        let trimmed = raw.trim();
+        if !(trimmed.starts_with('(') && trimmed.ends_with(')')) {
+            return None;
+        }
+        let inner = &trimmed[1..trimmed.len() - 1];
+        let ids: Vec<String> = inner
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+        if ids.is_empty() {
+            return None;
+        }
+        let list = build_string_list_from_strings(&ids);
+        Some((list, ROUP_DIRECTIVE_PARAM_IDENTIFIER_LIST))
+    }
+
     if let Some(param) = parameter {
+        if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
+            let kind_name = match param {
+                OmpDirectiveParameter::IdentifierList(_) => "id_list",
+                OmpDirectiveParameter::Identifier(_) => "identifier",
+                OmpDirectiveParameter::Mapper(_) => "mapper",
+                OmpDirectiveParameter::VariantFunction(_) => "variant_fn",
+                OmpDirectiveParameter::Depobj(_) => "depobj",
+                OmpDirectiveParameter::Scan(_) => "scan",
+                OmpDirectiveParameter::Construct(_) => "construct",
+                OmpDirectiveParameter::CriticalSection(_) => "critical",
+                OmpDirectiveParameter::FlushList(_) => "flush_list",
+                OmpDirectiveParameter::DeclareReduction(_) => "declare_reduction",
+                OmpDirectiveParameter::DeclareMapper(_) => "declare_mapper",
+                OmpDirectiveParameter::DeclareSimd(_) => "declare_simd",
+            };
+            eprintln!("[c_api] param variant={}", kind_name);
+        }
         match param {
             OmpDirectiveParameter::IdentifierList(list)
             | OmpDirectiveParameter::FlushList(list) => {
@@ -2910,17 +3670,39 @@ fn directive_parameter_data_from_ast(
             OmpDirectiveParameter::Identifier(id)
             | OmpDirectiveParameter::Mapper(id)
             | OmpDirectiveParameter::VariantFunction(id)
-            | OmpDirectiveParameter::Depobj(id)
-            | OmpDirectiveParameter::CriticalSection(id) => {
-                data.kind = match param {
-                    OmpDirectiveParameter::Identifier(_) => ROUP_DIRECTIVE_PARAM_IDENTIFIER,
-                    OmpDirectiveParameter::Mapper(_) => ROUP_DIRECTIVE_PARAM_MAPPER,
-                    OmpDirectiveParameter::VariantFunction(_) => {
-                        ROUP_DIRECTIVE_PARAM_VARIANT_FUNCTION
-                    }
-                    OmpDirectiveParameter::Depobj(_) => ROUP_DIRECTIVE_PARAM_DEPOBJ,
-                    _ => ROUP_DIRECTIVE_PARAM_CRITICAL,
+            | OmpDirectiveParameter::Depobj(id) => {
+                if let Some((list, kind)) = parse_param_identifier_list(id.name(), language) {
+                    data.kind = kind;
+                    data.identifiers = list;
+                } else {
+                    data.kind = match param {
+                        OmpDirectiveParameter::Identifier(_) => ROUP_DIRECTIVE_PARAM_IDENTIFIER,
+                        OmpDirectiveParameter::Mapper(_) => ROUP_DIRECTIVE_PARAM_MAPPER,
+                        OmpDirectiveParameter::VariantFunction(_) => {
+                            ROUP_DIRECTIVE_PARAM_VARIANT_FUNCTION
+                        }
+                        OmpDirectiveParameter::Depobj(_) => ROUP_DIRECTIVE_PARAM_DEPOBJ,
+                        _ => ROUP_DIRECTIVE_PARAM_IDENTIFIER,
+                    };
+                    data.identifiers =
+                        build_string_list_from_identifiers(std::slice::from_ref(id), language);
+                }
+            }
+            OmpDirectiveParameter::DeclareMapper(mapper) => {
+                data.kind = ROUP_DIRECTIVE_PARAM_MAPPER;
+                data.declare_mapper_identifier = match mapper.identifier {
+                    OmpDeclareMapperId::Default => 0,
+                    OmpDeclareMapperId::User(_) => 1,
+                    OmpDeclareMapperId::Unspecified => 2,
                 };
+                if let OmpDeclareMapperId::User(id) = &mapper.identifier {
+                    data.declare_mapper_user_identifier = allocate_c_string(id.name());
+                }
+                data.declare_mapper_type = allocate_c_string(&mapper.type_name);
+                data.declare_mapper_var = allocate_c_string(&mapper.variable);
+            }
+            OmpDirectiveParameter::CriticalSection(id) => {
+                data.kind = ROUP_DIRECTIVE_PARAM_CRITICAL;
                 data.identifiers =
                     build_string_list_from_identifiers(std::slice::from_ref(id), language);
             }
@@ -2942,11 +3724,44 @@ fn directive_parameter_data_from_ast(
                     OmpConstructType::Other(_) => ROUP_CONSTRUCT_TYPE_OTHER,
                 };
             }
-            OmpDirectiveParameter::DeclareReduction(_) => {
+            OmpDirectiveParameter::DeclareReduction(dr) => {
                 data.kind = ROUP_DIRECTIVE_PARAM_DECLARE_REDUCTION;
+                data.declare_reduction_operator = match &dr.operator {
+                    ReductionOperatorToken::Builtin(op) => reduction_operator_code_from_ir(*op),
+                    ReductionOperatorToken::Identifier(_) => -1,
+                };
+                if let ReductionOperatorToken::Identifier(id) = &dr.operator {
+                    data.declare_reduction_user_identifier = allocate_c_string(id.name());
+                }
+                data.declare_reduction_types = build_string_list_from_strings(&dr.type_names);
+                data.declare_reduction_combiner = allocate_c_string(&dr.combiner);
+                if let Some(init) = &dr.initializer {
+                    data.declare_reduction_initializer = allocate_c_string(init);
+                }
             }
-            OmpDirectiveParameter::DeclareSimd(_) => {
+            OmpDirectiveParameter::DeclareSimd(ds) => {
                 data.kind = ROUP_DIRECTIVE_PARAM_DECLARE_SIMD;
+                if let Some(func) = &ds.function {
+                    data.declare_simd_target = allocate_c_string(func.name());
+                    data.identifiers =
+                        build_string_list_from_identifiers(std::slice::from_ref(func), language);
+                }
+            }
+        }
+    }
+
+    if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
+        eprintln!(
+            "[c_api] parameter_kind={} construct_type={}",
+            data.kind, data.construct_type
+        );
+    }
+
+    if data.identifiers.is_null() {
+        if let Some(param_text) = text.as_ref() {
+            if let Some((list, kind)) = parse_param_identifier_list(param_text.trim(), language) {
+                data.kind = kind;
+                data.identifiers = list;
             }
         }
     }
@@ -3018,6 +3833,7 @@ fn convert_clause_from_ast(kind: OmpClauseKind, payload: &IrClauseData) -> OmpCl
         Safelen => expect_clause(convert_safelen_clause_from_ast(payload), "safelen"),
         Simdlen => expect_clause(convert_simdlen_clause_from_ast(payload), "simdlen"),
         Aligned => expect_clause(convert_aligned_clause_from_ast(payload), "aligned"),
+        Bind => expect_clause(convert_bind_clause_from_ast(payload), "bind"),
         Reduction => expect_clause(
             convert_reduction_clause_from_ast(CLAUSE_KIND_REDUCTION, payload),
             "reduction",
@@ -3118,6 +3934,9 @@ fn convert_clause_from_ast(kind: OmpClauseKind, payload: &IrClauseData) -> OmpCl
             convert_bare_clause_from_ast(payload, CLAUSE_KIND_EXCLUSIVE),
             "exclusive",
         ),
+        When => build_metadirective_clause(CLAUSE_KIND_WHEN, payload),
+        Match => build_metadirective_clause(CLAUSE_KIND_MATCH, payload),
+        Otherwise => build_metadirective_clause(CLAUSE_KIND_OTHERWISE, payload),
         ReverseOffload => {
             expect_clause(convert_requires_clause_from_ast(payload), "reverse_offload")
         }
@@ -3165,11 +3984,49 @@ fn convert_generic_clause_from_ast(clause_name: ClauseName, payload: &IrClauseDa
     }
 }
 
+fn build_metadirective_clause(kind: i32, payload: &IrClauseData) -> OmpClause {
+    let (selector_ptr, text) = match payload {
+        IrClauseData::MetadirectiveSelector { selector } => {
+            let args = selector.raw.clone().or_else(|| {
+                selector
+                    .user
+                    .as_ref()
+                    .and_then(|u| u.condition.as_ref().map(ToString::to_string))
+            });
+            (build_selector_data(selector), args)
+        }
+        IrClauseData::Expression(expr) => (ptr::null_mut(), Some(expr.to_string())),
+        IrClauseData::Generic { data, .. } => (ptr::null_mut(), data.clone()),
+        _ => (ptr::null_mut(), render_arguments_from_payload(payload)),
+    };
+    debug_assert!(
+        text.as_ref().map(|s| !s.is_empty()).unwrap_or(false),
+        "metadirective selector arguments missing"
+    );
+    let arguments = text
+        .as_ref()
+        .map(|t| allocate_c_string(t))
+        .unwrap_or(ptr::null());
+    OmpClause {
+        kind,
+        arguments,
+        data: ClauseData {
+            selector: selector_ptr,
+        },
+    }
+}
+
 fn render_arguments_from_payload(payload: &IrClauseData) -> Option<String> {
     match payload {
         IrClauseData::Bare(_) => None,
         IrClauseData::Expression(expr) => Some(expr.to_string()),
         IrClauseData::ItemList(items) => format_clause_items(items),
+        IrClauseData::MetadirectiveSelector { selector } => selector.raw.clone().or_else(|| {
+            selector
+                .user
+                .as_ref()
+                .and_then(|u| u.condition.as_ref().map(ToString::to_string))
+        }),
         IrClauseData::Private { items }
         | IrClauseData::Firstprivate { items }
         | IrClauseData::Shared { items }
@@ -3355,6 +4212,7 @@ fn render_arguments_from_payload(payload: &IrClauseData) -> Option<String> {
             memory_order.as_ref().map(|mo| mo.to_string())
         }
         IrClauseData::ProcBind(policy) => Some(policy.to_string()),
+        IrClauseData::Bind(binding) => Some(binding.to_string()),
         IrClauseData::Order { modifier, kind } => {
             let mut text = String::new();
             if *modifier != OrderModifier::Unspecified {
@@ -3429,6 +4287,168 @@ fn render_arguments_from_payload(payload: &IrClauseData) -> Option<String> {
     }
 }
 
+fn build_selector_data(selector: &OmpSelector) -> *mut SelectorData {
+    let raw = selector
+        .raw
+        .as_ref()
+        .map(|s| allocate_c_string(s))
+        .unwrap_or(ptr::null());
+    let device_kind = selector
+        .device
+        .as_ref()
+        .and_then(|d| d.kind.as_ref().map(|k| allocate_c_string(&k.value)))
+        .unwrap_or(ptr::null());
+    let device_num_score = selector
+        .device
+        .as_ref()
+        .and_then(|d| d.device_num_score.as_ref().map(|s| allocate_c_string(s)))
+        .unwrap_or(ptr::null());
+    let device_num = selector
+        .device
+        .as_ref()
+        .and_then(|d| {
+            d.device_num
+                .as_ref()
+                .map(|e| allocate_c_string(&e.to_string()))
+        })
+        .unwrap_or(ptr::null());
+    let device_isa = selector
+        .device
+        .as_ref()
+        .map(|d| {
+            let vals: Vec<String> = d.isa.iter().map(|v| v.value.clone()).collect();
+            build_string_list_from_strings(&vals)
+        })
+        .unwrap_or(ptr::null_mut());
+    let device_arch = selector
+        .device
+        .as_ref()
+        .map(|d| {
+            let vals: Vec<String> = d.arch.iter().map(|v| v.value.clone()).collect();
+            build_string_list_from_strings(&vals)
+        })
+        .unwrap_or(ptr::null_mut());
+    let impl_vendor = selector
+        .implementation
+        .as_ref()
+        .and_then(|i| i.vendor.as_ref().map(|v| allocate_c_string(v)))
+        .unwrap_or(ptr::null());
+    let impl_vendor_score = selector
+        .implementation
+        .as_ref()
+        .and_then(|i| i.vendor_score.as_ref().map(|v| allocate_c_string(v)))
+        .unwrap_or(ptr::null());
+    let impl_extensions = selector
+        .implementation
+        .as_ref()
+        .map(|i| build_string_list_from_strings(&i.extensions))
+        .unwrap_or(ptr::null_mut());
+    let impl_extension_scores = selector
+        .implementation
+        .as_ref()
+        .map(|i| {
+            let scores: Vec<String> = i
+                .extension_scores
+                .iter()
+                .map(|s| s.clone().unwrap_or_default())
+                .collect();
+            build_string_list_from_strings(&scores)
+        })
+        .unwrap_or(ptr::null_mut());
+    let impl_user_expr = selector
+        .implementation
+        .as_ref()
+        .and_then(|i| i.user_expression.as_ref().map(|e| allocate_c_string(e)))
+        .unwrap_or(ptr::null());
+    let impl_user_expr_score = selector
+        .implementation
+        .as_ref()
+        .and_then(|i| {
+            i.user_expression_score
+                .as_ref()
+                .map(|s| allocate_c_string(s))
+        })
+        .unwrap_or(ptr::null());
+    let user_condition = selector
+        .user
+        .as_ref()
+        .and_then(|u| {
+            u.condition
+                .as_ref()
+                .map(|e| allocate_c_string(&e.to_string()))
+        })
+        .unwrap_or(ptr::null());
+    let constructs = selector
+        .constructs
+        .as_ref()
+        .map(|c| {
+            let names: Vec<String> = c
+                .constructs
+                .iter()
+                .map(|k| k.kind.as_str().to_string())
+                .collect();
+            build_string_list_from_strings(&names)
+        })
+        .unwrap_or(ptr::null_mut());
+    let construct_scores = selector
+        .constructs
+        .as_ref()
+        .map(|c| {
+            let scores: Vec<String> = c
+                .scores
+                .iter()
+                .map(|s| s.clone().unwrap_or_default())
+                .collect();
+            build_string_list_from_strings(&scores)
+        })
+        .unwrap_or(ptr::null_mut());
+    let construct_directives = selector
+        .constructs
+        .as_ref()
+        .map(|c| {
+            let dirs: Vec<Box<crate::ast::OmpDirective>> = c
+                .constructs
+                .iter()
+                .map(|entry| entry.directive.clone())
+                .collect();
+            build_directive_list_from_ast(&dirs, Language::C)
+        })
+        .unwrap_or(ptr::null_mut());
+
+    // Nested directive not yet parsed; keep null for now.
+    let nested_directive = selector
+        .nested_directive
+        .as_ref()
+        .map(|d| {
+            let c_dir = build_c_api_directive_from_ast(d, Language::C);
+            Box::into_raw(Box::new(c_dir))
+        })
+        .unwrap_or(ptr::null_mut());
+
+    let data = SelectorData {
+        raw,
+        device_kind,
+        device_isa,
+        device_arch,
+        device_num,
+        device_num_score,
+        impl_vendor,
+        impl_vendor_score,
+        impl_extensions,
+        impl_extension_scores,
+        impl_user_expr,
+        impl_user_expr_score,
+        is_target_device: selector.is_target_device,
+        user_condition,
+        constructs,
+        construct_scores,
+        construct_directives,
+        nested_directive,
+    };
+
+    Box::into_raw(Box::new(data))
+}
+
 fn convert_bare_clause_from_ast(payload: &IrClauseData, kind: i32) -> Option<OmpClause> {
     match payload {
         IrClauseData::Bare(_) => Some(OmpClause {
@@ -3452,7 +4472,6 @@ fn expect_clause(value: Option<OmpClause>, clause: &'static str) -> OmpClause {
 // Legacy clause converter retained for header generation (constants_gen.rs).
 // Not used at runtime; all data flows through the AST-based converters.
 #[allow(dead_code)]
-
 fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     match payload {
         IrClauseData::Default(kind) => {
@@ -3471,7 +4490,8 @@ fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
         IrClauseData::Expression(expr) => Some(OmpClause {
             kind: CLAUSE_KIND_DEFAULT,
             arguments: allocate_c_string(&expr.to_string()),
-            data: ClauseData { default: -1 },
+            // Treat expression form as variant; encode default code 4 for compat.
+            data: ClauseData { default: 4 },
         }),
         _ => None,
     }
@@ -3863,6 +4883,19 @@ fn convert_proc_bind_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
             arguments: allocate_c_string(&policy.to_string()),
             data: ClauseData {
                 default: *policy as i32,
+            },
+        });
+    }
+    None
+}
+
+fn convert_bind_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Bind(binding) = payload {
+        return Some(OmpClause {
+            kind: CLAUSE_KIND_BIND,
+            arguments: allocate_c_string(&binding.to_string()),
+            data: ClauseData {
+                default: *binding as i32,
             },
         });
     }
@@ -4461,6 +5494,29 @@ fn build_string_list_from_identifiers(
         .map(|id| Cow::Owned(id.name().to_string()))
         .collect();
     build_string_list(&cows)
+}
+
+fn build_string_list_from_strings(strings: &[String]) -> *mut OmpStringList {
+    if strings.is_empty() {
+        return ptr::null_mut();
+    }
+    let cows: Vec<Cow<'_, str>> = strings.iter().map(|s| Cow::Owned(s.clone())).collect();
+    build_string_list(&cows)
+}
+
+fn build_directive_list_from_ast(
+    directives: &[Box<crate::ast::OmpDirective>],
+    language: Language,
+) -> *mut OmpDirectiveList {
+    if directives.is_empty() {
+        return ptr::null_mut();
+    }
+    let mut items = Vec::with_capacity(directives.len());
+    for dir in directives {
+        let c_dir = build_c_api_directive_from_ast(dir, language);
+        items.push(Box::into_raw(Box::new(c_dir)));
+    }
+    Box::into_raw(Box::new(OmpDirectiveList { items }))
 }
 
 fn convert_item_list_clause_from_ast(code: i32, payload: &IrClauseData) -> Option<OmpClause> {
@@ -5474,6 +6530,14 @@ fn free_clause_data(clause: &OmpClause) {
                     roup_string_list_free(boxed.variables);
                 }
             }
+        } else if clause.kind == CLAUSE_KIND_WHEN
+            || clause.kind == CLAUSE_KIND_MATCH
+            || clause.kind == CLAUSE_KIND_OTHERWISE
+        {
+            let ptr = clause.data.selector;
+            if !ptr.is_null() {
+                free_selector_data(ptr);
+            }
         } else if clause.kind == CLAUSE_KIND_SCHEDULE {
             let sched = &*clause.data.schedule;
             if !sched.chunk.is_null() {
@@ -5513,6 +6577,61 @@ fn free_clause_data(clause: &OmpClause) {
                 }
             }
         }
+    }
+}
+
+unsafe fn free_selector_data(ptr: *mut SelectorData) {
+    let data = Box::from_raw(ptr);
+    if !data.raw.is_null() {
+        drop(CString::from_raw(data.raw as *mut c_char));
+    }
+    if !data.device_kind.is_null() {
+        drop(CString::from_raw(data.device_kind as *mut c_char));
+    }
+    if !data.device_num_score.is_null() {
+        drop(CString::from_raw(data.device_num_score as *mut c_char));
+    }
+    if !data.device_num.is_null() {
+        drop(CString::from_raw(data.device_num as *mut c_char));
+    }
+    if !data.impl_vendor.is_null() {
+        drop(CString::from_raw(data.impl_vendor as *mut c_char));
+    }
+    if !data.user_condition.is_null() {
+        drop(CString::from_raw(data.user_condition as *mut c_char));
+    }
+    if !data.impl_vendor_score.is_null() {
+        drop(CString::from_raw(data.impl_vendor_score as *mut c_char));
+    }
+    if !data.impl_user_expr.is_null() {
+        drop(CString::from_raw(data.impl_user_expr as *mut c_char));
+    }
+    if !data.impl_user_expr_score.is_null() {
+        drop(CString::from_raw(data.impl_user_expr_score as *mut c_char));
+    }
+    if !data.construct_scores.is_null() {
+        roup_string_list_free(data.construct_scores);
+    }
+    if !data.construct_directives.is_null() {
+        roup_directive_list_free(data.construct_directives);
+    }
+    if !data.impl_extension_scores.is_null() {
+        roup_string_list_free(data.impl_extension_scores);
+    }
+    if !data.nested_directive.is_null() {
+        roup_directive_free(data.nested_directive);
+    }
+    if !data.device_isa.is_null() {
+        roup_string_list_free(data.device_isa);
+    }
+    if !data.device_arch.is_null() {
+        roup_string_list_free(data.device_arch);
+    }
+    if !data.impl_extensions.is_null() {
+        roup_string_list_free(data.impl_extensions);
+    }
+    if !data.constructs.is_null() {
+        roup_string_list_free(data.constructs);
     }
 }
 
@@ -5595,6 +6714,76 @@ mod tests {
         }
 
         assert!(found, "uniform clause should be present");
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn metadirective_when_clause_carries_selector_text() {
+        let input = std::ffi::CString::new(
+            "#pragma omp metadirective when(user={condition(a>4)}: ) default(parallel)",
+        )
+        .expect("cstring");
+        let directive = roup_parse(input.as_ptr());
+        assert!(!directive.is_null(), "parse failed");
+
+        let iter = roup_directive_clauses_iter(directive);
+        assert!(!iter.is_null(), "iterator should be created");
+        let mut clause_ptr: *const OmpClause = ptr::null();
+        let advanced = roup_clause_iterator_next(iter, &mut clause_ptr);
+        assert_eq!(advanced, 1, "iterator should yield first clause");
+        assert!(!clause_ptr.is_null(), "clause pointer should not be NULL");
+
+        let kind = roup_clause_kind(clause_ptr);
+        assert_eq!(kind, CLAUSE_KIND_WHEN);
+
+        let args_ptr = roup_clause_arguments(clause_ptr);
+        assert!(
+            !args_ptr.is_null(),
+            "metadirective when clause should carry selector text"
+        );
+        let args = unsafe { CStr::from_ptr(args_ptr) }.to_str().expect("utf8");
+        assert!(!args.trim().is_empty(), "selector text should not be empty");
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn metadirective_complex_selector_arguments_preserved() {
+        let input = std::ffi::CString::new(
+            "#pragma omp metadirective when(construct={parallel(score(30): private(m))}, device = {arch(score(20): x86)}: ) default(parallel)",
+        )
+        .expect("cstring");
+        let directive = roup_parse(input.as_ptr());
+        assert!(!directive.is_null());
+
+        let iter = roup_directive_clauses_iter(directive);
+        assert!(!iter.is_null(), "iterator should be created");
+
+        let mut clause_ptr: *const OmpClause = ptr::null();
+        let advanced = roup_clause_iterator_next(iter, &mut clause_ptr);
+        assert_eq!(advanced, 1, "iterator should yield first clause");
+        assert!(!clause_ptr.is_null(), "clause pointer should not be NULL");
+
+        let kind = roup_clause_kind(clause_ptr);
+        assert_eq!(kind, CLAUSE_KIND_WHEN);
+
+        let args_ptr = roup_clause_arguments(clause_ptr);
+        assert!(
+            !args_ptr.is_null(),
+            "metadirective when clause should carry selector text"
+        );
+        let args = unsafe { CStr::from_ptr(args_ptr) }.to_str().expect("utf8");
+        assert!(
+            args.contains("construct"),
+            "selector text should include construct selector"
+        );
+        assert!(
+            args.contains("device"),
+            "selector text should include device selector"
+        );
 
         roup_clause_iterator_free(iter);
         roup_directive_free(directive);

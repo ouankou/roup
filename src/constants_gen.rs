@@ -930,7 +930,38 @@ fn collect_const_i32_values(ast: &File) -> HashMap<String, i32> {
             }
         }
     }
+    // Fallback: when build.rs runs before we have inlined consts (e.g., clause kind
+    // constants generated into OUT_DIR), seed the map from the last generated header.
+    if let Ok(header) = fs::read_to_string("src/roup_constants.h") {
+        for line in header.lines() {
+            if let Some(rest) = line.strip_prefix("#define ROUP_OMPC_") {
+                let mut parts = rest.split_whitespace();
+                if let (Some(name), Some(val)) = (parts.next(), parts.next()) {
+                    if let Ok(num) = val.parse::<i32>() {
+                        let key = format!("CLAUSE_KIND_{}", normalize_clause_const_name(name));
+                        values.entry(key).or_insert(num);
+                    }
+                }
+            }
+        }
+    }
+
     values
+}
+
+/// Normalize clause constant names from the generated header to the internal constant IDs.
+/// Example: "copy_in" -> "COPYIN", "read" -> "ATOMIC_READ".
+pub fn normalize_clause_const_name(name: &str) -> String {
+    match name {
+        "copy_in" => "COPYIN".to_string(),
+        "copy_out" => "COPYOUT".to_string(),
+        "self_maps" => "SELF".to_string(),
+        "read" => "ATOMIC_READ".to_string(),
+        "write" => "ATOMIC_WRITE".to_string(),
+        "update" => "ATOMIC_UPDATE".to_string(),
+        "capture" => "ATOMIC_CAPTURE".to_string(),
+        _ => name.to_ascii_uppercase(),
+    }
 }
 
 /// Parse an arm that maps a ClauseName enum variant to an integer

@@ -7,8 +7,10 @@
 //! For design rationale and maintenance instructions:
 //! See [`docs/BUILD_SCRIPT_RATIONALE.md`](../docs/BUILD_SCRIPT_RATIONALE.md)
 
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 // Use #[path] to share code between build.rs and main crate
@@ -197,6 +199,9 @@ fn main() {
     // Write to OUT_DIR
     fs::write(&dest_path, &header).expect("Failed to write to OUT_DIR");
 
+    // Generate a Rust module of clause kind constants from the generated header (for runtime use).
+    generate_clause_kind_rs(Path::new(&out_dir), &header);
+
     // Also copy to src/ for easier access during development
     let src_dest = Path::new("src").join("roup_constants.h");
     fs::write(&src_dest, &header).expect("Failed to write to src/");
@@ -232,8 +237,44 @@ fn main() {
         }
     }
 
+    // Copy header into compat tree so C++ builds pick up new APIs.
+    let compat_header = Path::new("compat/ompparser/src/roup_constants.h");
+    if let Err(err) = fs::copy(&src_dest, &compat_header) {
+        eprintln!(
+            "cargo:warning=failed to copy generated header to compat: {}",
+            err
+        );
+    }
+
     println!("cargo:rerun-if-changed=src/c_api.rs");
     println!("cargo:rerun-if-changed=src/c_api/openacc.rs");
     println!("cargo:rerun-if-changed=src/constants_gen.rs");
     println!("cargo:rerun-if-changed=build.rs");
+}
+
+fn generate_clause_kind_rs(out_dir: &Path, header: &str) {
+    let mut clause_kinds = BTreeMap::new();
+    for line in header.lines() {
+        if let Some(rest) = line.strip_prefix("#define ROUP_OMPC_") {
+            let mut parts = rest.split_whitespace();
+            if let (Some(name), Some(value)) = (parts.next(), parts.next()) {
+                let ident = format!(
+                    "CLAUSE_KIND_{}",
+                    constants_gen::normalize_clause_const_name(name)
+                );
+                clause_kinds.insert(ident, value.to_string());
+            }
+        }
+    }
+
+    let dest = out_dir.join("clause_kinds.rs");
+    let mut file = fs::File::create(dest).expect("failed to create clause_kinds.rs");
+    writeln!(
+        file,
+        "// Auto-generated from roup_constants.h by build.rs — do not edit manually."
+    )
+    .unwrap();
+    for (ident, value) in clause_kinds {
+        writeln!(file, "pub const {}: i32 = {};", ident, value).unwrap();
+    }
 }
