@@ -915,7 +915,11 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
         if !boxed.parameter_data.identifiers.is_null() {
             roup_string_list_free(boxed.parameter_data.identifiers);
         }
-        if !boxed.parameter_data.declare_mapper_user_identifier.is_null() {
+        if !boxed
+            .parameter_data
+            .declare_mapper_user_identifier
+            .is_null()
+        {
             drop(CString::from_raw(
                 boxed.parameter_data.declare_mapper_user_identifier as *mut c_char,
             ));
@@ -930,7 +934,11 @@ pub extern "C" fn roup_directive_free(directive: *mut OmpDirective) {
                 boxed.parameter_data.declare_mapper_var as *mut c_char,
             ));
         }
-        if !boxed.parameter_data.declare_reduction_user_identifier.is_null() {
+        if !boxed
+            .parameter_data
+            .declare_reduction_user_identifier
+            .is_null()
+        {
             drop(CString::from_raw(
                 boxed.parameter_data.declare_reduction_user_identifier as *mut c_char,
             ));
@@ -1391,9 +1399,7 @@ pub extern "C" fn roup_directive_declare_mapper_variable(
 }
 
 #[no_mangle]
-pub extern "C" fn roup_directive_declare_reduction_operator(
-    directive: *const OmpDirective,
-) -> i32 {
+pub extern "C" fn roup_directive_declare_reduction_operator(directive: *const OmpDirective) -> i32 {
     if directive.is_null() {
         return 0;
     }
@@ -1407,7 +1413,11 @@ pub extern "C" fn roup_directive_declare_reduction_user_identifier(
     if directive.is_null() {
         return ptr::null();
     }
-    unsafe { (&*directive).parameter_data.declare_reduction_user_identifier }
+    unsafe {
+        (&*directive)
+            .parameter_data
+            .declare_reduction_user_identifier
+    }
 }
 
 #[no_mangle]
@@ -3614,9 +3624,7 @@ fn directive_parameter_data_from_ast(
     if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
         eprintln!(
             "[c_api] param (raw display) = {:?}",
-            parameter
-                .as_ref()
-                .map(|p| format_directive_parameter(p))
+            parameter.as_ref().map(|p| format_directive_parameter(p))
         );
     }
 

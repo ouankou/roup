@@ -192,13 +192,17 @@ fn build_omp_directive_parameter(
         // Critical name
         if name_lower == "critical" {
             let trimmed = param_str.trim();
-            let cleaned = if trimmed.starts_with('(') && trimmed.ends_with(')') && trimmed.len() > 1 {
+            let cleaned = if trimmed.starts_with('(') && trimmed.ends_with(')') && trimmed.len() > 1
+            {
                 &trimmed[1..trimmed.len() - 1]
             } else {
                 trimmed
             };
             if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
-                eprintln!("[ast] critical param value={} cleaned={}", param_str, cleaned);
+                eprintln!(
+                    "[ast] critical param value={} cleaned={}",
+                    param_str, cleaned
+                );
             }
             return Some(OmpDirectiveParameter::CriticalSection(Identifier::new(
                 cleaned,
@@ -225,9 +229,9 @@ fn build_omp_directive_parameter(
         }
 
         if name_lower == "declare simd" {
-            return Some(OmpDirectiveParameter::DeclareSimd(parse_declare_simd_target(
-                param_str,
-            )));
+            return Some(OmpDirectiveParameter::DeclareSimd(
+                parse_declare_simd_target(param_str),
+            ));
         }
 
         if name_lower == "declare mapper" {
@@ -299,10 +303,7 @@ fn parse_declare_simd_target(raw: &str) -> OmpSimdTarget {
     OmpSimdTarget { function }
 }
 
-fn parse_declare_mapper_param(
-    raw: &str,
-    parser_config: &ParserConfig,
-) -> Option<OmpDeclareMapper> {
+fn parse_declare_mapper_param(raw: &str, parser_config: &ParserConfig) -> Option<OmpDeclareMapper> {
     let _ = parser_config;
     let trimmed = raw.trim();
     let inner = if trimmed.starts_with('(') && trimmed.ends_with(')') && trimmed.len() > 1 {
@@ -331,7 +332,10 @@ fn parse_declare_mapper_param(
 
     // Split remaining portion into type and variable
     let (type_part, var_part) = if let Some(pos) = rest.find("::") {
-        (rest[..pos].trim().to_string(), rest[pos + 2..].trim().to_string())
+        (
+            rest[..pos].trim().to_string(),
+            rest[pos + 2..].trim().to_string(),
+        )
     } else {
         let mut pieces = rest.split_whitespace().collect::<Vec<_>>();
         if pieces.is_empty() {
