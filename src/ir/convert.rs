@@ -1097,6 +1097,7 @@ fn parse_constructs_selector(
     Ok(constructs)
 }
 
+#[allow(dead_code)]
 fn lookup_omp_construct(name: &str) -> Option<OmpDirectiveKind> {
     let normalized = name.trim().replace(' ', "");
     for kind in OmpDirectiveKind::ALL {
