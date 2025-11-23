@@ -34,8 +34,7 @@ fn acc_directive_kind_matches_generated_macro() {
     // The generated macro should equal the canonical OpenACC numeric value
     assert_eq!(
         kind, expected,
-        "acc_directive_kind returned {}, header macro = {}",
-        kind, expected
+        "acc_directive_kind returned {kind}, header macro = {expected}"
     );
 
     // Clean up

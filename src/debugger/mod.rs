@@ -31,9 +31,9 @@ pub enum DebugError {
 impl std::fmt::Display for DebugError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DebugError::ParseError(msg) => write!(f, "Parse error: {}", msg),
-            DebugError::IoError(e) => write!(f, "I/O error: {}", e),
-            DebugError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
+            DebugError::ParseError(msg) => write!(f, "Parse error: {msg}"),
+            DebugError::IoError(e) => write!(f, "I/O error: {e}"),
+            DebugError::InvalidInput(msg) => write!(f, "Invalid input: {msg}"),
         }
     }
 }

@@ -241,7 +241,7 @@ fn parse_cache_directive<'a>(
 
     // For backward compat: keep normalized parameter
     let normalized = normalize_directive_parameter(content.trim());
-    let parameter = format!("({})", normalized);
+    let parameter = format!("({normalized})");
 
     Ok((
         rest,
@@ -359,7 +359,7 @@ fn parse_wait_directive<'a>(
 
         // For backward compat: keep normalized parameter
         let normalized = normalize_directive_parameter(content.trim());
-        let parameter = format!("({})", normalized);
+        let parameter = format!("({normalized})");
 
         return Ok((
             rest,

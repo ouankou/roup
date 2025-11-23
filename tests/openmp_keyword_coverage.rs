@@ -10,7 +10,7 @@ fn parse_pragma(input: &str) -> Result<roup::parser::Directive<'_>, String> {
     parser
         .parse(input)
         .map(|(_, directive)| directive)
-        .map_err(|e| format!("{:?}", e))
+        .map_err(|e| format!("{e:?}"))
 }
 
 /// Test that all OpenMP 6.0 directives can be parsed
@@ -73,7 +73,7 @@ fn test_all_openmp60_directives_parse() {
     ];
 
     for directive in test_directives {
-        let pragma = format!("#pragma omp {}", directive);
+        let pragma = format!("#pragma omp {directive}");
         let result = parse_pragma(&pragma);
         assert!(
             result.is_ok(),
@@ -139,7 +139,7 @@ fn test_all_new_openmp60_clauses_parse() {
     ];
 
     for (directive, clause) in test_cases {
-        let pragma = format!("#pragma omp {} {}", directive, clause);
+        let pragma = format!("#pragma omp {directive} {clause}");
         let result = parse_pragma(&pragma);
         assert!(
             result.is_ok(),
@@ -166,7 +166,7 @@ fn test_loop_transformations() {
     ];
 
     for transform in transformations {
-        let pragma = format!("#pragma omp {}", transform);
+        let pragma = format!("#pragma omp {transform}");
         let result = parse_pragma(&pragma);
         assert!(
             result.is_ok(),
@@ -188,7 +188,7 @@ fn test_metadirectives() {
     ];
 
     for directive in metadirectives {
-        let pragma = format!("#pragma omp {}", directive);
+        let pragma = format!("#pragma omp {directive}");
         let result = parse_pragma(&pragma);
         assert!(
             result.is_ok(),
@@ -285,7 +285,7 @@ fn test_keyword_counts() {
 
     // Validate all base directives parse
     for directive in &test_base_directives {
-        let pragma = format!("#pragma omp {}", directive);
+        let pragma = format!("#pragma omp {directive}");
         let result = parse_pragma(&pragma);
         assert!(
             result.is_ok(),
@@ -295,10 +295,7 @@ fn test_keyword_counts() {
         );
     }
 
-    println!(
-        "✅ Successfully validated {} base OpenMP 6.0 directives",
-        base_directive_count
-    );
+    println!("✅ Successfully validated {base_directive_count} base OpenMP 6.0 directives");
     println!("✅ Parser supports 128 total directive spellings (base + combined forms)");
     println!("✅ Parser supports 132 clause keywords (125 from spec + 7 extras)");
 }
@@ -320,7 +317,7 @@ fn test_fortran_directives() {
     ];
 
     for directive in fortran_directives {
-        let pragma = format!("#pragma omp {}", directive); // Parser expects C pragma syntax
+        let pragma = format!("#pragma omp {directive}"); // Parser expects C pragma syntax
         let result = parse_pragma(&pragma);
         assert!(
             result.is_ok(),

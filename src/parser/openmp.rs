@@ -663,7 +663,7 @@ fn parse_allocate_directive<'a>(
             rest,
             Directive {
                 name: crate::parser::directive_kind::lookup_directive_name("allocate"),
-                parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
+                parameter: Some(std::borrow::Cow::Owned(format!("({list_content})"))),
                 clauses,
                 wait_data: None,
                 cache_data: None,
@@ -690,7 +690,7 @@ fn parse_threadprivate_directive<'a>(
             rest,
             Directive::new(
                 crate::parser::directive_kind::lookup_directive_name("threadprivate"),
-                Some(std::borrow::Cow::Owned(format!("({})", list_content))),
+                Some(std::borrow::Cow::Owned(format!("({list_content})"))),
                 vec![],
             ),
         ))
@@ -717,7 +717,7 @@ fn parse_declare_target_extended<'a>(
             rest,
             Directive {
                 name: crate::parser::directive_kind::lookup_directive_name("declare target"),
-                parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
+                parameter: Some(std::borrow::Cow::Owned(format!("({list_content})"))),
                 clauses,
                 wait_data: None,
                 cache_data: None,
@@ -780,7 +780,7 @@ fn parse_declare_mapper_directive<'a>(
             rest,
             Directive {
                 name: crate::parser::directive_kind::lookup_directive_name("declare mapper"),
-                parameter: Some(std::borrow::Cow::Owned(format!("({})", mapper_id))),
+                parameter: Some(std::borrow::Cow::Owned(format!("({mapper_id})"))),
                 clauses,
                 wait_data: None,
                 cache_data: None,
@@ -809,7 +809,7 @@ fn parse_declare_variant_directive<'a>(
             rest,
             Directive {
                 name: crate::parser::directive_kind::lookup_directive_name("declare variant"),
-                parameter: Some(std::borrow::Cow::Owned(format!("({})", variant_func))),
+                parameter: Some(std::borrow::Cow::Owned(format!("({variant_func})"))),
                 clauses,
                 wait_data: None,
                 cache_data: None,
@@ -838,7 +838,7 @@ fn parse_depobj_directive<'a>(
             rest,
             Directive {
                 name: crate::parser::directive_kind::lookup_directive_name("depobj"),
-                parameter: Some(std::borrow::Cow::Owned(format!("({})", depobj_id))),
+                parameter: Some(std::borrow::Cow::Owned(format!("({depobj_id})"))),
                 clauses,
                 wait_data: None,
                 cache_data: None,
@@ -897,8 +897,7 @@ fn parse_scan_directive<'a>(
                     // Store the parameter without a leading space; the display/formatting layer
                     // is responsible for spacing when rendering the directive.
                     parameter: Some(std::borrow::Cow::Owned(format!(
-                        "exclusive({})",
-                        list_content
+                        "exclusive({list_content})"
                     ))),
                     clauses,
                     wait_data: None,
@@ -935,8 +934,7 @@ fn parse_scan_directive<'a>(
                 Directive {
                     name: crate::parser::directive_kind::lookup_directive_name("scan"),
                     parameter: Some(std::borrow::Cow::Owned(format!(
-                        "inclusive({})",
-                        list_content
+                        "inclusive({list_content})"
                     ))),
                     clauses,
                     wait_data: None,
@@ -1037,7 +1035,7 @@ fn parse_groupprivate_directive<'a>(
             rest,
             Directive {
                 name: crate::parser::directive_kind::lookup_directive_name("groupprivate"),
-                parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
+                parameter: Some(std::borrow::Cow::Owned(format!("({list_content})"))),
                 clauses,
                 wait_data: None,
                 cache_data: None,
@@ -1067,7 +1065,7 @@ fn parse_critical_directive<'a>(
             rest,
             Directive {
                 name: crate::parser::directive_kind::lookup_directive_name("critical"),
-                parameter: Some(std::borrow::Cow::Owned(format!("({})", critical_name))),
+                parameter: Some(std::borrow::Cow::Owned(format!("({critical_name})"))),
                 clauses,
                 wait_data: None,
                 cache_data: None,
@@ -1117,7 +1115,7 @@ fn parse_flush_directive<'a>(
                     rest,
                     Directive {
                         name: crate::parser::directive_kind::lookup_directive_name("flush"),
-                        parameter: Some(Cow::Owned(format!("({})", list_content))),
+                        parameter: Some(Cow::Owned(format!("({list_content})"))),
                         clauses: vec![clause],
                         wait_data: None,
                         cache_data: None,
@@ -1143,7 +1141,7 @@ fn parse_flush_directive<'a>(
                 rest,
                 Directive {
                     name: crate::parser::directive_kind::lookup_directive_name("flush"),
-                    parameter: Some(std::borrow::Cow::Owned(format!("({})", list_content))),
+                    parameter: Some(std::borrow::Cow::Owned(format!("({list_content})"))),
                     clauses,
                     wait_data: None,
                     cache_data: None,
@@ -1199,7 +1197,7 @@ fn parse_declare_simd_directive<'a>(
         // Found proc-name, return it as the parameter and continue parsing clauses from rest
         (
             rest,
-            Some(std::borrow::Cow::Owned(format!("({})", proc_name))),
+            Some(std::borrow::Cow::Owned(format!("({proc_name})"))),
         )
     } else {
         // No proc-name, parse clauses from the entire input
@@ -1411,9 +1409,9 @@ mod tests {
         let input = "!$omp end atomic";
         let result = parser.parse(input);
         if let Err(ref e) = result {
-            eprintln!("Parse error for '{}': {:?}", input, e);
+            eprintln!("Parse error for '{input}': {e:?}");
         }
-        assert!(result.is_ok(), "Failed to parse: {}", input);
+        assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
         assert_eq!(directive.name.as_str(), "end atomic");
     }
@@ -1424,7 +1422,7 @@ mod tests {
         let parser = parser().with_language(Language::FortranFree);
         let input = "!$omp end critical";
         let result = parser.parse(input);
-        assert!(result.is_ok(), "Failed to parse: {}", input);
+        assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
         assert_eq!(directive.name.as_str(), "end critical");
     }
@@ -1435,7 +1433,7 @@ mod tests {
         let parser = parser().with_language(Language::FortranFree);
         let input = "!$omp end distribute";
         let result = parser.parse(input);
-        assert!(result.is_ok(), "Failed to parse: {}", input);
+        assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
         assert_eq!(directive.name.as_str(), "end distribute");
     }
@@ -1446,7 +1444,7 @@ mod tests {
         let parser = parser().with_language(Language::FortranFree);
         let input = "!$omp end parallel";
         let result = parser.parse(input);
-        assert!(result.is_ok(), "Failed to parse: {}", input);
+        assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
         assert_eq!(directive.name.as_str(), "end parallel");
     }
@@ -1457,7 +1455,7 @@ mod tests {
         let parser = parser().with_language(Language::C);
         let input = "#pragma omp end target";
         let result = parser.parse(input);
-        assert!(result.is_ok(), "Failed to parse: {}", input);
+        assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
         assert_eq!(directive.name.as_str(), "end target");
     }
@@ -1468,7 +1466,7 @@ mod tests {
         let parser = parser().with_language(Language::FortranFree);
         let input = "!$omp end do";
         let result = parser.parse(input);
-        assert!(result.is_ok(), "Failed to parse: {}", input);
+        assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
         assert_eq!(directive.name.as_str(), "end do");
     }
@@ -1480,9 +1478,9 @@ mod tests {
         let input = "!$omp masked";
         let result = parser.parse(input);
         if let Err(ref e) = result {
-            eprintln!("Parse error for '{}': {:?}", input, e);
+            eprintln!("Parse error for '{input}': {e:?}");
         }
-        assert!(result.is_ok(), "Failed to parse: {}", input);
+        assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
         assert_eq!(directive.name.as_str(), "masked");
     }

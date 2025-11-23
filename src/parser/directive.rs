@@ -511,7 +511,7 @@ impl fmt::Display for Directive<'_> {
             // Use the same rendering rules as the helper to avoid divergence
             let mut tmp = String::new();
             render_parameter_into(&mut tmp, Some(param.as_ref()));
-            write!(f, "{}", tmp)?;
+            write!(f, "{tmp}")?;
         }
         if !self.clauses.is_empty() {
             write!(f, " ")?;

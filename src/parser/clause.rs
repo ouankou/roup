@@ -592,7 +592,7 @@ impl fmt::Display for Clause<'_> {
                             GangModifier::Num => "num",
                             GangModifier::Static => "static",
                         };
-                        write!(f, "{}: ", mod_str)?;
+                        write!(f, "{mod_str}: ")?;
                     }
                     write!(f, "{})", variables.join(", "))
                 }
@@ -715,7 +715,7 @@ impl fmt::Display for Clause<'_> {
                     }
                 };
 
-                write!(f, "{}", op_str)?;
+                write!(f, "{op_str}")?;
                 if *space_after_colon {
                     write!(f, ": ")?;
                 } else {

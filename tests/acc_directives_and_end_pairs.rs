@@ -15,20 +15,19 @@ fn acc_multiple_directives_and_end_pairs_match_generated_macros() {
     ];
 
     for (text, macro_name) in &directives {
-        let re = regex::Regex::new(&format!(r"#define\s+{}\s+(\-?\d+)", macro_name)).unwrap();
+        let re = regex::Regex::new(&format!(r"#define\s+{macro_name}\s+(\-?\d+)")).unwrap();
         let caps = re
             .captures(&header)
-            .unwrap_or_else(|| panic!("{} not found in header", macro_name));
+            .unwrap_or_else(|| panic!("{macro_name} not found in header"));
         let expected: i32 = caps.get(1).unwrap().as_str().parse().unwrap();
 
-        let input = CString::new(format!("#pragma acc {}", text)).unwrap();
+        let input = CString::new(format!("#pragma acc {text}")).unwrap();
         let dir = roup::acc_parse(input.as_ptr() as *const c_char);
-        assert!(!dir.is_null(), "acc_parse returned NULL for '{}'", text);
+        assert!(!dir.is_null(), "acc_parse returned NULL for '{text}'");
         let kind = roup::acc_directive_kind(dir);
         assert_eq!(
             kind, expected,
-            "directive '{}' returned {}, header macro = {}",
-            text, kind, expected
+            "directive '{text}' returned {kind}, header macro = {expected}"
         );
         roup::acc_directive_free(dir);
     }
@@ -51,8 +50,7 @@ fn acc_multiple_directives_and_end_pairs_match_generated_macros() {
     let paired = roup::acc_directive_end_paired_kind(end_dir);
     assert_eq!(
         paired, expected_parallel,
-        "end paired kind {} != expected {}",
-        paired, expected_parallel
+        "end paired kind {paired} != expected {expected_parallel}"
     );
     roup::acc_directive_free(end_dir);
 }

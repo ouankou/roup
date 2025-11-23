@@ -175,10 +175,7 @@ fn build_omp_directive_parameter(
         // Typed construct parameter for cancel / cancellation point
         if name_lower == "cancel" || name_lower == "cancellation point" {
             if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
-                eprintln!(
-                    "[ast] construct param directive={} value={}",
-                    name_lower, param_str
-                );
+                eprintln!("[ast] construct param directive={name_lower} value={param_str}");
             }
             let construct = match param_str.trim().to_ascii_lowercase().as_str() {
                 "parallel" => OmpConstructType::Parallel,
@@ -200,10 +197,7 @@ fn build_omp_directive_parameter(
                 trimmed
             };
             if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
-                eprintln!(
-                    "[ast] critical param value={} cleaned={}",
-                    param_str, cleaned
-                );
+                eprintln!("[ast] critical param value={param_str} cleaned={cleaned}");
             }
             return Some(OmpDirectiveParameter::CriticalSection(Identifier::new(
                 cleaned,
@@ -374,7 +368,7 @@ fn parse_declare_reduction_param(
     let trimmed = raw.trim();
     let debug = std::env::var_os("ROUP_DEBUG_DECLARE_REDUCTION").is_some();
     if debug {
-        eprintln!("[declare_reduction] raw=\"{}\"", trimmed);
+        eprintln!("[declare_reduction] raw=\"{trimmed}\"");
     }
 
     // Extract the parenthesized portion "(op : types [: combiner])"
@@ -401,10 +395,7 @@ fn parse_declare_reduction_param(
     let inner = trimmed[open + 1..close].trim();
     let mut remainder = trimmed[close + 1..].trim_start().to_string();
     if debug {
-        eprintln!(
-            "[declare_reduction] inner=\"{}\" remainder=\"{}\"",
-            inner, remainder
-        );
+        eprintln!("[declare_reduction] inner=\"{inner}\" remainder=\"{remainder}\"");
     }
 
     // Find separator colons that are not part of '::'
@@ -521,8 +512,7 @@ fn parse_declare_reduction_param(
 
     if debug {
         eprintln!(
-            "[declare_reduction] op={} types={:?} combiner={:?} init={:?}",
-            op_part, type_names, combiner, initializer
+            "[declare_reduction] op={op_part} types={type_names:?} combiner={combiner:?} init={initializer:?}"
         );
     }
 
@@ -1523,7 +1513,7 @@ mod tests {
             parse_declare_reduction_param(input, &config).expect("declare reduction should parse");
         match parsed.operator {
             ReductionOperatorToken::Builtin(ReductionOperator::Min) => {}
-            other => panic!("unexpected operator: {:?}", other),
+            other => panic!("unexpected operator: {other:?}"),
         }
         assert_eq!(parsed.type_names, vec!["struct point".to_string()]);
         assert_eq!(parsed.combiner, "minproc(&omp_out, &omp_in)");

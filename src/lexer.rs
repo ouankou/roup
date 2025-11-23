@@ -93,7 +93,7 @@ pub fn lex_fortran_free_sentinel_with_prefix<'a>(
     let (after_space, _) = skip_space_and_comments(input)?;
 
     // Try full form first (!$omp, !$acc, etc.)
-    let expected = format!("!${}", prefix);
+    let expected = format!("!${prefix}");
     if after_space
         .get(..expected.len())
         .is_some_and(|s| s.eq_ignore_ascii_case(&expected))
@@ -485,7 +485,7 @@ fn match_fortran_sentinel_with_prefix(input: &str, prefix: &str) -> Option<usize
     let mut candidates = Vec::new();
     let lower = prefix.to_ascii_lowercase();
     for sentinel in ["!$", "c$", "*$"] {
-        candidates.push(format!("{}{}", sentinel, lower));
+        candidates.push(format!("{sentinel}{lower}"));
     }
     // Short forms (!$, c$, *$) are valid for both OpenMP and OpenACC
     if lower == "omp" || lower == "acc" {

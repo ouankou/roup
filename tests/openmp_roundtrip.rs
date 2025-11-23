@@ -46,7 +46,7 @@ fn roundtrips_all_openmp_clauses() {
             continue;
         };
 
-        let source = format!("#pragma omp parallel {}", clause_source);
+        let source = format!("#pragma omp parallel {clause_source}");
         let parsed = parse(&source);
 
         assert_eq!(

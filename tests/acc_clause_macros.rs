@@ -76,11 +76,7 @@ fn generated_header_has_all_acc_clauses() {
             let parts: Vec<&str> = l.split_whitespace().collect();
             parts.len() >= 2 && parts[0] == "#define" && parts[1] == *name
         });
-        assert!(
-            found.is_some(),
-            "Missing macro {} in generated header",
-            name
-        );
+        assert!(found.is_some(), "Missing macro {name} in generated header");
 
         let line = found.unwrap();
 
@@ -89,9 +85,7 @@ fn generated_header_has_all_acc_clauses() {
         let parts: Vec<&str> = line.split_whitespace().collect();
         assert!(
             parts.len() >= 3,
-            "Unexpected macro format for {}: {}",
-            name,
-            line
+            "Unexpected macro format for {name}: {line}"
         );
         let val_str = parts.last().unwrap();
 
@@ -104,10 +98,10 @@ fn generated_header_has_all_acc_clauses() {
         };
 
         // Print macros and values for easier debugging when the test runs in CI
-        println!("{} = {}", name, val);
+        println!("{name} = {val}");
 
         // Ensure macro value is not the UNKNOWN_KIND (-1)
-        assert_ne!(val, -1, "Macro {} is UNKNOWN_KIND in header", name);
+        assert_ne!(val, -1, "Macro {name} is UNKNOWN_KIND in header");
 
         values.insert(name.to_string(), val);
     }
@@ -124,7 +118,7 @@ fn generated_header_has_all_acc_clauses() {
     if !duplicates.is_empty() {
         eprintln!("Found duplicate ROUP_ACCC_* numeric values:");
         for (val, names) in &duplicates {
-            eprintln!("  {} -> {:?}", val, names);
+            eprintln!("  {val} -> {names:?}");
         }
         panic!("Duplicate ROUP_ACCC_* numeric values found in generated header");
     }

@@ -85,7 +85,7 @@ fn detect_openacc_language(input: &str) -> Result<(InputLanguage, String), Strin
         // Check for full sentinel ($acc) first
         if rest_lower.starts_with("$acc") {
             let prefix = match first {
-                'c' | 'C' => format!("{}$acc", first),
+                'c' | 'C' => format!("{first}$acc"),
                 '*' => "*$acc".to_string(),
                 _ => return Err("Unable to detect OpenACC directive prefix".to_string()),
             };
@@ -97,7 +97,7 @@ fn detect_openacc_language(input: &str) -> Result<(InputLanguage, String), Strin
             let after_dollar = after_dollar.trim_start();
             if after_dollar.starts_with("acc") {
                 let prefix = match first {
-                    'c' | 'C' => format!("{}$", first),
+                    'c' | 'C' => format!("{first}$"),
                     '*' => "*$".to_string(),
                     _ => return Err("Unable to detect OpenACC directive prefix".to_string()),
                 };
@@ -110,7 +110,7 @@ fn detect_openacc_language(input: &str) -> Result<(InputLanguage, String), Strin
 }
 
 fn print_usage(program: &str) {
-    eprintln!("Usage: {} [OPTIONS] [INPUT]", program);
+    eprintln!("Usage: {program} [OPTIONS] [INPUT]");
     eprintln!();
     eprintln!("Interactive step-by-step parser debugger for OpenMP and OpenACC directives.");
     eprintln!();
@@ -124,9 +124,9 @@ fn print_usage(program: &str) {
     eprintln!("  Provide input as a command-line argument, or via stdin.");
     eprintln!();
     eprintln!("Examples:");
-    eprintln!("  {} '#pragma omp parallel shared(x)'", program);
-    eprintln!("  echo '#pragma omp for' | {}", program);
-    eprintln!("  {} --acc '#pragma acc parallel async(1)'", program);
+    eprintln!("  {program} '#pragma omp parallel shared(x)'");
+    eprintln!("  echo '#pragma omp for' | {program}");
+    eprintln!("  {program} --acc '#pragma acc parallel async(1)'");
 }
 
 fn main() {
@@ -150,7 +150,7 @@ fn main() {
             }
             arg => {
                 if arg.starts_with('-') {
-                    eprintln!("Unknown option: {}", arg);
+                    eprintln!("Unknown option: {arg}");
                     eprintln!();
                     print_usage(program);
                     std::process::exit(1);
@@ -168,7 +168,7 @@ fn main() {
     } else {
         let mut stdin_input = String::new();
         if let Err(e) = io::stdin().read_to_string(&mut stdin_input) {
-            eprintln!("Failed to read from stdin: {}", e);
+            eprintln!("Failed to read from stdin: {e}");
             std::process::exit(1);
         }
         stdin_input
@@ -196,7 +196,7 @@ fn main() {
         match detect_language(trimmed) {
             Ok((d, l)) => (d, l),
             Err(e) => {
-                eprintln!("Error: {}", e);
+                eprintln!("Error: {e}");
                 eprintln!();
                 eprintln!("Hint: Use --omp or --acc to force a specific dialect.");
                 std::process::exit(1);
@@ -218,7 +218,7 @@ fn main() {
     let session = match DebugSession::new(trimmed, config) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Failed to create debug session: {}", e);
+            eprintln!("Failed to create debug session: {e}");
             std::process::exit(1);
         }
     };
@@ -226,7 +226,7 @@ fn main() {
     // Run session
     if interactive {
         if let Err(e) = run_interactive_session(session) {
-            eprintln!("Error during interactive session: {}", e);
+            eprintln!("Error during interactive session: {e}");
             std::process::exit(1);
         }
     } else {

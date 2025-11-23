@@ -143,7 +143,7 @@ fn ensure_no_underscore_variants(mappings: &[(String, i32)]) {
         let mut msg =
             String::from("Found forbidden underscore-form directive variants in AST mapping:\n");
         for v in &bad {
-            msg.push_str(&format!("  - {}\n", v));
+            msg.push_str(&format!("  - {v}\n"));
         }
         msg.push_str("\nRemove these variants from the enum-based mapping in src/c_api or adjust the parser registrations to use canonical tokens only.\n");
         panic!("{}", msg);
@@ -458,7 +458,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
             "Found non-OpenACCKinds.h directive variants in openacc mapping (not present in OpenACCKinds.h whitelist):\n",
         );
         for name in &illegal {
-            msg.push_str(&format!("  - {}\n", name));
+            msg.push_str(&format!("  - {name}\n"));
         }
         msg.push_str("\nPlease remove these variants from src/c_api/openacc.rs or update compat/accparser/accparser/src/OpenACCKinds.h after careful review.\n");
         panic!("{}", msg);
@@ -656,7 +656,7 @@ fn check_no_unknowns(mappings: &[(String, i32)], context: &str) {
             context
         );
         for name in unknowns {
-            msg.push_str(&format!("  - {}\n", name));
+            msg.push_str(&format!("  - {name}\n"));
         }
         msg.push_str("\nPlease add the missing enum arms to the corresponding parser/c_api code so the mapping can be generated from the AST.\n");
         panic!("{}", msg);
@@ -829,12 +829,11 @@ fn load_openacc_kinds_from_header(path: &str) -> std::collections::HashSet<Strin
     // confusing panics listing every directive as illegal.
     if !Path::new(path).exists() {
         panic!(
-            "FATAL: Expected OpenACCKinds.h at '{}' but file was not found.\n\n\
+            "FATAL: Expected OpenACCKinds.h at '{path}' but file was not found.\n\n\
 Please ensure the accparser compatibility submodule is initialized before building.\n\
 Run: git submodule update --init --recursive\n\n\
 If you intentionally removed the submodule, update src/constants_gen.rs to point\n\
-to a valid OpenACCKinds.h location or adjust the build to provide the header.\n",
-            path
+to a valid OpenACCKinds.h location or adjust the build to provide the header.\n"
         );
     }
 

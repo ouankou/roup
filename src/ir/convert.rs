@@ -3459,7 +3459,7 @@ mod tests {
             ClauseData::ItemList(items) => {
                 assert_eq!(items.len(), 2);
             }
-            other => panic!("expected ItemList, got {:?}", other),
+            other => panic!("expected ItemList, got {other:?}"),
         }
     }
 
@@ -3488,7 +3488,7 @@ mod tests {
         let data = parse_clause_data(clause, &config).unwrap();
         match data {
             ClauseData::ItemList(items) => assert_eq!(items.len(), 2),
-            other => panic!("expected ItemList, got {:?}", other),
+            other => panic!("expected ItemList, got {other:?}"),
         }
     }
 
@@ -3511,7 +3511,7 @@ mod tests {
                     .expect("uniform clause present");
                 match &uniform_clause.payload {
                     ClauseData::ItemList(items) => assert_eq!(items.len(), 2),
-                    other => panic!("expected ItemList, got {:?}", other),
+                    other => panic!("expected ItemList, got {other:?}"),
                 }
             }
             _ => panic!("expected OpenMP AST"),
@@ -3559,7 +3559,7 @@ mod tests {
                         assert_eq!(*modifier, Some(LastprivateModifier::Conditional));
                         assert_eq!(items.len(), 3);
                     }
-                    other => panic!("unexpected payload: {:?}", other),
+                    other => panic!("unexpected payload: {other:?}"),
                 }
             }
             _ => panic!("expected OpenMP AST"),

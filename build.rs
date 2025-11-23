@@ -266,6 +266,6 @@ fn generate_clause_kind_rs(out_dir: &Path, header: &str) {
     )
     .unwrap();
     for (ident, value) in clause_kinds {
-        writeln!(file, "pub const {}: i32 = {};", ident, value).unwrap();
+        writeln!(file, "pub const {ident}: i32 = {value};").unwrap();
     }
 }

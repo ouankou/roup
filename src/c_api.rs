@@ -270,7 +270,7 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         | ClauseName::Host
         | ClauseName::Present
         | ClauseName::Create => UNKNOWN_KIND,
-        other => panic!("unmapped ClauseName in constants mapping: {:?}", other),
+        other => panic!("unmapped ClauseName in constants mapping: {other:?}"),
     }
 }
 
@@ -4326,7 +4326,7 @@ fn directive_parameter_data_from_ast(
                 OmpDirectiveParameter::DeclareMapper(_) => "declare_mapper",
                 OmpDirectiveParameter::DeclareSimd(_) => "declare_simd",
             };
-            eprintln!("[c_api] param variant={}", kind_name);
+            eprintln!("[c_api] param variant={kind_name}");
         }
         match param {
             OmpDirectiveParameter::IdentifierList(list)
@@ -6733,7 +6733,7 @@ fn build_reduction_data_from_ast(
                         if rendered.is_empty() {
                             m.to_string()
                         } else {
-                            format!("{}({})", m, rendered)
+                            format!("{m}({rendered})")
                         }
                     } else {
                         m.to_string()

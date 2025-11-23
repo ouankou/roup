@@ -972,7 +972,7 @@ impl fmt::Display for DependIterator {
         write!(f, "={}", self.start)?;
         write!(f, ":{}", self.end)?;
         if let Some(step) = &self.step {
-            write!(f, ":{}", step)?;
+            write!(f, ":{step}")?;
         }
         Ok(())
     }

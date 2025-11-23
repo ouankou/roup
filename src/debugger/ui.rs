@@ -159,7 +159,7 @@ pub fn run_interactive_session(mut session: DebugSession) -> DebugResult<()> {
                 break;
             }
             UserCommand::Invalid(cmd) => {
-                println!("Unknown command: '{}'. Type '?' for help.", cmd);
+                println!("Unknown command: '{cmd}'. Type '?' for help.");
             }
         }
     }
@@ -199,6 +199,6 @@ pub fn run_non_interactive(session: &DebugSession) {
         println!("{}", directive.to_pragma_string());
     } else if let Some(ref error) = session.error {
         println!("\nParsing failed:");
-        println!("{}", error);
+        println!("{error}");
     }
 }
