@@ -3,7 +3,6 @@ title = "ROUP Documentation"
 authors = ["Anjia Wang"]
 description = "Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible"
 language = "en"
-multilingual = false
 src = "src"
 
 [build]

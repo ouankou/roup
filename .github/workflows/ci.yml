@@ -25,9 +25,9 @@ jobs:
       matrix:
         # MSRV + Stable Testing Approach (Rust ecosystem best practice)
         #
-        # MSRV (Minimum Supported Rust Version): 1.85
-        # - Required for mdBook dependencies (edition2024 support in ignore crate)
-        # - Set in Cargo.toml as rust-version = "1.85.0"
+        # MSRV (Minimum Supported Rust Version): 1.88
+        # - Required for mdBook 0.5.x and current dependencies
+        # - Set in Cargo.toml as rust-version = "1.88.0"
         #
         # Stable: Latest stable Rust release
         # - Ensures compatibility with current Rust ecosystem
@@ -38,7 +38,7 @@ jobs:
         #
         # Version should be guarded with quotes (1.82 -> "1.82"). Otherwise, 1.82 may be recognized as 1.8.
         # Note: Clippy lints can vary between versions. Test locally with ./test_rust_versions.sh before pushing.
-        version: ["1.85", "stable"]
+        version: ["1.88", "stable"]
         # ubuntu-22.04-arm, ubuntu-24.04-arm and windows-11-arm are not supported yet for private repositories
         os: [ubuntu-24.04, windows-2025, macos-15]
         llvm: ["20"]

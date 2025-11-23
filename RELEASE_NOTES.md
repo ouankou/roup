@@ -65,7 +65,7 @@ None. All Rust, C, and C++ APIs remain backward compatible.
 
 - Test count now exceeds 620.
 - New suites cover OpenMP_VV round-trips, translation round-trips, Fortran sentinel variations, and directive-specific parsing.
-- CI targets MSRV 1.85 and stable across Linux, macOS, and Windows.
+- CI targets MSRV 1.88 and stable across Linux, macOS, and Windows.
 
 ### Documentation and internal work
 

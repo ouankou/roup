@@ -65,7 +65,7 @@ Ready to code? See [Development Setup](#development-setup) and [Pull Request Pro
 
 ### Prerequisites
 
-- **Rust 1.85+** - [Install Rust](https://rustup.rs/)
+- **Rust 1.88+** - [Install Rust](https://rustup.rs/)
 - **Git** - Version control
 - **mdBook** (optional) - For documentation: `cargo install mdbook`
 

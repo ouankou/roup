@@ -13,14 +13,13 @@ opening a pull request.
 ./test_rust_versions.sh
 
 # Optional: specify exact toolchains
-./test_rust_versions.sh 1.85 stable
+./test_rust_versions.sh 1.88 stable
 ```
 
 ## Rust toolchain policy
 
-- **MSRV:** 1.85.0 (first release with edition 2024 support used by the
-  documentation toolchain). The version is recorded in `Cargo.toml` and the CI
-  workflow.
+- **MSRV:** 1.88.0 (aligned with mdBook 0.5.x and current dependencies). The
+  version is recorded in `Cargo.toml` and the CI workflow.
 - **Stable:** latest stable release. Clippy changes between toolchains, so we
   test MSRV and stable to catch differences early.
 - Update the value only when a new language feature or dependency requires it.
@@ -58,7 +57,7 @@ version-specific failure.
 
 GitHub Actions runs six jobs:
 
-- **Toolchains:** 1.85 (MSRV) and stable
+- **Toolchains:** 1.88 (MSRV) and stable
 - **Operating systems:** Ubuntu 24.04, Windows, and macOS
 
 The build job performs the same checks as `test.sh`; the docs job rebuilds the
@@ -85,4 +84,4 @@ skip gracefully if required tools such as `clang` or `clang-format` are missing.
 - **Do I need rustup?** Yes. The scripts use `rustup` to install and select the
   toolchains they need.
 - **Can I test other versions?** Pass additional toolchains to
-  `test_rust_versions.sh`, for example `./test_rust_versions.sh 1.85 1.86 stable`.
+`test_rust_versions.sh`, for example `./test_rust_versions.sh 1.88 1.89 stable`.
