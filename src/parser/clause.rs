@@ -448,6 +448,7 @@ pub enum ReductionModifier {
     Task,
     Inscan,
     Default,
+    Original,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -505,6 +506,7 @@ pub enum ClauseKind<'a> {
     /// Structured reduction clause with operator
     ReductionClause {
         modifiers: Vec<ReductionModifier>,
+        modifier_items: Vec<Vec<String>>,
         operator: ReductionOperator,
         user_defined_identifier: Option<Cow<'a, str>>,
         variables: Vec<Cow<'a, str>>,
@@ -512,10 +514,18 @@ pub enum ClauseKind<'a> {
     },
 }
 
+/// Separator that appeared before a clause in source.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ClauseSeparator {
+    Space,
+    Comma,
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Clause<'a> {
     pub name: Cow<'a, str>,
     pub kind: ClauseKind<'a>,
+    pub separator: ClauseSeparator,
 }
 
 impl Clause<'_> {
@@ -647,6 +657,7 @@ impl fmt::Display for Clause<'_> {
             }
             ClauseKind::ReductionClause {
                 modifiers,
+                modifier_items,
                 operator,
                 user_defined_identifier,
                 variables,
@@ -659,12 +670,24 @@ impl fmt::Display for Clause<'_> {
                         if idx > 0 {
                             write!(f, ",")?;
                         }
-                        let text = match modifier {
-                            ReductionModifier::Task => "task",
-                            ReductionModifier::Inscan => "inscan",
-                            ReductionModifier::Default => "default",
-                        };
-                        write!(f, "{}", text)?;
+                        match modifier {
+                            ReductionModifier::Task => write!(f, "task")?,
+                            ReductionModifier::Inscan => write!(f, "inscan")?,
+                            ReductionModifier::Default => write!(f, "default")?,
+                            ReductionModifier::Original => {
+                                write!(f, "original")?;
+                                if let Some(items) = modifier_items.get(idx) {
+                                    write!(f, "(")?;
+                                    for (i, item) in items.iter().enumerate() {
+                                        if i > 0 {
+                                            write!(f, ",")?;
+                                        }
+                                        write!(f, "{item}")?;
+                                    }
+                                    write!(f, ")")?;
+                                }
+                            }
+                        }
                     }
                     write!(f, ",")?;
                 }
@@ -720,6 +743,7 @@ impl ClauseRule {
             ClauseRule::Bare => Ok((
                 input,
                 Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
                     name,
                     kind: ClauseKind::Bare,
                 },
@@ -766,6 +790,7 @@ impl ClauseRegistry {
         rest = next;
 
         let mut clauses = Vec::new();
+        let mut next_separator = crate::parser::ClauseSeparator::Space;
         loop {
             let before = rest;
             match self.parse_clause(rest) {
@@ -774,13 +799,21 @@ impl ClauseRegistry {
                     if after_clause.len() == before.len() {
                         break;
                     }
-                    clauses.push(clause);
+                    clauses.push(Clause {
+                        separator: next_separator,
+                        ..clause
+                    });
                     // Prepare for the next clause: optional whitespace/comma
                     let (after_ws, _) = crate::lexer::skip_space_and_comments(after_clause)?;
                     let (after_sep, _) = nom::combinator::opt(nom::character::complete::char(','))
                         .parse(after_ws)?;
                     let (after_ws2, _) = crate::lexer::skip_space_and_comments(after_sep)?;
                     rest = after_ws2;
+                    next_separator = if after_sep != after_ws {
+                        crate::parser::ClauseSeparator::Comma
+                    } else {
+                        crate::parser::ClauseSeparator::Space
+                    };
                 }
                 Err(err) => {
                     if rest.is_empty() {
@@ -963,6 +996,7 @@ fn parse_parenthesized_clause<'a>(
         return Ok((
             rest,
             Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::Parenthesized(normalized),
             },
@@ -1004,6 +1038,7 @@ mod tests {
         assert_eq!(
             clauses,
             vec![Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name: "nowait".into(),
                 kind: ClauseKind::Bare,
             }]
@@ -1027,6 +1062,7 @@ mod tests {
     #[test]
     fn clause_display_roundtrips_bare_clause() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "nowait".into(),
             kind: ClauseKind::Bare,
         };
@@ -1038,6 +1074,7 @@ mod tests {
     #[test]
     fn clause_display_roundtrips_parenthesized_clause() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "private".into(),
             kind: ClauseKind::Parenthesized("a, b".into()),
         };
@@ -1071,6 +1108,7 @@ mod tests {
         Ok((
             input,
             Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::Parenthesized(identifier.into()),
             },

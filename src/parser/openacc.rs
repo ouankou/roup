@@ -585,6 +585,7 @@ fn parse_copyin_clause<'a>(
     Ok((
         rest,
         super::Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name,
             kind: ClauseKind::CopyinClause {
                 modifier,
@@ -646,6 +647,7 @@ fn parse_copyout_clause<'a>(
     Ok((
         rest,
         super::Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name,
             kind: ClauseKind::CopyoutClause {
                 modifier,
@@ -707,6 +709,7 @@ fn parse_create_clause<'a>(
     Ok((
         rest,
         super::Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name,
             kind: ClauseKind::CreateClause {
                 modifier,
@@ -795,9 +798,11 @@ fn parse_reduction_clause<'a>(
     Ok((
         rest,
         super::Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name,
             kind: ClauseKind::ReductionClause {
                 modifiers: Vec::new(),
+                modifier_items: Vec::new(),
                 operator,
                 user_defined_identifier: None,
                 variables,
@@ -853,6 +858,7 @@ fn parse_variable_list_clause<'a>(
         Ok((
             rest,
             super::Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::VariableList(variables),
             },
@@ -862,6 +868,7 @@ fn parse_variable_list_clause<'a>(
         Ok((
             input,
             super::Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::Bare,
             },
@@ -930,6 +937,7 @@ fn parse_gang_clause<'a>(
         Ok((
             rest,
             super::Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::GangClause {
                     modifier,
@@ -942,6 +950,7 @@ fn parse_gang_clause<'a>(
         Ok((
             input,
             super::Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::GangClause {
                     modifier: None,
@@ -1008,6 +1017,7 @@ fn parse_worker_clause<'a>(
         Ok((
             rest,
             super::Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::WorkerClause {
                     modifier,
@@ -1020,6 +1030,7 @@ fn parse_worker_clause<'a>(
         Ok((
             input,
             super::Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::WorkerClause {
                     modifier: None,
@@ -1086,6 +1097,7 @@ fn parse_vector_clause<'a>(
         Ok((
             rest,
             super::Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::VectorClause {
                     modifier,
@@ -1098,6 +1110,7 @@ fn parse_vector_clause<'a>(
         Ok((
             input,
             super::Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::VectorClause {
                     modifier: None,

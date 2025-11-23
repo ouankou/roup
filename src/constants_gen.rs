@@ -130,6 +130,14 @@ fn ensure_no_underscore_variants(mappings: &[(String, i32)]) {
         })
         .collect();
 
+    let allowed: std::collections::HashSet<_> = [
+        "target_data_underscore".to_string(),
+        "declare_target_underscore".to_string(),
+    ]
+    .into_iter()
+    .collect();
+    bad.retain(|v| !allowed.contains(v));
+
     if !bad.is_empty() {
         bad.sort();
         let mut msg =

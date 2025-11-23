@@ -107,6 +107,7 @@ fn build_omp_directive(
         let clause = OmpClause {
             kind: OmpClauseKind::Requires,
             payload: ClauseData::Requires { requirements },
+            separator: crate::ast::OmpClauseSeparator::Space,
         };
         return Ok(OmpDirective {
             kind,
@@ -318,14 +319,14 @@ fn parse_declare_mapper_param(raw: &str, parser_config: &ParserConfig) -> Option
     // Find a colon that is NOT part of a Fortran-style '::'
     if let Some(pos) = inner.find(':') {
         let bytes = inner.as_bytes();
-        if !(bytes.get(pos + 1).copied() == Some(b':')) {
+        if bytes.get(pos + 1).copied() != Some(b':') {
             mapper_id = Some(inner[..pos].trim());
             rest = inner[pos + 1..].trim();
         }
     }
 
     // If we didn't parse a mapper id, everything is the type/variable portion
-    if mapper_id.map_or(true, |id| id.is_empty()) {
+    if mapper_id.is_none_or(|id| id.is_empty()) {
         mapper_id = None;
         rest = inner.trim();
     }
@@ -371,22 +372,134 @@ fn parse_declare_reduction_param(
 ) -> Option<OmpDeclareReduction> {
     let _ = parser_config;
     let trimmed = raw.trim();
-    let (inner, remainder) = if trimmed.starts_with('(') {
-        if let Some(close) = trimmed.rfind(')') {
-            (&trimmed[1..close], trimmed[close + 1..].trim())
-        } else {
-            return None;
+    let debug = std::env::var_os("ROUP_DEBUG_DECLARE_REDUCTION").is_some();
+    if debug {
+        eprintln!("[declare_reduction] raw=\"{}\"", trimmed);
+    }
+
+    // Extract the parenthesized portion "(op : types [: combiner])"
+    let open = trimmed.find('(')?;
+    let mut depth: i32 = 0;
+    let mut close: Option<usize> = None;
+    for (idx, ch) in trimmed.char_indices().skip(open) {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                if depth == 0 {
+                    return None;
+                }
+                depth -= 1;
+                if depth == 0 {
+                    close = Some(idx);
+                    break;
+                }
+            }
+            _ => {}
         }
-    } else {
-        return None;
+    }
+    let close = close?;
+    let inner = trimmed[open + 1..close].trim();
+    let mut remainder = trimmed[close + 1..].trim_start().to_string();
+    if debug {
+        eprintln!(
+            "[declare_reduction] inner=\"{}\" remainder=\"{}\"",
+            inner, remainder
+        );
+    }
+
+    // Find separator colons that are not part of '::'
+    let mut first_sep: Option<usize> = None;
+    let mut second_sep: Option<usize> = None;
+    let bytes = inner.as_bytes();
+    for i in 0..bytes.len() {
+        if bytes[i] != b':' {
+            continue;
+        }
+        if (i > 0 && bytes[i - 1] == b':') || (i + 1 < bytes.len() && bytes[i + 1] == b':') {
+            continue;
+        }
+        if first_sep.is_none() {
+            first_sep = Some(i);
+        } else {
+            second_sep = Some(i);
+            break;
+        }
+    }
+
+    let (op_part, types_part, embedded_combiner) = match (first_sep, second_sep) {
+        (Some(s1), Some(s2)) if s1 < s2 && s2 < inner.len() => {
+            let op = inner[..s1].trim();
+            let types = inner[s1 + 1..s2].trim();
+            let comb = inner[s2 + 1..].trim();
+            (op, types, if comb.is_empty() { None } else { Some(comb) })
+        }
+        (Some(s1), None) if s1 + 1 < inner.len() => {
+            let op = inner[..s1].trim();
+            let types = inner[s1 + 1..].trim();
+            (op, types, None)
+        }
+        _ => return None,
     };
 
-    let parts = inner.splitn(3, ':').map(|s| s.trim()).collect::<Vec<_>>();
-    if parts.len() != 3 {
+    if op_part.is_empty() || types_part.is_empty() {
         return None;
     }
 
-    let operator = match parts[0] {
+    // Parse optional combiner/initializer keywords that may follow the parenthesized portion.
+    let mut combiner: Option<String> = embedded_combiner.map(|c| c.to_string());
+    let mut combiner_from_clause = false;
+    let mut initializer: Option<String> = None;
+    let extract_paren_payload = |text: &str| -> Option<(String, String)> {
+        let trimmed = text.trim_start();
+        let open = trimmed.find('(')?;
+        let mut depth: i32 = 0;
+        let mut close_idx: Option<usize> = None;
+        for (offset, ch) in trimmed[open..].char_indices() {
+            match ch {
+                '(' => depth += 1,
+                ')' => {
+                    if depth == 0 {
+                        return None;
+                    }
+                    depth -= 1;
+                    if depth == 0 {
+                        close_idx = Some(open + offset);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let close = close_idx?;
+        let payload = trimmed[open + 1..close].to_string();
+        let rest = trimmed[close + 1..].trim_start().to_string();
+        Some((payload, rest))
+    };
+
+    while !remainder.is_empty() {
+        if let Some(rest) = remainder.strip_prefix("combiner") {
+            if let Some((payload, after)) = extract_paren_payload(rest) {
+                combiner = Some(payload.trim().to_string());
+                combiner_from_clause = true;
+                remainder = after;
+                continue;
+            } else {
+                return None;
+            }
+        }
+        if let Some(rest) = remainder.strip_prefix("initializer") {
+            if let Some((payload, after)) = extract_paren_payload(rest) {
+                initializer = Some(payload.trim().to_string());
+                remainder = after;
+                continue;
+            } else {
+                return None;
+            }
+        }
+        break;
+    }
+
+    let operator = match op_part {
         "+" => ReductionOperatorToken::Builtin(ReductionOperator::Add),
         "-" => ReductionOperatorToken::Builtin(ReductionOperator::Subtract),
         "*" => ReductionOperatorToken::Builtin(ReductionOperator::Multiply),
@@ -400,41 +513,36 @@ fn parse_declare_reduction_param(
         other => ReductionOperatorToken::Identifier(Identifier::new(other)),
     };
 
-    let type_names = parts[1]
+    let type_names = types_part
         .split(',')
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>();
 
-    let combiner = parts[2].to_string();
+    if debug {
+        eprintln!(
+            "[declare_reduction] op={} types={:?} combiner={:?} init={:?}",
+            op_part, type_names, combiner, initializer
+        );
+    }
 
-    let initializer = if remainder.starts_with("initializer") {
-        if let Some(start) = remainder.find('(') {
-            if let Some(end) = remainder.rfind(')') {
-                let payload = &remainder[start + 1..end];
-                Some(payload.trim().to_string())
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    if type_names.is_empty() || combiner.is_none() {
+        return None;
+    }
 
     Some(OmpDeclareReduction {
         operator,
         type_names,
-        combiner,
+        combiner: combiner.unwrap(),
         initializer,
+        combiner_from_clause,
     })
 }
 
 fn clause_item_to_identifier(item: ClauseItem) -> Identifier {
     match item {
         ClauseItem::Identifier(id) => id,
-        ClauseItem::Variable(var) => Identifier::new(&var.to_string()),
+        ClauseItem::Variable(var) => Identifier::new(var.to_string()),
         ClauseItem::Expression(expr) => Identifier::new(expr.as_str()),
     }
 }
@@ -607,7 +715,11 @@ fn convert_clause_to_omp(
     let payload = parse_clause_data(clause, parser_config)
         .map_err(|err| AstBuildError::ClauseConversion(err.to_string()))?;
 
-    Ok(OmpClause { kind, payload })
+    Ok(OmpClause {
+        kind,
+        payload,
+        separator: clause.separator,
+    })
 }
 
 #[allow(dead_code)]
@@ -681,7 +793,7 @@ fn build_acc_clause_payload(
         DeviceType => Ok(build_acc_device_type_clause(clause)),
         Async | Bind | Collapse | NumGangs | NumWorkers | VectorLength | Seq | Independent
         | Auto | DefaultAsync | NoCreate | NoHost | SelfClause | Tile | Finalize | IfPresent
-        | DevicePtr | DeviceNum => Ok(build_identifier_list_payload(clause)),
+        | DevicePtr | DeviceNum => Ok(build_fallback_clause_payload(clause, parser_config)),
         _ => Ok(build_fallback_clause_payload(clause, parser_config)),
     }
 }
@@ -1365,6 +1477,7 @@ mod tests {
             name: DirectiveName::Parallel,
             parameter: None,
             clauses: vec![Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name: Cow::Borrowed("nowait"),
                 kind: ClauseKind::Bare,
             }],
@@ -1400,5 +1513,20 @@ mod tests {
             &ParserConfig::default(),
         );
         assert!(result.is_ok(), "reduction parse failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn parses_declare_reduction_parameter_payload() {
+        let config = ParserConfig::default();
+        let input = "(min : struct point) combiner(minproc(&omp_out, &omp_in)) initializer(omp_priv = { 1, 2 })";
+        let parsed =
+            parse_declare_reduction_param(input, &config).expect("declare reduction should parse");
+        match parsed.operator {
+            ReductionOperatorToken::Builtin(ReductionOperator::Min) => {}
+            other => panic!("unexpected operator: {:?}", other),
+        }
+        assert_eq!(parsed.type_names, vec!["struct point".to_string()]);
+        assert_eq!(parsed.combiner, "minproc(&omp_out, &omp_in)");
+        assert_eq!(parsed.initializer.as_deref(), Some("omp_priv = { 1, 2 }"));
     }
 }

@@ -148,11 +148,11 @@ impl fmt::Display for Identifier {
 /// let config = ParserConfig::default();
 ///
 /// // arr[0:N]
-/// let section = ArraySection {
-///     lower_bound: Some(Expression::new("0", &config)),
-///     length: Some(Expression::new("N", &config)),
-///     stride: None,
-/// };
+/// let section = ArraySection::new(
+///     Some(Expression::new("0", &config)),
+///     Some(Expression::new("N", &config)),
+///     None,
+/// );
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArraySection {
@@ -170,6 +170,12 @@ pub struct ArraySection {
     ///
     /// If `None`, defaults to 1 (consecutive elements)
     pub stride: Option<Expression>,
+
+    /// Whether a length field was explicitly present (controls colon rendering).
+    pub has_length: bool,
+
+    /// Whether a stride field was explicitly present (controls second colon rendering).
+    pub has_stride: bool,
 }
 
 impl ArraySection {
@@ -179,10 +185,14 @@ impl ArraySection {
         length: Option<Expression>,
         stride: Option<Expression>,
     ) -> Self {
+        let has_length = length.is_some();
+        let has_stride = stride.is_some();
         Self {
             lower_bound,
             length,
             stride,
+            has_length,
+            has_stride,
         }
     }
 
@@ -202,6 +212,8 @@ impl ArraySection {
             lower_bound: Some(index),
             length: None,
             stride: None,
+            has_length: false,
+            has_stride: false,
         }
     }
 
@@ -220,6 +232,8 @@ impl ArraySection {
             lower_bound: None,
             length: None,
             stride: None,
+            has_length: true,
+            has_stride: false,
         }
     }
 
@@ -252,26 +266,24 @@ impl fmt::Display for ArraySection {
     /// ```
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Format: [lower:length:stride]
-        // Omitted parts are skipped, but colons are preserved
+        // Preserve explicit colons even when length/stride are omitted.
 
         if let Some(lower) = &self.lower_bound {
             write!(f, "{lower}")?;
         }
 
-        if self.length.is_some() || self.stride.is_some() {
+        if self.has_length {
             write!(f, ":")?;
+            if let Some(length) = &self.length {
+                write!(f, "{length}")?;
+            }
         }
 
-        if let Some(length) = &self.length {
-            write!(f, "{length}")?;
-        }
-
-        if self.stride.is_some() {
+        if self.has_stride {
             write!(f, ":")?;
-        }
-
-        if let Some(stride) = &self.stride {
-            write!(f, "{stride}")?;
+            if let Some(stride) = &self.stride {
+                write!(f, "{stride}")?;
+            }
         }
 
         Ok(())
@@ -578,7 +590,7 @@ mod tests {
     #[test]
     fn array_section_display_all() {
         let section = ArraySection::all();
-        assert_eq!(format!("{section}"), "");
+        assert_eq!(format!("{section}"), ":");
     }
 
     #[test]

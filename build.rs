@@ -237,15 +237,6 @@ fn main() {
         }
     }
 
-    // Copy header into compat tree so C++ builds pick up new APIs.
-    let compat_header = Path::new("compat/ompparser/src/roup_constants.h");
-    if let Err(err) = fs::copy(&src_dest, &compat_header) {
-        eprintln!(
-            "cargo:warning=failed to copy generated header to compat: {}",
-            err
-        );
-    }
-
     println!("cargo:rerun-if-changed=src/c_api.rs");
     println!("cargo:rerun-if-changed=src/c_api/openacc.rs");
     println!("cargo:rerun-if-changed=src/constants_gen.rs");

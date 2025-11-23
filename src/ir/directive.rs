@@ -1207,6 +1207,7 @@ impl DirectiveIR {
     /// let clauses = vec![
     ///     ClauseData::Reduction {
     ///         modifiers: vec![ReductionModifier::Task],
+    ///         modifier_items: Vec::new(),
     ///         operator: ReductionOperator::Add,
     ///         user_identifier: None,
     ///         items: vec![Identifier::new("sum").into()],
@@ -1763,6 +1764,7 @@ mod tests {
     fn test_directive_ir_display_with_reduction() {
         let clauses = vec![ClauseData::Reduction {
             modifiers: Vec::new(),
+            modifier_items: Vec::new(),
             operator: ReductionOperator::Add,
             user_identifier: None,
             items: vec![ClauseItem::Identifier(Identifier::new("sum"))],

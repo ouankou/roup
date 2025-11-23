@@ -196,6 +196,7 @@ impl<'a> DirectiveBuilder {
             .collect();
         self.clauses.push(ClauseData::Reduction {
             modifiers: Vec::new(),
+            modifier_items: Vec::new(),
             operator,
             user_identifier: None,
             items,
@@ -300,8 +301,7 @@ impl<'a> DirectiveBuilder {
 
     /// Add a nowait clause
     pub fn nowait(mut self) -> Self {
-        self.clauses
-            .push(ClauseData::Bare(Identifier::new("nowait")));
+        self.clauses.push(ClauseData::Nowait { modifier: None });
         self
     }
 

@@ -28,6 +28,7 @@ pub enum DirectiveName {
     DeclareReduction,
     DeclareSimd,
     DeclareTarget,
+    DeclareTargetUnderscore,
     DeclareVariant,
     Depobj,
     Dispatch,
@@ -65,10 +66,12 @@ pub enum DirectiveName {
     ParallelMaskedTaskloopSimd,
     Metadirective,
     BeginMetadirective,
+    EndMetadirective,
     Nothing,
     Ordered,
     Parallel,
     ParallelDo,
+    ParallelDoCompact,
     ParallelDoSimd,
     ParallelFor,
     ParallelForSimd,
@@ -88,7 +91,9 @@ pub enum DirectiveName {
     // Fortran end directives - all map to OMPD_end but have unique enum variants
     EndParallel,
     EndDo,
+    EndDoCompact,
     EndSimd,
+    EndDoSimdCompact,
     EndSections,
     EndSingle,
     EndWorkshare,
@@ -108,6 +113,7 @@ pub enum DirectiveName {
     EndParallelSections,
     EndParallelWorkshare,
     EndParallelMaster,
+    EndParallelSingle,
     EndDoSimd,
     EndForSimd,
     EndParallelDoSimd,
@@ -180,6 +186,7 @@ pub enum DirectiveName {
     Stripe,
     Target,
     TargetData,
+    TargetDataUnderscore,
     TargetDataComposite,
     TargetEnterData,
     TargetExitData,
@@ -302,6 +309,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("declare reduction", DirectiveName::DeclareReduction);
     insert!("declare simd", DirectiveName::DeclareSimd);
     insert!("declare target", DirectiveName::DeclareTarget);
+    insert!("declare_target", DirectiveName::DeclareTargetUnderscore);
     insert!("declare variant", DirectiveName::DeclareVariant);
     insert!("depobj", DirectiveName::Depobj);
     insert!("dispatch", DirectiveName::Dispatch);
@@ -362,11 +370,13 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("master taskloop simd", DirectiveName::MasterTaskloopSimd);
     insert!("metadirective", DirectiveName::Metadirective);
     insert!("begin metadirective", DirectiveName::BeginMetadirective);
+    insert!("end metadirective", DirectiveName::EndMetadirective);
     insert!("nothing", DirectiveName::Nothing);
     insert!("ordered", DirectiveName::Ordered);
     insert!("parallel", DirectiveName::Parallel);
     insert!("parallel do", DirectiveName::ParallelDo);
     insert!("parallel do simd", DirectiveName::ParallelDoSimd);
+    insert!("paralleldo", DirectiveName::ParallelDoCompact);
     insert!("parallel for", DirectiveName::ParallelFor);
     insert!("parallel for simd", DirectiveName::ParallelForSimd);
     insert!("parallel loop", DirectiveName::ParallelLoop);
@@ -387,8 +397,10 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     // Fortran end directives (with space and without space variants)
     insert!("end parallel", DirectiveName::EndParallel);
     insert!("endparallel", DirectiveName::EndParallel);
+    insert!("end parallel single", DirectiveName::EndParallelSingle);
+    insert!("endparallel single", DirectiveName::EndParallelSingle);
     insert!("end do", DirectiveName::EndDo);
-    insert!("enddo", DirectiveName::EndDo);
+    insert!("enddo", DirectiveName::EndDoCompact);
     insert!("end simd", DirectiveName::EndSimd);
     insert!("endsimd", DirectiveName::EndSimd);
     insert!("end sections", DirectiveName::EndSections);
@@ -432,7 +444,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("end parallel master", DirectiveName::EndParallelMaster);
     insert!("endparallelmaster", DirectiveName::EndParallelMaster);
     insert!("end do simd", DirectiveName::EndDoSimd);
-    insert!("enddosimd", DirectiveName::EndDoSimd);
+    insert!("enddosimd", DirectiveName::EndDoSimdCompact);
     insert!("end for simd", DirectiveName::EndForSimd);
     insert!("end parallel do simd", DirectiveName::EndParallelDoSimd);
     insert!("endparalleldosimd", DirectiveName::EndParallelDoSimd);
@@ -596,6 +608,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("stripe", DirectiveName::Stripe);
     insert!("target", DirectiveName::Target);
     insert!("target data", DirectiveName::TargetData);
+    insert!("target_data", DirectiveName::TargetDataUnderscore);
     insert!("target data composite", DirectiveName::TargetDataComposite);
     insert!("target enter data", DirectiveName::TargetEnterData);
     insert!("target exit data", DirectiveName::TargetExitData);
@@ -722,6 +735,12 @@ pub fn lookup_directive_name(name: &str) -> DirectiveName {
     if name.trim().eq_ignore_ascii_case("host_data") {
         return DirectiveName::HostData;
     }
+    if name.trim().eq_ignore_ascii_case("target_data") {
+        return DirectiveName::TargetDataUnderscore;
+    }
+    if name.trim().eq_ignore_ascii_case("declare_target") {
+        return DirectiveName::DeclareTargetUnderscore;
+    }
 
     let normalized = normalize_directive_key(name);
     let key = normalized.to_ascii_lowercase();
@@ -730,13 +749,13 @@ pub fn lookup_directive_name(name: &str) -> DirectiveName {
     // variant does not exist yet. Treat them as their opening directive so
     // downstream conversion can proceed instead of aborting the parse.
     if key == "end metadirective" {
-        return DirectiveName::Metadirective;
+        return DirectiveName::EndMetadirective;
     }
     if key == "end scope" {
         return DirectiveName::EndScope;
     }
     if key == "end parallel single" {
-        return DirectiveName::EndParallel;
+        return DirectiveName::EndParallelSingle;
     }
 
     DIRECTIVE_MAP
@@ -765,6 +784,7 @@ impl DirectiveName {
             DirectiveName::Barrier => "barrier",
             DirectiveName::BeginAssumes => "begin assumes",
             DirectiveName::BeginDeclareTarget => "begin declare target",
+            DirectiveName::DeclareTargetUnderscore => "declare_target",
             DirectiveName::BeginDeclareVariant => "begin declare variant",
             DirectiveName::Cancel => "cancel",
             DirectiveName::CancellationPoint => "cancellation point",
@@ -810,10 +830,12 @@ impl DirectiveName {
             DirectiveName::MasterTaskloopSimd => "master taskloop simd",
             DirectiveName::Metadirective => "metadirective",
             DirectiveName::BeginMetadirective => "begin metadirective",
+            DirectiveName::EndMetadirective => "end metadirective",
             DirectiveName::Nothing => "nothing",
             DirectiveName::Ordered => "ordered",
             DirectiveName::Parallel => "parallel",
             DirectiveName::ParallelDo => "parallel do",
+            DirectiveName::ParallelDoCompact => "paralleldo",
             DirectiveName::ParallelDoSimd => "parallel do simd",
             DirectiveName::ParallelFor => "parallel for",
             DirectiveName::ParallelForSimd => "parallel for simd",
@@ -837,6 +859,7 @@ impl DirectiveName {
             DirectiveName::Stripe => "stripe",
             DirectiveName::Target => "target",
             DirectiveName::TargetData => "target data",
+            DirectiveName::TargetDataUnderscore => "target_data",
             DirectiveName::TargetDataComposite => "target data composite",
             DirectiveName::TargetEnterData => "target enter data",
             DirectiveName::TargetExitData => "target exit data",
@@ -888,7 +911,9 @@ impl DirectiveName {
             DirectiveName::End => "end",
             DirectiveName::EndParallel => "end parallel",
             DirectiveName::EndDo => "end do",
+            DirectiveName::EndDoCompact => "enddo",
             DirectiveName::EndSimd => "end simd",
+            DirectiveName::EndDoSimdCompact => "enddosimd",
             DirectiveName::EndSections => "end sections",
             DirectiveName::EndSingle => "end single",
             DirectiveName::EndWorkshare => "end workshare",
@@ -908,6 +933,7 @@ impl DirectiveName {
             DirectiveName::EndParallelSections => "end parallel sections",
             DirectiveName::EndParallelWorkshare => "end parallel workshare",
             DirectiveName::EndParallelMaster => "end parallel master",
+            DirectiveName::EndParallelSingle => "end parallel single",
             DirectiveName::EndDoSimd => "end do simd",
             DirectiveName::EndForSimd => "end for simd",
             DirectiveName::EndParallelDoSimd => "end parallel do simd",

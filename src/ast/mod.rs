@@ -9,7 +9,7 @@ use std::convert::TryFrom;
 
 use crate::ir::{ClauseData, ClauseItem, Expression, Identifier, SourceLocation, Variable};
 use crate::parser::directive_kind::DirectiveName;
-use crate::parser::ClauseName;
+use crate::parser::{ClauseName, ClauseSeparator};
 
 /// Re-export OpenMP clause payload primitives so downstream users can
 /// centralize on this module while the eventual refactor migrates more IR
@@ -18,6 +18,7 @@ pub type OmpClausePayload = ClauseData;
 pub type OmpClauseItem = ClauseItem;
 pub type OmpIdentifier = Identifier;
 pub type OmpVariable = Variable;
+pub type OmpClauseSeparator = ClauseSeparator;
 
 /// Language identifier used throughout the enum-based AST.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -75,6 +76,7 @@ pub struct AccDirective {
 pub struct OmpClause {
     pub kind: OmpClauseKind,
     pub payload: OmpClausePayload,
+    pub separator: OmpClauseSeparator,
 }
 
 /// Typed OpenACC clause record.
@@ -94,6 +96,17 @@ pub struct OmpSelector {
     pub nested_directive: Option<Box<OmpDirective>>,
     pub is_target_device: bool,
     pub raw: Option<String>,
+    /// Selector keys in the order they appeared in source.
+    pub order: Vec<OmpSelectorKey>,
+}
+
+/// Sequence of selector keys as they appeared in the source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OmpSelectorKey {
+    Device,
+    Implementation,
+    User,
+    Construct,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -111,6 +124,8 @@ pub struct OmpSelectorImpl {
     pub extensions: Vec<String>,
     pub vendor_score: Option<String>,
     pub extension_scores: Vec<Option<String>>,
+    pub requires: Vec<String>,
+    pub require_scores: Vec<Option<String>>,
     pub user_expression: Option<String>,
     pub user_expression_score: Option<String>,
 }
@@ -190,6 +205,9 @@ pub struct OmpDeclareReduction {
     pub type_names: Vec<String>,
     pub combiner: String,
     pub initializer: Option<String>,
+    /// True if the combiner originated from a trailing `combiner(...)` clause
+    /// rather than the embedded third field of the parenthesized parameter.
+    pub combiner_from_clause: bool,
 }
 
 /// Reduction operator token (builtin or user-defined identifier).
@@ -542,6 +560,7 @@ define_omp_directive_kind! {
     DeclareReduction => "declare reduction",
     DeclareSimd => "declare simd",
     DeclareTarget => "declare target",
+    DeclareTargetUnderscore => "declare_target",
     DeclareVariant => "declare variant",
     Depobj => "depobj",
     Dispatch => "dispatch",
@@ -562,7 +581,9 @@ define_omp_directive_kind! {
     EndDeclareVariant => "end declare variant",
     EndParallel => "end parallel",
     EndDo => "end do",
+    EndDoCompact => "enddo",
     EndSimd => "end simd",
+    EndDoSimdCompact => "enddosimd",
     EndSections => "end sections",
     EndSingle => "end single",
     EndWorkshare => "end workshare",
@@ -583,6 +604,7 @@ define_omp_directive_kind! {
     EndParallelSections => "end parallel sections",
     EndParallelWorkshare => "end parallel workshare",
     EndParallelMaster => "end parallel master",
+    EndParallelSingle => "end parallel single",
     EndParallelMasterTaskloop => "end parallel master taskloop",
     EndParallelMasterTaskloopSimd => "end parallel master taskloop simd",
     EndDoSimd => "end do simd",
@@ -646,10 +668,13 @@ define_omp_directive_kind! {
     MasterTaskloopSimd => "master taskloop simd",
     Metadirective => "metadirective",
     BeginMetadirective => "begin metadirective",
+    // Fortran block-ending form of metadirective
+    EndMetadirective => "end metadirective",
     Nothing => "nothing",
     Ordered => "ordered",
     Parallel => "parallel",
     ParallelDo => "parallel do",
+    ParallelDoCompact => "paralleldo",
     ParallelDoSimd => "parallel do simd",
     ParallelFor => "parallel for",
     ParallelForSimd => "parallel for simd",
@@ -675,6 +700,7 @@ define_omp_directive_kind! {
     Stripe => "stripe",
     Target => "target",
     TargetData => "target data",
+    TargetDataUnderscore => "target_data",
     TargetDataComposite => "target data composite",
     TargetEnterData => "target enter data",
     TargetExitData => "target exit data",

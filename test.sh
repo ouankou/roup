@@ -10,6 +10,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+ROOT_DIR="$(pwd)"
+
 echo "========================================"
 echo "  ROUP Comprehensive Test Suite"
 echo "========================================"
@@ -181,24 +183,35 @@ fi
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. ompparser Compat Tests ==="
 if [ -d "compat/ompparser" ] && [ -f "compat/ompparser/build.sh" ]; then
     echo -n "Running compat tests (ctest gating)... "
-    cd compat/ompparser
+    pushd compat/ompparser > /dev/null
+    rm -rf build > /dev/null 2>&1
     if ./build.sh > /tmp/compat_test.log 2>&1; then
-        cd build
+        pushd build > /dev/null
         if ctest --output-on-failure -j$(nproc) > /tmp/ompparser_compat_ctest.log 2>&1; then
-            echo -e "${GREEN}✓ PASS${NC}"
+            summary=$(grep -E "tests failed out of" /tmp/ompparser_compat_ctest.log | tail -1)
+            if [ -n "$summary" ]; then
+                total=$(echo "$summary" | awk '{print $9}')
+                failed=$(echo "$summary" | awk '{print $4}')
+                passed=$((total - failed))
+                echo -e "${GREEN}✓ PASS${NC} (${passed}/${total} tests)"
+            else
+                echo -e "${GREEN}✓ PASS${NC}"
+            fi
         else
             echo -e "${RED}✗ FAIL - ctest failures${NC}"
             tail -200 /tmp/ompparser_compat_ctest.log || true
-            cd ../../..
+            popd > /dev/null
+            popd > /dev/null
             exit 1
         fi
+        popd > /dev/null
     else
         echo -e "${RED}✗ FAIL${NC}"
         cat /tmp/compat_test.log
-        cd ../..
+        popd > /dev/null
         exit 1
     fi
-    cd ../../..
+    popd > /dev/null
 else
     echo -e "${RED}✗ FAIL - ompparser compatibility layer is MANDATORY but not found${NC}"
     echo "   Expected: compat/ompparser/build.sh"
@@ -211,35 +224,37 @@ fi
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. accparser Compat Tests ==="
 if [ -d "compat/accparser" ] && [ -f "compat/accparser/build.sh" ]; then
-    echo -n "Running accparser compat tests (clean isolated build + ctest)... "
-    cd compat/accparser
-    # Use an isolated build dir so we don't interfere with user artifacts
-    BUILD_DIR="build-temp"
-    rm -rf "${BUILD_DIR}" > /dev/null 2>&1
-    mkdir -p "${BUILD_DIR}"
-    pushd "${BUILD_DIR}" > /dev/null
-    # Run the local build script (it will honor being invoked from a build dir)
-    if ../build.sh > /tmp/accparser_compat_build.log 2>&1; then
-        # Run ctest to exercise the test harness; use all CPUs and show failures
+    echo -n "Running accparser compat tests (clean build + ctest)... "
+    pushd compat/accparser > /dev/null
+    rm -rf build > /dev/null 2>&1
+    if ./build.sh > /tmp/accparser_compat_build.log 2>&1; then
+        pushd build > /dev/null
         echo "Running ctest (this may take several minutes)..."
         if ctest --output-on-failure -j$(nproc) > /tmp/accparser_compat_ctest.log 2>&1; then
-            echo -e "${GREEN}✓ PASS${NC}"
+            summary=$(grep -E "tests failed out of" /tmp/accparser_compat_ctest.log | tail -1)
+            if [ -n "$summary" ]; then
+                total=$(echo "$summary" | awk '{print $9}')
+                failed=$(echo "$summary" | awk '{print $4}')
+                passed=$((total - failed))
+                echo -e "${GREEN}✓ PASS${NC} (${passed}/${total} tests)"
+            else
+                echo -e "${GREEN}✓ PASS${NC}"
+            fi
         else
             echo -e "${RED}✗ FAIL - ctest failures${NC}"
             tail -200 /tmp/accparser_compat_ctest.log || true
             popd > /dev/null
-            cd ../..
+            popd > /dev/null
             exit 1
         fi
+        popd > /dev/null
     else
         echo -e "${RED}✗ FAIL - build.sh failed${NC}"
         tail -200 /tmp/accparser_compat_build.log || true
         popd > /dev/null
-        cd ../..
         exit 1
     fi
     popd > /dev/null
-    cd ../..
 else
     echo -e "${YELLOW}⚠ SKIP - accparser compatibility layer not found (optional)${NC}"
     echo "   To enable: git submodule update --init compat/accparser/accparser"
@@ -411,6 +426,17 @@ fi
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. OpenMP_VV Round-Trip Validation ==="
 openmp_vv_status="skipped"
+
+# Attempt to locate clang/clang-format if not on PATH (common when installed under /usr/lib/llvm-XX/bin)
+if ! command -v clang >/dev/null 2>&1 || ! command -v clang-format >/dev/null 2>&1; then
+    for toolchain in /usr/lib/llvm-*/bin; do
+        if [ -x "$toolchain/clang" ] && [ -x "$toolchain/clang-format" ]; then
+            export PATH="$toolchain:$PATH"
+            break
+        fi
+    done
+fi
+
 if command -v clang &>/dev/null && command -v clang-format &>/dev/null; then
     echo -n "Running OpenMP_VV round-trip test (100% required)... "
     if ./test_openmp_vv.sh > /tmp/test_openmp_vv.log 2>&1; then

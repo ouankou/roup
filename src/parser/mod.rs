@@ -9,8 +9,8 @@ pub use ast_builder::AstBuildError;
 
 pub use clause::{
     lookup_clause_name, Clause, ClauseKind, ClauseName, ClauseRegistry, ClauseRegistryBuilder,
-    ClauseRule, CopyinModifier, CopyoutModifier, CreateModifier, GangModifier, ReductionOperator,
-    VectorModifier, WorkerModifier,
+    ClauseRule, ClauseSeparator, CopyinModifier, CopyoutModifier, CreateModifier, GangModifier,
+    ReductionOperator, VectorModifier, WorkerModifier,
 };
 pub use directive::{
     CacheDirectiveData, Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule,
@@ -283,6 +283,7 @@ mod tests {
             Ok((
                 input,
                 Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
                     name,
                     kind: ClauseKind::Parenthesized(value.into()),
                 },

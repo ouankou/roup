@@ -6,9 +6,9 @@ use bitflags::bitflags;
 
 use crate::ast::{
     AccClause as AstAccClause, AccClauseKind as AstAccClauseKind,
-    AccClausePayload as AstAccClausePayload, AccCopyKind, AccCopyModifier, AccCreateModifier,
-    AccDefaultKind, AccDirective as AstAccDirective, AccDirectiveParameter, AccGangClause,
-    DirectiveBody,
+    AccClausePayload as AstAccClausePayload, AccCopyKind, AccCopyModifier, AccCreateKind,
+    AccCreateModifier, AccDefaultKind, AccDirective as AstAccDirective, AccDirectiveParameter,
+    AccGangClause, DirectiveBody,
 };
 use crate::ir::ParserConfig;
 use crate::lexer::Language;
@@ -88,6 +88,10 @@ const ACC_VECTOR_MODIFIER_LENGTH: i32 = 1;
 
 const ACC_WORKER_MODIFIER_UNSPECIFIED: i32 = 0;
 const ACC_WORKER_MODIFIER_NUM: i32 = 1;
+
+const ACC_GANG_MODIFIER_UNSPECIFIED: i32 = 0;
+const ACC_GANG_MODIFIER_NUM: i32 = 1;
+const ACC_GANG_MODIFIER_STATIC: i32 = 2;
 
 const ACC_REDUCTION_OP_UNSPECIFIED: i32 = 0;
 const ACC_REDUCTION_OP_READONLY: i32 = 1;
@@ -748,6 +752,12 @@ pub extern "C" fn acc_directive_end_paired_kind(directive: *const AccDirective) 
 }
 
 fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
+    if std::env::var_os("ROUP_DEBUG_ACC_COMPAT").is_some() {
+        eprintln!(
+            "[c_api] clause kind={:?} payload={:?}",
+            ast_clause.kind, ast_clause.payload
+        );
+    }
     let kind_code = clause_name_to_kind(ast_clause.kind.as_str());
     let mut clause = AccClause {
         kind: kind_code,
@@ -792,6 +802,11 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
                 Some(AccCreateModifier::Zero) => ACC_CREATE_MODIFIER_ZERO,
                 _ => ACC_CREATE_MODIFIER_UNSPECIFIED,
             };
+            clause.original_keyword = Some(make_c_string(match create.kind {
+                AccCreateKind::Create => "create",
+                AccCreateKind::PCreate => "pcreate",
+                AccCreateKind::PresentOrCreate => "present_or_create",
+            }));
         }
         Reduction(reduction) => {
             clause.expressions = identifiers_to_cstrings(&reduction.variables);
@@ -834,7 +849,16 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
             set_vector_worker_payload(&mut clause, data, AstAccClauseKind::Worker);
         }
         Gang(data) => {
-            clause.expressions = gang_clause_expressions(data);
+            clause.modifier = match data.modifier.as_deref() {
+                Some("num") => ACC_GANG_MODIFIER_NUM,
+                Some("static") => ACC_GANG_MODIFIER_STATIC,
+                _ => ACC_GANG_MODIFIER_UNSPECIFIED,
+            };
+            clause.expressions = data
+                .values
+                .iter()
+                .map(|expr| make_c_string(&expr.to_string()))
+                .collect();
         }
     }
 
@@ -849,7 +873,11 @@ fn identifiers_to_cstrings(items: &[crate::ir::Identifier]) -> Vec<CString> {
 }
 
 fn set_vector_worker_payload(clause: &mut AccClause, data: &AccGangClause, kind: AstAccClauseKind) {
-    clause.expressions = clause_expressions_with_modifier(&data.values, data.modifier.as_deref());
+    clause.expressions = data
+        .values
+        .iter()
+        .map(|expr| make_c_string(&expr.to_string()))
+        .collect();
 
     match kind {
         AstAccClauseKind::Vector => {
@@ -866,54 +894,6 @@ fn set_vector_worker_payload(clause: &mut AccClause, data: &AccGangClause, kind:
         }
         _ => {}
     }
-}
-
-fn gang_clause_expressions(data: &AccGangClause) -> Vec<CString> {
-    clause_expressions_with_modifier(&data.values, data.modifier.as_deref())
-}
-
-fn clause_expressions_with_modifier(
-    values: &[crate::ir::Expression],
-    modifier: Option<&str>,
-) -> Vec<CString> {
-    let rendered_values: Vec<String> = values.iter().map(|expr| expr.to_string()).collect();
-
-    if let Some(prefix) = modifier {
-        let joined = join_expression_list(&rendered_values);
-        let formatted = if joined.is_empty() {
-            prefix.to_string()
-        } else {
-            format!("{prefix}: {joined}")
-        };
-        vec![make_c_string(&formatted)]
-    } else {
-        rendered_values
-            .into_iter()
-            .filter_map(|value| {
-                let trimmed = value.trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(make_c_string(trimmed))
-                }
-            })
-            .collect()
-    }
-}
-
-fn join_expression_list(values: &[String]) -> String {
-    let mut result = String::new();
-    for value in values {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        if !result.is_empty() {
-            result.push_str(", ");
-        }
-        result.push_str(trimmed);
-    }
-    result
 }
 
 fn acc_reduction_operator_code(token: &str) -> i32 {

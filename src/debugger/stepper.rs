@@ -252,6 +252,7 @@ impl DebugSession {
                     .clauses
                     .iter()
                     .map(|c| Clause {
+                        separator: crate::parser::ClauseSeparator::Space,
                         name: Cow::Owned(c.name.to_string()),
                         kind: match &c.kind {
                             crate::parser::ClauseKind::Bare => crate::parser::ClauseKind::Bare,
@@ -298,12 +299,14 @@ impl DebugSession {
                             },
                             crate::parser::ClauseKind::ReductionClause {
                                 modifiers,
+                                modifier_items,
                                 operator,
                                 user_defined_identifier,
                                 variables,
                                 space_after_colon,
                             } => crate::parser::ClauseKind::ReductionClause {
                                 modifiers: modifiers.clone(),
+                                modifier_items: modifier_items.clone(),
                                 operator: *operator,
                                 user_defined_identifier: user_defined_identifier
                                     .as_ref()
@@ -348,7 +351,7 @@ impl DebugSession {
                     })
                     .collect();
 
-                let static_directive = Directive {
+                let static_directive: Directive<'static> = Directive {
                     name: directive.name.clone(),
                     parameter: directive
                         .parameter

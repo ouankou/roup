@@ -23,7 +23,9 @@
 //! use roup::ir::{DirectiveKind, ClauseData, Identifier, ValidationContext};
 //!
 //! let context = ValidationContext::new(DirectiveKind::For);
-//! assert!(context.is_clause_allowed(&ClauseData::Bare(Identifier::new("nowait"))).is_ok());
+//! assert!(context
+//!     .is_clause_allowed(&ClauseData::Nowait { modifier: None })
+//!     .is_ok());
 //! ```
 
 use super::{ClauseData, DirectiveIR, DirectiveKind};
@@ -121,6 +123,17 @@ impl ValidationContext {
 
         match clause {
             // nowait is only for worksharing, not parallel
+            ClauseData::Nowait { .. } => {
+                if self.directive.is_worksharing() || self.directive == DirectiveKind::Target {
+                    Ok(())
+                } else {
+                    Err(ValidationError::ClauseNotAllowed {
+                        clause_name,
+                        directive: self.directive.to_string(),
+                        reason: "nowait only allowed on worksharing constructs (for, sections, single) or target".to_string(),
+                    })
+                }
+            }
             ClauseData::Bare(name) if name.to_string() == "nowait" => {
                 if self.directive.is_worksharing() || self.directive == DirectiveKind::Target {
                     Ok(())
@@ -358,6 +371,7 @@ impl ValidationContext {
     /// Get a displayable name for a clause
     fn clause_name(&self, clause: &ClauseData) -> String {
         match clause {
+            ClauseData::Nowait { .. } => "nowait".to_string(),
             ClauseData::Bare(name) => name.to_string(),
             ClauseData::Private { .. } => "private".to_string(),
             ClauseData::Firstprivate { .. } => "firstprivate".to_string(),
@@ -506,14 +520,14 @@ mod tests {
     #[test]
     fn test_nowait_allowed_on_for() {
         let context = ValidationContext::new(DirectiveKind::For);
-        let clause = ClauseData::Bare(Identifier::new("nowait"));
+        let clause = ClauseData::Nowait { modifier: None };
         assert!(context.is_clause_allowed(&clause).is_ok());
     }
 
     #[test]
     fn test_nowait_not_allowed_on_parallel() {
         let context = ValidationContext::new(DirectiveKind::Parallel);
-        let clause = ClauseData::Bare(Identifier::new("nowait"));
+        let clause = ClauseData::Nowait { modifier: None };
         assert!(context.is_clause_allowed(&clause).is_err());
     }
 
@@ -522,6 +536,7 @@ mod tests {
         let context = ValidationContext::new(DirectiveKind::Parallel);
         let clause = ClauseData::Reduction {
             modifiers: Vec::new(),
+            modifier_items: Vec::new(),
             operator: ReductionOperator::Add,
             user_identifier: None,
             items: vec![ClauseItem::Identifier(Identifier::new("sum"))],
@@ -535,6 +550,7 @@ mod tests {
         let context = ValidationContext::new(DirectiveKind::For);
         let clause = ClauseData::Reduction {
             modifiers: Vec::new(),
+            modifier_items: Vec::new(),
             operator: ReductionOperator::Add,
             user_identifier: None,
             items: vec![ClauseItem::Identifier(Identifier::new("sum"))],
@@ -762,7 +778,7 @@ mod tests {
         let ir = DirectiveIR::new(
             DirectiveKind::Parallel,
             "parallel",
-            vec![ClauseData::Bare(Identifier::new("nowait"))],
+            vec![ClauseData::Nowait { modifier: None }],
             SourceLocation::start(),
             Language::C,
         );
@@ -773,7 +789,7 @@ mod tests {
     #[test]
     fn test_nowait_allowed_on_workdistribute() {
         let context = ValidationContext::new(DirectiveKind::Workdistribute);
-        let clause = ClauseData::Bare(Identifier::new("nowait"));
+        let clause = ClauseData::Nowait { modifier: None };
         assert!(context.is_clause_allowed(&clause).is_ok());
     }
 
@@ -782,6 +798,7 @@ mod tests {
         let context = ValidationContext::new(DirectiveKind::Workdistribute);
         let clause = ClauseData::Reduction {
             modifiers: Vec::new(),
+            modifier_items: Vec::new(),
             operator: ReductionOperator::Add,
             user_identifier: None,
             items: vec![ClauseItem::Identifier(Identifier::new("sum"))],

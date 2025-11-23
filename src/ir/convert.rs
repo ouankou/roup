@@ -26,8 +26,8 @@
 //! Parser output:
 //!   Directive { name: "parallel for",
 //!               clauses: [
-//!                 Clause { name: "private", kind: Parenthesized("x, y") },
-//!                 Clause { name: "reduction".into(), kind: Parenthesized("+: sum") }
+//!                 Clause { separator: crate::parser::ClauseSeparator::Space, name: "private", kind: Parenthesized("x, y") },
+//!                 Clause { separator: crate::parser::ClauseSeparator::Space, name: "reduction".into(), kind: Parenthesized("+: sum") }
 //!               ] }
 //!
 //! IR output:
@@ -35,20 +35,22 @@
 //!     kind: DirectiveKind::ParallelFor,
 //!     clauses: [
 //!       ClauseData::Private { items: [Identifier("x"), Identifier("y")] },
-//!       ClauseData::Reduction { operator: Add, items: [Identifier("sum")] }
+//!       ClauseData::Reduction { modifier_items: Vec::new(), operator: Add, items: [Identifier("sum")] }
 //!     ],
 //!     ...
 //!   }
 //! ```
 
 use super::{
-    lang, AffinityModifier, AtomicOp, BindModifier, ClauseData, ClauseItem, ConversionError,
-    DefaultKind, DefaultmapBehavior, DefaultmapCategory, DependIterator, DependType,
-    DepobjUpdateDependence, DeviceModifier, DeviceType, DirectiveIR, DirectiveKind, Expression,
-    GrainsizeModifier, Identifier, Language, LastprivateModifier, LinearModifier, MapModifier,
-    MapType, MemoryOrder, NumTasksModifier, OrderKind, OrderModifier, ParserConfig, ProcBind,
-    ReductionModifier, ReductionOperator, RequireModifier, ScheduleKind, ScheduleModifier,
-    SourceLocation, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
+    lang, AdjustArgsModifier, AffinityModifier, ApplyTransform, ApplyTransformKind, AtKind,
+    AtomicOp, BindModifier, ClauseData, ClauseItem, ConversionError, DefaultKind,
+    DefaultmapBehavior, DefaultmapCategory, DependIterator, DependType, DepobjUpdateDependence,
+    DeviceModifier, DeviceType, DirectiveIR, DirectiveKind, DoacrossType, Expression,
+    GrainsizeModifier, Identifier, InductionItem, InitKind, Language, LastprivateModifier,
+    LinearModifier, MapModifier, MapType, MemoryOrder, NowaitModifier, NumTasksModifier, OrderKind,
+    OrderModifier, ParserConfig, ProcBind, ReductionModifier, ReductionOperator, RequireModifier,
+    ScheduleKind, ScheduleModifier, SeverityKind, SourceLocation, UsesAllocatorBuiltin,
+    UsesAllocatorKind, UsesAllocatorSpec,
 };
 use crate::ast::{
     OmpClauseKind, OmpDirective, OmpDirectiveKind, OmpSelector, OmpSelectorConstruct,
@@ -65,7 +67,6 @@ use crate::parser::{
     directive_kind::DirectiveName,
     Clause, ClauseKind, Directive,
 };
-use crate::parser::{ClauseRegistry, DirectiveRegistry, Parser};
 use std::collections::HashSet;
 
 impl From<ParserReductionModifier> for ReductionModifier {
@@ -74,6 +75,7 @@ impl From<ParserReductionModifier> for ReductionModifier {
             ParserReductionModifier::Task => ReductionModifier::Task,
             ParserReductionModifier::Inscan => ReductionModifier::Inscan,
             ParserReductionModifier::Default => ReductionModifier::Default,
+            ParserReductionModifier::Original => ReductionModifier::Original,
         }
     }
 }
@@ -106,6 +108,7 @@ pub fn parse_directive_kind(
         DirectiveName::Parallel => Ok(DirectiveKind::Parallel),
         DirectiveName::ParallelFor => Ok(DirectiveKind::ParallelFor),
         DirectiveName::ParallelDo => Ok(DirectiveKind::ParallelDo),
+        DirectiveName::ParallelDoCompact => Ok(DirectiveKind::ParallelDo),
         DirectiveName::ParallelForSimd => Ok(DirectiveKind::ParallelForSimd),
         DirectiveName::ParallelDoSimd => Ok(DirectiveKind::ParallelDoSimd),
         DirectiveName::ParallelSections => Ok(DirectiveKind::ParallelSections),
@@ -150,6 +153,7 @@ pub fn parse_directive_kind(
         // Target constructs
         DirectiveName::Target => Ok(DirectiveKind::Target),
         DirectiveName::TargetData => Ok(DirectiveKind::TargetData),
+        DirectiveName::TargetDataUnderscore => Ok(DirectiveKind::TargetData),
         DirectiveName::TargetEnterData => Ok(DirectiveKind::TargetEnterData),
         DirectiveName::TargetExitData => Ok(DirectiveKind::TargetExitData),
         DirectiveName::TargetUpdate => Ok(DirectiveKind::TargetUpdate),
@@ -464,6 +468,7 @@ pub fn parse_map_clause(
         if remainder.starts_with(',') {
             remainder = remainder[1..].trim_start();
         }
+        modifiers.push(MapModifier::Iterator);
     }
 
     // Check for mapper(...) prefix
@@ -502,6 +507,7 @@ pub fn parse_map_clause(
                     "close" => modifiers.push(MapModifier::Close),
                     "present" => modifiers.push(MapModifier::Present),
                     "self" => modifiers.push(MapModifier::SelfMap),
+                    "iterator" => modifiers.push(MapModifier::Iterator),
                     "ompx_hold" => modifiers.push(MapModifier::OmpxHold),
                     other => {
                         return Err(ConversionError::InvalidClauseSyntax(format!(
@@ -512,7 +518,7 @@ pub fn parse_map_clause(
             }
             (map_type, items.trim())
         } else {
-            (Some(MapType::ToFrom), remainder)
+            (None, remainder)
         };
 
     let items = parse_identifier_list(items_str, config)?;
@@ -688,6 +694,277 @@ fn parse_iterator_block(
     Ok(iterators)
 }
 
+fn split_apply_tokens(input: &str) -> (Vec<String>, bool) {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut depth: i32 = 0;
+    let mut used_comma = false;
+    for ch in input.chars() {
+        match ch {
+            '(' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+                current.push(ch);
+            }
+            ',' => {
+                if depth == 0 {
+                    used_comma = true;
+                    let trimmed = current.trim();
+                    if !trimmed.is_empty() {
+                        tokens.push(trimmed.to_string());
+                    }
+                    current.clear();
+                } else {
+                    current.push(ch);
+                }
+            }
+            c if c.is_whitespace() && depth == 0 => {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    tokens.push(trimmed.to_string());
+                }
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        tokens.push(trimmed.to_string());
+    }
+    (tokens, used_comma)
+}
+
+fn parse_apply_clause(
+    content: &str,
+) -> Result<(Option<Identifier>, Vec<ApplyTransform>, bool), ConversionError> {
+    let (label_part, transforms_part) =
+        if let Some((label, rest)) = lang::split_once_top_level(content, ':') {
+            (Some(label.trim()), rest.trim())
+        } else {
+            (None, content.trim())
+        };
+
+    let label = label_part.filter(|s| !s.is_empty()).map(Identifier::new);
+
+    let mut transforms = Vec::new();
+    let (tokens, used_comma) = split_apply_tokens(transforms_part);
+    let mut i = 0;
+    while i < tokens.len() {
+        let tok = tokens[i].trim();
+        let lower = tok.to_ascii_lowercase();
+        let next = tokens.get(i + 1).map(|s| s.as_str());
+
+        let kind;
+        let mut argument: Option<String> = None;
+        if lower.starts_with("unroll") {
+            if let Some(arg) = extract_paren_arg(tok) {
+                kind = ApplyTransformKind::UnrollPartial;
+                argument = Some(arg.trim().to_string());
+            } else if let Some(n) = next {
+                let nl = n.trim().to_ascii_lowercase();
+                if nl.starts_with("partial") {
+                    kind = ApplyTransformKind::UnrollPartial;
+                    if let Some(arg) = extract_paren_arg(n) {
+                        argument = Some(arg.trim().to_string());
+                    }
+                    i += 1;
+                } else if nl.starts_with("full") {
+                    kind = ApplyTransformKind::UnrollFull;
+                    i += 1;
+                } else {
+                    kind = ApplyTransformKind::Unroll;
+                }
+            } else {
+                kind = ApplyTransformKind::Unroll;
+            }
+        } else if lower.starts_with("partial") {
+            kind = ApplyTransformKind::UnrollPartial;
+            if let Some(arg) = extract_paren_arg(tok) {
+                argument = Some(arg.trim().to_string());
+            }
+        } else if lower.starts_with("full") {
+            kind = ApplyTransformKind::UnrollFull;
+        } else if lower.starts_with("reverse") {
+            kind = ApplyTransformKind::Reverse;
+        } else if lower.starts_with("interchange") {
+            kind = ApplyTransformKind::Interchange;
+        } else if lower.starts_with("nothing") {
+            kind = ApplyTransformKind::Nothing;
+        } else if lower.starts_with("tile") || lower.starts_with("sizes") {
+            kind = ApplyTransformKind::TileSizes;
+            if let Some(arg) = extract_paren_arg(tok) {
+                argument = Some(arg.trim().to_string());
+            } else if let Some(n) = next {
+                if n.to_ascii_lowercase().starts_with("sizes") {
+                    if let Some(arg) = extract_paren_arg(n) {
+                        argument = Some(arg.trim().to_string());
+                    }
+                    i += 1;
+                }
+            }
+        } else {
+            kind = ApplyTransformKind::Unknown;
+            if !tok.is_empty() {
+                argument = Some(tok.to_string());
+            }
+        }
+
+        transforms.push(ApplyTransform { kind, argument });
+        i += 1;
+    }
+
+    Ok((label, transforms, used_comma))
+}
+
+fn parse_at_clause(kind: &ClauseKind<'_>) -> Result<ClauseData, ConversionError> {
+    if let ClauseKind::Parenthesized(ref content) = kind {
+        let value = content.as_ref().trim().to_ascii_lowercase();
+        let at_kind = match value.as_str() {
+            "compilation" => AtKind::Compilation,
+            "execution" => AtKind::Execution,
+            "" => AtKind::Unknown,
+            other => {
+                return Err(ConversionError::InvalidClauseSyntax(format!(
+                    "Unknown at clause value: {other}"
+                )))
+            }
+        };
+        Ok(ClauseData::At(at_kind))
+    } else {
+        Err(ConversionError::InvalidClauseSyntax(
+            "at clause requires parenthesized value".to_string(),
+        ))
+    }
+}
+
+fn parse_init_clause(
+    kind: &ClauseKind<'_>,
+    config: &ParserConfig,
+) -> Result<ClauseData, ConversionError> {
+    if let ClauseKind::Parenthesized(ref content) = kind {
+        let mut init_kind = InitKind::Unknown;
+        let mut raw_kind = None;
+        let mut operand = None;
+        let text = content.as_ref().trim();
+        if let Some((lhs, rhs)) = lang::split_once_top_level(text, ':') {
+            let lhs_trim = lhs.trim();
+            if !lhs_trim.is_empty() {
+                match lhs_trim.to_ascii_lowercase().as_str() {
+                    "target" => init_kind = InitKind::Target,
+                    "targetsync" => init_kind = InitKind::Targetsync,
+                    _ => {
+                        init_kind = InitKind::Unknown;
+                        raw_kind = Some(Identifier::new(lhs_trim));
+                    }
+                }
+            }
+            let rhs_trim = rhs.trim();
+            if !rhs_trim.is_empty() {
+                operand = Some(Expression::new(rhs_trim, config));
+            }
+        } else if !text.is_empty() {
+            match text.to_ascii_lowercase().as_str() {
+                "target" => init_kind = InitKind::Target,
+                "targetsync" => init_kind = InitKind::Targetsync,
+                _ => {
+                    init_kind = InitKind::Unknown;
+                    raw_kind = Some(Identifier::new(text));
+                }
+            }
+        }
+        Ok(ClauseData::Init {
+            kind: init_kind,
+            raw_kind,
+            operand,
+        })
+    } else {
+        Err(ConversionError::InvalidClauseSyntax(
+            "init clause requires parenthesized content".to_string(),
+        ))
+    }
+}
+
+fn parse_induction_clause(
+    kind: &ClauseKind<'_>,
+    config: &ParserConfig,
+) -> Result<ClauseData, ConversionError> {
+    if let ClauseKind::Parenthesized(ref content) = kind {
+        let text = content.as_ref().trim();
+        if text.is_empty() {
+            return Ok(ClauseData::Induction { items: Vec::new() });
+        }
+
+        let mut items = Vec::new();
+        for token in split_top_level_items(text) {
+            let part = token.trim();
+            if part.is_empty() {
+                continue;
+            }
+            let lower = part.to_ascii_lowercase();
+            if lower.starts_with("step") {
+                let paren_pos = part.find('(').ok_or_else(|| {
+                    ConversionError::InvalidClauseSyntax(
+                        "step entry in induction clause must be step(expr)".into(),
+                    )
+                })?;
+                let prefix = part[..paren_pos].trim();
+                if !prefix.eq_ignore_ascii_case("step") {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "step entry in induction clause must start with step(".into(),
+                    ));
+                }
+                let (inner, rest) = extract_parenthesized(&part[paren_pos..])?;
+                if !rest.trim().is_empty() {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "step entry in induction clause must be step(expr)".into(),
+                    ));
+                }
+                let expr_text = inner.trim();
+                if expr_text.is_empty() {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "step expression missing in induction clause".into(),
+                    ));
+                }
+                items.push(InductionItem::Step(Expression::new(expr_text, config)));
+                continue;
+            }
+
+            if let Some((label_part, expr_part)) = lang::split_once_top_level(part, ':') {
+                let expr_text = expr_part.trim();
+                if expr_text.is_empty() {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "induction binding missing expression after ':'".into(),
+                    ));
+                }
+                let label = label_part.trim();
+                let label_id = if label.is_empty() {
+                    None
+                } else {
+                    Some(Identifier::new(label))
+                };
+                items.push(InductionItem::Binding {
+                    label: label_id,
+                    expression: Expression::new(expr_text, config),
+                });
+            } else {
+                items.push(InductionItem::Passthrough(Expression::new(part, config)));
+            }
+        }
+
+        Ok(ClauseData::Induction { items })
+    } else {
+        Err(ConversionError::InvalidClauseSyntax(
+            "induction clause requires parenthesized content".to_string(),
+        ))
+    }
+}
+
 /// Parse a linear clause
 ///
 /// Format: `linear([modifier(list):] list[:step])`
@@ -807,7 +1084,9 @@ fn parse_metadirective_selector(
         let raw = content.as_ref();
         let mut selector = parse_selector_content(raw, config)?;
         selector.raw = Some(raw.trim().to_string());
-        Ok(ClauseData::MetadirectiveSelector { selector })
+        Ok(ClauseData::MetadirectiveSelector {
+            selector: Box::new(selector),
+        })
     } else {
         Err(ConversionError::InvalidClauseSyntax(
             "metadirective selector requires parentheses".to_string(),
@@ -837,19 +1116,26 @@ fn parse_selector_content(
             match key.as_str() {
                 "device" => {
                     selector.device = Some(parse_device_selector(value, config)?);
+                    selector.order.push(crate::ast::OmpSelectorKey::Device);
                 }
                 "implementation" | "impl" => {
                     selector.implementation = Some(parse_impl_selector(value)?);
+                    selector
+                        .order
+                        .push(crate::ast::OmpSelectorKey::Implementation);
                 }
                 "user" => {
                     selector.user = Some(parse_user_selector(value, config)?);
+                    selector.order.push(crate::ast::OmpSelectorKey::User);
                 }
                 "construct" | "constructs" => {
                     selector.constructs = Some(parse_constructs_selector(value, config)?);
+                    selector.order.push(crate::ast::OmpSelectorKey::Construct);
                 }
                 "target_device" => {
                     selector.device = Some(parse_device_selector(value, config)?);
                     selector.is_target_device = true;
+                    selector.order.push(crate::ast::OmpSelectorKey::Device);
                 }
                 _ => {
                     // Unknown selector key; ignore but keep raw for round-trip
@@ -868,6 +1154,24 @@ fn parse_selector_content(
         }
     }
 
+    // For otherwise/default metadirective clauses that provide only a directive
+    // payload (no selectors, no colon), treat the remaining text as the nested
+    // directive rather than dropping it on the floor.
+    if selector.nested_directive.is_none()
+        && nested_directive_part.is_none()
+        && selector.device.is_none()
+        && selector.implementation.is_none()
+        && selector.user.is_none()
+        && selector.constructs.is_none()
+    {
+        let candidate = selector_part.trim();
+        if !candidate.is_empty() {
+            if let Some(dir) = parse_nested_directive(candidate, config)? {
+                selector.nested_directive = Some(Box::new(dir));
+            }
+        }
+    }
+
     Ok(selector)
 }
 
@@ -875,9 +1179,16 @@ fn parse_nested_directive(
     text: &str,
     config: &ParserConfig,
 ) -> Result<Option<OmpDirective>, ConversionError> {
-    let parser = Parser::new(DirectiveRegistry::default(), ClauseRegistry::default())
-        .with_language(map_ir_language_to_lexer(config.language()));
-    match parser.parse(text) {
+    let lexer_lang = map_ir_language_to_lexer(config.language());
+    // Use the OpenMP parser with its complete directive/clause registries so
+    // combined constructs (e.g., teams distribute parallel for) parse the same
+    // way as top-level directives instead of devolving into pseudo-clauses.
+    let parser = crate::parser::openmp::parser().with_language(lexer_lang);
+    let prefixed = match lexer_lang {
+        LexerLanguage::C => format!("#pragma omp {text}"),
+        LexerLanguage::FortranFree | LexerLanguage::FortranFixed => format!("!$omp {text}"),
+    };
+    match parser.parse(&prefixed) {
         Ok((_rest, directive)) => {
             let kind = lookup_directive_name(directive.name.as_ref());
             let directive_kind = OmpDirectiveKind::try_from(kind).map_err(|_| {
@@ -896,7 +1207,11 @@ fn parse_nested_directive(
                         clause.name.as_ref()
                     ))
                 })?;
-                clauses.push(crate::ast::OmpClause { kind, payload });
+                clauses.push(crate::ast::OmpClause {
+                    kind,
+                    payload,
+                    separator: clause.separator,
+                });
             }
             Ok(Some(OmpDirective {
                 kind: directive_kind,
@@ -904,7 +1219,19 @@ fn parse_nested_directive(
                 clauses,
             }))
         }
-        Err(_e) => Ok(None),
+        Err(_e) => {
+            // Fallback: accept directive names that omit spaces (e.g., paralleldo)
+            // to keep selector payload structured even when the nested directive
+            // uses legacy formatting.
+            if let Some(kind) = lookup_omp_construct(text) {
+                return Ok(Some(OmpDirective {
+                    kind,
+                    parameter: None,
+                    clauses: Vec::new(),
+                }));
+            }
+            Ok(None)
+        }
     }
 }
 
@@ -1030,6 +1357,17 @@ fn parse_impl_selector(value: &str) -> Result<OmpSelectorImpl, ConversionError> 
                     implementation.extension_scores.push(score);
                 }
             }
+        } else if let Some(arg) = item.strip_prefix("requires") {
+            let args = extract_paren_arg(arg).unwrap_or(arg);
+            for req in split_top_level_items(args) {
+                let req = req.trim();
+                if req.is_empty() {
+                    continue;
+                }
+                let (score, val) = parse_scored_value(req);
+                implementation.requires.push(val);
+                implementation.require_scores.push(score);
+            }
         } else {
             // Treat as user-defined implementation expression
             let (score, val) = parse_scored_value(item);
@@ -1082,8 +1420,40 @@ fn parse_constructs_selector(
             continue;
         }
 
-        let (score, directive_text, _rest) = split_score_and_value(text);
-        if let Some(dir) = parse_nested_directive(directive_text, config)? {
+        // Extract optional score(...) prefix at the start of the selector item.
+        let mut remaining = text;
+        let mut score: Option<String> = None;
+        if remaining.starts_with("score(") {
+            if let Some(end) = find_matching_delim(remaining, 5, '(', ')') {
+                let s = remaining[6..end].trim();
+                if !s.is_empty() {
+                    score = Some(s.to_string());
+                }
+                let after = remaining[end + 1..].trim_start();
+                let after = after.strip_prefix(':').unwrap_or(after).trim_start();
+                remaining = after;
+            }
+        }
+
+        // Separate directive name and clause text (handle parens).
+        let mut directive_text = remaining.trim().to_string();
+        if let Some(open) = directive_text.find('(') {
+            let close = find_matching_delim(&directive_text, open, '(', ')').ok_or_else(|| {
+                ConversionError::InvalidClauseSyntax("Unbalanced construct selector".into())
+            })?;
+            let inner = directive_text[open + 1..close].trim();
+            // If the inner starts with score(...):, strip that score and colon.
+            let (inner_score, val, rest) = split_score_and_value(inner);
+            if score.is_none() {
+                score = inner_score;
+            }
+            let clause_part = rest.unwrap_or(val).trim();
+            directive_text = format!("{} {}", directive_text[..open].trim(), clause_part)
+                .trim()
+                .to_string();
+        }
+
+        if let Some(dir) = parse_nested_directive(&directive_text, config)? {
             let kind = dir.kind;
             constructs.constructs.push(OmpSelectorConstruct {
                 score: score.clone(),
@@ -1091,6 +1461,28 @@ fn parse_constructs_selector(
                 directive: Box::new(dir),
             });
             constructs.scores.push(score);
+        } else {
+            // If we cannot fully parse the nested directive, fall back to a bare directive kind
+            // to keep structured (enum) representation without raw strings.
+            let name_token = directive_text.split_whitespace().next().ok_or_else(|| {
+                ConversionError::InvalidClauseSyntax("Empty construct selector".into())
+            })?;
+            if let Some(kind) = lookup_omp_construct(name_token) {
+                constructs.constructs.push(OmpSelectorConstruct {
+                    score: score.clone(),
+                    kind,
+                    directive: Box::new(OmpDirective {
+                        kind,
+                        parameter: None,
+                        clauses: Vec::new(),
+                    }),
+                });
+                constructs.scores.push(score);
+            } else {
+                return Err(ConversionError::InvalidClauseSyntax(format!(
+                    "Unable to parse construct selector: {directive_text}"
+                )));
+            }
         }
     }
 
@@ -1135,9 +1527,38 @@ fn split_score_and_value(input: &str) -> (Option<String>, &str, Option<&str>) {
     if let Some(colon) = remainder.find(':') {
         let val = remainder[..colon].trim();
         let rest = remainder.get(colon + 1..).map(str::trim);
+        // If the value before ':' is empty (e.g., " : nohost"), use the rest as the value.
+        if val.is_empty() {
+            if let Some(r) = rest {
+                return (score, r, None);
+            }
+        }
         return (score, val, rest);
     }
     (score, remainder, None)
+}
+
+fn find_matching_delim(
+    text: &str,
+    open_pos: usize,
+    open_ch: char,
+    close_ch: char,
+) -> Option<usize> {
+    if text.as_bytes().get(open_pos)? != &(open_ch as u8) {
+        return None;
+    }
+    let mut depth = 1;
+    for (idx, ch) in text.chars().enumerate().skip(open_pos + 1) {
+        if ch == open_ch {
+            depth += 1;
+        } else if ch == close_ch {
+            depth -= 1;
+            if depth == 0 {
+                return Some(idx);
+            }
+        }
+    }
+    None
 }
 
 fn strip_braces(value: &str) -> &str {
@@ -1152,7 +1573,7 @@ fn strip_braces(value: &str) -> &str {
 fn extract_paren_arg(input: &str) -> Option<&str> {
     let trimmed = input.trim();
     if let Some(start) = trimmed.find('(') {
-        if trimmed.ends_with(')') && start + 1 <= trimmed.len() - 1 {
+        if trimmed.ends_with(')') && start < trimmed.len() - 1 {
             return Some(&trimmed[start + 1..trimmed.len() - 1]);
         }
     }
@@ -1210,17 +1631,44 @@ fn parse_uses_allocators_clause(
             if entry.is_empty() {
                 continue;
             }
-            let (name, traits_expr) = split_allocator_entry(entry)?;
-            let allocator_kind = classify_allocator_name(name);
-            let traits = match traits_expr {
-                Some(expr_text) if !expr_text.trim().is_empty() => {
-                    Some(Expression::new(expr_text.trim(), config))
+            let (allocator_name, traits_expr, traits_first) =
+                if let Some(colon_idx) = find_top_level_colon(entry) {
+                    let left = entry[..colon_idx].trim();
+                    let right = entry[colon_idx + 1..].trim();
+                    if right.is_empty() {
+                        let (name, traits) = split_allocator_entry(entry)?;
+                        (name, traits, false)
+                    } else {
+                        let traits_expr = if left.to_ascii_lowercase().starts_with("traits") {
+                            if let Some(open) = left.find('(') {
+                                let close = left.rfind(')');
+                                close.map(|end| left[open + 1..end].trim())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        (right, traits_expr, true)
+                    }
+                } else {
+                    let (name, traits) = split_allocator_entry(entry)?;
+                    (name, traits, false)
+                };
+
+            let allocator_kind = classify_allocator_name(allocator_name);
+            let traits = traits_expr.and_then(|expr_text| {
+                let trimmed = expr_text.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(Expression::new(trimmed, config))
                 }
-                _ => None,
-            };
+            });
             allocators.push(UsesAllocatorSpec {
                 allocator: allocator_kind,
                 traits,
+                traits_first,
             });
         }
 
@@ -1480,11 +1928,13 @@ pub fn parse_clause_data<'a>(
     match clause_name {
         // Bare clauses (no parameters)
         "nowait" => match &clause.kind {
-            ClauseKind::Bare => Ok(ClauseData::Bare(Identifier::new(clause_name))),
+            ClauseKind::Bare => Ok(ClauseData::Nowait { modifier: None }),
             ClauseKind::Parenthesized(content)
                 if content.as_ref().trim().eq_ignore_ascii_case("is_deferred") =>
             {
-                Ok(ClauseData::Bare(Identifier::new(clause_name)))
+                Ok(ClauseData::Nowait {
+                    modifier: Some(NowaitModifier::IsDeferred),
+                })
             }
             _ => Err(ConversionError::InvalidClauseSyntax(
                 "nowait clause accepts only optional is_deferred modifier".to_string(),
@@ -1504,14 +1954,24 @@ pub fn parse_clause_data<'a>(
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let kind_str = content.trim();
-                let kind = match kind_str {
-                    "shared" => DefaultKind::Shared,
-                    "none" => DefaultKind::None,
-                    "private" => DefaultKind::Private,
-                    "firstprivate" => DefaultKind::Firstprivate,
-                    _ => return Ok(ClauseData::Expression(Expression::new(kind_str, config))),
+                let kind_norm = kind_str.to_ascii_lowercase();
+                let kind = match kind_norm.as_str() {
+                    "shared" => Some(DefaultKind::Shared),
+                    "none" => Some(DefaultKind::None),
+                    "private" => Some(DefaultKind::Private),
+                    "firstprivate" => Some(DefaultKind::Firstprivate),
+                    _ => None,
                 };
-                Ok(ClauseData::Default(kind))
+                if let Some(kind) = kind {
+                    Ok(ClauseData::Default(kind))
+                } else {
+                    let directive = parse_nested_directive(kind_str, config)?.ok_or_else(|| {
+                        ConversionError::InvalidClauseSyntax(format!(
+                            "Unrecognized default clause content: {kind_str}"
+                        ))
+                    })?;
+                    Ok(ClauseData::MetadirectiveDefault { directive })
+                }
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
                     "default clause requires parenthesized content".to_string(),
@@ -1678,15 +2138,36 @@ pub fn parse_clause_data<'a>(
                         (Vec::new(), op_str.trim())
                     };
 
-                    let modifiers: Vec<ReductionModifier> = modifier_tokens
-                        .iter()
-                        .filter_map(|m| match *m {
-                            "task" => Some(ReductionModifier::Task),
-                            "inscan" => Some(ReductionModifier::Inscan),
-                            "default" => Some(ReductionModifier::Default),
-                            _ => None,
-                        })
-                        .collect();
+                    let mut modifiers: Vec<ReductionModifier> = Vec::new();
+                    let mut modifier_items: Vec<Vec<ClauseItem>> = Vec::new();
+                    for m in modifier_tokens {
+                        let m_trim = m.trim();
+                        if m_trim.starts_with("original") {
+                            modifiers.push(ReductionModifier::Original);
+                            if let Some(start) = m_trim.find('(') {
+                                if let Some(end) = m_trim.rfind(')') {
+                                    if end > start + 1 {
+                                        let inner = &m_trim[start + 1..end];
+                                        let items = parse_identifier_list(inner, config)?;
+                                        modifier_items.push(items);
+                                        continue;
+                                    }
+                                }
+                            }
+                            modifier_items.push(Vec::new());
+                        } else {
+                            let maybe = match m_trim {
+                                "task" => Some(ReductionModifier::Task),
+                                "inscan" => Some(ReductionModifier::Inscan),
+                                "default" => Some(ReductionModifier::Default),
+                                _ => None,
+                            };
+                            if let Some(modifier) = maybe {
+                                modifiers.push(modifier);
+                                modifier_items.push(Vec::new());
+                            }
+                        }
+                    }
 
                     let operator = parse_reduction_operator(op_token)?;
                     let user_identifier = match operator {
@@ -1697,6 +2178,7 @@ pub fn parse_clause_data<'a>(
                     let space_after_colon = items_str.starts_with(' ');
                     Ok(ClauseData::Reduction {
                         modifiers,
+                        modifier_items,
                         operator,
                         user_identifier,
                         items,
@@ -1710,6 +2192,7 @@ pub fn parse_clause_data<'a>(
             }
             ClauseKind::ReductionClause {
                 modifiers,
+                modifier_items,
                 operator,
                 user_defined_identifier,
                 variables,
@@ -1738,16 +2221,32 @@ pub fn parse_clause_data<'a>(
                     }
                 };
                 let operator = parse_reduction_operator(op_text.trim())?;
+                let mut user_identifier = user_defined_identifier
+                    .as_ref()
+                    .map(|id| Identifier::new(id.as_ref()));
+                if matches!(operator, ReductionOperator::Custom) && user_identifier.is_none() {
+                    user_identifier = Some(Identifier::new(op_text.trim()));
+                }
                 let items = variables
                     .iter()
                     .map(|item| ClauseItem::Identifier(Identifier::new(item.as_ref())))
                     .collect();
+                let mapped_modifiers: Vec<ReductionModifier> =
+                    modifiers.iter().map(|m| (*m).into()).collect();
+                let mapped_modifier_items: Vec<Vec<ClauseItem>> = modifier_items
+                    .iter()
+                    .map(|list| {
+                        list.iter()
+                            .map(|item| ClauseItem::Identifier(Identifier::new(item.as_str())))
+                            .collect()
+                    })
+                    .collect();
+
                 Ok(ClauseData::Reduction {
-                    modifiers: modifiers.iter().map(|m| (*m).into()).collect(),
+                    modifiers: mapped_modifiers,
+                    modifier_items: mapped_modifier_items,
                     operator,
-                    user_identifier: user_defined_identifier
-                        .as_ref()
-                        .map(|id| Identifier::new(id.as_ref())),
+                    user_identifier,
                     items,
                     space_after_colon: *space_after_colon,
                 })
@@ -1823,6 +2322,40 @@ pub fn parse_clause_data<'a>(
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
                     "depend clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // doacross(source|sink : deps)
+        "doacross" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let inner = content.as_ref();
+                let (kind_text, rest) = match inner.split_once(':') {
+                    Some(parts) => (parts.0.trim(), parts.1.trim()),
+                    None => (inner.trim(), ""),
+                };
+                let kind = match kind_text.to_ascii_lowercase().as_str() {
+                    "source" => DoacrossType::Source,
+                    "sink" => DoacrossType::Sink,
+                    "" => DoacrossType::Unknown,
+                    other => {
+                        return Err(ConversionError::InvalidClauseSyntax(format!(
+                            "unknown doacross kind: {other}"
+                        )))
+                    }
+                };
+                let items = if rest.is_empty() {
+                    Vec::new()
+                } else {
+                    split_top_level_items(rest)
+                        .into_iter()
+                        .map(|s| ClauseItem::Expression(Expression::new(s.trim(), config)))
+                        .collect()
+                };
+                Ok(ClauseData::Doacross { kind, items })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "doacross clause requires parenthesized content".to_string(),
                 ))
             }
         }
@@ -2049,6 +2582,7 @@ pub fn parse_clause_data<'a>(
                     let space_after_colon = items_str.starts_with(' ');
                     Ok(ClauseData::Reduction {
                         modifiers: Vec::new(),
+                        modifier_items: Vec::new(),
                         operator,
                         user_identifier: None,
                         items,
@@ -2066,6 +2600,7 @@ pub fn parse_clause_data<'a>(
                 user_defined_identifier,
                 variables,
                 space_after_colon,
+                modifier_items: _,
             } => {
                 let op_text = match operator {
                     ParserReductionOperator::Add => "+",
@@ -2090,16 +2625,21 @@ pub fn parse_clause_data<'a>(
                     }
                 };
                 let operator = parse_reduction_operator(op_text.trim())?;
+                let mut user_identifier = user_defined_identifier
+                    .as_ref()
+                    .map(|id| Identifier::new(id.as_ref()));
+                if matches!(operator, ReductionOperator::Custom) && user_identifier.is_none() {
+                    user_identifier = Some(Identifier::new(op_text.trim()));
+                }
                 let items = variables
                     .iter()
                     .map(|item| ClauseItem::Identifier(Identifier::new(item.as_ref())))
                     .collect();
                 Ok(ClauseData::Reduction {
                     modifiers: modifiers.iter().map(|m| (*m).into()).collect(),
+                    modifier_items: Vec::new(),
                     operator,
-                    user_identifier: user_defined_identifier
-                        .as_ref()
-                        .map(|id| Identifier::new(id.as_ref())),
+                    user_identifier,
                     items,
                     space_after_colon: *space_after_colon,
                 })
@@ -2195,6 +2735,83 @@ pub fn parse_clause_data<'a>(
                 ))
             }
         }
+
+        // adjust_args([modifier:] expr-list)
+        "adjust_args" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let text = content.as_ref().trim();
+                let (modifier_text, args_text) =
+                    if let Some((mod_part, rest)) = lang::split_once_top_level(text, ':') {
+                        (mod_part.trim(), Some(rest.trim()))
+                    } else {
+                        ("", Some(text))
+                    };
+
+                let (modifier, custom_modifier) = match modifier_text.to_ascii_lowercase().as_str()
+                {
+                    "" => (AdjustArgsModifier::Unspecified, None),
+                    "need_device_ptr" => (AdjustArgsModifier::NeedDevicePtr, None),
+                    _ => (
+                        AdjustArgsModifier::Custom,
+                        Some(Identifier::new(modifier_text)),
+                    ),
+                };
+
+                let mut arguments = Vec::new();
+                if let Some(args_part) = args_text {
+                    for entry in split_top_level_items(args_part) {
+                        let expr_text = entry.trim();
+                        if expr_text.is_empty() {
+                            continue;
+                        }
+                        arguments.push(Expression::new(expr_text, config));
+                    }
+                }
+
+                Ok(ClauseData::AdjustArgs {
+                    modifier,
+                    custom_modifier,
+                    arguments,
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "adjust_args clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // apply([label:] transform-list)
+        "apply" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let (label, transforms, comma_separated) =
+                    parse_apply_clause(content.as_ref().trim())?;
+                Ok(ClauseData::Apply {
+                    label,
+                    transforms,
+                    comma_separated,
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "apply clause requires parenthesized content".to_string(),
+                ))
+            }
+        }
+
+        // collector(expression)
+        "collector" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                Ok(ClauseData::Collector {
+                    expression: Expression::unparsed(content.as_ref().trim()),
+                })
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "collector clause requires parenthesized expression".to_string(),
+                ))
+            }
+        }
+
+        // induction(step(...), [label:]expr, ...)
+        "induction" => parse_induction_clause(&clause.kind, config),
 
         // filter(expression)
         "filter" => {
@@ -2301,6 +2918,34 @@ pub fn parse_clause_data<'a>(
                 ))
             }
         }
+
+        // at(compilation|execution) for error directive
+        "at" => parse_at_clause(&clause.kind),
+
+        // severity(fatal|warning) for error directive
+        "severity" => {
+            if let ClauseKind::Parenthesized(ref content) = clause.kind {
+                let value = content.as_ref().trim().to_ascii_lowercase();
+                let kind = match value.as_str() {
+                    "fatal" => SeverityKind::Fatal,
+                    "warning" => SeverityKind::Warning,
+                    "" => SeverityKind::Unknown,
+                    other => {
+                        return Err(ConversionError::InvalidClauseSyntax(format!(
+                            "Unknown severity value: {other}"
+                        )))
+                    }
+                };
+                Ok(ClauseData::Severity(kind))
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "severity clause requires parenthesized value".to_string(),
+                ))
+            }
+        }
+
+        // init([kind][:operand]) for interop
+        "init" => parse_init_clause(&clause.kind, config),
 
         // use_device_ptr(list)
         "use_device_ptr" => {
@@ -2513,6 +3158,27 @@ pub fn parse_clause_data<'a>(
         // uses_allocators(allocator[(traits)], ...)
         "uses_allocators" => parse_uses_allocators_clause(&clause.kind, config),
 
+        // fail(memory-order) for atomic compare fail
+        "fail" => {
+            let order = match &clause.kind {
+                ClauseKind::Parenthesized(content) => {
+                    let trimmed = content.as_ref().trim();
+                    if trimmed.is_empty() {
+                        MemoryOrder::SeqCst
+                    } else {
+                        parse_memory_order(trimmed)?
+                    }
+                }
+                ClauseKind::Bare => MemoryOrder::SeqCst,
+                _ => {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "fail clause expects an optional memory order".to_string(),
+                    ))
+                }
+            };
+            Ok(ClauseData::Fail { order })
+        }
+
         // requires(...) with modifiers
         "requires" => parse_requires_clause(&clause.kind, config),
 
@@ -2543,6 +3209,7 @@ pub fn parse_clause_data<'a>(
                 user_defined_identifier,
                 variables,
                 space_after_colon,
+                modifier_items: _,
             } => {
                 let op_text = match operator {
                     ParserReductionOperator::Add => "+",
@@ -2567,16 +3234,21 @@ pub fn parse_clause_data<'a>(
                     }
                 };
                 let operator = parse_reduction_operator(op_text.trim())?;
+                let mut user_identifier = user_defined_identifier
+                    .as_ref()
+                    .map(|id| Identifier::new(id.as_ref()));
+                if matches!(operator, ReductionOperator::Custom) && user_identifier.is_none() {
+                    user_identifier = Some(Identifier::new(op_text.trim()));
+                }
                 let items = variables
                     .iter()
                     .map(|item| ClauseItem::Identifier(Identifier::new(item.as_ref())))
                     .collect();
                 Ok(ClauseData::Reduction {
                     modifiers: modifiers.iter().map(|m| (*m).into()).collect(),
+                    modifier_items: Vec::new(),
                     operator,
-                    user_identifier: user_defined_identifier
-                        .as_ref()
-                        .map(|id| Identifier::new(id.as_ref())),
+                    user_identifier,
                     items,
                     space_after_colon: *space_after_colon,
                 })
@@ -2595,13 +3267,14 @@ pub fn parse_clause_data<'a>(
 /// ## Example
 ///
 /// ```
-/// # use roup::parser::{Directive, Clause, ClauseKind};
+/// # use roup::parser::{Clause, ClauseKind, ClauseSeparator, Directive};
 /// # use roup::ir::{convert::convert_directive, Language, SourceLocation, ParserConfig};
 /// let directive = Directive {
 ///     name: "parallel".into(),
 ///     parameter: None,
 ///     clauses: vec![
 ///         Clause {
+///             separator: ClauseSeparator::Space,
 ///             name: "default".into(),
 ///             kind: ClauseKind::Parenthesized("shared".into()),
 ///         },
@@ -2720,7 +3393,8 @@ mod tests {
             parameter: None,
             clauses: vec![OmpClause {
                 kind: OmpClauseKind::Nowait,
-                payload: ClauseData::Bare(Identifier::new("nowait")),
+                payload: ClauseData::Nowait { modifier: None },
+                separator: crate::ast::OmpClauseSeparator::Space,
             }],
         };
 
@@ -2762,18 +3436,20 @@ mod tests {
     #[test]
     fn test_parse_clause_data_bare() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "nowait".into(),
             kind: ClauseKind::Bare,
         };
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
-        assert!(matches!(data, ClauseData::Bare(_)));
+        assert!(matches!(data, ClauseData::Nowait { modifier: None }));
         assert_eq!(data.to_string(), "nowait");
     }
 
     #[test]
     fn test_parse_clause_data_uniform_list() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "uniform".into(),
             kind: ClauseKind::Parenthesized("*a, &b".into()),
         };
@@ -2893,6 +3569,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_default_shared() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "default".into(),
             kind: ClauseKind::Parenthesized("shared".into()),
         };
@@ -2904,6 +3581,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_private() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "private".into(),
             kind: ClauseKind::Parenthesized("x, y".into()),
         };
@@ -2919,6 +3597,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_num_threads() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "num_threads".into(),
             kind: ClauseKind::Parenthesized("4".into()),
         };
@@ -2930,6 +3609,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_if_simple() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "if".into(),
             kind: ClauseKind::Parenthesized("n > 100".into()),
         };
@@ -2950,6 +3630,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_if_with_modifier() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "if".into(),
             kind: ClauseKind::Parenthesized("parallel: n > 100".into()),
         };
@@ -2991,10 +3672,12 @@ mod tests {
             parameter: None,
             clauses: vec![
                 Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
                     name: "default".into(),
                     kind: ClauseKind::Parenthesized("shared".into()),
                 },
                 Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
                     name: "private".into(),
                     kind: ClauseKind::Parenthesized("x".into()),
                 },
@@ -3078,6 +3761,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_reduction() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "reduction".into(),
             kind: ClauseKind::Parenthesized("+: sum".into()),
         };
@@ -3097,6 +3781,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_reduction_multiple_items() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "reduction".into(),
             kind: ClauseKind::Parenthesized("*: a, b, c".into()),
         };
@@ -3116,6 +3801,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_reduction_minmax() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "reduction".into(),
             kind: ClauseKind::Parenthesized("min: value".into()),
         };
@@ -3313,7 +3999,7 @@ mod tests {
             ..
         } = data
         {
-            assert_eq!(map_type, Some(MapType::ToFrom));
+            assert_eq!(map_type, None);
             assert!(mapper.is_none());
             assert_eq!(items.len(), 2);
         } else {
@@ -3373,6 +4059,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_depend() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "depend".into(),
             kind: ClauseKind::Parenthesized("in: x, y".into()),
         };
@@ -3433,6 +4120,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_fortran_private_variables() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "private".into(),
             kind: ClauseKind::Parenthesized("A(1:N), B(:, :)".into()),
         };
@@ -3456,6 +4144,7 @@ mod tests {
     #[test]
     fn test_parse_clause_data_proc_bind() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "proc_bind".into(),
             kind: ClauseKind::Parenthesized("close".into()),
         };

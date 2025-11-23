@@ -84,15 +84,41 @@ impl<'a> Directive<'a> {
                         "shared"
                             | "private"
                             | "firstprivate"
-                            | "lastprivate"
                             | "copyprivate"
                             | "copyin"
                             | "copyout"
-                            | "linear"
                             | "aligned"
                             | "nontemporal"
                     ) {
                         0
+                    } else if name_lower == "uses_allocators" {
+                        // Preserve multiple occurrences; give each a unique key.
+                        2_000_000 + order.len() as u32
+                    } else if name_lower == "depend" {
+                        // Merge depend clauses that share the same modifier/iterator prefix.
+                        use std::collections::hash_map::DefaultHasher;
+                        use std::hash::{Hash, Hasher};
+                        let mut depth = 0i32;
+                        let mut split_at = content.len();
+                        for (idx, ch) in content.char_indices() {
+                            match ch {
+                                '(' | '[' | '{' => depth += 1,
+                                ')' | ']' | '}' => {
+                                    if depth > 0 {
+                                        depth -= 1;
+                                    }
+                                }
+                                ':' if depth == 0 => {
+                                    split_at = idx;
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                        let prefix = content[..split_at].trim().to_ascii_lowercase();
+                        let mut hasher = DefaultHasher::new();
+                        prefix.hash(&mut hasher);
+                        2 + (hasher.finish() % 1_000_000) as u32
                     } else {
                         // Use hash of content to distinguish different parameter values
                         use std::collections::hash_map::DefaultHasher;
@@ -204,10 +230,12 @@ impl<'a> Directive<'a> {
                         // Create merged clause with same structure as first
                         let merged_clause = match &first.kind {
                             ClauseKind::VariableList(_) => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::VariableList(vars),
                             },
                             ClauseKind::GangClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::GangClause {
                                     modifier: *modifier,
@@ -215,6 +243,7 @@ impl<'a> Directive<'a> {
                                 },
                             },
                             ClauseKind::WorkerClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::WorkerClause {
                                     modifier: *modifier,
@@ -222,6 +251,7 @@ impl<'a> Directive<'a> {
                                 },
                             },
                             ClauseKind::VectorClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::VectorClause {
                                     modifier: *modifier,
@@ -233,24 +263,85 @@ impl<'a> Directive<'a> {
                         new_clauses.push(merged_clause);
                     }
                     ClauseKind::Parenthesized(_) => {
-                        // Merge list-based parenthesized clauses (e.g., shared/private) with deduplication.
-                        let mut vars = Vec::new();
-                        let mut seen = HashSet::new();
-                        for clause in &group {
-                            if let ClauseKind::Parenthesized(content) = &clause.kind {
-                                for var in parse_variable_list(content.as_ref()) {
-                                    let v = var.to_string();
-                                    if seen.insert(v.clone()) {
-                                        vars.push(Cow::Owned(v));
+                        let name_lower = first.name.to_ascii_lowercase();
+                        if name_lower == "depend" {
+                            // Merge depend clauses by preserving the modifier prefix once and
+                            // concatenating the unique variable list.
+                            let mut merged_prefix = String::new();
+                            let mut vars = Vec::new();
+                            let mut seen = HashSet::new();
+                            for clause in &group {
+                                if let ClauseKind::Parenthesized(content) = &clause.kind {
+                                    let text = content.as_ref();
+                                    let mut depth = 0i32;
+                                    let mut split_at = text.len();
+                                    for (idx, ch) in text.char_indices() {
+                                        match ch {
+                                            '(' | '[' | '{' => depth += 1,
+                                            ')' | ']' | '}' => {
+                                                if depth > 0 {
+                                                    depth -= 1;
+                                                }
+                                            }
+                                            ':' if depth == 0 => {
+                                                split_at = idx;
+                                                break;
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    let prefix = text[..split_at].trim();
+                                    if merged_prefix.is_empty() {
+                                        merged_prefix = prefix.to_string();
+                                    }
+                                    let remainder = if split_at < text.len() {
+                                        text[split_at + 1..].trim()
+                                    } else {
+                                        ""
+                                    };
+                                    for var in parse_variable_list(remainder) {
+                                        let v = var.to_string();
+                                        if seen.insert(v.clone()) {
+                                            vars.push(Cow::Owned(v));
+                                        }
                                     }
                                 }
                             }
+                            let merged_content = if !merged_prefix.is_empty() {
+                                if vars.is_empty() {
+                                    merged_prefix
+                                } else {
+                                    format!("{merged_prefix}: {}", vars.join(", "))
+                                }
+                            } else {
+                                vars.join(", ")
+                            };
+                            new_clauses.push(Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
+                                name: first.name.clone(),
+                                kind: ClauseKind::Parenthesized(Cow::Owned(merged_content)),
+                            });
+                        } else {
+                            // Merge list-based parenthesized clauses (e.g., shared/private) with deduplication.
+                            let mut vars = Vec::new();
+                            let mut seen = HashSet::new();
+                            for clause in &group {
+                                if let ClauseKind::Parenthesized(content) = &clause.kind {
+                                    for var in parse_variable_list(content.as_ref()) {
+                                        let v = var.to_string();
+                                        if seen.insert(v.clone()) {
+                                            vars.push(Cow::Owned(v));
+                                        }
+                                    }
+                                }
+                            }
+                            let merged_content = vars.join(", ");
+                            new_clauses.push(Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
+                                name: first.name.clone(),
+                                kind: ClauseKind::Parenthesized(Cow::Owned(merged_content)),
+                            });
                         }
-                        let merged_content = vars.join(", ");
-                        new_clauses.push(Clause {
-                            name: first.name.clone(),
-                            kind: ClauseKind::Parenthesized(Cow::Owned(merged_content)),
-                        });
                     }
                     ClauseKind::ReductionClause {
                         modifiers,
@@ -273,9 +364,11 @@ impl<'a> Directive<'a> {
                             }
                         }
                         new_clauses.push(Clause {
+                            separator: crate::parser::ClauseSeparator::Space,
                             name: first.name.clone(),
                             kind: ClauseKind::ReductionClause {
                                 modifiers: modifiers.clone(),
+                                modifier_items: Vec::new(),
                                 operator: *operator,
                                 user_defined_identifier: user_defined_identifier.clone(),
                                 variables: vars,
@@ -305,6 +398,7 @@ impl<'a> Directive<'a> {
                         }
                         let merged_clause = match &first.kind {
                             ClauseKind::CopyinClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::CopyinClause {
                                     modifier: *modifier,
@@ -312,6 +406,7 @@ impl<'a> Directive<'a> {
                                 },
                             },
                             ClauseKind::CopyoutClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::CopyoutClause {
                                     modifier: *modifier,
@@ -319,6 +414,7 @@ impl<'a> Directive<'a> {
                                 },
                             },
                             ClauseKind::CreateClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::CreateClause {
                                     modifier: *modifier,
@@ -368,14 +464,14 @@ impl<'a> Directive<'a> {
     ///
     /// # Example
     /// ```
-    /// # use roup::parser::{Directive, Clause, ClauseKind};
+    /// # use roup::parser::{Clause, ClauseKind, ClauseSeparator, Directive};
     /// # use std::borrow::Cow;
     /// let directive = Directive {
     ///     name: "parallel".into(),
     ///     parameter: None,
     ///     clauses: vec![
-    ///         Clause { name: Cow::Borrowed("async"), kind: ClauseKind::Parenthesized(Cow::Borrowed("1")) },
-    ///         Clause { name: Cow::Borrowed("wait"), kind: ClauseKind::Parenthesized(Cow::Borrowed("2")) },
+    ///         Clause { separator: ClauseSeparator::Space, name: Cow::Borrowed("async"), kind: ClauseKind::Parenthesized(Cow::Borrowed("1")) },
+    ///         Clause { separator: ClauseSeparator::Space, name: Cow::Borrowed("wait"), kind: ClauseKind::Parenthesized(Cow::Borrowed("2")) },
     ///     ],
     ///     cache_data: None,
     ///     wait_data: None,
@@ -838,10 +934,12 @@ mod tests {
             parameter: None,
             clauses: vec![
                 Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
                     name: "private".into(),
                     kind: ClauseKind::Parenthesized("a, b".into()),
                 },
                 Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
                     name: "nowait".into(),
                     kind: ClauseKind::Bare,
                 },

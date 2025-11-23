@@ -2023,7 +2023,7 @@ fn roundtrip_single_with_nowait() {
         .expect("Failed to convert to IR");
 
     assert!(ir.kind().is_worksharing());
-    assert!(ir.has_clause(|c| matches!(c, roup::ir::ClauseData::Bare(_))));
+    assert!(ir.has_clause(|c| matches!(c, roup::ir::ClauseData::Nowait { .. })));
     let output = ir.to_string();
     assert_eq!(output, input);
 }

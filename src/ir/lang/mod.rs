@@ -186,7 +186,9 @@ fn parse_array_section(
             } else {
                 Some(Expression::new(parts[1], config))
             };
-            Ok(ArraySection::new(lower, length, None))
+            let mut section = ArraySection::new(lower, length, None);
+            section.has_length = true;
+            Ok(section)
         }
         3 => {
             let lower = if parts[0].is_empty() {
@@ -217,7 +219,10 @@ fn parse_array_section(
                 Some(Expression::new(parts[1], config))
             };
 
-            Ok(ArraySection::new(lower, length, stride))
+            let mut section = ArraySection::new(lower, length, stride);
+            section.has_length = true;
+            section.has_stride = true;
+            Ok(section)
         }
         _ => Err(ConversionError::InvalidClauseSyntax(format!(
             "too many ':' separators in array section `{value}`"

@@ -50,12 +50,13 @@ pub use crate::ast::{
 };
 pub use builder::DirectiveBuilder;
 pub use clause::{
-    AffinityModifier, AtomicOp, BindModifier, ClauseData, ClauseItem, DefaultKind,
-    DefaultmapBehavior, DefaultmapCategory, DependIterator, DependType, DepobjUpdateDependence,
-    DeviceModifier, DeviceType, GrainsizeModifier, LastprivateModifier, LinearModifier,
-    MapModifier, MapType, MemoryOrder, NumTasksModifier, OrderKind, OrderModifier, ProcBind,
+    AdjustArgsModifier, AffinityModifier, ApplyTransform, ApplyTransformKind, AtKind, AtomicOp,
+    BindModifier, ClauseData, ClauseItem, DefaultKind, DefaultmapBehavior, DefaultmapCategory,
+    DependIterator, DependType, DepobjUpdateDependence, DeviceModifier, DeviceType, DoacrossType,
+    GrainsizeModifier, InductionItem, InitKind, LastprivateModifier, LinearModifier, MapModifier,
+    MapType, MemoryOrder, NowaitModifier, NumTasksModifier, OrderKind, OrderModifier, ProcBind,
     ReductionModifier, ReductionOperator, RequireModifier, ScheduleKind, ScheduleModifier,
-    UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
+    SeverityKind, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
 };
 pub use convert::convert_directive;
 pub use directive::{DirectiveIR, DirectiveKind};
