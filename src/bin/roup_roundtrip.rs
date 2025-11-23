@@ -18,7 +18,7 @@ enum InputLanguage {
 
 fn detect_language(input: &str, dialect_prefix: &str) -> Result<(InputLanguage, String), String> {
     let trimmed = input.trim_start();
-    let pragma_prefix = format!("#pragma {}", dialect_prefix);
+    let pragma_prefix = format!("#pragma {dialect_prefix}");
 
     // C/C++ pragma form (case-insensitive)
     if trimmed.len() >= pragma_prefix.len()
@@ -28,7 +28,7 @@ fn detect_language(input: &str, dialect_prefix: &str) -> Result<(InputLanguage, 
     }
 
     // Fortran free-form: !$<dialect> (full form) or !$ (short form)
-    let full_sentinel = format!("!${}", dialect_prefix);
+    let full_sentinel = format!("!${dialect_prefix}");
     // Check full form first to avoid matching short form prematurely (case-insensitive)
     if trimmed.len() >= full_sentinel.len()
         && trimmed[..full_sentinel.len()].eq_ignore_ascii_case(&full_sentinel)
@@ -49,7 +49,7 @@ fn detect_language(input: &str, dialect_prefix: &str) -> Result<(InputLanguage, 
         let rest = trimmed[first.len_utf8()..].trim_start();
 
         // Check for full sentinel ($<dialect>) first (case-insensitive)
-        let full_fixed_sentinel = format!("${}", dialect_prefix);
+        let full_fixed_sentinel = format!("${dialect_prefix}");
         if rest.len() >= full_fixed_sentinel.len()
             && rest[..full_fixed_sentinel.len()].eq_ignore_ascii_case(&full_fixed_sentinel)
         {
@@ -57,8 +57,7 @@ fn detect_language(input: &str, dialect_prefix: &str) -> Result<(InputLanguage, 
                 'c' | 'C' | '*' => format!("{}{}", first, &rest[..full_fixed_sentinel.len()]),
                 _ => {
                     return Err(format!(
-                        "Unable to detect {} directive prefix",
-                        dialect_prefix
+                        "Unable to detect {dialect_prefix} directive prefix"
                     ))
                 }
             };
@@ -71,8 +70,7 @@ fn detect_language(input: &str, dialect_prefix: &str) -> Result<(InputLanguage, 
                 'c' | 'C' | '*' => format!("{}{}", first, &rest[..1]),
                 _ => {
                     return Err(format!(
-                        "Unable to detect {} directive prefix",
-                        dialect_prefix
+                        "Unable to detect {dialect_prefix} directive prefix"
                     ))
                 }
             };
@@ -81,8 +79,7 @@ fn detect_language(input: &str, dialect_prefix: &str) -> Result<(InputLanguage, 
     }
 
     Err(format!(
-        "Unable to detect {} directive prefix",
-        dialect_prefix
+        "Unable to detect {dialect_prefix} directive prefix"
     ))
 }
 
@@ -98,7 +95,7 @@ fn main() {
 
     let mut input = String::new();
     if let Err(e) = io::stdin().read_to_string(&mut input) {
-        eprintln!("Failed to read stdin: {}", e);
+        eprintln!("Failed to read stdin: {e}");
         std::process::exit(1);
     }
 
@@ -117,7 +114,7 @@ fn main() {
     let (language, prefix) = match detect_language(trimmed, dialect_prefix) {
         Ok(result) => result,
         Err(err) => {
-            eprintln!("{}", err);
+            eprintln!("{err}");
             std::process::exit(1);
         }
     };
@@ -152,7 +149,7 @@ fn main() {
             println!("{}", directive.to_pragma_string_with_prefix(&prefix));
         }
         Err(e) => {
-            eprintln!("Parse error: {:?}", e);
+            eprintln!("Parse error: {e:?}");
             std::process::exit(1);
         }
     }

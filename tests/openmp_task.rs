@@ -1,4 +1,5 @@
-use roup::parser::{ClauseKind, Parser};
+use roup::parser::{clause::ReductionOperator, ClauseKind, Parser};
+use std::borrow::Cow;
 
 fn parse(input: &str) -> roup::parser::Directive<'_> {
     let parser = Parser::default();
@@ -60,10 +61,19 @@ fn parses_taskloop_simd_with_grainsize() {
         ClauseKind::Parenthesized("16".into())
     );
     assert_eq!(directive.clauses[2].name, "reduction");
-    assert_eq!(
-        directive.clauses[2].kind,
-        ClauseKind::Parenthesized("max:max_val".into())
-    );
+    match &directive.clauses[2].kind {
+        ClauseKind::ReductionClause {
+            operator,
+            user_defined_identifier,
+            variables,
+            ..
+        } => {
+            assert_eq!(*operator, ReductionOperator::Max);
+            assert!(user_defined_identifier.is_none());
+            assert_eq!(variables, &vec![Cow::from("max_val")]);
+        }
+        other => panic!("expected reduction clause, got {other:?}"),
+    }
     assert_eq!(directive.clauses[3].name, "shared");
     assert_eq!(
         directive.clauses[3].kind,

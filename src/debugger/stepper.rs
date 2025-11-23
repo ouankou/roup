@@ -126,7 +126,7 @@ impl DebugSession {
                 remaining: normalized.to_string(),
                 position,
                 context_stack: context_stack.clone(),
-                token_info: Some(format!("Normalized input: {}", normalized)),
+                token_info: Some(format!("Normalized input: {normalized}")),
             });
             step_number += 1;
             current_input = normalized.as_ref();
@@ -142,7 +142,7 @@ impl DebugSession {
                         step_number,
                         kind: StepKind::SkipWhitespace,
                         description: "Skip leading whitespace/comments".to_string(),
-                        consumed: format!("{:?}", consumed),
+                        consumed: format!("{consumed:?}"),
                         remaining: remaining.to_string(),
                         position,
                         context_stack: context_stack.clone(),
@@ -155,8 +155,7 @@ impl DebugSession {
             }
             Err(e) => {
                 return Err(DebugError::ParseError(format!(
-                    "Failed to skip whitespace: {:?}",
-                    e
+                    "Failed to skip whitespace: {e:?}"
                 )));
             }
         }
@@ -214,12 +213,12 @@ impl DebugSession {
                 self.steps.push(DebugStep {
                     step_number,
                     kind: StepKind::PragmaPrefix, // Treat dialect as part of pragma
-                    description: format!("Parse dialect keyword '{}'", dialect_keyword),
+                    description: format!("Parse dialect keyword '{dialect_keyword}'"),
                     consumed: dialect_keyword.to_string(),
                     remaining: current_input[dialect_keyword.len()..].to_string(),
                     position,
                     context_stack: context_stack.clone(),
-                    token_info: Some(format!("Dialect: \"{}\"", dialect_keyword)),
+                    token_info: Some(format!("Dialect: \"{dialect_keyword}\"")),
                 });
                 step_number += 1;
                 position += dialect_keyword.len();
@@ -252,6 +251,7 @@ impl DebugSession {
                     .clauses
                     .iter()
                     .map(|c| Clause {
+                        separator: crate::parser::ClauseSeparator::Space,
                         name: Cow::Owned(c.name.to_string()),
                         kind: match &c.kind {
                             crate::parser::ClauseKind::Bare => crate::parser::ClauseKind::Bare,
@@ -297,11 +297,19 @@ impl DebugSession {
                                     .collect(),
                             },
                             crate::parser::ClauseKind::ReductionClause {
+                                modifiers,
+                                modifier_items,
                                 operator,
+                                user_defined_identifier,
                                 variables,
                                 space_after_colon,
                             } => crate::parser::ClauseKind::ReductionClause {
+                                modifiers: modifiers.clone(),
+                                modifier_items: modifier_items.clone(),
                                 operator: *operator,
+                                user_defined_identifier: user_defined_identifier
+                                    .as_ref()
+                                    .map(|id| Cow::Owned(id.to_string())),
                                 variables: variables
                                     .iter()
                                     .map(|v| Cow::Owned(v.to_string()))
@@ -342,7 +350,7 @@ impl DebugSession {
                     })
                     .collect();
 
-                let static_directive = Directive {
+                let static_directive: Directive<'static> = Directive {
                     name: directive.name.clone(),
                     parameter: directive
                         .parameter
@@ -387,7 +395,7 @@ impl DebugSession {
                 });
             }
             Err(e) => {
-                let error_msg = format!("{:?}", e);
+                let error_msg = format!("{e:?}");
                 self.error = Some(error_msg.clone());
                 self.steps.push(DebugStep {
                     step_number,
@@ -447,7 +455,7 @@ impl DebugSession {
                     remaining: remaining.to_string(),
                     position,
                     context_stack: context_stack.to_vec(),
-                    token_info: Some(format!("Sentinel: \"{}\"", prefix)),
+                    token_info: Some(format!("Sentinel: \"{prefix}\"")),
                 });
                 Ok((prefix.to_string(), remaining))
             }
@@ -458,8 +466,7 @@ impl DebugSession {
                     Language::FortranFixed => "Fortran fixed-form sentinel",
                 };
                 Err(DebugError::ParseError(format!(
-                    "Failed to parse {}: {:?}",
-                    lang_str, e
+                    "Failed to parse {lang_str}: {e:?}"
                 )))
             }
         }
@@ -483,7 +490,7 @@ impl DebugSession {
                     step_number: *step_number,
                     kind: StepKind::SkipWhitespace,
                     description: "Skip whitespace before directive".to_string(),
-                    consumed: format!("{:?}", consumed),
+                    consumed: format!("{consumed:?}"),
                     remaining: remaining.to_string(),
                     position: *position,
                     context_stack: context_stack.to_vec(),
@@ -530,7 +537,7 @@ impl DebugSession {
                 param_str.to_string()
             } else {
                 // Needs parentheses wrapped
-                format!("({})", param_str)
+                format!("({param_str})")
             };
 
             // Safely compute remaining based on actual consumed length
@@ -544,12 +551,12 @@ impl DebugSession {
             self.steps.push(DebugStep {
                 step_number: *step_number,
                 kind: StepKind::DirectiveParameter,
-                description: format!("Parse directive parameter '{}'", param),
+                description: format!("Parse directive parameter '{param}'"),
                 consumed: param_with_parens.clone(),
                 remaining: remaining_text,
                 position: *position,
                 context_stack: context_stack.to_vec(),
-                token_info: Some(format!("Parameter: \"{}\"", param)),
+                token_info: Some(format!("Parameter: \"{param}\"")),
             });
             *step_number += 1;
             *position += consumed_len;
@@ -574,7 +581,7 @@ impl DebugSession {
                         step_number: *step_number,
                         kind: StepKind::SkipWhitespace,
                         description: "Skip whitespace before clause".to_string(),
-                        consumed: format!("{:?}", consumed),
+                        consumed: format!("{consumed:?}"),
                         remaining: remaining.to_string(),
                         position: *position,
                         context_stack: clause_context.clone(),
@@ -603,11 +610,11 @@ impl DebugSession {
 
             // Clause arguments (if parenthesized)
             if let crate::parser::ClauseKind::Parenthesized(ref args) = clause.kind {
-                let args_with_parens = format!("({})", args);
+                let args_with_parens = format!("({args})");
                 self.steps.push(DebugStep {
                     step_number: *step_number,
                     kind: StepKind::ClauseArguments,
-                    description: format!("Parse clause arguments '{}'", args),
+                    description: format!("Parse clause arguments '{args}'"),
                     consumed: args_with_parens.clone(),
                     remaining: if current_input.len() >= args_with_parens.len() {
                         current_input[args_with_parens.len()..].to_string()
@@ -616,7 +623,7 @@ impl DebugSession {
                     },
                     position: *position,
                     context_stack: clause_context.clone(),
-                    token_info: Some(format!("Arguments: \"{}\"", args)),
+                    token_info: Some(format!("Arguments: \"{args}\"")),
                 });
                 *step_number += 1;
                 *position += args_with_parens.len();

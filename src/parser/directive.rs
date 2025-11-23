@@ -12,20 +12,20 @@ use crate::parser::directive_kind::DirectiveName;
 type DirectiveParserFn =
     for<'a> fn(Cow<'a, str>, &'a str, &ClauseRegistry) -> IResult<&'a str, Directive<'a>>;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WaitDirectiveData<'a> {
     pub devnum: Option<Cow<'a, str>>,
     pub has_queues: bool,
     pub queue_exprs: Vec<Cow<'a, str>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CacheDirectiveData<'a> {
     pub readonly: bool,
     pub variables: Vec<Cow<'a, str>>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Directive<'a> {
     pub name: DirectiveName,
     pub parameter: Option<Cow<'a, str>>,
@@ -63,12 +63,13 @@ impl<'a> Directive<'a> {
     ///
     /// Example: `gang(a,b) gang(b,c)` becomes `gang(a,b,c)`
     pub fn merge_clauses(&mut self) {
-        use super::clause::{Clause, ClauseKind};
+        use super::clause::{parse_variable_list, Clause, ClauseKind};
         use std::collections::{HashMap, HashSet};
         // Group clauses by name AND modifier/kind for merging
         // Key: (name, kind_discriminant, modifier_value)
         type MergeKey = (String, u8, u32);
         let mut merged: HashMap<MergeKey, Vec<Clause<'a>>> = HashMap::new();
+        let mut order: Vec<MergeKey> = Vec::new();
 
         for clause in self.clauses.drain(..) {
             // Create key based on clause name, kind, and modifier/content
@@ -76,12 +77,56 @@ impl<'a> Directive<'a> {
             let kind_disc = match &clause.kind {
                 ClauseKind::Bare => 0,
                 ClauseKind::Parenthesized(content) => {
-                    // Use hash of content to distinguish different parameter values
-                    use std::collections::hash_map::DefaultHasher;
-                    use std::hash::{Hash, Hasher};
-                    let mut hasher = DefaultHasher::new();
-                    content.as_ref().hash(&mut hasher);
-                    1_000_000 + (hasher.finish() % 1_000_000) as u32
+                    // Merge common list-based clauses regardless of exact list
+                    let name_lower = clause.name.to_ascii_lowercase();
+                    if matches!(
+                        name_lower.as_str(),
+                        "shared"
+                            | "private"
+                            | "firstprivate"
+                            | "copyprivate"
+                            | "copyin"
+                            | "copyout"
+                            | "aligned"
+                            | "nontemporal"
+                    ) {
+                        0
+                    } else if name_lower == "uses_allocators" {
+                        // Preserve multiple occurrences; give each a unique key.
+                        2_000_000 + order.len() as u32
+                    } else if name_lower == "depend" {
+                        // Merge depend clauses that share the same modifier/iterator prefix.
+                        use std::collections::hash_map::DefaultHasher;
+                        use std::hash::{Hash, Hasher};
+                        let mut depth = 0i32;
+                        let mut split_at = content.len();
+                        for (idx, ch) in content.char_indices() {
+                            match ch {
+                                '(' | '[' | '{' => depth += 1,
+                                ')' | ']' | '}' => {
+                                    if depth > 0 {
+                                        depth -= 1;
+                                    }
+                                }
+                                ':' if depth == 0 => {
+                                    split_at = idx;
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                        let prefix = content[..split_at].trim().to_ascii_lowercase();
+                        let mut hasher = DefaultHasher::new();
+                        prefix.hash(&mut hasher);
+                        2 + (hasher.finish() % 1_000_000) as u32
+                    } else {
+                        // Use hash of content to distinguish different parameter values
+                        use std::collections::hash_map::DefaultHasher;
+                        use std::hash::{Hash, Hasher};
+                        let mut hasher = DefaultHasher::new();
+                        content.as_ref().hash(&mut hasher);
+                        1_000_000 + (hasher.finish() % 1_000_000) as u32
+                    }
                 }
                 ClauseKind::VariableList(_) => 2,
                 ClauseKind::GangClause {
@@ -114,19 +159,45 @@ impl<'a> Directive<'a> {
                         20 + modifier.map_or(0, |m| m as u32)
                     }
                 }
-                ClauseKind::ReductionClause { operator, .. } => 30 + *operator as u32,
+                ClauseKind::ReductionClause {
+                    operator,
+                    modifiers,
+                    user_defined_identifier,
+                    space_after_colon,
+                    ..
+                } => {
+                    use std::collections::hash_map::DefaultHasher;
+                    use std::hash::{Hash, Hasher};
+                    let mut hasher = DefaultHasher::new();
+                    (*space_after_colon as u8).hash(&mut hasher);
+                    (*operator as u8).hash(&mut hasher);
+                    for modifier in modifiers {
+                        (*modifier as u8).hash(&mut hasher);
+                    }
+                    if let Some(id) = user_defined_identifier {
+                        id.as_ref().hash(&mut hasher);
+                    }
+                    30 + (hasher.finish() % 1_000_000) as u32
+                }
                 ClauseKind::CopyinClause { modifier, .. } => 40 + modifier.map_or(0, |m| m as u32),
                 ClauseKind::CopyoutClause { modifier, .. } => 50 + modifier.map_or(0, |m| m as u32),
                 ClauseKind::CreateClause { modifier, .. } => 60 + modifier.map_or(0, |m| m as u32),
             };
 
             let key = (clause.name.to_string(), kind_disc as u8, kind_disc);
-            merged.entry(key).or_default().push(clause);
+            let entry = merged.entry(key.clone()).or_default();
+            if entry.is_empty() {
+                order.push(key.clone());
+            }
+            entry.push(clause);
         }
 
         // Rebuild clauses list with merging
         let mut new_clauses = Vec::new();
-        for (_, group) in merged {
+        for key in order {
+            let group = merged
+                .remove(&key)
+                .expect("merge bookkeeping should retain group");
             if group.len() == 1 {
                 // Single occurrence - keep as is
                 new_clauses.push(group.into_iter().next().unwrap());
@@ -159,10 +230,12 @@ impl<'a> Directive<'a> {
                         // Create merged clause with same structure as first
                         let merged_clause = match &first.kind {
                             ClauseKind::VariableList(_) => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::VariableList(vars),
                             },
                             ClauseKind::GangClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::GangClause {
                                     modifier: *modifier,
@@ -170,6 +243,7 @@ impl<'a> Directive<'a> {
                                 },
                             },
                             ClauseKind::WorkerClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::WorkerClause {
                                     modifier: *modifier,
@@ -177,6 +251,7 @@ impl<'a> Directive<'a> {
                                 },
                             },
                             ClauseKind::VectorClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::VectorClause {
                                     modifier: *modifier,
@@ -187,33 +262,117 @@ impl<'a> Directive<'a> {
                         };
                         new_clauses.push(merged_clause);
                     }
-                    ClauseKind::ReductionClause { operator, .. } => {
-                        // Merge reduction clauses with same operator
+                    ClauseKind::Parenthesized(_) => {
+                        let name_lower = first.name.to_ascii_lowercase();
+                        if name_lower == "depend" {
+                            // Merge depend clauses by preserving the modifier prefix once and
+                            // concatenating the unique variable list.
+                            let mut merged_prefix = String::new();
+                            let mut vars = Vec::new();
+                            let mut seen = HashSet::new();
+                            for clause in &group {
+                                if let ClauseKind::Parenthesized(content) = &clause.kind {
+                                    let text = content.as_ref();
+                                    let mut depth = 0i32;
+                                    let mut split_at = text.len();
+                                    for (idx, ch) in text.char_indices() {
+                                        match ch {
+                                            '(' | '[' | '{' => depth += 1,
+                                            ')' | ']' | '}' => {
+                                                if depth > 0 {
+                                                    depth -= 1;
+                                                }
+                                            }
+                                            ':' if depth == 0 => {
+                                                split_at = idx;
+                                                break;
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    let prefix = text[..split_at].trim();
+                                    if merged_prefix.is_empty() {
+                                        merged_prefix = prefix.to_string();
+                                    }
+                                    let remainder = if split_at < text.len() {
+                                        text[split_at + 1..].trim()
+                                    } else {
+                                        ""
+                                    };
+                                    for var in parse_variable_list(remainder) {
+                                        let v = var.to_string();
+                                        if seen.insert(v.clone()) {
+                                            vars.push(Cow::Owned(v));
+                                        }
+                                    }
+                                }
+                            }
+                            let merged_content = if !merged_prefix.is_empty() {
+                                if vars.is_empty() {
+                                    merged_prefix
+                                } else {
+                                    format!("{merged_prefix}: {}", vars.join(", "))
+                                }
+                            } else {
+                                vars.join(", ")
+                            };
+                            new_clauses.push(Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
+                                name: first.name.clone(),
+                                kind: ClauseKind::Parenthesized(Cow::Owned(merged_content)),
+                            });
+                        } else {
+                            // Merge list-based parenthesized clauses (e.g., shared/private) with deduplication.
+                            let mut vars = Vec::new();
+                            let mut seen = HashSet::new();
+                            for clause in &group {
+                                if let ClauseKind::Parenthesized(content) = &clause.kind {
+                                    for var in parse_variable_list(content.as_ref()) {
+                                        let v = var.to_string();
+                                        if seen.insert(v.clone()) {
+                                            vars.push(Cow::Owned(v));
+                                        }
+                                    }
+                                }
+                            }
+                            let merged_content = vars.join(", ");
+                            new_clauses.push(Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
+                                name: first.name.clone(),
+                                kind: ClauseKind::Parenthesized(Cow::Owned(merged_content)),
+                            });
+                        }
+                    }
+                    ClauseKind::ReductionClause {
+                        modifiers,
+                        operator,
+                        user_defined_identifier,
+                        space_after_colon,
+                        ..
+                    } => {
+                        // Merge reduction clauses only when operator, modifiers, and user identifier match
                         let mut vars = Vec::new();
                         let mut seen = HashSet::new();
                         for clause in &group {
-                            if let ClauseKind::ReductionClause {
-                                operator: op,
-                                variables,
-                                ..
-                            } = &clause.kind
-                            {
-                                if op == operator {
-                                    for var in variables {
-                                        let var_str = var.as_ref();
-                                        if seen.insert(var_str.to_string()) {
-                                            vars.push(Cow::Owned(var_str.to_string()));
-                                        }
+                            if let ClauseKind::ReductionClause { variables, .. } = &clause.kind {
+                                for var in variables {
+                                    let var_str = var.as_ref();
+                                    if seen.insert(var_str.to_string()) {
+                                        vars.push(Cow::Owned(var_str.to_string()));
                                     }
                                 }
                             }
                         }
                         new_clauses.push(Clause {
+                            separator: crate::parser::ClauseSeparator::Space,
                             name: first.name.clone(),
                             kind: ClauseKind::ReductionClause {
+                                modifiers: modifiers.clone(),
+                                modifier_items: Vec::new(),
                                 operator: *operator,
+                                user_defined_identifier: user_defined_identifier.clone(),
                                 variables: vars,
-                                space_after_colon: false,
+                                space_after_colon: *space_after_colon,
                             },
                         });
                     }
@@ -239,6 +398,7 @@ impl<'a> Directive<'a> {
                         }
                         let merged_clause = match &first.kind {
                             ClauseKind::CopyinClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::CopyinClause {
                                     modifier: *modifier,
@@ -246,6 +406,7 @@ impl<'a> Directive<'a> {
                                 },
                             },
                             ClauseKind::CopyoutClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::CopyoutClause {
                                     modifier: *modifier,
@@ -253,6 +414,7 @@ impl<'a> Directive<'a> {
                                 },
                             },
                             ClauseKind::CreateClause { modifier, .. } => Clause {
+                                separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::CreateClause {
                                     modifier: *modifier,
@@ -302,14 +464,14 @@ impl<'a> Directive<'a> {
     ///
     /// # Example
     /// ```
-    /// # use roup::parser::{Directive, Clause, ClauseKind};
+    /// # use roup::parser::{Clause, ClauseKind, ClauseSeparator, Directive};
     /// # use std::borrow::Cow;
     /// let directive = Directive {
     ///     name: "parallel".into(),
     ///     parameter: None,
     ///     clauses: vec![
-    ///         Clause { name: Cow::Borrowed("async"), kind: ClauseKind::Parenthesized(Cow::Borrowed("1")) },
-    ///         Clause { name: Cow::Borrowed("wait"), kind: ClauseKind::Parenthesized(Cow::Borrowed("2")) },
+    ///         Clause { separator: ClauseSeparator::Space, name: Cow::Borrowed("async"), kind: ClauseKind::Parenthesized(Cow::Borrowed("1")) },
+    ///         Clause { separator: ClauseSeparator::Space, name: Cow::Borrowed("wait"), kind: ClauseKind::Parenthesized(Cow::Borrowed("2")) },
     ///     ],
     ///     cache_data: None,
     ///     wait_data: None,
@@ -349,7 +511,7 @@ impl fmt::Display for Directive<'_> {
             // Use the same rendering rules as the helper to avoid divergence
             let mut tmp = String::new();
             render_parameter_into(&mut tmp, Some(param.as_ref()));
-            write!(f, "{}", tmp)?;
+            write!(f, "{tmp}")?;
         }
         if !self.clauses.is_empty() {
             write!(f, " ")?;
@@ -370,11 +532,13 @@ impl fmt::Display for Directive<'_> {
 // duplication between different render paths.
 fn render_parameter_into(output: &mut String, param: Option<&str>) {
     if let Some(p) = param {
-        if p.starts_with('(') || p.starts_with(' ') {
-            output.push_str(p);
-        } else {
-            output.push(' ');
-            output.push_str(p);
+        if !p.is_empty() {
+            if p.starts_with('(') || p.starts_with(' ') {
+                output.push_str(p);
+            } else {
+                output.push(' ');
+                output.push_str(p);
+            }
         }
     }
 }
@@ -770,10 +934,12 @@ mod tests {
             parameter: None,
             clauses: vec![
                 Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
                     name: "private".into(),
                     kind: ClauseKind::Parenthesized("a, b".into()),
                 },
                 Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
                     name: "nowait".into(),
                     kind: ClauseKind::Bare,
                 },

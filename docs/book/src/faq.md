@@ -41,7 +41,7 @@ script.
 
 ### What toolchains are required?
 
-- Rust 1.85 or newer (matches the MSRV in `Cargo.toml`).
+- Rust 1.88 or newer (matches the MSRV in `Cargo.toml`).
 - A C/C++ compiler when using the FFI bindings.
 - Optional: Fortran compiler for the Fortran examples.
 

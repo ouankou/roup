@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashMap, fmt};
 
-use nom::{multi::separated_list0, IResult, Parser};
+use nom::{IResult, Parser};
 
 use crate::lexer;
 
@@ -21,6 +21,79 @@ pub enum ClauseName {
     Ordered,
     Nowait,
     Default,
+    // OpenMP atomic memory order clauses
+    Hint,
+    SeqCst,
+    Release,
+    Acquire,
+    Relaxed,
+    AcqRel,
+    // OpenMP map clause
+    Map,
+    // OpenMP allocate directive clauses
+    Allocator,
+    Align,
+    // Additional OpenMP clauses
+    InReduction,
+    IsDevicePtr,
+    Defaultmap,
+    Depend,
+    UsesAllocators,
+    NumTeams,
+    ThreadLimit,
+    DistSchedule,
+    // Additional OpenMP clauses from spec
+    ProcBind,
+    Allocate,
+    Linear,
+    Safelen,
+    Simdlen,
+    Aligned,
+    Nontemporal,
+    Uniform,
+    Inbranch,
+    Notinbranch,
+    Inclusive,
+    Exclusive,
+    Copyprivate,
+    Parallel,
+    Sections,
+    For,
+    Do,
+    Taskgroup,
+    Initializer,
+    Final,
+    Untied,
+    Requires,
+    Mergeable,
+    Priority,
+    Affinity,
+    Grainsize,
+    NumTasks,
+    Nogroup,
+    ReverseOffload,
+    UnifiedAddress,
+    UnifiedSharedMemory,
+    AtomicDefaultMemOrder,
+    DynamicAllocators,
+    SelfMaps,
+    ExtImplementationDefinedRequirement,
+    UseDevicePtr,
+    Sizes,
+    UseDeviceAddr,
+    HasDeviceAddr,
+    To,
+    From,
+    When,
+    Match,
+    TaskReduction,
+    Destroy,
+    DepobjUpdate,
+    Compare,
+    CompareCapture,
+    Partial,
+    Full,
+    Order,
     // OpenACC-specific canonical clause names
     Copy,
     CopyIn,
@@ -63,6 +136,50 @@ pub enum ClauseName {
     Host,
     Present,
     Create,
+    // Additional OpenMP clauses missing from the enum
+    Threads,
+    Simd,
+    Filter,
+    Fail,
+    Weak,
+    At,
+    Severity,
+    Message,
+    Doacross,
+    Absent,
+    Contains,
+    Holds,
+    Otherwise,
+    GraphId,
+    GraphReset,
+    Transparent,
+    Replayable,
+    Threadset,
+    Indirect,
+    Local,
+    Init,
+    InitComplete,
+    Safesync,
+    DeviceSafesync,
+    Memscope,
+    Looprange,
+    Permutation,
+    Counts,
+    Induction,
+    Inductor,
+    Collector,
+    Combiner,
+    AdjustArgs,
+    AppendArgs,
+    Apply,
+    NoOpenmp,
+    NoOpenmpConstructs,
+    NoOpenmpRoutines,
+    NoParallelism,
+    Nocontext,
+    Novariants,
+    Enter,
+    Use,
     Other(Cow<'static, str>),
 }
 
@@ -86,6 +203,90 @@ static CLAUSE_MAP: Lazy<HashMap<&'static str, ClauseName>> = Lazy::new(|| {
     insert!("ordered", ClauseName::Ordered);
     insert!("nowait", ClauseName::Nowait);
     insert!("default", ClauseName::Default);
+
+    // OpenMP atomic memory order clauses
+    insert!("hint", ClauseName::Hint);
+    insert!("seq_cst", ClauseName::SeqCst);
+    insert!("release", ClauseName::Release);
+    insert!("acquire", ClauseName::Acquire);
+    insert!("relaxed", ClauseName::Relaxed);
+    insert!("acq_rel", ClauseName::AcqRel);
+
+    // OpenMP map clause
+    insert!("map", ClauseName::Map);
+
+    // OpenMP allocate directive clauses
+    insert!("allocator", ClauseName::Allocator);
+    insert!("align", ClauseName::Align);
+
+    // Additional OpenMP clauses
+    insert!("in_reduction", ClauseName::InReduction);
+    insert!("is_device_ptr", ClauseName::IsDevicePtr);
+    insert!("defaultmap", ClauseName::Defaultmap);
+    insert!("depend", ClauseName::Depend);
+    insert!("uses_allocators", ClauseName::UsesAllocators);
+    insert!("num_teams", ClauseName::NumTeams);
+    insert!("thread_limit", ClauseName::ThreadLimit);
+    insert!("dist_schedule", ClauseName::DistSchedule);
+
+    // Additional OpenMP clauses from spec
+    insert!("proc_bind", ClauseName::ProcBind);
+    insert!("allocate", ClauseName::Allocate);
+    insert!("linear", ClauseName::Linear);
+    insert!("safelen", ClauseName::Safelen);
+    insert!("simdlen", ClauseName::Simdlen);
+    insert!("aligned", ClauseName::Aligned);
+    insert!("nontemporal", ClauseName::Nontemporal);
+    insert!("uniform", ClauseName::Uniform);
+    insert!("inbranch", ClauseName::Inbranch);
+    insert!("notinbranch", ClauseName::Notinbranch);
+    insert!("inclusive", ClauseName::Inclusive);
+    insert!("exclusive", ClauseName::Exclusive);
+    insert!("copyprivate", ClauseName::Copyprivate);
+    insert!("parallel", ClauseName::Parallel);
+    insert!("sections", ClauseName::Sections);
+    insert!("for", ClauseName::For);
+    insert!("do", ClauseName::Do);
+    insert!("taskgroup", ClauseName::Taskgroup);
+    insert!("initializer", ClauseName::Initializer);
+    insert!("final", ClauseName::Final);
+    insert!("untied", ClauseName::Untied);
+    insert!("requires", ClauseName::Requires);
+    insert!("mergeable", ClauseName::Mergeable);
+    insert!("priority", ClauseName::Priority);
+    insert!("affinity", ClauseName::Affinity);
+    insert!("grainsize", ClauseName::Grainsize);
+    insert!("num_tasks", ClauseName::NumTasks);
+    insert!("nogroup", ClauseName::Nogroup);
+    insert!("reverse_offload", ClauseName::ReverseOffload);
+    insert!("unified_address", ClauseName::UnifiedAddress);
+    insert!("unified_shared_memory", ClauseName::UnifiedSharedMemory);
+    insert!(
+        "atomic_default_mem_order",
+        ClauseName::AtomicDefaultMemOrder
+    );
+    insert!("dynamic_allocators", ClauseName::DynamicAllocators);
+    insert!("self_maps", ClauseName::SelfMaps);
+    insert!(
+        "ext_implementation_defined_requirement",
+        ClauseName::ExtImplementationDefinedRequirement
+    );
+    insert!("use_device_ptr", ClauseName::UseDevicePtr);
+    insert!("sizes", ClauseName::Sizes);
+    insert!("use_device_addr", ClauseName::UseDeviceAddr);
+    insert!("has_device_addr", ClauseName::HasDeviceAddr);
+    insert!("to", ClauseName::To);
+    insert!("from", ClauseName::From);
+    insert!("when", ClauseName::When);
+    insert!("match", ClauseName::Match);
+    insert!("task_reduction", ClauseName::TaskReduction);
+    insert!("destroy", ClauseName::Destroy);
+    insert!("depobj_update", ClauseName::DepobjUpdate);
+    insert!("compare", ClauseName::Compare);
+    insert!("compare capture", ClauseName::CompareCapture);
+    insert!("partial", ClauseName::Partial);
+    insert!("full", ClauseName::Full);
+    insert!("order", ClauseName::Order);
 
     // Common OpenACC synonyms - canonicalize to dedicated ClauseName variants
     insert!("copy", ClauseName::Copy);
@@ -139,6 +340,51 @@ static CLAUSE_MAP: Lazy<HashMap<&'static str, ClauseName>> = Lazy::new(|| {
     insert!("device_resident", ClauseName::DeviceResident);
     insert!("host", ClauseName::Host);
 
+    // Additional OpenMP clauses for ompparser compatibility
+    insert!("threads", ClauseName::Threads);
+    insert!("simd", ClauseName::Simd);
+    insert!("filter", ClauseName::Filter);
+    insert!("fail", ClauseName::Fail);
+    insert!("weak", ClauseName::Weak);
+    insert!("at", ClauseName::At);
+    insert!("severity", ClauseName::Severity);
+    insert!("message", ClauseName::Message);
+    insert!("doacross", ClauseName::Doacross);
+    insert!("absent", ClauseName::Absent);
+    insert!("contains", ClauseName::Contains);
+    insert!("holds", ClauseName::Holds);
+    insert!("otherwise", ClauseName::Otherwise);
+    insert!("graph_id", ClauseName::GraphId);
+    insert!("graph_reset", ClauseName::GraphReset);
+    insert!("transparent", ClauseName::Transparent);
+    insert!("replayable", ClauseName::Replayable);
+    insert!("threadset", ClauseName::Threadset);
+    insert!("indirect", ClauseName::Indirect);
+    insert!("local", ClauseName::Local);
+    insert!("init", ClauseName::Init);
+    insert!("init_complete", ClauseName::InitComplete);
+    insert!("safesync", ClauseName::Safesync);
+    insert!("device_safesync", ClauseName::DeviceSafesync);
+    insert!("memscope", ClauseName::Memscope);
+    insert!("looprange", ClauseName::Looprange);
+    insert!("permutation", ClauseName::Permutation);
+    insert!("counts", ClauseName::Counts);
+    insert!("induction", ClauseName::Induction);
+    insert!("inductor", ClauseName::Inductor);
+    insert!("collector", ClauseName::Collector);
+    insert!("combiner", ClauseName::Combiner);
+    insert!("adjust_args", ClauseName::AdjustArgs);
+    insert!("append_args", ClauseName::AppendArgs);
+    insert!("apply", ClauseName::Apply);
+    insert!("no_openmp", ClauseName::NoOpenmp);
+    insert!("no_openmp_constructs", ClauseName::NoOpenmpConstructs);
+    insert!("no_openmp_routines", ClauseName::NoOpenmpRoutines);
+    insert!("no_parallelism", ClauseName::NoParallelism);
+    insert!("nocontext", ClauseName::Nocontext);
+    insert!("novariants", ClauseName::Novariants);
+    insert!("enter", ClauseName::Enter);
+    insert!("use", ClauseName::Use);
+
     m
 });
 
@@ -171,7 +417,7 @@ pub enum CreateModifier {
     Zero,
 }
 
-/// OpenACC reduction clause operator
+/// Reduction clause operator
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ReductionOperator {
     Add,    // +
@@ -192,6 +438,17 @@ pub enum ReductionOperator {
     FortIand, // iand
     FortIor,  // ior
     FortIeor, // ieor
+    /// User-defined reduction operator
+    UserDefined,
+}
+
+/// Reduction clause modifiers (OpenMP 5.x).
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ReductionModifier {
+    Task,
+    Inscan,
+    Default,
+    Original,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -248,22 +505,70 @@ pub enum ClauseKind<'a> {
     },
     /// Structured reduction clause with operator
     ReductionClause {
+        modifiers: Vec<ReductionModifier>,
+        modifier_items: Vec<Vec<String>>,
         operator: ReductionOperator,
+        user_defined_identifier: Option<Cow<'a, str>>,
         variables: Vec<Cow<'a, str>>,
         space_after_colon: bool,
     },
+}
+
+/// Separator that appeared before a clause in source.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ClauseSeparator {
+    Space,
+    Comma,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Clause<'a> {
     pub name: Cow<'a, str>,
     pub kind: ClauseKind<'a>,
+    pub separator: ClauseSeparator,
 }
 
 impl Clause<'_> {
     pub fn to_source_string(&self) -> String {
         self.to_string()
     }
+}
+
+/// Parse a comma-separated list of identifiers/expressions, preserving nested parentheses.
+pub fn parse_variable_list(input: &str) -> Vec<Cow<'_, str>> {
+    let mut variables = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0;
+
+    for ch in input.chars() {
+        match ch {
+            ',' if depth == 0 => {
+                let trimmed = current.trim();
+                if !trimmed.is_empty() {
+                    variables.push(Cow::Owned(trimmed.to_string()));
+                }
+                current.clear();
+            }
+            '(' | '[' => {
+                depth += 1;
+                current.push(ch);
+            }
+            ')' | ']' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+                current.push(ch);
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        variables.push(Cow::Owned(trimmed.to_string()));
+    }
+
+    variables
 }
 
 impl fmt::Display for Clause<'_> {
@@ -287,7 +592,7 @@ impl fmt::Display for Clause<'_> {
                             GangModifier::Num => "num",
                             GangModifier::Static => "static",
                         };
-                        write!(f, "{}: ", mod_str)?;
+                        write!(f, "{mod_str}: ")?;
                     }
                     write!(f, "{})", variables.join(", "))
                 }
@@ -351,10 +656,42 @@ impl fmt::Display for Clause<'_> {
                 write!(f, "{})", variables.join(", "))
             }
             ClauseKind::ReductionClause {
+                modifiers,
+                modifier_items,
                 operator,
+                user_defined_identifier,
                 variables,
                 space_after_colon,
             } => {
+                write!(f, "{}(", self.name)?;
+
+                if !modifiers.is_empty() {
+                    for (idx, modifier) in modifiers.iter().enumerate() {
+                        if idx > 0 {
+                            write!(f, ",")?;
+                        }
+                        match modifier {
+                            ReductionModifier::Task => write!(f, "task")?,
+                            ReductionModifier::Inscan => write!(f, "inscan")?,
+                            ReductionModifier::Default => write!(f, "default")?,
+                            ReductionModifier::Original => {
+                                write!(f, "original")?;
+                                if let Some(items) = modifier_items.get(idx) {
+                                    write!(f, "(")?;
+                                    for (i, item) in items.iter().enumerate() {
+                                        if i > 0 {
+                                            write!(f, ",")?;
+                                        }
+                                        write!(f, "{item}")?;
+                                    }
+                                    write!(f, ")")?;
+                                }
+                            }
+                        }
+                    }
+                    write!(f, ",")?;
+                }
+
                 let op_str = match operator {
                     ReductionOperator::Add => "+",
                     ReductionOperator::Sub => "-",
@@ -373,12 +710,19 @@ impl fmt::Display for Clause<'_> {
                     ReductionOperator::FortIand => "iand",
                     ReductionOperator::FortIor => "ior",
                     ReductionOperator::FortIeor => "ieor",
+                    ReductionOperator::UserDefined => {
+                        user_defined_identifier.as_deref().unwrap_or("user")
+                    }
                 };
+
+                write!(f, "{op_str}")?;
                 if *space_after_colon {
-                    write!(f, "{}({}: {})", self.name, op_str, variables.join(", "))
+                    write!(f, ": ")?;
                 } else {
-                    write!(f, "{}({}:{})", self.name, op_str, variables.join(", "))
+                    write!(f, ":")?;
                 }
+                write!(f, "{})", variables.join(", "))?;
+                Ok(())
             }
         }
     }
@@ -399,6 +743,7 @@ impl ClauseRule {
             ClauseRule::Bare => Ok((
                 input,
                 Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
                     name,
                     kind: ClauseKind::Bare,
                 },
@@ -437,28 +782,53 @@ impl ClauseRegistry {
     }
 
     pub fn parse_sequence<'a>(&self, input: &'a str) -> IResult<&'a str, Vec<Clause<'a>>> {
-        let (input, _) = crate::lexer::skip_space_and_comments(input)?;
-        let parse_clause = |input| self.parse_clause(input);
-        let separator = |i| {
-            let original = i;
-            let (i, _) = crate::lexer::skip_space_and_comments(i)?;
-            let consumed_ws = i.len() != original.len();
-            let (i, comma) = nom::combinator::opt(nom::character::complete::char(',')).parse(i)?;
-            if comma.is_some() {
-                let (i, _) = crate::lexer::skip_space_and_comments(i)?;
-                Ok((i, ()))
-            } else if consumed_ws {
-                Ok((i, ()))
-            } else {
-                Err(nom::Err::Error(nom::error::Error::new(
-                    i,
-                    nom::error::ErrorKind::Space,
-                )))
+        let (mut rest, _) = crate::lexer::skip_space_and_comments(input)?;
+        // Skip optional leading comma (for directives like "atomic read,seq_cst")
+        let (next, _) = nom::combinator::opt(nom::character::complete::char(',')).parse(rest)?;
+        rest = next;
+        let (next, _) = crate::lexer::skip_space_and_comments(rest)?;
+        rest = next;
+
+        let mut clauses = Vec::new();
+        let mut next_separator = crate::parser::ClauseSeparator::Space;
+        loop {
+            let before = rest;
+            match self.parse_clause(rest) {
+                Ok((after_clause, clause)) => {
+                    // Ensure progress to avoid infinite loops
+                    if after_clause.len() == before.len() {
+                        break;
+                    }
+                    clauses.push(Clause {
+                        separator: next_separator,
+                        ..clause
+                    });
+                    // Prepare for the next clause: optional whitespace/comma
+                    let (after_ws, _) = crate::lexer::skip_space_and_comments(after_clause)?;
+                    let (after_sep, _) = nom::combinator::opt(nom::character::complete::char(','))
+                        .parse(after_ws)?;
+                    let (after_ws2, _) = crate::lexer::skip_space_and_comments(after_sep)?;
+                    rest = after_ws2;
+                    next_separator = if after_sep != after_ws {
+                        crate::parser::ClauseSeparator::Comma
+                    } else {
+                        crate::parser::ClauseSeparator::Space
+                    };
+                }
+                Err(err) => {
+                    if rest.is_empty() {
+                        break;
+                    }
+                    if matches!(self.default_rule, ClauseRule::Unsupported) {
+                        return Err(err);
+                    }
+                    break;
+                }
             }
-        };
-        let (input, clauses) = separated_list0(separator, parse_clause).parse(input)?;
-        let (input, _) = crate::lexer::skip_space_and_comments(input)?;
-        Ok((input, clauses))
+        }
+
+        let (rest, _) = crate::lexer::skip_space_and_comments(rest)?;
+        Ok((rest, clauses))
     }
 
     fn parse_clause<'a>(&self, input: &'a str) -> IResult<&'a str, Clause<'a>> {
@@ -626,6 +996,7 @@ fn parse_parenthesized_clause<'a>(
         return Ok((
             rest,
             Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::Parenthesized(normalized),
             },
@@ -667,6 +1038,7 @@ mod tests {
         assert_eq!(
             clauses,
             vec![Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name: "nowait".into(),
                 kind: ClauseKind::Bare,
             }]
@@ -690,6 +1062,7 @@ mod tests {
     #[test]
     fn clause_display_roundtrips_bare_clause() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "nowait".into(),
             kind: ClauseKind::Bare,
         };
@@ -701,6 +1074,7 @@ mod tests {
     #[test]
     fn clause_display_roundtrips_parenthesized_clause() {
         let clause = Clause {
+            separator: crate::parser::ClauseSeparator::Space,
             name: "private".into(),
             kind: ClauseKind::Parenthesized("a, b".into()),
         };
@@ -734,6 +1108,7 @@ mod tests {
         Ok((
             input,
             Clause {
+                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::Parenthesized(identifier.into()),
             },

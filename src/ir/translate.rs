@@ -49,8 +49,8 @@ impl fmt::Display for TranslationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TranslationError::EmptyInput => write!(f, "input directive is empty"),
-            TranslationError::ParseError(msg) => write!(f, "failed to parse directive: {}", msg),
-            TranslationError::ConversionError(err) => write!(f, "conversion error: {}", err),
+            TranslationError::ParseError(msg) => write!(f, "failed to parse directive: {msg}"),
+            TranslationError::ConversionError(err) => write!(f, "conversion error: {err}"),
         }
     }
 }
@@ -120,7 +120,7 @@ pub fn translate_c_to_fortran_ir(
     let parser = openmp::parser().with_language(LexerLanguage::C);
     let (rest, directive) = parser
         .parse(input)
-        .map_err(|err| TranslationError::ParseError(format!("{:?}", err)))?;
+        .map_err(|err| TranslationError::ParseError(format!("{err:?}")))?;
 
     // Check for unparsed input
     if !rest.trim().is_empty() {
@@ -179,7 +179,7 @@ pub fn translate_fortran_to_c_ir(
     let parser = openmp::parser().with_language(fortran_lang);
     let (rest, directive) = parser
         .parse(input)
-        .map_err(|err| TranslationError::ParseError(format!("{:?}", err)))?;
+        .map_err(|err| TranslationError::ParseError(format!("{err:?}")))?;
 
     // Check for unparsed input
     if !rest.trim().is_empty() {

@@ -9,6 +9,8 @@
  */
 
 #include <OpenACCParser.h>
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -86,6 +88,8 @@ extern "C" void setLang(OpenACCBaseLang lang) {
 }
 
 static void maybeMergeClause(OpenACCDirective* directive, OpenACCClauseKind kind, OpenACCClause* clause) {
+    const bool prev_merge = OpenACCDirective::getClauseMerging();
+    OpenACCDirective::setClauseMerging(true);
     switch (kind) {
         case ACCC_async:
             static_cast<OpenACCAsyncClause*>(clause)->mergeClause(directive, clause);
@@ -111,6 +115,9 @@ static void maybeMergeClause(OpenACCDirective* directive, OpenACCClauseKind kind
         case ACCC_device_num:
             static_cast<OpenACCDeviceNumClause*>(clause)->mergeClause(directive, clause);
             break;
+        case ACCC_tile:
+            static_cast<OpenACCTileClause*>(clause)->mergeClause(directive, clause);
+            break;
         case ACCC_gang:
             static_cast<OpenACCGangClause*>(clause)->mergeClause(directive, clause);
             break;
@@ -123,14 +130,47 @@ static void maybeMergeClause(OpenACCDirective* directive, OpenACCClauseKind kind
         case ACCC_reduction:
             static_cast<OpenACCReductionClause*>(clause)->mergeClause(directive, clause);
             break;
-        case ACCC_self:
-            static_cast<OpenACCSelfClause*>(clause)->mergeClause(directive, clause);
-            break;
         case ACCC_vector:
             static_cast<OpenACCVectorClause*>(clause)->mergeClause(directive, clause);
             break;
         case ACCC_vector_length:
             static_cast<OpenACCVectorLengthClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_delete:
+            static_cast<OpenACCDeleteClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_detach:
+            static_cast<OpenACCDetachClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_device:
+            static_cast<OpenACCDeviceClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_use_device:
+            static_cast<OpenACCUseDeviceClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_host:
+            static_cast<OpenACCHostClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_private:
+            static_cast<OpenACCPrivateClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_firstprivate:
+            static_cast<OpenACCFirstprivateClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_no_create:
+            static_cast<OpenACCNoCreateClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_present:
+            static_cast<OpenACCPresentClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_link:
+            static_cast<OpenACCLinkClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_device_resident:
+            static_cast<OpenACCDeviceResidentClause*>(clause)->mergeClause(directive, clause);
+            break;
+        case ACCC_deviceptr:
+            static_cast<OpenACCDeviceptrClause*>(clause)->mergeClause(directive, clause);
             break;
         case ACCC_wait:
             static_cast<OpenACCWaitClause*>(clause)->mergeClause(directive, clause);
@@ -141,6 +181,7 @@ static void maybeMergeClause(OpenACCDirective* directive, OpenACCClauseKind kind
         default:
             break;
     }
+    OpenACCDirective::setClauseMerging(prev_merge);
 }
 
 // ============================================================================
@@ -155,7 +196,7 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
     // The ROUP C API may return either the reduced directive kind (small
     // integers like 0..N) or the full macro values (offset by ACC_DIRECTIVE_BASE,
     // e.g., 10000+). Normalize here to the full macro values so the switch
-    // statements using `ROUP_ACC_DIRECTIVE_*` macros match correctly.
+    // statements using `ROUP_ACCD_*` macros match correctly.
     // Expect ROUP to publish canonical ACC namespace values (ACC_DIRECTIVE_BASE + raw).
     // Any reduced 0..N values or otherwise out-of-range values indicate a producer bug
     // and must be treated as a fatal error rather than normalized silently.
@@ -175,33 +216,33 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
     //     not accepted by the ROUP canonical mapping used here)
     //   - "wait" and "wait(... )" both map to ACCD_wait
     switch (full_kind) {
-        case ROUP_ACC_DIRECTIVE_PARALLEL:    return ACCD_parallel;     // 0 = "parallel"
-        case ROUP_ACC_DIRECTIVE_LOOP:        return ACCD_loop;         // 1 = "loop"
-        case ROUP_ACC_DIRECTIVE_KERNELS:     return ACCD_kernels;      // 2 = "kernels"
-    case ROUP_ACC_DIRECTIVE_DATA:                 return ACCD_data;         // 3 = "data"
-    case ROUP_ACC_DIRECTIVE_ENTER_DATA:           return ACCD_enter_data;   // 4 = "enter data" (space)
-    case ROUP_ACC_DIRECTIVE_EXIT_DATA:            return ACCD_exit_data;    // 5 = "exit data" (space)
-        case ROUP_ACC_DIRECTIVE_ATOMIC:      return ACCD_atomic;       // 7 = "atomic"
-        case ROUP_ACC_DIRECTIVE_DECLARE:     return ACCD_declare;      // 8 = "declare"
-        case ROUP_ACC_DIRECTIVE_WAIT:        return ACCD_wait;         // 9 = "wait"
-        case ROUP_ACC_DIRECTIVE_END:         return ACCD_end;          // 10 = "end"
-    case ROUP_ACC_DIRECTIVE_HOST_DATA:   return ACCD_host_data;    // host_data (underscore form)
-    case ROUP_ACC_DIRECTIVE_UPDATE:      return ACCD_update;       // 12 = "update"
+        case ROUP_ACCD_parallel:    return ACCD_parallel;     // 0 = "parallel"
+        case ROUP_ACCD_loop:        return ACCD_loop;         // 1 = "loop"
+        case ROUP_ACCD_kernels:     return ACCD_kernels;      // 2 = "kernels"
+    case ROUP_ACCD_data:                 return ACCD_data;         // 3 = "data"
+    case ROUP_ACCD_enter_data:           return ACCD_enter_data;   // 4 = "enter data" (space)
+    case ROUP_ACCD_exit_data:            return ACCD_exit_data;    // 5 = "exit data" (space)
+        case ROUP_ACCD_atomic:      return ACCD_atomic;       // 7 = "atomic"
+        case ROUP_ACCD_declare:     return ACCD_declare;      // 8 = "declare"
+        case ROUP_ACCD_wait:        return ACCD_wait;         // 9 = "wait"
+        case ROUP_ACCD_end:         return ACCD_end;          // 10 = "end"
+    case ROUP_ACCD_host_data:   return ACCD_host_data;    // host_data (underscore form)
+    case ROUP_ACCD_update:      return ACCD_update;       // 12 = "update"
     // Note: ROUP previously emitted target/teams/distribute family aliases
     // in the OpenACC mapping. These constructs do not appear in the
     // accparser OpenACCKinds.h header, so the ROUP constants for them are
     // no longer generated. Do not attempt to map them here.
 
     // Preserve earlier per-directive loop/kernels mappings for other kinds
-    case ROUP_ACC_DIRECTIVE_KERNELS_LOOP:         return ACCD_kernels_loop; // 10016 = "kernels loop"
-    case ROUP_ACC_DIRECTIVE_PARALLEL_LOOP:        return ACCD_parallel_loop;// 10017 = "parallel loop"
-    case ROUP_ACC_DIRECTIVE_SERIAL_LOOP:          return ACCD_serial_loop;  // 10018 = "serial loop"
-        case ROUP_ACC_DIRECTIVE_SERIAL:      return ACCD_serial;       // 17 = "serial"
-        case ROUP_ACC_DIRECTIVE_ROUTINE:     return ACCD_routine;      // 18 = "routine"
-        case ROUP_ACC_DIRECTIVE_SET:         return ACCD_set;          // 19 = "set"
-        case ROUP_ACC_DIRECTIVE_INIT:        return ACCD_init;         // 20 = "init"
-        case ROUP_ACC_DIRECTIVE_SHUTDOWN:    return ACCD_shutdown;     // 21 = "shutdown"
-    case ROUP_ACC_DIRECTIVE_CACHE:       return ACCD_cache;        // 23 = "cache(... )" with content
+    case ROUP_ACCD_kernels_loop:         return ACCD_kernels_loop; // 10016 = "kernels loop"
+    case ROUP_ACCD_parallel_loop:        return ACCD_parallel_loop;// 10017 = "parallel loop"
+    case ROUP_ACCD_serial_loop:          return ACCD_serial_loop;  // 10018 = "serial loop"
+        case ROUP_ACCD_serial:      return ACCD_serial;       // 17 = "serial"
+        case ROUP_ACCD_routine:     return ACCD_routine;      // 18 = "routine"
+        case ROUP_ACCD_set:         return ACCD_set;          // 19 = "set"
+        case ROUP_ACCD_init:        return ACCD_init;         // 20 = "init"
+        case ROUP_ACCD_shutdown:    return ACCD_shutdown;     // 21 = "shutdown"
+    case ROUP_ACCD_cache:       return ACCD_cache;        // 23 = "cache(... )" with content
     // underscore-form variants removed from ROUP OpenACC mapping
         default:                        return ACCD_unknown;
     }
@@ -209,53 +250,53 @@ static OpenACCDirectiveKind mapRoupToAccparserDirective(int32_t roup_kind) {
 
 static OpenACCClauseKind mapRoupToAccparserClause(int32_t roup_kind) {
     // ROUP clause kind mapping using named constants from roup_constants.h
-    // Single source of truth: src/c_api.rs:convert_acc_clause()
+    // Single source of truth: src/c_api/openacc.rs:clause_name_to_kind()
     switch (roup_kind) {
-        case ROUP_ACC_CLAUSE_ASYNC:           return ACCC_async;
-        case ROUP_ACC_CLAUSE_WAIT:            return ACCC_wait;
-        case ROUP_ACC_CLAUSE_NUM_GANGS:       return ACCC_num_gangs;
-        case ROUP_ACC_CLAUSE_NUM_WORKERS:     return ACCC_num_workers;
-        case ROUP_ACC_CLAUSE_VECTOR_LENGTH:   return ACCC_vector_length;
-        case ROUP_ACC_CLAUSE_GANG:            return ACCC_gang;
-        case ROUP_ACC_CLAUSE_WORKER:          return ACCC_worker;
-        case ROUP_ACC_CLAUSE_VECTOR:          return ACCC_vector;
-        case ROUP_ACC_CLAUSE_SEQ:             return ACCC_seq;
-        case ROUP_ACC_CLAUSE_INDEPENDENT:     return ACCC_independent;
-        case ROUP_ACC_CLAUSE_AUTO:            return ACCC_auto;
-        case ROUP_ACC_CLAUSE_COLLAPSE:        return ACCC_collapse;
-        case ROUP_ACC_CLAUSE_DEVICE_TYPE:     return ACCC_device_type;
-        case ROUP_ACC_CLAUSE_BIND:            return ACCC_bind;
-        case ROUP_ACC_CLAUSE_IF:              return ACCC_if;
-        case ROUP_ACC_CLAUSE_DEFAULT:         return ACCC_default;
-        case ROUP_ACC_CLAUSE_FIRSTPRIVATE:    return ACCC_firstprivate;
-        case ROUP_ACC_CLAUSE_DEFAULT_ASYNC:   return ACCC_default_async;
-        case ROUP_ACC_CLAUSE_LINK:            return ACCC_link;
-        case ROUP_ACC_CLAUSE_NO_CREATE:       return ACCC_no_create;
-        case ROUP_ACC_CLAUSE_NOHOST:          return ACCC_nohost;
-        case ROUP_ACC_CLAUSE_PRESENT:         return ACCC_present;
-        case ROUP_ACC_CLAUSE_PRIVATE:         return ACCC_private;
-        case ROUP_ACC_CLAUSE_REDUCTION:       return ACCC_reduction;
-        case ROUP_ACC_CLAUSE_READ:            return ACCC_read;
-        case ROUP_ACC_CLAUSE_SELF:            return ACCC_self;
-        case ROUP_ACC_CLAUSE_TILE:            return ACCC_tile;
-        case ROUP_ACC_CLAUSE_USE_DEVICE:      return ACCC_use_device;
-        case ROUP_ACC_CLAUSE_ATTACH:          return ACCC_attach;
-        case ROUP_ACC_CLAUSE_DETACH:          return ACCC_detach;
-        case ROUP_ACC_CLAUSE_FINALIZE:        return ACCC_finalize;
-        case ROUP_ACC_CLAUSE_IF_PRESENT:      return ACCC_if_present;
-        case ROUP_ACC_CLAUSE_CAPTURE:         return ACCC_capture;
-        case ROUP_ACC_CLAUSE_WRITE:           return ACCC_write;
-        case ROUP_ACC_CLAUSE_UPDATE:          return ACCC_update;
-        case ROUP_ACC_CLAUSE_COPY:            return ACCC_copy;
-        case ROUP_ACC_CLAUSE_COPYIN:          return ACCC_copyin;
-        case ROUP_ACC_CLAUSE_COPYOUT:         return ACCC_copyout;
-        case ROUP_ACC_CLAUSE_CREATE:          return ACCC_create;
-        case ROUP_ACC_CLAUSE_DELETE:          return ACCC_delete;
-        case ROUP_ACC_CLAUSE_DEVICE:          return ACCC_device;
-        case ROUP_ACC_CLAUSE_DEVICEPTR:       return ACCC_deviceptr;
-        case ROUP_ACC_CLAUSE_DEVICE_NUM:      return ACCC_device_num;
-        case ROUP_ACC_CLAUSE_DEVICE_RESIDENT: return ACCC_device_resident;
-        case ROUP_ACC_CLAUSE_HOST:            return ACCC_host;
+        case ROUP_ACCC_async:           return ACCC_async;
+        case ROUP_ACCC_wait:            return ACCC_wait;
+        case ROUP_ACCC_num_gangs:       return ACCC_num_gangs;
+        case ROUP_ACCC_num_workers:     return ACCC_num_workers;
+        case ROUP_ACCC_vector_length:   return ACCC_vector_length;
+        case ROUP_ACCC_gang:            return ACCC_gang;
+        case ROUP_ACCC_worker:          return ACCC_worker;
+        case ROUP_ACCC_vector:          return ACCC_vector;
+        case ROUP_ACCC_seq:             return ACCC_seq;
+        case ROUP_ACCC_independent:     return ACCC_independent;
+        case ROUP_ACCC_auto:            return ACCC_auto;
+        case ROUP_ACCC_collapse:        return ACCC_collapse;
+        case ROUP_ACCC_device_type:     return ACCC_device_type;
+        case ROUP_ACCC_bind:            return ACCC_bind;
+        case ROUP_ACCC_if:              return ACCC_if;
+        case ROUP_ACCC_default:         return ACCC_default;
+        case ROUP_ACCC_firstprivate:    return ACCC_firstprivate;
+        case ROUP_ACCC_default_async:   return ACCC_default_async;
+        case ROUP_ACCC_link:            return ACCC_link;
+        case ROUP_ACCC_no_create:       return ACCC_no_create;
+        case ROUP_ACCC_nohost:          return ACCC_nohost;
+        case ROUP_ACCC_present:         return ACCC_present;
+        case ROUP_ACCC_private:         return ACCC_private;
+        case ROUP_ACCC_reduction:       return ACCC_reduction;
+        case ROUP_ACCC_read:            return ACCC_read;
+        case ROUP_ACCC_self:            return ACCC_self;
+        case ROUP_ACCC_tile:            return ACCC_tile;
+        case ROUP_ACCC_use_device:      return ACCC_use_device;
+        case ROUP_ACCC_attach:          return ACCC_attach;
+        case ROUP_ACCC_detach:          return ACCC_detach;
+        case ROUP_ACCC_finalize:        return ACCC_finalize;
+        case ROUP_ACCC_if_present:      return ACCC_if_present;
+        case ROUP_ACCC_capture:         return ACCC_capture;
+        case ROUP_ACCC_write:           return ACCC_write;
+        case ROUP_ACCC_update:          return ACCC_update;
+        case ROUP_ACCC_copy:            return ACCC_copy;
+        case ROUP_ACCC_copyin:          return ACCC_copyin;
+        case ROUP_ACCC_copyout:         return ACCC_copyout;
+        case ROUP_ACCC_create:          return ACCC_create;
+        case ROUP_ACCC_delete:          return ACCC_delete;
+        case ROUP_ACCC_device:          return ACCC_device;
+        case ROUP_ACCC_deviceptr:       return ACCC_deviceptr;
+        case ROUP_ACCC_device_num:      return ACCC_device_num;
+        case ROUP_ACCC_device_resident: return ACCC_device_resident;
+        case ROUP_ACCC_host:            return ACCC_host;
         default:                         return ACCC_unknown;
     }
 }
@@ -373,7 +414,7 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
         for (int32_t i = 0; i < expr_count; ++i) {
             const char* expr = acc_directive_wait_expression_at(roup_dir, i);
             if (expr) {
-                wait_dir->addVar(std::string(expr));
+                wait_dir->addAsyncId(std::string(expr));
             }
         }
 
@@ -422,6 +463,11 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
         dir = new OpenACCDirective(kind, effective_lang, 0, 0);
     }
 
+    // Disable accparser's global clause merging; compat controls merging
+    // explicitly via maybeMergeClause to preserve duplicate/self clauses.
+    const bool prev_merge = OpenACCDirective::getClauseMerging();
+    OpenACCDirective::setClauseMerging(false);
+
     // Convert clauses - get ALL data from ROUP's C API
     AccClauseIterator* iter = acc_directive_clauses_iter(roup_dir);
     if (iter) {
@@ -445,16 +491,23 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                 clause->setOriginalKeyword(std::string(original_keyword));
             }
 
+            // Collect clause expressions up front
+            std::vector<std::string> expressions;
             {
-                // Get expressions from ROUP and add to accparser clause
                 int32_t expr_count = acc_clause_expressions_count(roup_clause);
+                expressions.reserve(expr_count > 0 ? expr_count : 0);
                 for (int32_t i = 0; i < expr_count; i++) {
                     const char* expr = acc_clause_expression_at(roup_clause, i);
                     if (expr) {
-                        clause->addLangExpr(std::string(expr));
+                        expressions.emplace_back(expr);
                     }
                 }
+            }
+            if (std::getenv("ROUP_DEBUG_ACC_COMPAT")) {
+                fprintf(stderr, "[compat] clause %d expr_count=%zu\n", static_cast<int>(clause_kind), expressions.size());
+            }
 
+            {
                 // Handle modifiers for clauses that have them
                 int32_t modifier = acc_clause_modifier(roup_clause);
                 if (modifier != 0) {
@@ -498,6 +551,288 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                 }
             }
 
+            // Populate clause-specific payloads using structured data
+            switch (clause_kind) {
+                case ACCC_async: {
+                    if (!expressions.empty()) {
+                        auto* async_clause = static_cast<OpenACCAsyncClause*>(clause);
+                        async_clause->setAsyncExpr(expressions.front());
+                        async_clause->setModifier(ACCC_ASYNC_expr);
+                    }
+                    break;
+                }
+                case ACCC_default_async: {
+                    if (!expressions.empty()) {
+                        static_cast<OpenACCDefaultAsyncClause*>(clause)->setAsyncExpr(expressions.front());
+                    }
+                    break;
+                }
+                case ACCC_bind: {
+                    if (!expressions.empty()) {
+                        static_cast<OpenACCBindClause*>(clause)->setBinding(expressions.front(), /*is_string_literal=*/false);
+                    }
+                    break;
+                }
+                case ACCC_collapse: {
+                    auto* collapse = static_cast<OpenACCCollapseClause*>(clause);
+                    for (const auto& expr : expressions) {
+                        collapse->addCountExpr(expr);
+                    }
+                    break;
+                }
+                case ACCC_num_gangs: {
+                    auto* ng = static_cast<OpenACCNumGangsClause*>(clause);
+                    for (const auto& expr : expressions) {
+                        ng->addNum(expr);
+                    }
+                    break;
+                }
+                case ACCC_num_workers: {
+                    if (!expressions.empty()) {
+                        static_cast<OpenACCNumWorkersClause*>(clause)->setNumExpr(expressions.front());
+                    }
+                    break;
+                }
+                case ACCC_vector_length: {
+                    if (!expressions.empty()) {
+                        static_cast<OpenACCVectorLengthClause*>(clause)->setLengthExpr(expressions.front());
+                    }
+                    break;
+                }
+                case ACCC_device_num: {
+                    if (!expressions.empty()) {
+                        static_cast<OpenACCDeviceNumClause*>(clause)->setDeviceExpr(expressions.front());
+                    }
+                    break;
+                }
+                case ACCC_if: {
+                    if (!expressions.empty()) {
+                        static_cast<OpenACCIfClause*>(clause)->setCondition(expressions.front());
+                    }
+                    break;
+                }
+                case ACCC_device: {
+                    auto* dev = static_cast<OpenACCDeviceClause*>(clause);
+                    for (const auto& expr : expressions) {
+                        dev->addDevice(expr);
+                    }
+                    break;
+                }
+                case ACCC_tile: {
+                    auto* tile = static_cast<OpenACCTileClause*>(clause);
+                    for (const auto& expr : expressions) {
+                        tile->addTileSize(expr);
+                    }
+                    break;
+                }
+                case ACCC_vector: {
+                    auto* vec = static_cast<OpenACCVectorClause*>(clause);
+                    if (!expressions.empty()) {
+                        vec->setLengthExpr(expressions.front());
+                    }
+                    break;
+                }
+                case ACCC_worker: {
+                    auto* worker = static_cast<OpenACCWorkerClause*>(clause);
+                    if (!expressions.empty()) {
+                        worker->setNumExpr(expressions.front());
+                    }
+                    break;
+                }
+                case ACCC_gang: {
+                    auto* gang = static_cast<OpenACCGangClause*>(clause);
+                    OpenACCGangArgKind arg_kind = ACCC_GANG_ARG_other;
+                    const int32_t modifier = acc_clause_modifier(roup_clause);
+                    if (modifier == 1) {
+                        arg_kind = ACCC_GANG_ARG_num;
+                    } else if (modifier == 2) {
+                        arg_kind = ACCC_GANG_ARG_static;
+                    }
+                    for (const auto& expr : expressions) {
+                        gang->addArg(arg_kind, expr);
+                    }
+                    break;
+                }
+                case ACCC_device_type: {
+                    auto* dtype = static_cast<OpenACCDeviceTypeClause*>(clause);
+                    for (const auto& expr : expressions) {
+                        std::string lowered = expr;
+                        std::transform(lowered.begin(), lowered.end(), lowered.begin(), ::tolower);
+                        if (lowered == "host") {
+                            dtype->addDeviceType(ACCC_DEVICE_TYPE_host);
+                        } else if (lowered == "any") {
+                            dtype->addDeviceType(ACCC_DEVICE_TYPE_any);
+                        } else if (lowered == "multicore") {
+                            dtype->addDeviceType(ACCC_DEVICE_TYPE_multicore);
+                        } else if (lowered == "default") {
+                            dtype->addDeviceType(ACCC_DEVICE_TYPE_default);
+                        } else {
+                            dtype->addDeviceTypeString(expr);
+                        }
+                    }
+                    break;
+                }
+                case ACCC_wait: {
+                    auto* wait_clause = static_cast<OpenACCWaitClause*>(clause);
+                    for (const auto& expr : expressions) {
+                        wait_clause->addAsyncId(expr);
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+
+            // Populate variable-list style clauses
+            if (auto* var_clause = dynamic_cast<OpenACCVarListClause*>(clause)) {
+                auto add_var_token = [&](const std::string& token) {
+                    const auto first = token.find_first_not_of(" \t");
+                    if (first == std::string::npos) {
+                        return;
+                    }
+                    const auto last = token.find_last_not_of(" \t");
+                    var_clause->addVar(token.substr(first, last - first + 1));
+                };
+
+                for (const auto& expr : expressions) {
+                    if (expr.find(',') != std::string::npos) {
+                        std::stringstream ss(expr);
+                        std::string part;
+                        while (std::getline(ss, part, ',')) {
+                            add_var_token(part);
+                        }
+                    } else {
+                        add_var_token(expr);
+                    }
+                }
+            } else if (expressions.empty() == false) {
+                // For non-varlist clauses that still carry expressions, preserve them
+                for (const auto& expr : expressions) {
+                    clause->addLangExpr(expr);
+                }
+            }
+
+            // Deduplicate trivial marker clauses that are expected to merge
+            if (clause_kind == ACCC_auto || clause_kind == ACCC_independent ||
+                clause_kind == ACCC_if_present) {
+                auto* existing = dir->getClauses(clause_kind);
+                if (existing != nullptr && existing->size() > 1) {
+                    auto* order = dir->getClausesInOriginalOrder();
+                    if (order && !order->empty() && order->back() == clause) {
+                        order->pop_back();
+                    }
+                    existing->pop_back();
+                    delete clause;
+                    continue;
+                }
+            }
+
+            // Drop duplicate/self-subset clauses
+            if (clause_kind == ACCC_self) {
+                auto* self_clause = static_cast<OpenACCSelfClause*>(clause);
+                auto* existing = dir->getClauses(ACCC_self);
+                if (existing != nullptr) {
+                    const bool has_condition = !self_clause->getCondition().empty();
+                    bool drop_current = false;
+                    std::vector<OpenACCSelfClause*> remove_list;
+
+                    // Skip the clause we just added (last element)
+                    for (auto it = existing->begin(); it != existing->end(); ++it) {
+                        if (it + 1 == existing->end()) {
+                            break;
+                        }
+                        auto* prev = static_cast<OpenACCSelfClause*>(*it);
+                        const bool prev_has_condition = !prev->getCondition().empty();
+                        if (has_condition || prev_has_condition) {
+                            if (has_condition && prev_has_condition &&
+                                prev->getCondition() == self_clause->getCondition()) {
+                                remove_list.push_back(prev);
+                            }
+                            continue;
+                        }
+
+                        // Both are var-list clauses: drop subsets/duplicates.
+                        auto normalize_vars = [](const std::vector<std::string>& raw_vars) {
+                            std::vector<std::string> tokens;
+                            for (const auto& raw : raw_vars) {
+                                std::stringstream ss(raw);
+                                std::string part;
+                                while (std::getline(ss, part, ',')) {
+                                    const auto first = part.find_first_not_of(" \t");
+                                    const auto last = part.find_last_not_of(" \t");
+                                    if (first == std::string::npos) {
+                                        continue;
+                                    }
+                                    tokens.emplace_back(part.substr(first, last - first + 1));
+                                }
+                            }
+                            return tokens.empty() ? raw_vars : tokens;
+                        };
+
+                        const auto incoming_vars = normalize_vars(self_clause->getVars());
+                        const auto prev_vars = normalize_vars(prev->getVars());
+                        const bool incoming_empty = incoming_vars.empty();
+                        const bool prev_empty = prev_vars.empty();
+
+                        if (incoming_empty && prev_empty) {
+                            drop_current = true;
+                            break;
+                        }
+                        if (incoming_empty != prev_empty) {
+                            continue;
+                        }
+
+                        auto is_subset = [](const std::vector<std::string>& a,
+                                            const std::vector<std::string>& b) {
+                            return std::all_of(a.begin(), a.end(), [&](const std::string& val) {
+                                return std::find(b.begin(), b.end(), val) != b.end();
+                            });
+                        };
+
+                        if (is_subset(prev_vars, incoming_vars)) {
+                            if (is_subset(incoming_vars, prev_vars)) {
+                                // Exact duplicate: drop the incoming clause to preserve order
+                                drop_current = true;
+                                break;
+                            }
+                            // Incoming is a strict superset: remove the previous subset clause
+                            remove_list.push_back(prev);
+                        } else if (is_subset(incoming_vars, prev_vars)) {
+                            // Incoming is a subset of an existing clause: skip it
+                            drop_current = true;
+                            break;
+                        }
+                    }
+
+                    if (drop_current) {
+                        auto* order = dir->getClausesInOriginalOrder();
+                        if (order && !order->empty() && order->back() == clause) {
+                            order->pop_back();
+                        }
+                        if (!existing->empty() && existing->back() == clause) {
+                            existing->pop_back();
+                        }
+                        delete clause;
+                        continue;
+                    }
+
+                    if (!remove_list.empty()) {
+                        auto* order = dir->getClausesInOriginalOrder();
+                        for (auto* prev : remove_list) {
+                            if (order) {
+                                order->erase(
+                                    std::remove(order->begin(), order->end(), prev),
+                                    order->end());
+                            }
+                            existing->erase(
+                                std::remove(existing->begin(), existing->end(), prev),
+                                existing->end());
+                            delete prev;
+                        }
+                    }
+                }
+            }
+
             if (clause_kind == ACCC_wait) {
                 if (const char* devnum_value = acc_clause_wait_devnum(roup_clause)) {
                     static_cast<OpenACCWaitClause*>(clause)->setDevnum(std::string(devnum_value));
@@ -514,6 +849,9 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
 
     // Free ROUP directive (we've extracted what we need)
     acc_directive_free(roup_dir);
+
+    // Restore previous merging setting
+    OpenACCDirective::setClauseMerging(prev_merge);
 
     return dir;
 }

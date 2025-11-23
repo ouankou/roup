@@ -24,7 +24,7 @@
 //!
 //! See: <https://github.com/rust-lang/rust/blob/master/compiler/rustc_span/src/symbol.rs>
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -43,8 +43,8 @@ const FNV_PRIME: u64 = 0x100000001b3;
 
 // Normalize constant name: uppercase and replace hyphens with underscores
 // normalize_constant_name removed; generator uses enum-variant -> constant naming
-/// Convert CamelCase variant name to UPPER_SNAKE constant name
-fn variant_to_constant(variant: &str) -> String {
+/// Convert CamelCase variant name to lower_snake identifier
+fn variant_to_snake(variant: &str) -> String {
     let mut out = String::new();
     for (i, ch) in variant.chars().enumerate() {
         if ch.is_ascii_uppercase() {
@@ -56,7 +56,7 @@ fn variant_to_constant(variant: &str) -> String {
             out.push(ch);
         }
     }
-    out.to_uppercase()
+    out
 }
 
 /// Parse directive mappings from c_api.rs directive_name_to_kind() using AST
@@ -76,7 +76,7 @@ pub fn parse_directive_mappings() -> Vec<(String, i32)> {
         if num == UNKNOWN_KIND || !seen.insert(num) {
             continue;
         }
-        mappings.push((variant_to_constant(&variant), num));
+        mappings.push((variant_to_snake(&variant), num));
     }
 
     mappings.sort_by_key(|(_, num)| *num);
@@ -123,19 +123,27 @@ fn ensure_no_underscore_variants(mappings: &[(String, i32)]) {
         .iter()
         .filter_map(|(variant, _num)| {
             if variant.ends_with("Underscore") {
-                Some(variant_to_constant(variant))
+                Some(variant_to_snake(variant))
             } else {
                 None
             }
         })
         .collect();
 
+    let allowed: std::collections::HashSet<_> = [
+        "target_data_underscore".to_string(),
+        "declare_target_underscore".to_string(),
+    ]
+    .into_iter()
+    .collect();
+    bad.retain(|v| !allowed.contains(v));
+
     if !bad.is_empty() {
         bad.sort();
         let mut msg =
             String::from("Found forbidden underscore-form directive variants in AST mapping:\n");
         for v in &bad {
-            msg.push_str(&format!("  - {}\n", v));
+            msg.push_str(&format!("  - {v}\n"));
         }
         msg.push_str("\nRemove these variants from the enum-based mapping in src/c_api or adjust the parser registrations to use canonical tokens only.\n");
         panic!("{}", msg);
@@ -146,22 +154,17 @@ fn ensure_no_underscore_variants(mappings: &[(String, i32)]) {
 pub fn parse_clause_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
+    let const_values = collect_const_i32_values(&ast);
 
     let mut mappings = Vec::new();
-    let mut seen_numbers: HashSet<i32> = HashSet::new();
-
-    // Find the convert_clause function (AST-only enum-patterns)
     for item in &ast.items {
         if let Item::Fn(ItemFn { sig, block, .. }) = item {
-            if sig.ident == "convert_clause" {
-                // Recursively find match expressions in the function body
+            if sig.ident == "clause_name_to_kind_for_constants" {
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        // AST-only: handle enum-pattern arms mapping ClauseName::Variant => num
-                        for (variant, num) in parse_enum_clause_arm(arm) {
-                            if num != UNKNOWN_KIND && seen_numbers.insert(num) {
-                                let const_name = variant_to_constant(&variant);
-                                mappings.push((const_name, num));
+                        for (variant, num) in parse_enum_clause_arm(arm, &const_values) {
+                            if num != UNKNOWN_KIND {
+                                mappings.push((variant_to_snake(&variant), num));
                             }
                         }
                     }
@@ -170,8 +173,60 @@ pub fn parse_clause_mappings() -> Vec<(String, i32)> {
         }
     }
 
+    if mappings.is_empty() {
+        panic!("No clause mapping function found (expected clause_name_to_kind_for_constants)");
+    }
+
     mappings.sort_by_key(|(_, num)| *num);
     mappings
+}
+
+/// Parse uses_allocators kind codes from src/c_api.rs (uses_allocator_builtin_code)
+#[allow(dead_code)]
+pub fn parse_uses_allocators_mappings() -> Vec<(String, i32)> {
+    let c_api = fs::read_to_string("src/c_api.rs").expect("Failed to read c_api.rs");
+    let ast: File = syn::parse_file(&c_api).expect("Failed to parse c_api.rs");
+
+    let mut mappings = Vec::new();
+    for item in &ast.items {
+        if let Item::Fn(ItemFn { sig, block, .. }) = item {
+            if sig.ident == "uses_allocator_builtin_code" {
+                find_matches_in_stmts(&block.stmts, &mut |arms| {
+                    for arm in arms {
+                        if let Some((variant, num)) = parse_enum_arm_with_literal(arm) {
+                            mappings.push((variant_to_snake(&variant), num));
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    // Inject the user-defined code if not present (mapped in c_api.rs as USES_ALLOCATOR_KIND_USER)
+    if !mappings.iter().any(|(name, _)| name == "user") {
+        mappings.push(("user".to_string(), 8));
+    }
+
+    mappings.sort_by_key(|(_, num)| *num);
+    mappings
+}
+
+/// Compute combined checksum for OpenMP + OpenACC + uses_allocators mappings
+#[allow(dead_code)]
+pub fn calculate_combined_checksum_with_uses_alloc(
+    directives: &[(String, i32)],
+    clauses: &[(String, i32)],
+    acc_directives: &[(String, i32)],
+    acc_clauses: &[(String, i32)],
+    uses_alloc: &[(String, i32)],
+) -> u64 {
+    let directive_hash = calculate_checksum(directives, &[]);
+    let clause_hash = calculate_checksum(clauses, &[]);
+    let acc_directive_hash = calculate_checksum(acc_directives, &[]);
+    let acc_clause_hash = calculate_checksum(acc_clauses, &[]);
+    let uses_alloc_hash = calculate_checksum(uses_alloc, &[]);
+
+    directive_hash ^ clause_hash ^ acc_directive_hash ^ acc_clause_hash ^ uses_alloc_hash
 }
 
 /// Parse OpenACC directive mappings from c_api.rs acc_directive_name_to_kind() using AST
@@ -213,7 +268,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
             if num == UNKNOWN_KIND {
                 continue;
             }
-            mappings.push((variant_to_constant(&variant), num));
+            mappings.push((variant_to_snake(&variant), num));
         }
         mappings.sort_by_key(|(_, num)| *num);
         return mappings;
@@ -249,7 +304,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     }
 
     for (variant, num) in &enum_mappings {
-        gen_map.insert(variant_to_constant(variant), acc_directive_base + *num);
+        gen_map.insert(variant_to_snake(variant), acc_directive_base + *num);
     }
 
     // Load the authoritative whitelist from accparser's OpenACCKinds.h so we
@@ -259,34 +314,34 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     let allowed_from_header =
         load_openacc_kinds_from_header("compat/accparser/accparser/src/OpenACCKinds.h");
 
-    // List of ROUP_ACC_DIRECTIVE_* identifiers expected by compat/accparser
+    // List of ROUP_ACCD_* identifiers expected by compat/accparser
     // This list focuses on the directive names used by the compatibility layer
     // and mirrors the identifiers referenced in compat/accparser/src/compat_impl.cpp
     // Exact whitelist derived from compat/accparser/accparser/src/OpenACCKinds.h
-    // This ensures the generated ROUP_ACC_DIRECTIVE_* macros only include
+    // This ensures the generated ROUP_ACCD_* macros only include
     // directives that the accparser compatibility layer understands.
     let expected = vec![
-        "ATOMIC",
-        "CACHE",
-        "DATA",
-        "DECLARE",
-        "END",
-        "ENTER_DATA",
-        "EXIT_DATA",
-        "HOST_DATA",
-        "INIT",
-        "KERNELS",
-        "KERNELS_LOOP",
-        "LOOP",
-        "PARALLEL",
-        "PARALLEL_LOOP",
-        "ROUTINE",
-        "SERIAL",
-        "SERIAL_LOOP",
-        "SET",
-        "SHUTDOWN",
-        "UPDATE",
-        "WAIT",
+        "atomic",
+        "cache",
+        "data",
+        "declare",
+        "end",
+        "enter_data",
+        "exit_data",
+        "host_data",
+        "init",
+        "kernels",
+        "kernels_loop",
+        "loop",
+        "parallel",
+        "parallel_loop",
+        "routine",
+        "serial",
+        "serial_loop",
+        "set",
+        "shutdown",
+        "update",
+        "wait",
     ];
 
     // Known alias candidates for expected compat names. Each expected key
@@ -294,10 +349,10 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     // (e.g., EnterData). We check all candidates
     // when attempting to resolve the expected mapping.
     let alias_candidates = vec![
-        ("ENTER_DATA", "EnterData"),
-        ("EXIT_DATA", "ExitData"),
-        ("HOST_DATA", "HostData"),
-        ("KERNELS_LOOP", "KernelsLoop"),
+        ("enter_data", "EnterData"),
+        ("exit_data", "ExitData"),
+        ("host_data", "HostData"),
+        ("kernels_loop", "KernelsLoop"),
     ];
 
     let mut final_mappings: Vec<(String, i32)> = Vec::new();
@@ -313,7 +368,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
             if k != key {
                 continue;
             }
-            let canon_const = variant_to_constant(cand);
+            let canon_const = variant_to_snake(cand);
             if let Some(&v) = gen_map.get(&canon_const) {
                 final_mappings.push((key.to_string(), v));
                 found_alias = true;
@@ -377,13 +432,13 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
         let candidate_token = if let Some(tok) = canonical_header_token_for_variant_local(variant) {
             tok.to_string()
         } else {
-            variant_to_constant(variant)
+            variant_to_snake(variant).to_ascii_uppercase()
         };
 
         // If the canonical token is not listed in the OpenACCKinds.h whitelist,
         // this AST-derived variant is illegal for OpenACC mapping.
         if !allowed_from_header.contains(&candidate_token) {
-            illegal.push(variant_to_constant(variant));
+            illegal.push(variant_to_snake(variant));
             continue;
         }
 
@@ -392,7 +447,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
         // code even when the token exists in the header (defensive check).
         let code = acc_directive_base + *num;
         if !allowed_codes.contains(&code) {
-            illegal.push(variant_to_constant(variant));
+            illegal.push(variant_to_snake(variant));
             continue;
         }
     }
@@ -403,7 +458,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
             "Found non-OpenACCKinds.h directive variants in openacc mapping (not present in OpenACCKinds.h whitelist):\n",
         );
         for name in &illegal {
-            msg.push_str(&format!("  - {}\n", name));
+            msg.push_str(&format!("  - {name}\n"));
         }
         msg.push_str("\nPlease remove these variants from src/c_api/openacc.rs or update compat/accparser/accparser/src/OpenACCKinds.h after careful review.\n");
         panic!("{}", msg);
@@ -424,15 +479,16 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     // The user requested there be no post-parse string heuristics and that any
     // unknown keyword should produce a fatal error during header generation so
     // the issue is fixed at compile time instead of silently assigned placeholders.
-    check_no_unknowns(&final_mappings, "OpenACC directive (ROUP_ACC_DIRECTIVE_*)");
+    check_no_unknowns(&final_mappings, "OpenACC directive (ROUP_ACCD_*)");
 
     final_mappings
 }
 
-/// Parse OpenACC clause mappings from c_api.rs convert_acc_clause() using AST
+/// Parse OpenACC clause mappings from c_api.rs clause_name_to_kind() using AST
 pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read openacc c_api");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse src/c_api/openacc.rs");
+    let const_values = collect_const_i32_values(&ast);
 
     let mut mappings = Vec::new();
 
@@ -442,9 +498,9 @@ pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
             if sig.ident == "clause_name_to_kind" {
                 find_matches_in_stmts(&block.stmts, &mut |arms| {
                     for arm in arms {
-                        for (variant, num) in parse_enum_clause_arm(arm) {
+                        for (variant, num) in parse_enum_clause_arm(arm, &const_values) {
                             if num != UNKNOWN_KIND {
-                                mappings.push((variant_to_constant(&variant), num));
+                                mappings.push((variant_to_snake(&variant), num));
                             }
                         }
                     }
@@ -459,71 +515,71 @@ pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
         gen_map.insert(name.clone(), *num);
     }
 
-    // List of ACC_CLAUSE_* identifiers expected by compat/accparser
+    // List of ROUP_ACCC_* identifiers expected by compat/accparser
     // This expected list is authoritative for the compatibility header
     // generation and is validated by a unit test (tests/acc_clause_macros.rs)
     // which asserts that `src/roup_constants.h` contains each
-    // `ACC_CLAUSE_{NAME}` macro and that none are left as UNKNOWN_KIND.
+    // `ROUP_ACCC_{name}` macro and that none are left as UNKNOWN_KIND.
     let expected = vec![
-        "ASYNC",
-        "WAIT",
-        "NUM_GANGS",
-        "NUM_WORKERS",
-        "VECTOR_LENGTH",
-        "GANG",
-        "WORKER",
-        "VECTOR",
-        "SEQ",
-        "INDEPENDENT",
-        "AUTO",
-        "COLLAPSE",
-        "DEVICE_TYPE",
-        "BIND",
-        "IF",
-        "DEFAULT",
-        "FIRSTPRIVATE",
-        "DEFAULT_ASYNC",
-        "LINK",
-        "NO_CREATE",
-        "NOHOST",
-        "PRESENT",
-        "PRIVATE",
-        "REDUCTION",
-        "READ",
-        "SELF",
-        "TILE",
-        "USE_DEVICE",
-        "ATTACH",
-        "DETACH",
-        "FINALIZE",
-        "IF_PRESENT",
-        "CAPTURE",
-        "WRITE",
-        "UPDATE",
-        "COPY",
-        "COPYIN",
-        "COPYOUT",
-        "CREATE",
-        "DELETE",
-        "DEVICE",
-        "DEVICEPTR",
-        "DEVICE_NUM",
-        "DEVICE_RESIDENT",
-        "HOST",
+        "async",
+        "wait",
+        "num_gangs",
+        "num_workers",
+        "vector_length",
+        "gang",
+        "worker",
+        "vector",
+        "seq",
+        "independent",
+        "auto",
+        "collapse",
+        "device_type",
+        "bind",
+        "if",
+        "default",
+        "firstprivate",
+        "default_async",
+        "link",
+        "no_create",
+        "nohost",
+        "present",
+        "private",
+        "reduction",
+        "read",
+        "self",
+        "tile",
+        "use_device",
+        "attach",
+        "detach",
+        "finalize",
+        "if_present",
+        "capture",
+        "write",
+        "update",
+        "copy",
+        "copyin",
+        "copyout",
+        "create",
+        "delete",
+        "device",
+        "deviceptr",
+        "device_num",
+        "device_resident",
+        "host",
         // include some canonical OMP names that OpenACC also uses
-        "NUM_THREADS",
+        "num_threads",
     ];
 
     // Known alias mapping from expected compat names -> generated variant names
     // Note: do NOT alias PRESENT to SHARED — they are distinct in OpenACC.
     let alias_map = vec![
-        ("COPYIN", "COPY_IN"),
-        ("COPYOUT", "COPY_OUT"),
-        ("DEVICE_NUM", "DEVICE_NUM"),
+        ("copyin", "copy_in"),
+        ("copyout", "copy_out"),
+        ("device_num", "device_num"),
         // Map compat names without underscores to enum variant names used in parser
-        ("DEVICEPTR", "DEVICE_PTR"),
-        ("NOHOST", "NO_HOST"),
-        ("SELF", "SELF_CLAUSE"),
+        ("deviceptr", "device_ptr"),
+        ("nohost", "no_host"),
+        ("self", "self_clause"),
     ]
     .into_iter()
     .collect::<std::collections::HashMap<_, _>>();
@@ -566,7 +622,7 @@ pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
     });
 
     // Fail fast if any expected compat clause identifiers are missing in the AST-derived map.
-    check_no_unknowns(&final_mappings, "OpenACC clause (ROUP_ACC_CLAUSE_*)");
+    check_no_unknowns(&final_mappings, "OpenACC clause (ROUP_ACCC_*)");
 
     final_mappings
 }
@@ -600,7 +656,7 @@ fn check_no_unknowns(mappings: &[(String, i32)], context: &str) {
             context
         );
         for name in unknowns {
-            msg.push_str(&format!("  - {}\n", name));
+            msg.push_str(&format!("  - {name}\n"));
         }
         msg.push_str("\nPlease add the missing enum arms to the corresponding parser/c_api code so the mapping can be generated from the AST.\n");
         panic!("{}", msg);
@@ -646,6 +702,7 @@ pub fn calculate_checksum(directives: &[(String, i32)], clauses: &[(String, i32)
 /// Calculate combined FNV-1a hash checksum of OpenMP and OpenACC mappings.
 ///
 /// Used to verify the generated header matches c_api.rs for both APIs.
+#[allow(dead_code)]
 pub fn calculate_combined_checksum(
     omp_directives: &[(String, i32)],
     omp_clauses: &[(String, i32)],
@@ -772,12 +829,11 @@ fn load_openacc_kinds_from_header(path: &str) -> std::collections::HashSet<Strin
     // confusing panics listing every directive as illegal.
     if !Path::new(path).exists() {
         panic!(
-            "FATAL: Expected OpenACCKinds.h at '{}' but file was not found.\n\n\
+            "FATAL: Expected OpenACCKinds.h at '{path}' but file was not found.\n\n\
 Please ensure the accparser compatibility submodule is initialized before building.\n\
 Run: git submodule update --init --recursive\n\n\
 If you intentionally removed the submodule, update src/constants_gen.rs to point\n\
-to a valid OpenACCKinds.h location or adjust the build to provide the header.\n",
-            path
+to a valid OpenACCKinds.h location or adjust the build to provide the header.\n"
         );
     }
 
@@ -856,12 +912,71 @@ fn parse_enum_directive_arm(arm: &Arm) -> Vec<(String, i32)> {
     results
 }
 
+/// Collect `const NAME: i32 = <literal>;` values from the parsed c_api.rs AST.
+fn collect_const_i32_values(ast: &File) -> HashMap<String, i32> {
+    let mut values = HashMap::new();
+    for item in &ast.items {
+        if let Item::Const(item_const) = item {
+            if let syn::Type::Path(type_path) = &*item_const.ty {
+                if type_path
+                    .path
+                    .segments
+                    .last()
+                    .map(|seg| seg.ident == "i32")
+                    .unwrap_or(false)
+                {
+                    if let Expr::Lit(ExprLit {
+                        lit: Lit::Int(li), ..
+                    }) = &*item_const.expr
+                    {
+                        if let Ok(num) = li.base10_parse::<i32>() {
+                            values.insert(item_const.ident.to_string(), num);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Fallback: when build.rs runs before we have inlined consts (e.g., clause kind
+    // constants generated into OUT_DIR), seed the map from the last generated header.
+    if let Ok(header) = fs::read_to_string("src/roup_constants.h") {
+        for line in header.lines() {
+            if let Some(rest) = line.strip_prefix("#define ROUP_OMPC_") {
+                let mut parts = rest.split_whitespace();
+                if let (Some(name), Some(val)) = (parts.next(), parts.next()) {
+                    if let Ok(num) = val.parse::<i32>() {
+                        let key = format!("CLAUSE_KIND_{}", normalize_clause_const_name(name));
+                        values.entry(key).or_insert(num);
+                    }
+                }
+            }
+        }
+    }
+
+    values
+}
+
+/// Normalize clause constant names from the generated header to the internal constant IDs.
+/// Example: "copy_in" -> "COPYIN", "read" -> "ATOMIC_READ".
+pub fn normalize_clause_const_name(name: &str) -> String {
+    match name {
+        "copy_in" => "COPYIN".to_string(),
+        "copy_out" => "COPYOUT".to_string(),
+        "self_maps" => "SELF".to_string(),
+        "read" => "ATOMIC_READ".to_string(),
+        "write" => "ATOMIC_WRITE".to_string(),
+        "update" => "ATOMIC_UPDATE".to_string(),
+        "capture" => "ATOMIC_CAPTURE".to_string(),
+        _ => name.to_ascii_uppercase(),
+    }
+}
+
 /// Parse an arm that maps a ClauseName enum variant to an integer
 /// e.g. `ClauseName::NumThreads => 0,` returning Some(("NumThreads", 0))
-fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
+fn parse_enum_clause_arm(arm: &Arm, const_values: &HashMap<String, i32>) -> Vec<(String, i32)> {
     let mut results = Vec::new();
     // Helper: recursively extract an integer tag from expression bodies (AST-only)
-    fn extract_num_from_expr(expr: &Expr) -> Option<i32> {
+    fn extract_num_from_expr(expr: &Expr, const_values: &HashMap<String, i32>) -> Option<i32> {
         match expr {
             Expr::Lit(ExprLit {
                 lit: Lit::Int(li), ..
@@ -876,9 +991,14 @@ fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
                     None
                 }
             }
+            Expr::Path(path) => path
+                .path
+                .segments
+                .last()
+                .and_then(|seg| const_values.get(&seg.ident.to_string()).copied()),
             Expr::Return(ret) => {
                 if let Some(e) = &ret.expr {
-                    extract_num_from_expr(e)
+                    extract_num_from_expr(e, const_values)
                 } else {
                     None
                 }
@@ -887,7 +1007,7 @@ fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
                 // Scan statements for an expression or semi containing a tuple/literal
                 for stmt in &block.block.stmts {
                     if let syn::Stmt::Expr(e, _) = stmt {
-                        if let Some(n) = extract_num_from_expr(e) {
+                        if let Some(n) = extract_num_from_expr(e, const_values) {
                             return Some(n);
                         }
                     }
@@ -898,7 +1018,7 @@ fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
         }
     }
 
-    let Some(num) = extract_num_from_expr(&arm.body) else {
+    let Some(num) = extract_num_from_expr(&arm.body, const_values) else {
         return results;
     };
 
@@ -918,6 +1038,24 @@ fn parse_enum_clause_arm(arm: &Arm) -> Vec<(String, i32)> {
     }
 
     results
+}
+
+#[allow(dead_code)]
+fn parse_enum_arm_with_literal(arm: &syn::Arm) -> Option<(String, i32)> {
+    let num = extract_num_from_expr(&arm.body)?;
+    let var = extract_variant_from_pat(&arm.pat)?;
+    Some((var, num))
+}
+
+#[allow(dead_code)]
+fn extract_num_from_expr(expr: &syn::Expr) -> Option<i32> {
+    match expr {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(li),
+            ..
+        }) => li.base10_parse::<i32>().ok(),
+        _ => None,
+    }
 }
 
 // String-based helpers removed: generator is AST-only

@@ -35,7 +35,7 @@ fn all_openacc34_directives_parse() {
 
     for (pragma, expected_name) in cases {
         let directive = parse_directive(pragma);
-        assert_eq!(directive.name, expected_name, "{}", pragma);
+        assert_eq!(directive.name, expected_name, "{pragma}");
     }
 }
 
@@ -49,8 +49,8 @@ fn assert_clause_case(pragma: &str, expected_name: &str, expected_kind: ClauseEx
     let clause = directive
         .clauses
         .last()
-        .unwrap_or_else(|| panic!("{} should contain clause", pragma));
-    assert_eq!(clause.name, expected_name, "{}", pragma);
+        .unwrap_or_else(|| panic!("{pragma} should contain clause"));
+    assert_eq!(clause.name, expected_name, "{pragma}");
     match (expected_kind, &clause.kind) {
         (ClauseExpectation::Bare, ClauseKind::Bare) => {}
         // Structured clauses with no content are also bare
@@ -85,10 +85,10 @@ fn assert_clause_case(pragma: &str, expected_name: &str, expected_kind: ClauseEx
         (ClauseExpectation::Parenthesized, ClauseKind::CreateClause { .. }) => {}
         (ClauseExpectation::Parenthesized, ClauseKind::ReductionClause { .. }) => {}
         (ClauseExpectation::Bare, ClauseKind::Parenthesized(_) | ClauseKind::VariableList(_)) => {
-            panic!("{} expected bare clause", pragma)
+            panic!("{pragma} expected bare clause")
         }
         (ClauseExpectation::Parenthesized, ClauseKind::Bare) => {
-            panic!("{} expected parenthesized clause", pragma)
+            panic!("{pragma} expected parenthesized clause")
         }
         _ => panic!(
             "{} returned unexpected clause kind: {:?}",

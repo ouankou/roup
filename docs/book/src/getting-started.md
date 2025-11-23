@@ -5,7 +5,7 @@ the C/C++ bindings.
 
 ## Prerequisites
 
-- Rust 1.85 or newer (`rustup` is recommended).
+- Rust 1.88 or newer (`rustup` is recommended).
 - A C/C++ toolchain (clang or GCC) when using the FFI bindings.
 - Optional: a Fortran compiler for the example programs in `examples/fortran/`.
 

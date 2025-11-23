@@ -2,13 +2,15 @@
 //!
 //! **Usage:** Runs automatically during `cargo build`
 //!
-//! **Source of truth:** `src/c_api.rs` (directive_name_to_kind, convert_clause)
+//! **Source of truth:** `src/c_api.rs` (directive_name_to_kind, clause_name_to_kind_for_constants)
 //!
 //! For design rationale and maintenance instructions:
 //! See [`docs/BUILD_SCRIPT_RATIONALE.md`](../docs/BUILD_SCRIPT_RATIONALE.md)
 
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 // Use #[path] to share code between build.rs and main crate
@@ -30,49 +32,56 @@ fn generate_header(
     clauses: &[(String, i32)],
     acc_directives: &[(String, i32)],
     acc_clauses: &[(String, i32)],
+    uses_alloc: &[(String, i32)],
 ) -> String {
     // Generate OpenMP directive constants
     let mut directive_defs = String::new();
     for (name, num) in directives {
-        directive_defs.push_str(&format!("#define ROUP_DIRECTIVE_{name:<20} {num}\n"));
+        directive_defs.push_str(&format!("#define ROUP_OMPD_{name:<30} {num}\n"));
     }
     directive_defs.push_str(&format!(
-        "#define ROUP_DIRECTIVE_UNKNOWN       {UNKNOWN_KIND}\n"
+        "#define ROUP_OMPD_unknown                   {UNKNOWN_KIND}\n"
     ));
 
     // Generate OpenMP clause constants
     let mut clause_defs = String::new();
     for (name, num) in clauses {
-        clause_defs.push_str(&format!("#define ROUP_CLAUSE_{name:<15} {num}\n"));
+        clause_defs.push_str(&format!("#define ROUP_OMPC_{name:<30} {num}\n"));
     }
     clause_defs.push_str(&format!(
-        "#define ROUP_CLAUSE_UNKNOWN      {UNKNOWN_KIND}\n"
+        "#define ROUP_OMPC_unknown                   {UNKNOWN_KIND}\n"
     ));
 
     // Generate OpenACC directive constants with ROUP_ACC_ prefix
     let mut acc_directive_defs = String::new();
     for (name, num) in acc_directives {
-        acc_directive_defs.push_str(&format!("#define ROUP_ACC_DIRECTIVE_{name:<20} {num}\n"));
+        acc_directive_defs.push_str(&format!("#define ROUP_ACCD_{name:<30} {num}\n"));
     }
     acc_directive_defs.push_str(&format!(
-        "#define ROUP_ACC_DIRECTIVE_UNKNOWN        {UNKNOWN_KIND}\n"
+        "#define ROUP_ACCD_unknown                    {UNKNOWN_KIND}\n"
     ));
 
     // Generate OpenACC clause constants with ROUP_ACC_ prefix
     let mut acc_clause_defs = String::new();
     for (name, num) in acc_clauses {
-        acc_clause_defs.push_str(&format!("#define ROUP_ACC_CLAUSE_{name:<15} {num}\n"));
+        acc_clause_defs.push_str(&format!("#define ROUP_ACCC_{name:<30} {num}\n"));
     }
     acc_clause_defs.push_str(&format!(
-        "#define ROUP_ACC_CLAUSE_UNKNOWN       {UNKNOWN_KIND}\n"
+        "#define ROUP_ACCC_unknown                  {UNKNOWN_KIND}\n"
     ));
 
-    // Generate checksum for validation (includes both OpenMP and OpenACC)
+    let mut uses_alloc_defs = String::new();
+    for (name, num) in uses_alloc {
+        uses_alloc_defs.push_str(&format!("#define ROUP_OMPA_USESALLOC_{name:<24} {num}\n"));
+    }
+
+    // Generate checksum for validation (OpenMP + OpenACC)
     let checksum = calculate_combined_checksum(directives, clauses, acc_directives, acc_clauses);
     let dir_count = directives.len();
     let clause_count = clauses.len();
     let acc_dir_count = acc_directives.len();
     let acc_clause_count = acc_clauses.len();
+    let uses_alloc_len = uses_alloc.len();
 
     format!(
         r#"/*
@@ -83,7 +92,7 @@ fn generate_header(
  *
  * Single source of truth: src/c_api.rs
  * - directive_name_to_kind() for directives
- * - convert_clause() for clauses
+ * - clause_name_to_kind_for_constants() for clauses
  *
  * Copyright (c) 2025 ROUP Project
  * SPDX-License-Identifier: BSD-3-Clause
@@ -103,6 +112,7 @@ extern "C" {{
 // Synchronization Check
 // ============================================================================
 // Auto-generated checksum: FNV-1a hash of OpenMP ({dir_count} directives + {clause_count} clauses) + OpenACC ({acc_dir_count} directives + {acc_clause_count} clauses) = 0x{checksum:016X}
+// uses_allocators entries (not part of checksum): {uses_alloc_len}
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
 #define ROUP_CONSTANTS_CHECKSUM 0x{checksum:016X}
 
@@ -115,32 +125,39 @@ extern "C" {{
 #define ROUP_LANG_FORTRAN_FIXED             2  // Fortran fixed-form (!$OMP/!$ACC or C$OMP/C$ACC)
 
 // ============================================================================
-// OpenMP Directive Kind Constants
+// OpenMP Directive Kind Constants (ROUP_OMPD_*)
 // ============================================================================
 // Auto-generated from src/c_api.rs:directive_name_to_kind()
 
 {directive_defs}
 
 // ============================================================================
-// OpenMP Clause Kind Constants
+// OpenMP Clause Kind Constants (ROUP_OMPC_*)
 // ============================================================================
-// Auto-generated from src/c_api.rs:convert_clause()
+// Auto-generated from src/c_api.rs:clause_name_to_kind_for_constants()
 
 {clause_defs}
 
 // ============================================================================
-// OpenACC Directive Kind Constants
+// OpenACC Directive Kind Constants (ROUP_ACCD_*)
 // ============================================================================
 // Auto-generated from src/c_api.rs:acc_directive_name_to_kind()
 
 {acc_directive_defs}
 
 // ============================================================================
-// OpenACC Clause Kind Constants
+// OpenACC Clause Kind Constants (ROUP_ACCC_*)
 // ============================================================================
-// Auto-generated from src/c_api.rs:convert_acc_clause()
+// Auto-generated from src/c_api/openacc.rs:clause_name_to_kind()
 
 {acc_clause_defs}
+
+// ============================================================================
+// Uses Allocators Kind Constants (ROUP_USEALLOC_*)
+// ============================================================================
+// Auto-generated from src/c_api.rs uses_allocators mapping
+
+
 
 // ============================================================================
 // Validation Constants
@@ -164,16 +181,26 @@ fn main() {
     // Parse OpenACC constants from source
     let acc_directives = parse_acc_directive_mappings();
     let acc_clauses = parse_acc_clause_mappings();
+    let uses_alloc = constants_gen::parse_uses_allocators_mappings();
 
     // Get the output directory
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("roup_constants.h");
 
     // Generate the header with both OpenMP and OpenACC constants
-    let header = generate_header(&directives, &clauses, &acc_directives, &acc_clauses);
+    let header = generate_header(
+        &directives,
+        &clauses,
+        &acc_directives,
+        &acc_clauses,
+        &uses_alloc,
+    );
 
     // Write to OUT_DIR
     fs::write(&dest_path, &header).expect("Failed to write to OUT_DIR");
+
+    // Generate a Rust module of clause kind constants from the generated header (for runtime use).
+    generate_clause_kind_rs(Path::new(&out_dir), &header);
 
     // Also copy to src/ for easier access during development
     let src_dest = Path::new("src").join("roup_constants.h");
@@ -214,4 +241,31 @@ fn main() {
     println!("cargo:rerun-if-changed=src/c_api/openacc.rs");
     println!("cargo:rerun-if-changed=src/constants_gen.rs");
     println!("cargo:rerun-if-changed=build.rs");
+}
+
+fn generate_clause_kind_rs(out_dir: &Path, header: &str) {
+    let mut clause_kinds = BTreeMap::new();
+    for line in header.lines() {
+        if let Some(rest) = line.strip_prefix("#define ROUP_OMPC_") {
+            let mut parts = rest.split_whitespace();
+            if let (Some(name), Some(value)) = (parts.next(), parts.next()) {
+                let ident = format!(
+                    "CLAUSE_KIND_{}",
+                    constants_gen::normalize_clause_const_name(name)
+                );
+                clause_kinds.insert(ident, value.to_string());
+            }
+        }
+    }
+
+    let dest = out_dir.join("clause_kinds.rs");
+    let mut file = fs::File::create(dest).expect("failed to create clause_kinds.rs");
+    writeln!(
+        file,
+        "// Auto-generated from roup_constants.h by build.rs — do not edit manually."
+    )
+    .unwrap();
+    for (ident, value) in clause_kinds {
+        writeln!(file, "pub const {ident}: i32 = {value};").unwrap();
+    }
 }

@@ -1,4 +1,5 @@
-use roup::parser::{ClauseKind, Parser};
+use roup::parser::{clause::ReductionOperator, ClauseKind, Parser};
+use std::borrow::Cow;
 
 fn parse(input: &str) -> roup::parser::Directive<'_> {
     let parser = Parser::default();
@@ -56,10 +57,19 @@ fn parses_target_teams_distribute_parallel_for_simd() {
         ClauseKind::Parenthesized("dynamic,8".into())
     );
     assert_eq!(directive.clauses[3].name, "reduction");
-    assert_eq!(
-        directive.clauses[3].kind,
-        ClauseKind::Parenthesized("*:prod".into())
-    );
+    match &directive.clauses[3].kind {
+        ClauseKind::ReductionClause {
+            operator,
+            user_defined_identifier,
+            variables,
+            ..
+        } => {
+            assert_eq!(*operator, ReductionOperator::Mul);
+            assert!(user_defined_identifier.is_none());
+            assert_eq!(variables, &vec![Cow::from("prod")]);
+        }
+        other => panic!("expected reduction clause, got {other:?}"),
+    }
     assert_eq!(directive.clauses[4].name, "uses_allocators");
     assert_eq!(
         directive.clauses[4].kind,

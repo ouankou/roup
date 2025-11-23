@@ -6,7 +6,7 @@
  *
  * Single source of truth: src/c_api.rs
  * - directive_name_to_kind() for directives
- * - convert_clause() for clauses
+ * - clause_name_to_kind_for_constants() for clauses
  *
  * Copyright (c) 2025 ROUP Project
  * SPDX-License-Identifier: BSD-3-Clause
@@ -25,9 +25,10 @@ extern "C" {
 // ============================================================================
 // Synchronization Check
 // ============================================================================
-// Auto-generated checksum: FNV-1a hash of OpenMP (17 directives + 12 clauses) + OpenACC (21 directives + 52 clauses) = 0x1ABD0C8CA3644820
+// Auto-generated checksum: FNV-1a hash of OpenMP (204 directives + 135 clauses) + OpenACC (21 directives + 52 clauses) = 0xA79F72859348C0A9
+// uses_allocators entries (not part of checksum): 1
 // If this doesn't match c_api.rs, rebuild with `cargo clean && cargo build`
-#define ROUP_CONSTANTS_CHECKSUM 0x1ABD0C8CA3644820
+#define ROUP_CONSTANTS_CHECKSUM 0xA79F72859348C0A9
 
 // ============================================================================
 // Language Format Constants
@@ -38,137 +39,454 @@ extern "C" {
 #define ROUP_LANG_FORTRAN_FIXED             2  // Fortran fixed-form (!$OMP/!$ACC or C$OMP/C$ACC)
 
 // ============================================================================
-// OpenMP Directive Kind Constants
+// OpenMP Directive Kind Constants (ROUP_OMPD_*)
 // ============================================================================
 // Auto-generated from src/c_api.rs:directive_name_to_kind()
 
-#define ROUP_DIRECTIVE_PARALLEL             0
-#define ROUP_DIRECTIVE_FOR                  1
-#define ROUP_DIRECTIVE_SECTIONS             2
-#define ROUP_DIRECTIVE_SINGLE               3
-#define ROUP_DIRECTIVE_TASK                 4
-#define ROUP_DIRECTIVE_MASTER               5
-#define ROUP_DIRECTIVE_CRITICAL             6
-#define ROUP_DIRECTIVE_BARRIER              7
-#define ROUP_DIRECTIVE_TASKWAIT             8
-#define ROUP_DIRECTIVE_TASKGROUP            9
-#define ROUP_DIRECTIVE_ATOMIC               10
-#define ROUP_DIRECTIVE_FLUSH                11
-#define ROUP_DIRECTIVE_ORDERED              12
-#define ROUP_DIRECTIVE_TARGET               13
-#define ROUP_DIRECTIVE_TEAMS                14
-#define ROUP_DIRECTIVE_DISTRIBUTE           15
-#define ROUP_DIRECTIVE_METADIRECTIVE        16
-#define ROUP_DIRECTIVE_UNKNOWN       -1
+#define ROUP_OMPD_parallel                       0
+#define ROUP_OMPD_for                            1
+#define ROUP_OMPD_do                             2
+#define ROUP_OMPD_simd                           3
+#define ROUP_OMPD_for_simd                       4
+#define ROUP_OMPD_do_simd                        5
+#define ROUP_OMPD_parallel_for_simd              6
+#define ROUP_OMPD_parallel_do_simd               7
+#define ROUP_OMPD_declare_simd                   8
+#define ROUP_OMPD_distribute                     9
+#define ROUP_OMPD_distribute_simd                10
+#define ROUP_OMPD_distribute_parallel_for        11
+#define ROUP_OMPD_distribute_parallel_do         12
+#define ROUP_OMPD_distribute_parallel_for_simd   13
+#define ROUP_OMPD_distribute_parallel_do_simd    14
+#define ROUP_OMPD_loop                           15
+#define ROUP_OMPD_scan                           16
+#define ROUP_OMPD_sections                       17
+#define ROUP_OMPD_section                        18
+#define ROUP_OMPD_single                         19
+#define ROUP_OMPD_workshare                      20
+#define ROUP_OMPD_cancel                         21
+#define ROUP_OMPD_cancellation_point             22
+#define ROUP_OMPD_allocate                       23
+#define ROUP_OMPD_threadprivate                  24
+#define ROUP_OMPD_declare_reduction              25
+#define ROUP_OMPD_declare_mapper                 26
+#define ROUP_OMPD_parallel_for                   27
+#define ROUP_OMPD_parallel_do                    28
+#define ROUP_OMPD_parallel_loop                  29
+#define ROUP_OMPD_parallel_sections              30
+#define ROUP_OMPD_parallel_single                31
+#define ROUP_OMPD_parallel_workshare             32
+#define ROUP_OMPD_parallel_master                33
+#define ROUP_OMPD_master_taskloop                34
+#define ROUP_OMPD_master_taskloop_simd           35
+#define ROUP_OMPD_parallel_master_taskloop       36
+#define ROUP_OMPD_parallel_master_taskloop_simd  37
+#define ROUP_OMPD_teams                          38
+#define ROUP_OMPD_metadirective                  39
+#define ROUP_OMPD_declare_variant                40
+#define ROUP_OMPD_begin_declare_variant          41
+#define ROUP_OMPD_end_declare_variant            42
+#define ROUP_OMPD_task                           43
+#define ROUP_OMPD_taskloop                       44
+#define ROUP_OMPD_taskloop_simd                  45
+#define ROUP_OMPD_taskyield                      46
+#define ROUP_OMPD_requires                       47
+#define ROUP_OMPD_target_data                    48
+#define ROUP_OMPD_target_data_composite          49
+#define ROUP_OMPD_target_enter_data              50
+#define ROUP_OMPD_target_update                  51
+#define ROUP_OMPD_target_exit_data               52
+#define ROUP_OMPD_target                         53
+#define ROUP_OMPD_declare_target                 54
+#define ROUP_OMPD_begin_declare_target           55
+#define ROUP_OMPD_end_declare_target             56
+#define ROUP_OMPD_master                         57
+#define ROUP_OMPD_end                            58
+#define ROUP_OMPD_barrier                        59
+#define ROUP_OMPD_taskwait                       60
+#define ROUP_OMPD_unroll                         61
+#define ROUP_OMPD_tile                           62
+#define ROUP_OMPD_taskgroup                      63
+#define ROUP_OMPD_flush                          64
+#define ROUP_OMPD_atomic                         65
+#define ROUP_OMPD_critical                       66
+#define ROUP_OMPD_depobj                         67
+#define ROUP_OMPD_ordered                        68
+#define ROUP_OMPD_teams_distribute               69
+#define ROUP_OMPD_teams_distribute_simd          70
+#define ROUP_OMPD_teams_distribute_parallel_for  71
+#define ROUP_OMPD_teams_distribute_parallel_for_simd 72
+#define ROUP_OMPD_teams_loop                     73
+#define ROUP_OMPD_target_parallel                74
+#define ROUP_OMPD_target_parallel_for            75
+#define ROUP_OMPD_target_parallel_for_simd       76
+#define ROUP_OMPD_target_parallel_loop           77
+#define ROUP_OMPD_target_simd                    78
+#define ROUP_OMPD_target_teams                   79
+#define ROUP_OMPD_target_teams_distribute        80
+#define ROUP_OMPD_target_teams_distribute_simd   81
+#define ROUP_OMPD_target_teams_loop              82
+#define ROUP_OMPD_target_teams_distribute_parallel_for 83
+#define ROUP_OMPD_target_teams_distribute_parallel_for_simd 84
+#define ROUP_OMPD_teams_distribute_parallel_do   85
+#define ROUP_OMPD_teams_distribute_parallel_do_simd 86
+#define ROUP_OMPD_target_parallel_do             87
+#define ROUP_OMPD_target_parallel_do_simd        88
+#define ROUP_OMPD_target_teams_distribute_parallel_do 89
+#define ROUP_OMPD_target_teams_distribute_parallel_do_simd 90
+#define ROUP_OMPD_error                          91
+#define ROUP_OMPD_nothing                        92
+#define ROUP_OMPD_masked                         93
+#define ROUP_OMPD_scope                          94
+#define ROUP_OMPD_masked_taskloop                95
+#define ROUP_OMPD_masked_taskloop_simd           96
+#define ROUP_OMPD_parallel_masked                97
+#define ROUP_OMPD_parallel_masked_taskloop       98
+#define ROUP_OMPD_parallel_masked_taskloop_simd  99
+#define ROUP_OMPD_interop                        100
+#define ROUP_OMPD_assume                         101
+#define ROUP_OMPD_end_assume                     102
+#define ROUP_OMPD_assumes                        103
+#define ROUP_OMPD_begin_assumes                  104
+#define ROUP_OMPD_end_assumes                    105
+#define ROUP_OMPD_allocators                     106
+#define ROUP_OMPD_taskgraph                      107
+#define ROUP_OMPD_task_iteration                 108
+#define ROUP_OMPD_dispatch                       109
+#define ROUP_OMPD_groupprivate                   110
+#define ROUP_OMPD_workdistribute                 111
+#define ROUP_OMPD_fuse                           112
+#define ROUP_OMPD_interchange                    113
+#define ROUP_OMPD_reverse                        114
+#define ROUP_OMPD_split                          115
+#define ROUP_OMPD_stripe                         116
+#define ROUP_OMPD_declare_induction              117
+#define ROUP_OMPD_begin_metadirective            118
+#define ROUP_OMPD_parallel_loop_simd             119
+#define ROUP_OMPD_teams_loop_simd                120
+#define ROUP_OMPD_target_loop                    121
+#define ROUP_OMPD_target_loop_simd               122
+#define ROUP_OMPD_target_parallel_loop_simd      123
+#define ROUP_OMPD_target_teams_loop_simd         124
+#define ROUP_OMPD_distribute_parallel_loop       125
+#define ROUP_OMPD_distribute_parallel_loop_simd  126
+#define ROUP_OMPD_teams_distribute_parallel_loop 127
+#define ROUP_OMPD_teams_distribute_parallel_loop_simd 128
+#define ROUP_OMPD_target_teams_distribute_parallel_loop 129
+#define ROUP_OMPD_target_teams_distribute_parallel_loop_simd 130
+#define ROUP_OMPD_end_parallel                   131
+#define ROUP_OMPD_end_do                         132
+#define ROUP_OMPD_end_simd                       133
+#define ROUP_OMPD_end_sections                   134
+#define ROUP_OMPD_end_single                     135
+#define ROUP_OMPD_end_workshare                  136
+#define ROUP_OMPD_end_ordered                    137
+#define ROUP_OMPD_end_loop                       138
+#define ROUP_OMPD_end_distribute                 139
+#define ROUP_OMPD_end_teams                      140
+#define ROUP_OMPD_end_taskloop                   141
+#define ROUP_OMPD_end_task                       142
+#define ROUP_OMPD_end_taskgroup                  143
+#define ROUP_OMPD_end_master                     144
+#define ROUP_OMPD_end_critical                   145
+#define ROUP_OMPD_end_atomic                     146
+#define ROUP_OMPD_end_parallel_do                147
+#define ROUP_OMPD_end_parallel_for               148
+#define ROUP_OMPD_end_parallel_sections          149
+#define ROUP_OMPD_end_parallel_workshare         150
+#define ROUP_OMPD_end_parallel_master            151
+#define ROUP_OMPD_end_do_simd                    152
+#define ROUP_OMPD_end_for_simd                   153
+#define ROUP_OMPD_end_parallel_do_simd           154
+#define ROUP_OMPD_end_parallel_for_simd          155
+#define ROUP_OMPD_end_distribute_simd            156
+#define ROUP_OMPD_end_distribute_parallel_do     157
+#define ROUP_OMPD_end_distribute_parallel_for    158
+#define ROUP_OMPD_end_distribute_parallel_do_simd 159
+#define ROUP_OMPD_end_distribute_parallel_for_simd 160
+#define ROUP_OMPD_end_target_parallel            161
+#define ROUP_OMPD_end_target_parallel_do         162
+#define ROUP_OMPD_end_target_parallel_for        163
+#define ROUP_OMPD_end_target_parallel_do_simd    164
+#define ROUP_OMPD_end_target_parallel_for_simd   165
+#define ROUP_OMPD_end_target_simd                166
+#define ROUP_OMPD_end_target_teams               167
+#define ROUP_OMPD_end_target_teams_distribute    168
+#define ROUP_OMPD_end_target_teams_distribute_parallel_do 169
+#define ROUP_OMPD_end_target_teams_distribute_parallel_for 170
+#define ROUP_OMPD_end_target_teams_distribute_parallel_do_simd 171
+#define ROUP_OMPD_end_target_teams_distribute_parallel_for_simd 172
+#define ROUP_OMPD_end_target_teams_distribute_simd 173
+#define ROUP_OMPD_end_target_teams_loop          174
+#define ROUP_OMPD_end_teams_distribute           175
+#define ROUP_OMPD_end_teams_distribute_parallel_do 176
+#define ROUP_OMPD_end_teams_distribute_parallel_for 177
+#define ROUP_OMPD_end_teams_distribute_parallel_do_simd 178
+#define ROUP_OMPD_end_teams_distribute_parallel_for_simd 179
+#define ROUP_OMPD_end_teams_distribute_simd      180
+#define ROUP_OMPD_end_teams_loop                 181
+#define ROUP_OMPD_end_taskloop_simd              182
+#define ROUP_OMPD_end_master_taskloop            183
+#define ROUP_OMPD_end_master_taskloop_simd       184
+#define ROUP_OMPD_end_parallel_master_taskloop   185
+#define ROUP_OMPD_end_parallel_master_taskloop_simd 186
+#define ROUP_OMPD_end_target_parallel_loop       187
+#define ROUP_OMPD_end_parallel_loop              188
+#define ROUP_OMPD_end_target_loop                189
+#define ROUP_OMPD_end_section                    190
+#define ROUP_OMPD_end_target                     191
+#define ROUP_OMPD_end_target_data                192
+#define ROUP_OMPD_end_target_enter_data          193
+#define ROUP_OMPD_end_target_exit_data           194
+#define ROUP_OMPD_end_target_update              195
+#define ROUP_OMPD_end_unroll                     196
+#define ROUP_OMPD_end_tile                       197
+#define ROUP_OMPD_end_masked                     198
+#define ROUP_OMPD_end_masked_taskloop            199
+#define ROUP_OMPD_end_masked_taskloop_simd       200
+#define ROUP_OMPD_end_parallel_masked            201
+#define ROUP_OMPD_end_parallel_masked_taskloop   202
+#define ROUP_OMPD_end_parallel_masked_taskloop_simd 203
+#define ROUP_OMPD_unknown                   -1
 
 
 // ============================================================================
-// OpenMP Clause Kind Constants
+// OpenMP Clause Kind Constants (ROUP_OMPC_*)
 // ============================================================================
-// Auto-generated from src/c_api.rs:convert_clause()
+// Auto-generated from src/c_api.rs:clause_name_to_kind_for_constants()
 
-#define ROUP_CLAUSE_NUM_THREADS     0
-#define ROUP_CLAUSE_IF              1
-#define ROUP_CLAUSE_PRIVATE         2
-#define ROUP_CLAUSE_SHARED          3
-#define ROUP_CLAUSE_FIRSTPRIVATE    4
-#define ROUP_CLAUSE_LASTPRIVATE     5
-#define ROUP_CLAUSE_REDUCTION       6
-#define ROUP_CLAUSE_SCHEDULE        7
-#define ROUP_CLAUSE_COLLAPSE        8
-#define ROUP_CLAUSE_ORDERED         9
-#define ROUP_CLAUSE_NOWAIT          10
-#define ROUP_CLAUSE_DEFAULT         11
-#define ROUP_CLAUSE_UNKNOWN      -1
+#define ROUP_OMPC_if                             1
+#define ROUP_OMPC_num_threads                    2
+#define ROUP_OMPC_default                        3
+#define ROUP_OMPC_private                        4
+#define ROUP_OMPC_firstprivate                   5
+#define ROUP_OMPC_shared                         6
+#define ROUP_OMPC_copy_in                        7
+#define ROUP_OMPC_align                          8
+#define ROUP_OMPC_reduction                      9
+#define ROUP_OMPC_proc_bind                      10
+#define ROUP_OMPC_allocate                       11
+#define ROUP_OMPC_num_teams                      12
+#define ROUP_OMPC_thread_limit                   13
+#define ROUP_OMPC_lastprivate                    14
+#define ROUP_OMPC_collapse                       15
+#define ROUP_OMPC_ordered                        16
+#define ROUP_OMPC_partial                        17
+#define ROUP_OMPC_nowait                         18
+#define ROUP_OMPC_full                           19
+#define ROUP_OMPC_order                          20
+#define ROUP_OMPC_linear                         21
+#define ROUP_OMPC_schedule                       22
+#define ROUP_OMPC_safelen                        23
+#define ROUP_OMPC_simdlen                        24
+#define ROUP_OMPC_aligned                        25
+#define ROUP_OMPC_nontemporal                    26
+#define ROUP_OMPC_uniform                        27
+#define ROUP_OMPC_inbranch                       28
+#define ROUP_OMPC_notinbranch                    29
+#define ROUP_OMPC_dist_schedule                  30
+#define ROUP_OMPC_bind                           31
+#define ROUP_OMPC_inclusive                      32
+#define ROUP_OMPC_exclusive                      33
+#define ROUP_OMPC_copyprivate                    34
+#define ROUP_OMPC_parallel                       35
+#define ROUP_OMPC_sections                       36
+#define ROUP_OMPC_for                            37
+#define ROUP_OMPC_do                             38
+#define ROUP_OMPC_taskgroup                      39
+#define ROUP_OMPC_allocator                      40
+#define ROUP_OMPC_initializer                    41
+#define ROUP_OMPC_final                          42
+#define ROUP_OMPC_untied                         43
+#define ROUP_OMPC_requires                       44
+#define ROUP_OMPC_mergeable                      45
+#define ROUP_OMPC_in_reduction                   46
+#define ROUP_OMPC_depend                         47
+#define ROUP_OMPC_priority                       48
+#define ROUP_OMPC_affinity                       49
+#define ROUP_OMPC_detach                         50
+#define ROUP_OMPC_grainsize                      51
+#define ROUP_OMPC_num_tasks                      52
+#define ROUP_OMPC_nogroup                        53
+#define ROUP_OMPC_reverse_offload                54
+#define ROUP_OMPC_unified_address                55
+#define ROUP_OMPC_unified_shared_memory          56
+#define ROUP_OMPC_atomic_default_mem_order       57
+#define ROUP_OMPC_dynamic_allocators             58
+#define ROUP_OMPC_self_maps                      59
+#define ROUP_OMPC_ext_implementation_defined_requirement 60
+#define ROUP_OMPC_device                         61
+#define ROUP_OMPC_map                            62
+#define ROUP_OMPC_copy                           62
+#define ROUP_OMPC_copy_out                       62
+#define ROUP_OMPC_use_device_ptr                 63
+#define ROUP_OMPC_sizes                          64
+#define ROUP_OMPC_use_device_addr                65
+#define ROUP_OMPC_is_device_ptr                  66
+#define ROUP_OMPC_has_device_addr                67
+#define ROUP_OMPC_defaultmap                     68
+#define ROUP_OMPC_to                             69
+#define ROUP_OMPC_from                           70
+#define ROUP_OMPC_uses_allocators                71
+#define ROUP_OMPC_when                           72
+#define ROUP_OMPC_match                          73
+#define ROUP_OMPC_link                           74
+#define ROUP_OMPC_device_type                    75
+#define ROUP_OMPC_task_reduction                 76
+#define ROUP_OMPC_acq_rel                        77
+#define ROUP_OMPC_release                        78
+#define ROUP_OMPC_acquire                        79
+#define ROUP_OMPC_read                           80
+#define ROUP_OMPC_write                          81
+#define ROUP_OMPC_update                         82
+#define ROUP_OMPC_capture                        83
+#define ROUP_OMPC_seq_cst                        84
+#define ROUP_OMPC_relaxed                        85
+#define ROUP_OMPC_hint                           86
+#define ROUP_OMPC_destroy                        87
+#define ROUP_OMPC_depobj_update                  88
+#define ROUP_OMPC_threads                        89
+#define ROUP_OMPC_simd                           90
+#define ROUP_OMPC_filter                         91
+#define ROUP_OMPC_compare                        92
+#define ROUP_OMPC_compare_capture                92
+#define ROUP_OMPC_otherwise                      102
+#define ROUP_OMPC_fail                           103
+#define ROUP_OMPC_weak                           104
+#define ROUP_OMPC_at                             105
+#define ROUP_OMPC_severity                       106
+#define ROUP_OMPC_message                        107
+#define ROUP_OMPC_doacross                       108
+#define ROUP_OMPC_absent                         109
+#define ROUP_OMPC_contains                       110
+#define ROUP_OMPC_holds                          111
+#define ROUP_OMPC_graph_id                       112
+#define ROUP_OMPC_graph_reset                    113
+#define ROUP_OMPC_transparent                    114
+#define ROUP_OMPC_replayable                     115
+#define ROUP_OMPC_threadset                      116
+#define ROUP_OMPC_indirect                       117
+#define ROUP_OMPC_local                          118
+#define ROUP_OMPC_init                           119
+#define ROUP_OMPC_init_complete                  120
+#define ROUP_OMPC_safesync                       121
+#define ROUP_OMPC_device_safesync                122
+#define ROUP_OMPC_memscope                       123
+#define ROUP_OMPC_looprange                      124
+#define ROUP_OMPC_permutation                    125
+#define ROUP_OMPC_counts                         126
+#define ROUP_OMPC_induction                      127
+#define ROUP_OMPC_inductor                       128
+#define ROUP_OMPC_collector                      129
+#define ROUP_OMPC_combiner                       130
+#define ROUP_OMPC_adjust_args                    131
+#define ROUP_OMPC_append_args                    132
+#define ROUP_OMPC_apply                          133
+#define ROUP_OMPC_no_openmp                      134
+#define ROUP_OMPC_no_openmp_constructs           135
+#define ROUP_OMPC_no_openmp_routines             136
+#define ROUP_OMPC_no_parallelism                 137
+#define ROUP_OMPC_nocontext                      138
+#define ROUP_OMPC_novariants                     139
+#define ROUP_OMPC_enter                          140
+#define ROUP_OMPC_use                            141
+#define ROUP_OMPC_unknown                   -1
 
 
 // ============================================================================
-// OpenACC Directive Kind Constants
+// OpenACC Directive Kind Constants (ROUP_ACCD_*)
 // ============================================================================
 // Auto-generated from src/c_api.rs:acc_directive_name_to_kind()
 
-#define ROUP_ACC_DIRECTIVE_PARALLEL             10000
-#define ROUP_ACC_DIRECTIVE_LOOP                 10001
-#define ROUP_ACC_DIRECTIVE_KERNELS              10002
-#define ROUP_ACC_DIRECTIVE_DATA                 10004
-#define ROUP_ACC_DIRECTIVE_ENTER_DATA           10005
-#define ROUP_ACC_DIRECTIVE_EXIT_DATA            10006
-#define ROUP_ACC_DIRECTIVE_HOST_DATA            10007
-#define ROUP_ACC_DIRECTIVE_ATOMIC               10011
-#define ROUP_ACC_DIRECTIVE_DECLARE              10012
-#define ROUP_ACC_DIRECTIVE_WAIT                 10013
-#define ROUP_ACC_DIRECTIVE_END                  10014
-#define ROUP_ACC_DIRECTIVE_UPDATE               10015
-#define ROUP_ACC_DIRECTIVE_KERNELS_LOOP         10016
-#define ROUP_ACC_DIRECTIVE_PARALLEL_LOOP        10017
-#define ROUP_ACC_DIRECTIVE_SERIAL_LOOP          10018
-#define ROUP_ACC_DIRECTIVE_SERIAL               10019
-#define ROUP_ACC_DIRECTIVE_ROUTINE              10020
-#define ROUP_ACC_DIRECTIVE_SET                  10021
-#define ROUP_ACC_DIRECTIVE_INIT                 10022
-#define ROUP_ACC_DIRECTIVE_SHUTDOWN             10023
-#define ROUP_ACC_DIRECTIVE_CACHE                10024
-#define ROUP_ACC_DIRECTIVE_UNKNOWN        -1
+#define ROUP_ACCD_parallel                       10000
+#define ROUP_ACCD_loop                           10001
+#define ROUP_ACCD_kernels                        10002
+#define ROUP_ACCD_data                           10004
+#define ROUP_ACCD_enter_data                     10005
+#define ROUP_ACCD_exit_data                      10006
+#define ROUP_ACCD_host_data                      10007
+#define ROUP_ACCD_atomic                         10011
+#define ROUP_ACCD_declare                        10012
+#define ROUP_ACCD_wait                           10013
+#define ROUP_ACCD_end                            10014
+#define ROUP_ACCD_update                         10015
+#define ROUP_ACCD_kernels_loop                   10016
+#define ROUP_ACCD_parallel_loop                  10017
+#define ROUP_ACCD_serial_loop                    10018
+#define ROUP_ACCD_serial                         10019
+#define ROUP_ACCD_routine                        10020
+#define ROUP_ACCD_set                            10021
+#define ROUP_ACCD_init                           10022
+#define ROUP_ACCD_shutdown                       10023
+#define ROUP_ACCD_cache                          10024
+#define ROUP_ACCD_unknown                    -1
 
 
 // ============================================================================
-// OpenACC Clause Kind Constants
+// OpenACC Clause Kind Constants (ROUP_ACCC_*)
 // ============================================================================
-// Auto-generated from src/c_api.rs:convert_acc_clause()
+// Auto-generated from src/c_api/openacc.rs:clause_name_to_kind()
 
-#define ROUP_ACC_CLAUSE_NUM_THREADS     0
-#define ROUP_ACC_CLAUSE_COLLAPSE        11
-#define ROUP_ACC_CLAUSE_IF              14
-#define ROUP_ACC_CLAUSE_DEFAULT         15
-#define ROUP_ACC_CLAUSE_FIRSTPRIVATE    16
-#define ROUP_ACC_CLAUSE_PRIVATE         22
-#define ROUP_ACC_CLAUSE_REDUCTION       23
-#define ROUP_ACC_CLAUSE_COPY            35
-#define ROUP_ACC_CLAUSE_COPYIN          36
-#define ROUP_ACC_CLAUSE_COPYOUT         37
-#define ROUP_ACC_CLAUSE_CREATE          38
-#define ROUP_ACC_CLAUSE_PRESENT         39
-#define ROUP_ACC_CLAUSE_ASYNC           2000
-#define ROUP_ACC_CLAUSE_WAIT            2001
-#define ROUP_ACC_CLAUSE_NUM_GANGS       2002
-#define ROUP_ACC_CLAUSE_NUM_WORKERS     2003
-#define ROUP_ACC_CLAUSE_VECTOR_LENGTH   2004
-#define ROUP_ACC_CLAUSE_GANG            2005
-#define ROUP_ACC_CLAUSE_WORKER          2006
-#define ROUP_ACC_CLAUSE_VECTOR          2007
-#define ROUP_ACC_CLAUSE_SEQ             2008
-#define ROUP_ACC_CLAUSE_INDEPENDENT     2009
-#define ROUP_ACC_CLAUSE_AUTO            2010
-#define ROUP_ACC_CLAUSE_DEVICE_TYPE     2011
-#define ROUP_ACC_CLAUSE_BIND            2012
-#define ROUP_ACC_CLAUSE_DEFAULT_ASYNC   2013
-#define ROUP_ACC_CLAUSE_LINK            2014
-#define ROUP_ACC_CLAUSE_NO_CREATE       2015
-#define ROUP_ACC_CLAUSE_NOHOST          2016
-#define ROUP_ACC_CLAUSE_READ            2017
-#define ROUP_ACC_CLAUSE_SELF            2018
-#define ROUP_ACC_CLAUSE_TILE            2019
-#define ROUP_ACC_CLAUSE_USE_DEVICE      2020
-#define ROUP_ACC_CLAUSE_ATTACH          2021
-#define ROUP_ACC_CLAUSE_DETACH          2022
-#define ROUP_ACC_CLAUSE_FINALIZE        2023
-#define ROUP_ACC_CLAUSE_IF_PRESENT      2024
-#define ROUP_ACC_CLAUSE_CAPTURE         2025
-#define ROUP_ACC_CLAUSE_WRITE           2026
-#define ROUP_ACC_CLAUSE_UPDATE          2027
-#define ROUP_ACC_CLAUSE_DELETE          2028
-#define ROUP_ACC_CLAUSE_DEVICE          2029
-#define ROUP_ACC_CLAUSE_DEVICEPTR       2030
-#define ROUP_ACC_CLAUSE_DEVICE_NUM      2031
-#define ROUP_ACC_CLAUSE_DEVICE_RESIDENT 2032
-#define ROUP_ACC_CLAUSE_HOST            2033
-#define ROUP_ACC_CLAUSE_SHARED          21
-#define ROUP_ACC_CLAUSE_COPY_IN         36
-#define ROUP_ACC_CLAUSE_COPY_OUT        37
-#define ROUP_ACC_CLAUSE_NO_HOST         2016
-#define ROUP_ACC_CLAUSE_SELF_CLAUSE     2018
-#define ROUP_ACC_CLAUSE_DEVICE_PTR      2030
-#define ROUP_ACC_CLAUSE_UNKNOWN       -1
+#define ROUP_ACCC_num_threads                    0
+#define ROUP_ACCC_collapse                       11
+#define ROUP_ACCC_if                             14
+#define ROUP_ACCC_default                        15
+#define ROUP_ACCC_firstprivate                   16
+#define ROUP_ACCC_private                        22
+#define ROUP_ACCC_reduction                      23
+#define ROUP_ACCC_copy                           35
+#define ROUP_ACCC_copyin                         36
+#define ROUP_ACCC_copyout                        37
+#define ROUP_ACCC_create                         38
+#define ROUP_ACCC_present                        39
+#define ROUP_ACCC_async                          2000
+#define ROUP_ACCC_wait                           2001
+#define ROUP_ACCC_num_gangs                      2002
+#define ROUP_ACCC_num_workers                    2003
+#define ROUP_ACCC_vector_length                  2004
+#define ROUP_ACCC_gang                           2005
+#define ROUP_ACCC_worker                         2006
+#define ROUP_ACCC_vector                         2007
+#define ROUP_ACCC_seq                            2008
+#define ROUP_ACCC_independent                    2009
+#define ROUP_ACCC_auto                           2010
+#define ROUP_ACCC_device_type                    2011
+#define ROUP_ACCC_bind                           2012
+#define ROUP_ACCC_default_async                  2013
+#define ROUP_ACCC_link                           2014
+#define ROUP_ACCC_no_create                      2015
+#define ROUP_ACCC_nohost                         2016
+#define ROUP_ACCC_read                           2017
+#define ROUP_ACCC_self                           2018
+#define ROUP_ACCC_tile                           2019
+#define ROUP_ACCC_use_device                     2020
+#define ROUP_ACCC_attach                         2021
+#define ROUP_ACCC_detach                         2022
+#define ROUP_ACCC_finalize                       2023
+#define ROUP_ACCC_if_present                     2024
+#define ROUP_ACCC_capture                        2025
+#define ROUP_ACCC_write                          2026
+#define ROUP_ACCC_update                         2027
+#define ROUP_ACCC_delete                         2028
+#define ROUP_ACCC_device                         2029
+#define ROUP_ACCC_deviceptr                      2030
+#define ROUP_ACCC_device_num                     2031
+#define ROUP_ACCC_device_resident                2032
+#define ROUP_ACCC_host                           2033
+#define ROUP_ACCC_shared                         21
+#define ROUP_ACCC_copy_in                        36
+#define ROUP_ACCC_copy_out                       37
+#define ROUP_ACCC_no_host                        2016
+#define ROUP_ACCC_self_clause                    2018
+#define ROUP_ACCC_device_ptr                     2030
+#define ROUP_ACCC_unknown                  -1
+
+
+// ============================================================================
+// Uses Allocators Kind Constants (ROUP_USEALLOC_*)
+// ============================================================================
+// Auto-generated from src/c_api.rs uses_allocators mapping
+
 
 
 // ============================================================================

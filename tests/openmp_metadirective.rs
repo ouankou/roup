@@ -93,3 +93,18 @@ fn parses_metadirective_with_nested_directives_and_qualifiers() {
     );
     assert_eq!(bodies[2], "nothing");
 }
+
+#[test]
+fn metadirective_when_selector_preserves_text() {
+    let parser = parser();
+    let source = "#pragma omp metadirective when(user={condition(a>4)}: ) default(parallel)";
+    let (_rest, directive) = parser.parse(source).expect("parse should succeed");
+    assert_eq!(directive.clauses.len(), 2);
+    let when = &directive.clauses[0];
+    match &when.kind {
+        ClauseKind::Parenthesized(body) => {
+            assert!(!body.as_ref().trim().is_empty());
+        }
+        _ => panic!("expected parenthesized when selector"),
+    }
+}

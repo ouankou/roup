@@ -146,6 +146,9 @@ add_test(NAME compat_basic COMMAND compat_example)
 add_test(NAME ompparser_drop_in COMMAND ompparser_example)
 add_test(NAME comprehensive COMMAND comprehensive_test)
 
+# Include ompparser submodule tests (1524 tests from openmp_examples and openmp_vv)
+add_subdirectory(ompparser/tests)
+
 # ============================================================================
 # Installation
 # ============================================================================

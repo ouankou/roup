@@ -1,13 +1,16 @@
-mod clause;
+pub mod ast_builder;
+pub mod clause;
 mod directive;
 pub mod directive_kind;
 pub mod openacc;
 pub mod openmp;
 
+pub use ast_builder::AstBuildError;
+
 pub use clause::{
     lookup_clause_name, Clause, ClauseKind, ClauseName, ClauseRegistry, ClauseRegistryBuilder,
-    ClauseRule, CopyinModifier, CopyoutModifier, CreateModifier, GangModifier, ReductionOperator,
-    VectorModifier, WorkerModifier,
+    ClauseRule, ClauseSeparator, CopyinModifier, CopyoutModifier, CreateModifier, GangModifier,
+    ReductionOperator, VectorModifier, WorkerModifier,
 };
 pub use directive::{
     CacheDirectiveData, Directive, DirectiveRegistry, DirectiveRegistryBuilder, DirectiveRule,
@@ -15,6 +18,8 @@ pub use directive::{
 };
 
 use super::lexer::{self, Language};
+use crate::ast::{ClauseNormalizationMode, RoupDirective};
+use crate::ir::{Language as IrLanguage, ParserConfig};
 use nom::{IResult, Parser as _};
 
 pub struct Parser {
@@ -28,6 +33,27 @@ pub struct Parser {
 pub enum Dialect {
     OpenMp,
     OpenAcc,
+}
+
+/// Skip duplicate prefix keyword after sentinel (e.g., "omp" after "!$omp")
+/// This provides forgiving parsing for malformed directives like "!$omp omp teams"
+fn skip_duplicate_keyword<'a>(input: &'a str, prefix: &str) -> &'a str {
+    // Check if the input starts with the prefix (case-insensitive)
+    // followed by whitespace or end of string
+    if input.len() >= prefix.len()
+        && input[..prefix.len()].eq_ignore_ascii_case(prefix)
+        && (input.len() == prefix.len()
+            || input
+                .chars()
+                .nth(prefix.len())
+                .is_some_and(|c| c.is_whitespace()))
+    {
+        // Skip the prefix and any following whitespace
+        let after_prefix = &input[prefix.len()..];
+        after_prefix.trim_start()
+    } else {
+        input
+    }
 }
 
 impl Parser {
@@ -83,7 +109,7 @@ impl Parser {
                 input
             }
             Language::FortranFree => {
-                let (input, _) = (
+                let (mut input, _) = (
                     |i| match self.dialect {
                         Dialect::OpenMp => lexer::lex_fortran_free_sentinel_with_prefix(i, "omp"),
                         Dialect::OpenAcc => lexer::lex_fortran_free_sentinel_with_prefix(i, "acc"),
@@ -91,10 +117,18 @@ impl Parser {
                     lexer::skip_space1_and_comments,
                 )
                     .parse(input)?;
+
+                // Skip duplicate prefix keyword if present (e.g., "!$omp omp teams" -> "!$omp teams")
+                // This provides forgiving parsing for malformed directives
+                let prefix = match self.dialect {
+                    Dialect::OpenMp => "omp",
+                    Dialect::OpenAcc => "acc",
+                };
+                input = skip_duplicate_keyword(input, prefix);
                 input
             }
             Language::FortranFixed => {
-                let (input, _) = (
+                let (mut input, _) = (
                     |i| match self.dialect {
                         Dialect::OpenMp => lexer::lex_fortran_fixed_sentinel_with_prefix(i, "omp"),
                         Dialect::OpenAcc => lexer::lex_fortran_fixed_sentinel_with_prefix(i, "acc"),
@@ -102,10 +136,58 @@ impl Parser {
                     lexer::skip_space1_and_comments,
                 )
                     .parse(input)?;
+
+                // Skip duplicate prefix keyword if present (e.g., "!$omp omp teams" -> "!$omp teams")
+                // This provides forgiving parsing for malformed directives
+                let prefix = match self.dialect {
+                    Dialect::OpenMp => "omp",
+                    Dialect::OpenAcc => "acc",
+                };
+                input = skip_duplicate_keyword(input, prefix);
                 input
             }
         };
         self.directive_registry.parse(input, &self.clause_registry)
+    }
+
+    pub fn parse_ast(
+        &self,
+        input: &str,
+        normalization: ClauseNormalizationMode,
+        parser_config: &ParserConfig,
+    ) -> Result<RoupDirective, AstBuildError> {
+        let ir_language = ir_language_from_parser_language(self.language);
+        let config = parser_config.for_language(ir_language);
+        let (rest, directive) = self
+            .parse(input)
+            .map_err(|err| AstBuildError::ParseFailure(format!("{err:?}")))?;
+
+        // Reject trailing tokens once a directive has been parsed to prevent
+        // accidentally accepting malformed pragmas like "safelen" (missing
+        // parentheses) or bare branch hints with leftover text.
+        let rest = crate::lexer::skip_space_and_comments(rest)
+            .map(|(remaining, _)| remaining)
+            .unwrap_or(rest);
+        let trimmed_rest = rest.trim();
+        if !trimmed_rest.is_empty() {
+            // Ompparser is permissive about trailing commas; tolerate them but
+            // reject any other leftover tokens to avoid silently accepting
+            // malformed pragmas.
+            let without_commas = trimmed_rest.trim_matches(',');
+            if !without_commas.trim().is_empty() {
+                return Err(AstBuildError::ParseFailure(format!(
+                    "unexpected trailing tokens: {trimmed_rest:?}"
+                )));
+            }
+        }
+
+        ast_builder::build_roup_directive(
+            &directive,
+            self.dialect,
+            normalization,
+            &config,
+            ir_language,
+        )
     }
 }
 
@@ -144,9 +226,18 @@ pub fn parse_acc_directive(input: &str) -> IResult<&str, Directive<'_>> {
     parser.parse(input)
 }
 
+fn ir_language_from_parser_language(lang: Language) -> IrLanguage {
+    match lang {
+        Language::C => IrLanguage::C,
+        Language::FortranFree | Language::FortranFixed => IrLanguage::Fortran,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::ClauseNormalizationMode;
+    use crate::ir::ParserConfig;
     use crate::lexer::{self, Language};
     use std::borrow::Cow;
 
@@ -169,6 +260,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_ast_accepts_hint_clause() {
+        let parser = Parser::default();
+        let config = ParserConfig::default();
+
+        let result = parser.parse_ast(
+            "#pragma omp critical(test1) hint(test2)",
+            ClauseNormalizationMode::ParserParity,
+            &config,
+        );
+
+        assert!(result.is_ok(), "parse_ast error: {:?}", result.err());
+    }
+
+    #[test]
     fn parser_uses_custom_registries() {
         fn parse_only_bare<'a>(name: Cow<'a, str>, input: &'a str) -> IResult<&'a str, Clause<'a>> {
             let (input, _) = nom::character::complete::char('(')(input)?;
@@ -178,6 +283,7 @@ mod tests {
             Ok((
                 input,
                 Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
                     name,
                     kind: ClauseKind::Parenthesized(value.into()),
                 },

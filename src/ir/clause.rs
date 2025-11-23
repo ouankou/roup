@@ -155,6 +155,31 @@ impl fmt::Display for MapType {
     }
 }
 
+/// Map-type modifiers (e.g., `always`, `close`, `present`, `self`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum MapModifier {
+    Always = 0,
+    Close = 1,
+    Present = 2,
+    SelfMap = 3,
+    Iterator = 4,
+    OmpxHold = 5,
+}
+
+impl fmt::Display for MapModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MapModifier::Always => write!(f, "always"),
+            MapModifier::Close => write!(f, "close"),
+            MapModifier::Present => write!(f, "present"),
+            MapModifier::SelfMap => write!(f, "self"),
+            MapModifier::Iterator => write!(f, "iterator"),
+            MapModifier::OmpxHold => write!(f, "ompx_hold"),
+        }
+    }
+}
+
 // ============================================================================
 // Schedule Kind (OpenMP 5.2 spec section 2.9.2)
 // ============================================================================
@@ -263,14 +288,31 @@ pub enum DependType {
     Out = 1,
     /// Read-write dependency
     Inout = 2,
+    /// Read-write dependency that must not be executed concurrently
+    Inoutset = 3,
     /// Mutual exclusion with inout
-    Mutexinoutset = 3,
+    Mutexinoutset = 4,
     /// Dependency on task completion
-    Depobj = 4,
+    Depobj = 5,
     /// Source dependency (OpenMP 5.0)
-    Source = 5,
+    Source = 6,
     /// Sink dependency (OpenMP 5.0)
-    Sink = 6,
+    Sink = 7,
+}
+
+/// Depobj update dependence types
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum DepobjUpdateDependence {
+    In,
+    Out,
+    Inout,
+    Inoutset,
+    Mutexinoutset,
+    Depobj,
+    Sink,
+    Source,
+    Unknown,
 }
 
 impl fmt::Display for DependType {
@@ -279,10 +321,27 @@ impl fmt::Display for DependType {
             DependType::In => write!(f, "in"),
             DependType::Out => write!(f, "out"),
             DependType::Inout => write!(f, "inout"),
+            DependType::Inoutset => write!(f, "inoutset"),
             DependType::Mutexinoutset => write!(f, "mutexinoutset"),
             DependType::Depobj => write!(f, "depobj"),
             DependType::Source => write!(f, "source"),
             DependType::Sink => write!(f, "sink"),
+        }
+    }
+}
+
+impl fmt::Display for DepobjUpdateDependence {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DepobjUpdateDependence::In => write!(f, "in"),
+            DepobjUpdateDependence::Out => write!(f, "out"),
+            DepobjUpdateDependence::Inout => write!(f, "inout"),
+            DepobjUpdateDependence::Inoutset => write!(f, "inoutset"),
+            DepobjUpdateDependence::Mutexinoutset => write!(f, "mutexinoutset"),
+            DepobjUpdateDependence::Depobj => write!(f, "depobj"),
+            DepobjUpdateDependence::Sink => write!(f, "sink"),
+            DepobjUpdateDependence::Source => write!(f, "source"),
+            DepobjUpdateDependence::Unknown => write!(f, "unknown"),
         }
     }
 }
@@ -330,6 +389,68 @@ impl fmt::Display for DefaultKind {
 }
 
 // ============================================================================
+// Defaultmap Clause Attributes (OpenMP 5.2 spec section 2.21.7)
+// ============================================================================
+
+/// Behavior applied to implicit data mappings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum DefaultmapBehavior {
+    Unspecified = 0,
+    Alloc = 1,
+    To = 2,
+    From = 3,
+    Tofrom = 4,
+    Firstprivate = 5,
+    None = 6,
+    Default = 7,
+    Present = 8,
+}
+
+impl fmt::Display for DefaultmapBehavior {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match self {
+            DefaultmapBehavior::Unspecified => "unspecified",
+            DefaultmapBehavior::Alloc => "alloc",
+            DefaultmapBehavior::To => "to",
+            DefaultmapBehavior::From => "from",
+            DefaultmapBehavior::Tofrom => "tofrom",
+            DefaultmapBehavior::Firstprivate => "firstprivate",
+            DefaultmapBehavior::None => "none",
+            DefaultmapBehavior::Default => "default",
+            DefaultmapBehavior::Present => "present",
+        };
+        write!(f, "{text}")
+    }
+}
+
+/// Category of data to which the defaultmap clause applies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum DefaultmapCategory {
+    Unspecified = 0,
+    Scalar = 1,
+    Aggregate = 2,
+    Pointer = 3,
+    All = 4,
+    Allocatable = 5,
+}
+
+impl fmt::Display for DefaultmapCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = match self {
+            DefaultmapCategory::Unspecified => "unspecified",
+            DefaultmapCategory::Scalar => "scalar",
+            DefaultmapCategory::Aggregate => "aggregate",
+            DefaultmapCategory::Pointer => "pointer",
+            DefaultmapCategory::All => "all",
+            DefaultmapCategory::Allocatable => "allocatable",
+        };
+        write!(f, "{text}")
+    }
+}
+
+// ============================================================================
 // Proc Bind (OpenMP 5.2 spec section 2.6.2)
 // ============================================================================
 
@@ -364,6 +485,31 @@ impl fmt::Display for ProcBind {
             ProcBind::Close => write!(f, "close"),
             ProcBind::Spread => write!(f, "spread"),
             ProcBind::Primary => write!(f, "primary"),
+        }
+    }
+}
+
+// ============================================================================
+// Loop Bind (OpenMP 5.1 loop construct)
+// ============================================================================
+
+/// Binding for `bind(...)` on loop constructs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum BindModifier {
+    Teams = 0,
+    Parallel = 1,
+    Thread = 2,
+    User = 3,
+}
+
+impl fmt::Display for BindModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BindModifier::Teams => write!(f, "teams"),
+            BindModifier::Parallel => write!(f, "parallel"),
+            BindModifier::Thread => write!(f, "thread"),
+            BindModifier::User => write!(f, "user"),
         }
     }
 }
@@ -478,6 +624,81 @@ pub enum DeviceType {
     Any = 2,
 }
 
+// ============================================================================
+// Uses Allocators Clause Helpers (OpenMP 5.2 spec section 2.11.5)
+// ============================================================================
+
+/// Built-in allocator identifiers recognized by the specification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum UsesAllocatorBuiltin {
+    Default = 0,
+    LargeCap = 1,
+    Const = 2,
+    HighBw = 3,
+    LowLat = 4,
+    Cgroup = 5,
+    Pteam = 6,
+    Thread = 7,
+}
+
+impl UsesAllocatorBuiltin {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            UsesAllocatorBuiltin::Default => "omp_default_mem_alloc",
+            UsesAllocatorBuiltin::LargeCap => "omp_large_cap_mem_alloc",
+            UsesAllocatorBuiltin::Const => "omp_const_mem_alloc",
+            UsesAllocatorBuiltin::HighBw => "omp_high_bw_mem_alloc",
+            UsesAllocatorBuiltin::LowLat => "omp_low_lat_mem_alloc",
+            UsesAllocatorBuiltin::Cgroup => "omp_cgroup_mem_alloc",
+            UsesAllocatorBuiltin::Pteam => "omp_pteam_mem_alloc",
+            UsesAllocatorBuiltin::Thread => "omp_thread_mem_alloc",
+        }
+    }
+}
+
+impl fmt::Display for UsesAllocatorBuiltin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// Kind of allocator referenced by a `uses_allocators` clause entry.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum UsesAllocatorKind {
+    Builtin(UsesAllocatorBuiltin),
+    Custom(Identifier),
+}
+
+impl UsesAllocatorKind {
+    pub fn canonical_name(&self) -> &str {
+        match self {
+            UsesAllocatorKind::Builtin(builtin) => builtin.as_str(),
+            UsesAllocatorKind::Custom(identifier) => identifier.as_str(),
+        }
+    }
+}
+
+/// Parsed `uses_allocators` clause entry.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UsesAllocatorSpec {
+    pub allocator: UsesAllocatorKind,
+    pub traits: Option<Expression>,
+    pub traits_first: bool,
+}
+
+/// Requires clause modifiers (OpenMP 5.x)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum RequireModifier {
+    ReverseOffload,
+    UnifiedAddress,
+    UnifiedSharedMemory,
+    DynamicAllocators,
+    SelfMaps,
+    AtomicDefaultMemOrder(MemoryOrder),
+    ExtImplementationDefinedRequirement(Option<Identifier>),
+}
+
 impl fmt::Display for DeviceType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -546,6 +767,101 @@ pub enum LastprivateModifier {
     Conditional = 0,
 }
 
+// ============================================================================
+// Reduction Modifiers (OpenMP 5.x)
+// ============================================================================
+
+/// Reduction clause modifiers (`task`, `inscan`, `default`)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum ReductionModifier {
+    Task = 0,
+    Inscan = 1,
+    Default = 2,
+    Original = 3,
+}
+
+impl fmt::Display for ReductionModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReductionModifier::Task => write!(f, "task"),
+            ReductionModifier::Inscan => write!(f, "inscan"),
+            ReductionModifier::Default => write!(f, "default"),
+            ReductionModifier::Original => write!(f, "original"),
+        }
+    }
+}
+
+/// Device clause modifier
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum DeviceModifier {
+    Unspecified,
+    Ancestor,
+    DeviceNum,
+}
+
+impl fmt::Display for DeviceModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DeviceModifier::Unspecified => Ok(()),
+            DeviceModifier::Ancestor => write!(f, "ancestor"),
+            DeviceModifier::DeviceNum => write!(f, "device_num"),
+        }
+    }
+}
+
+/// Affinity clause modifier
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum AffinityModifier {
+    Unspecified,
+    Iterator,
+}
+
+impl fmt::Display for AffinityModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AffinityModifier::Unspecified => Ok(()),
+            AffinityModifier::Iterator => write!(f, "iterator"),
+        }
+    }
+}
+
+/// Grainsize clause modifier (OpenMP 5.1)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum GrainsizeModifier {
+    Unspecified,
+    Strict,
+}
+
+impl fmt::Display for GrainsizeModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GrainsizeModifier::Unspecified => Ok(()),
+            GrainsizeModifier::Strict => write!(f, "strict"),
+        }
+    }
+}
+
+/// Num_tasks clause modifier (OpenMP 5.1)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum NumTasksModifier {
+    Unspecified,
+    Strict,
+}
+
+impl fmt::Display for NumTasksModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NumTasksModifier::Unspecified => Ok(()),
+            NumTasksModifier::Strict => write!(f, "strict"),
+        }
+    }
+}
+
 impl fmt::Display for LastprivateModifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -576,6 +892,18 @@ pub enum OrderKind {
     Concurrent = 0,
 }
 
+/// Order clause execution modifiers (OpenMP 5.1)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum OrderModifier {
+    /// No modifier specified.
+    Unspecified = -1,
+    /// Enforce reproducible execution.
+    Reproducible = 0,
+    /// Allow unconstrained execution.
+    Unconstrained = 1,
+}
+
 impl fmt::Display for OrderKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -584,9 +912,71 @@ impl fmt::Display for OrderKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum DoacrossType {
+    Source = 0,
+    Sink = 1,
+    Unknown = 2,
+}
+
+impl fmt::Display for DoacrossType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DoacrossType::Source => write!(f, "source"),
+            DoacrossType::Sink => write!(f, "sink"),
+            DoacrossType::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+impl fmt::Display for OrderModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OrderModifier::Unspecified => write!(f, ""),
+            OrderModifier::Reproducible => write!(f, "reproducible"),
+            OrderModifier::Unconstrained => write!(f, "unconstrained"),
+        }
+    }
+}
+
 // ============================================================================
 // ClauseItem: Items that appear in clause lists
 // ============================================================================
+
+/// Iterator definition used by depend/affinity iterator modifiers.
+///
+/// Example: `iterator(int i=0:N:1)` yields a type of `int`, name `i`,
+/// start `0`, end `N`, and step `1`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DependIterator {
+    /// Optional type name (e.g., `int` or `double`).
+    pub type_name: Option<String>,
+    /// Iterator induction variable.
+    pub name: Identifier,
+    /// Starting expression.
+    pub start: Expression,
+    /// Ending expression.
+    pub end: Expression,
+    /// Optional step expression.
+    pub step: Option<Expression>,
+}
+
+impl fmt::Display for DependIterator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(ref ty) = self.type_name {
+            write!(f, "{ty} {}", self.name)?;
+        } else {
+            write!(f, "{}", self.name)?;
+        }
+        write!(f, "={}", self.start)?;
+        write!(f, ":{}", self.end)?;
+        if let Some(step) = &self.step {
+            write!(f, ":{step}")?;
+        }
+        Ok(())
+    }
+}
 
 /// Item that can appear in a clause list
 ///
@@ -667,6 +1057,140 @@ impl From<Expression> for ClauseItem {
     }
 }
 
+// ========================================================================
+// Nowait modifiers
+// ========================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum NowaitModifier {
+    IsDeferred = 0,
+}
+
+impl fmt::Display for NowaitModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NowaitModifier::IsDeferred => write!(f, "is_deferred"),
+        }
+    }
+}
+
+/// Modifier for `adjust_args` clauses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum AdjustArgsModifier {
+    Unspecified = 0,
+    NeedDevicePtr = 1,
+    Custom = 100,
+}
+
+/// Severity levels for the `error` directive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum SeverityKind {
+    Fatal = 0,
+    Warning = 1,
+    Unknown = 2,
+}
+
+impl fmt::Display for SeverityKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SeverityKind::Fatal => write!(f, "fatal"),
+            SeverityKind::Warning => write!(f, "warning"),
+            SeverityKind::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+/// Error location for the `error` directive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum AtKind {
+    Compilation = 0,
+    Execution = 1,
+    Unknown = 2,
+}
+
+impl fmt::Display for AtKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AtKind::Compilation => write!(f, "compilation"),
+            AtKind::Execution => write!(f, "execution"),
+            AtKind::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+/// Interop init kinds (target vs targetsync).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum InitKind {
+    Target = 0,
+    Targetsync = 1,
+    Unknown = 2,
+}
+
+impl fmt::Display for InitKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InitKind::Target => write!(f, "target"),
+            InitKind::Targetsync => write!(f, "targetsync"),
+            InitKind::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+/// Loop transformation apply kinds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum ApplyTransformKind {
+    Unspecified = -1,
+    Unroll = 0,
+    UnrollPartial = 1,
+    UnrollFull = 2,
+    Reverse = 3,
+    Interchange = 4,
+    Nothing = 5,
+    TileSizes = 6,
+    Unknown = 100,
+}
+
+impl fmt::Display for ApplyTransformKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ApplyTransformKind::Unroll => write!(f, "unroll"),
+            ApplyTransformKind::UnrollPartial => write!(f, "unroll partial"),
+            ApplyTransformKind::UnrollFull => write!(f, "unroll full"),
+            ApplyTransformKind::Reverse => write!(f, "reverse"),
+            ApplyTransformKind::Interchange => write!(f, "interchange"),
+            ApplyTransformKind::Nothing => write!(f, "nothing"),
+            ApplyTransformKind::TileSizes => write!(f, "tile sizes"),
+            ApplyTransformKind::Unknown | ApplyTransformKind::Unspecified => {
+                write!(f, "unknown")
+            }
+        }
+    }
+}
+
+/// Transformation entry inside an `apply` clause.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ApplyTransform {
+    pub kind: ApplyTransformKind,
+    pub argument: Option<String>,
+}
+
+/// Item inside an `induction(...)` specification preserving source order.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InductionItem {
+    Step(Expression),
+    Binding {
+        label: Option<Identifier>,
+        expression: Expression,
+    },
+    Passthrough(Expression),
+}
+
 // ============================================================================
 // ClauseData: Complete clause semantic information
 // ============================================================================
@@ -686,8 +1210,12 @@ impl From<Expression> for ClauseItem {
 ///
 /// // reduction(+: sum)
 /// let clause = ClauseData::Reduction {
+///     modifiers: Vec::new(),
+///     modifier_items: Vec::new(),
 ///     operator: ReductionOperator::Add,
+///     user_identifier: None,
 ///     items: vec![Identifier::new("sum").into()],
+///     space_after_colon: true,
 /// };
 /// assert_eq!(clause.to_string(), "reduction(+: sum)");
 /// ```
@@ -719,6 +1247,8 @@ pub enum ClauseData {
     // ========================================================================
     /// Clause with no parameters (e.g., `nowait`, `nogroup`)
     Bare(Identifier),
+    /// `nowait` with optional modifier (e.g., `nowait(is_deferred)`)
+    Nowait { modifier: Option<NowaitModifier> },
 
     // ========================================================================
     // Simple expression clauses
@@ -731,6 +1261,29 @@ pub enum ClauseData {
     // ========================================================================
     /// List of items (e.g., `private(x, y, z)`)
     ItemList(Vec<ClauseItem>),
+
+    // ========================================================================
+    // Argument-adjustment clauses
+    // ========================================================================
+    /// `adjust_args([modifier:] list)` used by declare variant/dispatch
+    AdjustArgs {
+        modifier: AdjustArgsModifier,
+        custom_modifier: Option<Identifier>,
+        arguments: Vec<Expression>,
+    },
+
+    /// `collector(expr)` for declare induction.
+    Collector { expression: Expression },
+
+    /// `apply([label:] transform-list)` for loop transformations
+    Apply {
+        label: Option<Identifier>,
+        transforms: Vec<ApplyTransform>,
+        comma_separated: bool,
+    },
+
+    /// `induction(step(...), [label:] expr, ...)` preserving item order
+    Induction { items: Vec<InductionItem> },
 
     // ========================================================================
     // Data-sharing attribute clauses
@@ -753,13 +1306,26 @@ pub enum ClauseData {
     /// `default(shared|none|...)` - Default data-sharing attribute
     Default(DefaultKind),
 
+    /// `default(<directive>)` on metadirective - structured fallback directive
+    MetadirectiveDefault { directive: crate::ast::OmpDirective },
+
+    /// `defaultmap(behavior[:category])` - Default mapping semantics
+    Defaultmap {
+        behavior: DefaultmapBehavior,
+        category: Option<DefaultmapCategory>,
+    },
+
     // ========================================================================
     // Reduction clause
     // ========================================================================
     /// `reduction([modifier,]operator: list)` - Reduction operation
     Reduction {
+        modifiers: Vec<ReductionModifier>,
+        modifier_items: Vec<Vec<ClauseItem>>,
         operator: ReductionOperator,
+        user_identifier: Option<Identifier>,
         items: Vec<ClauseItem>,
+        space_after_colon: bool,
     },
 
     // ========================================================================
@@ -768,7 +1334,10 @@ pub enum ClauseData {
     /// `map([[mapper(id),] map-type:] list)` - Map variables to device
     Map {
         map_type: Option<MapType>,
+        modifiers: Vec<MapModifier>,
         mapper: Option<Identifier>,
+        /// Optional iterator definitions (OpenMP 5.1)
+        iterators: Vec<DependIterator>,
         items: Vec<ClauseItem>,
     },
 
@@ -791,13 +1360,25 @@ pub enum ClauseData {
     Depend {
         depend_type: DependType,
         items: Vec<ClauseItem>,
+        /// Iterator definitions associated with the clause (OpenMP 5.1)
+        iterators: Vec<DependIterator>,
+    },
+
+    /// `doacross(source|sink : list)` - Doacross dependence
+    Doacross {
+        kind: DoacrossType,
+        items: Vec<ClauseItem>,
     },
 
     /// `priority(expression)` - Task priority
     Priority { priority: Expression },
 
     /// `affinity([modifier:] list)` - Task affinity
-    Affinity { items: Vec<ClauseItem> },
+    Affinity {
+        modifier: AffinityModifier,
+        iterators: Vec<DependIterator>,
+        items: Vec<ClauseItem>,
+    },
 
     // ========================================================================
     // Loop scheduling clauses
@@ -852,6 +1433,9 @@ pub enum ClauseData {
     /// `proc_bind(master|close|spread|primary)` - Thread affinity policy
     ProcBind(ProcBind),
 
+    /// `bind(parallel|teams|thread|user)` - Loop binding
+    Bind(BindModifier),
+
     /// `num_threads(expression)` - Number of threads
     NumThreads { num: Expression },
 
@@ -859,16 +1443,35 @@ pub enum ClauseData {
     // Device clauses
     // ========================================================================
     /// `device(expression)` - Target device
-    Device { device_num: Expression },
+    Device {
+        modifier: DeviceModifier,
+        device_num: Expression,
+    },
 
     /// `device_type(host|nohost|any)` - Device type specifier
     DeviceType(DeviceType),
+
+    /// `at(compilation|execution)` - Error location
+    At(AtKind),
+
+    /// `severity(fatal|warning)` - Error directive severity
+    Severity(SeverityKind),
+
+    /// `init([kind[:operand]])` - Interop init clause
+    Init {
+        kind: InitKind,
+        raw_kind: Option<Identifier>,
+        operand: Option<Expression>,
+    },
 
     // ========================================================================
     // Atomic clauses
     // ========================================================================
     /// `atomic_default_mem_order(seq_cst|acq_rel|...)` - Default memory order
     AtomicDefaultMemOrder(MemoryOrder),
+
+    /// `fail(memory-order)` for atomic compare fail behavior
+    Fail { order: MemoryOrder },
 
     /// Atomic operation modifier
     AtomicOperation {
@@ -879,8 +1482,11 @@ pub enum ClauseData {
     // ========================================================================
     // Order clause
     // ========================================================================
-    /// `order(concurrent)` - Iteration execution order
-    Order(OrderKind),
+    /// `order([modifier:]concurrent)` - Iteration execution order
+    Order {
+        modifier: OrderModifier,
+        kind: OrderKind,
+    },
 
     // ========================================================================
     // Teams clauses
@@ -919,18 +1525,38 @@ pub enum ClauseData {
     },
 
     /// `grainsize(expression)` - Taskloop grainsize
-    Grainsize { grain: Expression },
+    Grainsize {
+        modifier: GrainsizeModifier,
+        grain: Expression,
+    },
 
     /// `num_tasks(expression)` - Number of tasks
-    NumTasks { num: Expression },
+    NumTasks {
+        modifier: NumTasksModifier,
+        num: Expression,
+    },
 
     /// `filter(thread-num)` - Thread filter for masked construct
     Filter { thread_num: Expression },
+
+    /// `uses_allocators(list)` - Allocator selection
+    UsesAllocators { allocators: Vec<UsesAllocatorSpec> },
+
+    /// `requires(...)` - Implementation requirements
+    Requires { requirements: Vec<RequireModifier> },
 
     /// Generic clause with unparsed data (fallback for unknown clauses)
     Generic {
         name: Identifier,
         data: Option<String>,
+    },
+
+    /// `depobj_update(dep)` - Depobj update dependence type
+    DepobjUpdate { dependence: DepobjUpdateDependence },
+
+    /// Metadirective/variant selector with fully typed payload.
+    MetadirectiveSelector {
+        selector: Box<crate::ast::OmpSelector>,
     },
 }
 
@@ -938,6 +1564,13 @@ impl fmt::Display for ClauseData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ClauseData::Bare(name) => write!(f, "{name}"),
+            ClauseData::Nowait { modifier } => {
+                if let Some(modifier) = modifier {
+                    write!(f, "nowait({modifier})")
+                } else {
+                    write!(f, "nowait")
+                }
+            }
             ClauseData::Expression(expr) => write!(f, "{expr}"),
             ClauseData::ItemList(items) => {
                 for (i, item) in items.iter().enumerate() {
@@ -947,6 +1580,100 @@ impl fmt::Display for ClauseData {
                     write!(f, "{item}")?;
                 }
                 Ok(())
+            }
+            ClauseData::AdjustArgs {
+                modifier,
+                custom_modifier,
+                arguments,
+            } => {
+                write!(f, "adjust_args(")?;
+                match modifier {
+                    AdjustArgsModifier::NeedDevicePtr => write!(f, "need_device_ptr")?,
+                    AdjustArgsModifier::Custom => {
+                        if let Some(id) = custom_modifier {
+                            write!(f, "{id}")?;
+                        }
+                    }
+                    AdjustArgsModifier::Unspecified => {}
+                }
+                if !arguments.is_empty() {
+                    if !matches!(modifier, AdjustArgsModifier::Unspecified)
+                        || custom_modifier.is_some()
+                    {
+                        write!(f, ": ")?;
+                    }
+                    for (i, arg) in arguments.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{arg}")?;
+                    }
+                }
+                write!(f, ")")
+            }
+            ClauseData::Apply {
+                label,
+                transforms,
+                comma_separated,
+            } => {
+                write!(f, "apply(")?;
+                if let Some(lab) = label {
+                    write!(f, "{lab}")?;
+                    if !transforms.is_empty() {
+                        write!(f, ": ")?;
+                    }
+                }
+                let sep = if *comma_separated { ", " } else { " " };
+                for (i, t) in transforms.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, "{sep}")?;
+                    }
+                    match t.kind {
+                        ApplyTransformKind::Unroll => write!(f, "unroll")?,
+                        ApplyTransformKind::UnrollPartial => {
+                            write!(f, "unroll partial")?;
+                            if let Some(arg) = &t.argument {
+                                write!(f, "({arg})")?;
+                            }
+                        }
+                        ApplyTransformKind::UnrollFull => write!(f, "unroll full")?,
+                        ApplyTransformKind::Reverse => write!(f, "reverse")?,
+                        ApplyTransformKind::Interchange => write!(f, "interchange")?,
+                        ApplyTransformKind::Nothing => write!(f, "nothing")?,
+                        ApplyTransformKind::TileSizes => {
+                            write!(f, "tile sizes")?;
+                            if let Some(arg) = &t.argument {
+                                write!(f, "({arg})")?;
+                            }
+                        }
+                        ApplyTransformKind::Unknown | ApplyTransformKind::Unspecified => {
+                            if let Some(arg) = &t.argument {
+                                write!(f, "{arg}")?;
+                            }
+                        }
+                    }
+                }
+                write!(f, ")")
+            }
+            ClauseData::Collector { expression } => write!(f, "collector({expression})"),
+            ClauseData::Induction { items } => {
+                write!(f, "induction(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    match item {
+                        InductionItem::Step(expr) => write!(f, "step({expr})")?,
+                        InductionItem::Binding { label, expression } => {
+                            if let Some(lab) = label {
+                                write!(f, "{lab}: ")?;
+                            }
+                            write!(f, "{expression}")?;
+                        }
+                        InductionItem::Passthrough(expr) => write!(f, "{expr}")?,
+                    }
+                }
+                write!(f, ")")
             }
             ClauseData::Private { items } => {
                 write!(f, "private(")?;
@@ -992,8 +1719,56 @@ impl fmt::Display for ClauseData {
                 write!(f, ")")
             }
             ClauseData::Default(kind) => write!(f, "default({kind})"),
-            ClauseData::Reduction { operator, items } => {
-                write!(f, "reduction({operator}: ")?;
+            ClauseData::MetadirectiveDefault { directive } => {
+                write!(f, "default({})", directive.kind.as_str())
+            }
+            ClauseData::Defaultmap { behavior, category } => {
+                if let Some(cat) = category {
+                    write!(f, "defaultmap({behavior}: {cat})")
+                } else {
+                    write!(f, "defaultmap({behavior})")
+                }
+            }
+            ClauseData::Reduction {
+                modifiers,
+                modifier_items,
+                operator,
+                user_identifier,
+                items,
+                space_after_colon,
+            } => {
+                write!(f, "reduction(")?;
+                if !modifiers.is_empty() {
+                    for (i, modifier) in modifiers.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{modifier}")?;
+                        if let ReductionModifier::Original = modifier {
+                            if let Some(items) = modifier_items.get(i) {
+                                write!(f, "(")?;
+                                for (idx, item) in items.iter().enumerate() {
+                                    if idx > 0 {
+                                        write!(f, ", ")?;
+                                    }
+                                    write!(f, "{item}")?;
+                                }
+                                write!(f, ")")?;
+                            }
+                        }
+                    }
+                    write!(f, ", ")?;
+                }
+
+                let op_text = match (operator, user_identifier) {
+                    (ReductionOperator::Custom, Some(id)) => id.to_string(),
+                    _ => operator.to_string(),
+                };
+                write!(f, "{op_text}")?;
+
+                let separator = if *space_after_colon { ": " } else { ":" };
+                write!(f, "{separator}")?;
+
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -1004,15 +1779,50 @@ impl fmt::Display for ClauseData {
             }
             ClauseData::Map {
                 map_type,
+                modifiers,
                 mapper,
+                iterators,
                 items,
             } => {
                 write!(f, "map(")?;
+                let mut wrote_prefix = false;
+                if !iterators.is_empty() {
+                    let defs = iterators
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    write!(f, "iterator ( {defs} )")?;
+                    wrote_prefix = true;
+                }
                 if let Some(mapper_id) = mapper {
-                    write!(f, "mapper({mapper_id}), ")?;
+                    if wrote_prefix {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "mapper({mapper_id})")?;
+                    wrote_prefix = true;
+                }
+                if !modifiers.is_empty() {
+                    if wrote_prefix {
+                        write!(f, ", ")?;
+                    }
+                    for (idx, modifier) in modifiers.iter().enumerate() {
+                        if idx > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{modifier}")?;
+                    }
+                    wrote_prefix = true;
                 }
                 if let Some(mt) = map_type {
-                    write!(f, "{mt}: ")?;
+                    if wrote_prefix {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{mt}")?;
+                    wrote_prefix = true;
+                }
+                if wrote_prefix {
+                    write!(f, ": ")?;
                 }
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
@@ -1073,10 +1883,49 @@ impl fmt::Display for ClauseData {
                 }
                 write!(f, "{condition})")
             }
+            ClauseData::Bind(binding) => write!(f, "bind({binding})"),
             ClauseData::NumThreads { num } => write!(f, "num_threads({num})"),
             ClauseData::ProcBind(pb) => write!(f, "proc_bind({pb})"),
-            ClauseData::Device { device_num } => write!(f, "device({device_num})"),
+            ClauseData::Device {
+                modifier,
+                device_num,
+            } => {
+                write!(f, "device(")?;
+                if *modifier != DeviceModifier::Unspecified {
+                    write!(f, "{modifier}: ")?;
+                }
+                write!(f, "{device_num})")
+            }
             ClauseData::DeviceType(dt) => write!(f, "device_type({dt})"),
+            ClauseData::At(kind) => write!(f, "at({kind})"),
+            ClauseData::Severity(kind) => write!(f, "severity({kind})"),
+            ClauseData::Init {
+                kind,
+                raw_kind,
+                operand,
+            } => {
+                write!(f, "init(")?;
+                let mut wrote = false;
+                match kind {
+                    InitKind::Target | InitKind::Targetsync => {
+                        write!(f, "{kind}")?;
+                        wrote = true;
+                    }
+                    InitKind::Unknown => {
+                        if let Some(raw) = raw_kind {
+                            write!(f, "{raw}")?;
+                            wrote = true;
+                        }
+                    }
+                }
+                if let Some(op) = operand {
+                    if wrote {
+                        write!(f, ": ")?;
+                    }
+                    write!(f, "{op}")?;
+                }
+                write!(f, ")")
+            }
             ClauseData::Collapse { n } => write!(f, "collapse({n})"),
             ClauseData::Ordered { n } => {
                 write!(f, "ordered")?;
@@ -1085,17 +1934,168 @@ impl fmt::Display for ClauseData {
                 }
                 Ok(())
             }
-            ClauseData::Depend { depend_type, items } => {
-                write!(f, "depend({depend_type}: ")?;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+            ClauseData::Order { modifier, kind } => {
+                write!(f, "order(")?;
+                if *modifier != OrderModifier::Unspecified {
+                    write!(f, "{modifier}: ")?;
+                }
+                write!(f, "{kind})")
+            }
+            ClauseData::Grainsize { modifier, grain } => {
+                write!(f, "grainsize(")?;
+                if *modifier != GrainsizeModifier::Unspecified {
+                    write!(f, "{modifier}: ")?;
+                }
+                write!(f, "{grain})")
+            }
+            ClauseData::NumTasks { modifier, num } => {
+                write!(f, "num_tasks(")?;
+                if *modifier != NumTasksModifier::Unspecified {
+                    write!(f, "{modifier}: ")?;
+                }
+                write!(f, "{num})")
+            }
+            ClauseData::Depend {
+                depend_type,
+                items,
+                iterators,
+            } => {
+                write!(f, "depend(")?;
+                if !iterators.is_empty() {
+                    write!(f, "iterator ( ")?;
+                    for (idx, it) in iterators.iter().enumerate() {
+                        if idx > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{it}")?;
                     }
-                    write!(f, "{item}")?;
+                    write!(f, " )")?;
+                    if !items.is_empty() {
+                        write!(f, ", ")?;
+                    } else {
+                        write!(f, ")")?;
+                        return Ok(());
+                    }
+                }
+
+                if items.is_empty() {
+                    // For depend(source) or empty depend types, no colon or items
+                    write!(f, "{depend_type})")
+                } else {
+                    write!(f, "{depend_type}: ")?;
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{item}")?;
+                    }
+                    write!(f, ")")
+                }
+            }
+            ClauseData::Doacross { kind, items } => {
+                write!(f, "doacross({kind}:")?;
+                if !items.is_empty() {
+                    write!(f, " ")?;
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{item}")?;
+                    }
                 }
                 write!(f, ")")
             }
-            // Simplified Display for remaining variants (can be expanded as needed)
+            ClauseData::Affinity {
+                modifier,
+                iterators,
+                items,
+            } => {
+                write!(f, "affinity(")?;
+                let mut wrote_prefix = false;
+                if *modifier == AffinityModifier::Iterator && !iterators.is_empty() {
+                    write!(f, "iterator ( ")?;
+                    for (idx, it) in iterators.iter().enumerate() {
+                        if idx > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{it}")?;
+                    }
+                    write!(f, " )")?;
+                    wrote_prefix = true;
+                } else if *modifier != AffinityModifier::Unspecified {
+                    write!(f, "{modifier}")?;
+                    wrote_prefix = true;
+                }
+                if !items.is_empty() {
+                    if wrote_prefix {
+                        write!(f, ": ")?;
+                    }
+                    for (i, item) in items.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{item}")?;
+                    }
+                }
+                write!(f, ")")
+            }
+            ClauseData::UsesAllocators { allocators } => {
+                write!(f, "uses_allocators(")?;
+                for (idx, spec) in allocators.iter().enumerate() {
+                    if idx > 0 {
+                        write!(f, ", ")?;
+                    }
+                    match &spec.allocator {
+                        UsesAllocatorKind::Builtin(kind) => write!(f, "{kind}")?,
+                        UsesAllocatorKind::Custom(name) => write!(f, "{name}")?,
+                    }
+                    if let Some(traits) = spec.traits.as_ref() {
+                        write!(f, "({traits})")?;
+                    }
+                }
+                write!(f, ")")
+            }
+            ClauseData::Requires { requirements } => {
+                write!(f, "requires(")?;
+                for (idx, req) in requirements.iter().enumerate() {
+                    if idx > 0 {
+                        write!(f, ", ")?;
+                    }
+                    match req {
+                        RequireModifier::ReverseOffload => write!(f, "reverse_offload")?,
+                        RequireModifier::UnifiedAddress => write!(f, "unified_address")?,
+                        RequireModifier::UnifiedSharedMemory => write!(f, "unified_shared_memory")?,
+                        RequireModifier::DynamicAllocators => write!(f, "dynamic_allocators")?,
+                        RequireModifier::SelfMaps => write!(f, "self_maps")?,
+                        RequireModifier::ExtImplementationDefinedRequirement(name) => {
+                            if let Some(id) = name {
+                                write!(f, "{id}")?;
+                            } else {
+                                write!(f, "ext_implementation_defined_requirement")?;
+                            }
+                        }
+                        RequireModifier::AtomicDefaultMemOrder(order) => {
+                            write!(f, "atomic_default_mem_order({order})")?
+                        }
+                    }
+                }
+                write!(f, ")")
+            }
+            ClauseData::DepobjUpdate { dependence } => {
+                write!(f, "depobj_update({dependence})")
+            }
+            ClauseData::MetadirectiveSelector { selector } => {
+                if let Some(raw) = &selector.raw {
+                    write!(f, "{raw}")
+                } else {
+                    let has_nested = selector.nested_directive.is_some();
+                    write!(
+                        f,
+                        "metadirective_selector(device={:?}, impl={:?}, user={:?}, constructs={:?}, nested={})",
+                        selector.device, selector.implementation, selector.user, selector.constructs, has_nested
+                    )
+                }
+            }
             _ => write!(f, "<clause>"),
         }
     }
@@ -1620,8 +2620,12 @@ mod tests {
     fn test_clause_data_reduction() {
         let items = vec![ClauseItem::Identifier(Identifier::new("sum"))];
         let clause = ClauseData::Reduction {
+            modifiers: Vec::new(),
+            modifier_items: Vec::new(),
             operator: ReductionOperator::Add,
+            user_identifier: None,
             items,
+            space_after_colon: true,
         };
         assert_eq!(clause.to_string(), "reduction(+: sum)");
     }
@@ -1633,8 +2637,12 @@ mod tests {
             ClauseItem::Identifier(Identifier::new("total")),
         ];
         let clause = ClauseData::Reduction {
+            modifiers: Vec::new(),
+            modifier_items: Vec::new(),
             operator: ReductionOperator::Add,
+            user_identifier: None,
             items,
+            space_after_colon: true,
         };
         assert_eq!(clause.to_string(), "reduction(+: sum, total)");
     }
@@ -1643,8 +2651,12 @@ mod tests {
     fn test_clause_data_reduction_max() {
         let items = vec![ClauseItem::Identifier(Identifier::new("max_val"))];
         let clause = ClauseData::Reduction {
+            modifiers: Vec::new(),
+            modifier_items: Vec::new(),
             operator: ReductionOperator::Max,
+            user_identifier: None,
             items,
+            space_after_colon: true,
         };
         assert_eq!(clause.to_string(), "reduction(max: max_val)");
     }
@@ -1654,7 +2666,9 @@ mod tests {
         let items = vec![ClauseItem::Variable(Variable::new("arr"))];
         let clause = ClauseData::Map {
             map_type: Some(MapType::To),
+            modifiers: vec![],
             mapper: None,
+            iterators: vec![],
             items,
         };
         assert_eq!(clause.to_string(), "map(to: arr)");
@@ -1665,7 +2679,9 @@ mod tests {
         let items = vec![ClauseItem::Variable(Variable::new("data"))];
         let clause = ClauseData::Map {
             map_type: Some(MapType::ToFrom),
+            modifiers: vec![],
             mapper: None,
+            iterators: vec![],
             items,
         };
         assert_eq!(clause.to_string(), "map(tofrom: data)");
@@ -1676,7 +2692,9 @@ mod tests {
         let items = vec![ClauseItem::Variable(Variable::new("arr"))];
         let clause = ClauseData::Map {
             map_type: None,
+            modifiers: vec![],
             mapper: None,
+            iterators: vec![],
             items,
         };
         assert_eq!(clause.to_string(), "map(arr)");
@@ -1687,7 +2705,9 @@ mod tests {
         let items = vec![ClauseItem::Variable(Variable::new("arr"))];
         let clause = ClauseData::Map {
             map_type: Some(MapType::To),
+            modifiers: vec![],
             mapper: Some(Identifier::new("my_mapper")),
+            iterators: vec![],
             items,
         };
         assert_eq!(clause.to_string(), "map(mapper(my_mapper), to: arr)");
@@ -1807,6 +2827,7 @@ mod tests {
     #[test]
     fn test_clause_data_device() {
         let clause = ClauseData::Device {
+            modifier: DeviceModifier::Unspecified,
             device_num: Expression::unparsed("0"),
         };
         assert_eq!(clause.to_string(), "device(0)");
@@ -1846,6 +2867,7 @@ mod tests {
         let clause = ClauseData::Depend {
             depend_type: DependType::In,
             items,
+            iterators: Vec::new(),
         };
         assert_eq!(clause.to_string(), "depend(in: x)");
     }
@@ -1859,6 +2881,7 @@ mod tests {
         let clause = ClauseData::Depend {
             depend_type: DependType::Inout,
             items,
+            iterators: Vec::new(),
         };
         assert_eq!(clause.to_string(), "depend(inout: a, b)");
     }
@@ -1890,8 +2913,12 @@ mod tests {
     #[test]
     fn test_clause_data_reduction_empty_list() {
         let clause = ClauseData::Reduction {
+            modifiers: Vec::new(),
+            modifier_items: Vec::new(),
             operator: ReductionOperator::Add,
+            user_identifier: None,
             items: vec![],
+            space_after_colon: true,
         };
         assert_eq!(clause.to_string(), "reduction(+: )");
     }
@@ -1902,16 +2929,14 @@ mod tests {
         use crate::ir::ArraySection;
         let lower = Expression::unparsed("0");
         let length = Expression::unparsed("N");
-        let section = ArraySection {
-            lower_bound: Some(lower),
-            length: Some(length),
-            stride: None,
-        };
+        let section = ArraySection::new(Some(lower), Some(length), None);
         let var = Variable::with_sections("arr", vec![section]);
         let items = vec![ClauseItem::Variable(var)];
         let clause = ClauseData::Map {
             map_type: Some(MapType::To),
+            modifiers: vec![],
             mapper: None,
+            iterators: vec![],
             items,
         };
         assert_eq!(clause.to_string(), "map(to: arr[0:N])");

@@ -29,19 +29,19 @@ fn main() {
         let c_input = CString::new(*s).unwrap();
         let dir = acc_parse(c_input.as_ptr());
         if dir.is_null() {
-            println!("{s} => parsed=NULL, kind={}", k);
+            println!("{s} => parsed=NULL, kind={k}");
             continue;
         }
         let cname = acc_directive_name(dir);
         if cname.is_null() {
-            println!("{s} => parsed=name=NULL, kind={}", k);
+            println!("{s} => parsed=name=NULL, kind={k}");
         } else {
             let parsed_name = unsafe {
                 std::ffi::CStr::from_ptr(cname)
                     .to_string_lossy()
                     .into_owned()
             };
-            println!("{s} => parsed=\"{}\", kind={}", parsed_name, k);
+            println!("{s} => parsed=\"{parsed_name}\", kind={k}");
         }
         acc_directive_free(dir);
     }

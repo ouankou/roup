@@ -13,7 +13,7 @@ pub fn display_ast_tree(directive: &Directive) -> String {
 
     // Parameter
     match &directive.parameter {
-        Some(param) => output.push_str(&format!("├─ parameter: Some(\"{}\")\n", param)),
+        Some(param) => output.push_str(&format!("├─ parameter: Some(\"{param}\")\n")),
         None => output.push_str("├─ parameter: None\n"),
     }
 
@@ -28,17 +28,16 @@ pub fn display_ast_tree(directive: &Directive) -> String {
             let prefix = if is_last { "   └─ " } else { "   ├─ " };
             let continuation = if is_last { "      " } else { "   │  " };
 
-            output.push_str(&format!("{}Clause\n", prefix));
+            output.push_str(&format!("{prefix}Clause\n"));
             output.push_str(&format!("{}├─ name: \"{}\"\n", continuation, clause.name));
 
             match &clause.kind {
                 ClauseKind::Bare => {
-                    output.push_str(&format!("{}└─ kind: Bare\n", continuation));
+                    output.push_str(&format!("{continuation}└─ kind: Bare\n"));
                 }
                 ClauseKind::Parenthesized(args) => {
                     output.push_str(&format!(
-                        "{}└─ kind: Parenthesized(\"{}\")\n",
-                        continuation, args
+                        "{continuation}└─ kind: Parenthesized(\"{args}\")\n"
                     ));
                 }
                 ClauseKind::VariableList(variables) => {
@@ -150,7 +149,7 @@ pub fn display_compact(directive: &Directive) -> String {
     output.push_str(&format!("Directive {{ name: \"{}\"", directive.name));
 
     if let Some(ref param) = directive.parameter {
-        output.push_str(&format!(", parameter: \"{}\"", param));
+        output.push_str(&format!(", parameter: \"{param}\""));
     }
 
     if !directive.clauses.is_empty() {
@@ -159,7 +158,7 @@ pub fn display_compact(directive: &Directive) -> String {
             if idx > 0 {
                 output.push_str(", ");
             }
-            output.push_str(&format!("{}", clause));
+            output.push_str(&format!("{clause}"));
         }
         output.push(']');
     }
@@ -212,7 +211,7 @@ pub fn display_step_info(
 
     // Token info (if any)
     if let Some(ref token_info) = step.token_info {
-        output.push_str(&format!("Token: {}\n", token_info));
+        output.push_str(&format!("Token: {token_info}\n"));
         output.push('\n');
     }
 
@@ -294,7 +293,7 @@ pub fn display_all_steps(steps: &[super::DebugStep]) -> String {
         }
 
         if let Some(ref token_info) = step.token_info {
-            output.push_str(&format!("   {}\n", token_info));
+            output.push_str(&format!("   {token_info}\n"));
         }
 
         output.push('\n');

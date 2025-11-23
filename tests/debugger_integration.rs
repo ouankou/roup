@@ -267,23 +267,21 @@ fn test_directive_parameter_vs_clause() {
 
     for (input, has_param, clause_count) in inputs {
         let config = DebugConfig::openmp();
-        let session = DebugSession::new(input, config)
-            .unwrap_or_else(|_| panic!("Failed to parse: {}", input));
+        let session =
+            DebugSession::new(input, config).unwrap_or_else(|_| panic!("Failed to parse: {input}"));
 
         let directive = session.final_directive.as_ref().unwrap();
 
         assert_eq!(
             directive.parameter.is_some(),
             has_param,
-            "Parameter presence mismatch for: {}",
-            input
+            "Parameter presence mismatch for: {input}"
         );
 
         assert_eq!(
             directive.clauses.len(),
             clause_count,
-            "Clause count mismatch for: {}",
-            input
+            "Clause count mismatch for: {input}"
         );
     }
 }
@@ -484,8 +482,8 @@ fn test_reduction_with_operators() {
 
     for input in inputs {
         let config = DebugConfig::openmp();
-        let session = DebugSession::new(input, config)
-            .unwrap_or_else(|_| panic!("Failed to parse: {}", input));
+        let session =
+            DebugSession::new(input, config).unwrap_or_else(|_| panic!("Failed to parse: {input}"));
 
         let directive = session.final_directive.as_ref().unwrap();
         assert_eq!(directive.name, "parallel");
@@ -493,8 +491,7 @@ fn test_reduction_with_operators() {
         let reduction_clause = directive.clauses.iter().find(|c| c.name == "reduction");
         assert!(
             reduction_clause.is_some(),
-            "Missing reduction clause in: {}",
-            input
+            "Missing reduction clause in: {input}"
         );
     }
 }
@@ -555,14 +552,13 @@ fn test_no_hardcoded_directive_names() {
 
     for (input, expected_name) in test_cases {
         let config = DebugConfig::openmp();
-        let session = DebugSession::new(input, config)
-            .unwrap_or_else(|_| panic!("Failed to parse: {}", input));
+        let session =
+            DebugSession::new(input, config).unwrap_or_else(|_| panic!("Failed to parse: {input}"));
 
         let directive = session.final_directive.as_ref().unwrap();
         assert_eq!(
             directive.name, expected_name,
-            "Directive name mismatch for: {}",
-            input
+            "Directive name mismatch for: {input}"
         );
 
         // Verify we got steps
