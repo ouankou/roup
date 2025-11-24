@@ -3852,12 +3852,20 @@ static void convert_doacross_clause(OpenMPDirective* dir, const OmpClause* rc) {
     if (doacross_clause && vars) {
         int32_t len = roup_string_list_len(vars);
         if (type == OMPC_DOACROSS_TYPE_source) {
-            if (len > 0) {
+            if (len == 1) {
                 const char* expr = roup_string_list_get(vars, 0);
                 if (expr) {
                     std::string cleaned = trim_paren_padding(expr);
                     cleaned = normalize_expression(cleaned.c_str());
                     doacross_clause->setSourceExpression(cleaned, OMPC_CLAUSE_SEP_space);
+                }
+            } else {
+                for (int32_t i = 0; i < len; ++i) {
+                    const char* expr = roup_string_list_get(vars, i);
+                    if (!expr) continue;
+                    std::string cleaned = trim_paren_padding(expr);
+                    cleaned = normalize_expression(cleaned.c_str());
+                    doacross_clause->addLangExpr(strdup(cleaned.c_str()), OMPC_CLAUSE_SEP_comma);
                 }
             }
         } else {
