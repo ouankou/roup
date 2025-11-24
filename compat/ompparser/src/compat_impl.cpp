@@ -51,6 +51,9 @@ static OpenMPMapClauseType mapRoupMapType(int32_t code);
 static OpenMPOrderClauseModifier mapRoupOrderModifier(int32_t code);
 static OpenMPOrderClauseKind mapRoupOrderKind(int32_t code);
 static OpenMPFailClauseMemoryOrder mapRoupFailMemoryOrder(int32_t code);
+static std::string normalize_expression(const char* expr);
+static std::string trim_paren_padding(const std::string& expr);
+static std::string format_clause_args(const char* args, bool space_after_colon);
 static void warn_unsupported_clause(OpenMPClauseKind ck);
 static char* duplicate_c_string(const char* input);
 static std::vector<OpenMPMapClauseModifier> mapRoupMapModifiers(uint32_t mask, bool include_mapper);
@@ -58,7 +61,6 @@ static void attach_variant_selector_from_roup(OpenMPVariantClause* clause, const
 static void convert_map_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void handle_dist_schedule_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void handle_schedule_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
-static std::string normalize_list_arguments(const char* args, bool spaced = true);
 static void convert_clause_with_payload(
     OpenMPDirective* dir,
     const OmpClause* roup_clause,
@@ -416,24 +418,43 @@ static void convert_clause_from_roup(
         if (!text.empty()) {
             std::string arg_text;
             if (clause_kind == OMPC_device_type) {
-                if (args && args[0]) arg_text = normalize_list_arguments(args);
+            if (args && args[0]) {
+                std::string normalized = normalize_expression(args);
+                if (!normalized.empty() && normalized.front() != '(') {
+                    arg_text = "(" + normalized + ")";
+                } else {
+                    arg_text = normalized;
+                }
+            }
             } else {
                 const bool spaced = true;
+                std::string inner;
                 OmpStringList* vars = roup_clause_variables(roup_clause);
                 if (vars) {
                     int32_t len = roup_string_list_len(vars);
                     for (int32_t i = 0; i < len; ++i) {
                         const char* v = roup_string_list_get(vars, i);
                         if (!v) continue;
-                        if (!arg_text.empty()) arg_text += spaced ? ", " : ",";
-                        arg_text += v;
+                        if (!inner.empty()) inner += spaced ? ", " : ",";
+                        inner += v;
                     }
                     roup_string_list_free(vars);
                 }
-                if (arg_text.empty() && args && args[0]) {
-                    arg_text = normalize_list_arguments(args, spaced);
-                } else if (!arg_text.empty()) {
-                    arg_text = "(" + arg_text + ")";
+                if (inner.empty() && args && args[0]) {
+                    inner = args;
+                }
+                if (!inner.empty()) {
+                    if (inner.front() == '(' && inner.back() == ')') {
+                        inner = inner.substr(1, inner.size() - 2);
+                    }
+                    std::string formatted_inner = format_clause_args(inner.c_str(), spaced);
+                    if (std::getenv("ROUP_DEBUG_DECLARE_TARGET") != nullptr) {
+                        fprintf(stderr, "[declare_target] inner=\"%s\" formatted=\"%s\"\n",
+                                inner.c_str(),
+                                formatted_inner.c_str());
+                    }
+                    inner.swap(formatted_inner);
+                    arg_text = "(" + inner + ")";
                 }
             }
             if (!arg_text.empty()) {
@@ -542,9 +563,7 @@ static void convert_clause_from_roup(
         case OMPC_task_reduction:
         case OMPC_in_reduction:
         case OMPC_detach:
-        case OMPC_depobj_update:
         case OMPC_affinity:
-        case OMPC_linear:
             convert_clause_with_payload(dir, roup_clause, clause_kind, uses_allocators_clauses, exprParse, debug_logging);
             break;
         case OMPC_adjust_args:
@@ -635,6 +654,9 @@ static void convert_clause_from_roup(
         case OMPC_uniform:
             convert_variables_clause(dir, roup_clause, clause_kind);
             break;
+        case OMPC_linear:
+            convert_linear_clause(dir, roup_clause);
+            break;
         case OMPC_inbranch:
         case OMPC_notinbranch:
             convert_generic_clause(dir, roup_clause, clause_kind);
@@ -653,6 +675,9 @@ static void convert_clause_from_roup(
         }
         case OMPC_depend:
             convert_depend_clause(dir, roup_clause);
+            break;
+        case OMPC_depobj_update:
+            convert_depobj_update_clause(dir, roup_clause);
             break;
         case OMPC_doacross:
             convert_doacross_clause(dir, roup_clause);
@@ -701,10 +726,57 @@ static void convert_clause_from_roup(
         case OMPC_inclusive:
         case OMPC_exclusive:
         case OMPC_requires: {
-            const char* args = roup_clause_arguments(roup_clause);
-            std::string text;
-
-            if (clause_kind == OMPC_requires) {
+            if (clause_kind == OMPC_inclusive || clause_kind == OMPC_exclusive) {
+                OpenMPClause* clause = dir->addOpenMPClause(clause_kind, "");
+                auto* scan_clause = dynamic_cast<OpenMPScanClause*>(clause);
+                OmpStringList* vars = roup_clause_variables(roup_clause);
+                if (scan_clause && vars) {
+                    int32_t len = roup_string_list_len(vars);
+                    for (int32_t i = 0; i < len; ++i) {
+                        const char* v = roup_string_list_get(vars, i);
+                        if (!v) continue;
+                        std::string cleaned = trim_paren_padding(v);
+                        cleaned = normalize_expression(cleaned.c_str());
+                        scan_clause->addOperand(cleaned, OMPC_CLAUSE_SEP_comma);
+                    }
+                    roup_string_list_free(vars);
+                }
+                if (scan_clause) {
+                    const char* args = roup_clause_arguments(roup_clause);
+                    if ((vars == nullptr || scan_clause->getOperands().empty()) && args && args[0]) {
+                        std::string arg_str(args);
+                        int depth = 0;
+                        std::string current;
+                        auto flush = [&]() {
+                            std::string trimmed = current;
+                            trimmed = normalize_expression(trim_paren_padding(trimmed).c_str());
+                            if (!trimmed.empty()) {
+                                scan_clause->addOperand(trimmed, OMPC_CLAUSE_SEP_comma);
+                            }
+                            current.clear();
+                        };
+                        for (char c : arg_str) {
+                            if (c == '(') depth++;
+                            if (c == ')') depth--;
+                            if (c == ',' && depth == 0) {
+                                flush();
+                                continue;
+                            }
+                            current.push_back(c);
+                        }
+                        flush();
+                    }
+                }
+                if (scan_clause && clause->getClausePosition() == -1) {
+                    dir->getClausesInOriginalOrder()->push_back(clause);
+                    clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
+                } else if (clause && clause->getClausePosition() == -1) {
+                    dir->getClausesInOriginalOrder()->push_back(clause);
+                    clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
+                }
+            } else {
+                const char* args = roup_clause_arguments(roup_clause);
+                std::string text;
                 int32_t count = roup_clause_requires_count(roup_clause);
                 for (int32_t i = 0; i < count; ++i) {
                     int32_t mod = roup_clause_requires_modifier(roup_clause, i);
@@ -733,35 +805,12 @@ static void convert_clause_from_roup(
                 if (text.empty() && args && args[0]) {
                     text = args;
                 }
-            } else {
-                text = (clause_kind == OMPC_inclusive) ? "inclusive" : "exclusive";
-                std::string arg_text;
-                OmpStringList* vars = roup_clause_variables(roup_clause);
-                if (vars) {
-                    int32_t len = roup_string_list_len(vars);
-                    for (int32_t i = 0; i < len; ++i) {
-                        const char* v = roup_string_list_get(vars, i);
-                        if (!v) continue;
-                        if (!arg_text.empty()) arg_text += ", ";
-                        arg_text += v;
-                    }
-                    roup_string_list_free(vars);
+                if (!text.empty()) {
+                    OpenMPClause* raw = dir->registerClause(std::make_unique<OpenMPRawClause>(text));
+                    auto* order = dir->getClausesInOriginalOrder();
+                    order->push_back(raw);
+                    raw->setClausePosition(order->size() - 1);
                 }
-                if (arg_text.empty() && args && args[0]) {
-                    arg_text = args;
-                }
-                if (!arg_text.empty()) {
-                    text += "(";
-                    text += arg_text;
-                    text += ")";
-                }
-            }
-
-            if (!text.empty()) {
-                OpenMPClause* raw = dir->registerClause(std::make_unique<OpenMPRawClause>(text));
-                auto* order = dir->getClausesInOriginalOrder();
-                order->push_back(raw);
-                raw->setClausePosition(order->size() - 1);
             }
             break;
         }
@@ -1151,12 +1200,19 @@ static OpenMPDirective* convert_roup_directive_to_ompparser(
     if (kind == OMPD_declare_target && param != nullptr && param[0] != '\0') {
         std::string text(param);
         std::string normalized;
-        if (text.front() == '(') {
-            normalized = normalize_list_arguments(text.c_str(), /*spaced=*/false);
-        } else if (auto pos = text.find('('); pos != std::string::npos) {
-            std::string kw = text.substr(0, pos);
-            std::string rest = text.substr(pos);
-            normalized = kw + " " + normalize_list_arguments(rest.c_str(), /*spaced=*/true);
+        if (auto pos = text.find('('); pos != std::string::npos) {
+            if (pos == 0) {
+                normalized = normalize_expression(text.c_str());
+            } else {
+                std::string kw = text.substr(0, pos);
+                std::string inner = text.substr(pos + 1, text.size() - pos - 2);
+                inner = format_clause_args(inner.c_str(), true);
+                normalized = kw;
+                if (!normalized.empty()) {
+                    normalized += " ";
+                }
+                normalized += "(" + inner + ")";
+            }
         } else {
             normalized = text;
         }
@@ -1231,6 +1287,7 @@ static OpenMPDirective* convert_roup_directive_to_ompparser(
                 (scan_mode == ROUPO_SCAN_MODE_INCLUSIVE) ? OMPC_inclusive : OMPC_exclusive;
             OpenMPClause* clause = dir->addOpenMPClause(scan_clause_kind, "");
             if (clause != nullptr) {
+                auto* scan_clause = dynamic_cast<OpenMPScanClause*>(clause);
                 std::vector<std::string> items;
                 OmpStringList* variables = roup_directive_parameter_identifiers(roup_dir);
                 if (variables != nullptr) {
@@ -1264,8 +1321,14 @@ static OpenMPDirective* convert_roup_directive_to_ompparser(
                         }
                     }
                 }
-                for (const auto& it : items) {
-                    clause->addLangExpr(strdup(it.c_str()));
+                if (scan_clause) {
+                    for (const auto& it : items) {
+                        scan_clause->addOperand(it, OMPC_CLAUSE_SEP_comma);
+                    }
+                } else {
+                    for (const auto& it : items) {
+                        clause->addLangExpr(strdup(it.c_str()), OMPC_CLAUSE_SEP_comma);
+                    }
                 }
                 if (clause->getClausePosition() == -1) {
                     dir->getClausesInOriginalOrder()->push_back(clause);
@@ -2429,7 +2492,7 @@ static void append_variables_to_clause(OpenMPClause* clause, OmpStringList* list
         } else if (!force_space_before_colon) {
             cleaned = normalize_expression(cleaned.c_str());
         }
-        clause->addLangExpr(strdup(cleaned.c_str()));
+        clause->addLangExpr(strdup(cleaned.c_str()), OMPC_CLAUSE_SEP_comma);
     }
 }
 
@@ -2535,9 +2598,41 @@ static void add_reduction_clause_from_data(
     }
 
     OmpStringList* variables = roup_clause_variables(roup_clause);
-    append_variables_to_clause(clause_ptr, variables);
     if (variables) {
+        int length = roup_string_list_len(variables);
+        for (int i = 0; i < length; ++i) {
+            const char* item = roup_string_list_get(variables, i);
+            if (item == nullptr) {
+                continue;
+            }
+            std::string cleaned = trim_paren_padding(item);
+            cleaned = normalize_expression(cleaned.c_str());
+            if (clause_kind == OMPC_reduction) {
+                static_cast<OpenMPReductionClause*>(clause_ptr)->addOperand(cleaned, OMPC_CLAUSE_SEP_comma);
+            } else if (clause_kind == OMPC_in_reduction) {
+                static_cast<OpenMPInReductionClause*>(clause_ptr)->addOperand(cleaned, OMPC_CLAUSE_SEP_comma);
+            } else {
+                static_cast<OpenMPTaskReductionClause*>(clause_ptr)->addOperand(cleaned, OMPC_CLAUSE_SEP_comma);
+            }
+        }
         roup_string_list_free(variables);
+    }
+    if (std::getenv("ROUP_DEBUG_REDUCTION") != nullptr && clause_ptr) {
+        auto* exprs = clause_ptr->getExpressions();
+        auto seps = clause_ptr->getExpressionSeparators();
+        fprintf(stderr, "[reduction-debug] kind=%d expr_count=%zu sep_count=%zu\n",
+                static_cast<int>(clause_kind),
+                exprs ? exprs->size() : 0,
+                seps.size());
+        if (exprs) {
+            for (size_t i = 0; i < exprs->size(); ++i) {
+                const char* e = exprs->at(i);
+                OpenMPClauseSeparator sep =
+                    (i < seps.size()) ? seps[i] : OMPC_CLAUSE_SEP_space;
+                fprintf(stderr, "  [%zu] \"%s\" sep=%d\n", i, e ? e : "(null)",
+                        static_cast<int>(sep));
+            }
+        }
     }
 
     if (clause_ptr != nullptr && clause_ptr->getClausePosition() == -1) {
@@ -3513,12 +3608,26 @@ static void convert_clause_with_payload(
         case OMPC_in_reduction:
             add_reduction_clause_from_data(dir, rc, ck);
             break;
+        case OMPC_uniform:
+        case OMPC_aligned:
+        case OMPC_private:
+        case OMPC_firstprivate:
+        case OMPC_lastprivate:
+        case OMPC_shared:
+        case OMPC_copyprivate:
+        case OMPC_copyin:
+        case OMPC_use_device_ptr:
+        case OMPC_use_device_addr:
+        case OMPC_is_device_ptr:
+        case OMPC_has_device_addr:
+        case OMPC_depend:
+        case OMPC_allocator:
+        case OMPC_allocate:
+            convert_variables_clause(dir, rc, ck);
+            break;
         case OMPC_detach:
             convert_generic_clause(dir, rc, ck);
             warn_unsupported_clause(ck);
-            break;
-        case OMPC_depobj_update:
-            convert_depobj_update_clause(dir, rc);
             break;
         case OMPC_affinity:
             convert_affinity_clause(dir, rc);
@@ -3738,9 +3847,36 @@ static void convert_doacross_clause(OpenMPDirective* dir, const OmpClause* rc) {
         return;
     }
 
+    auto* doacross_clause = dynamic_cast<OpenMPDoacrossClause*>(clause);
     OmpStringList* vars = roup_clause_variables(rc);
-    append_variables_to_clause(clause, vars);
-    if (vars) {
+    if (doacross_clause && vars) {
+        int32_t len = roup_string_list_len(vars);
+        if (type == OMPC_DOACROSS_TYPE_source) {
+            if (len == 1) {
+                const char* expr = roup_string_list_get(vars, 0);
+                if (expr) {
+                    std::string cleaned = trim_paren_padding(expr);
+                    cleaned = normalize_expression(cleaned.c_str());
+                    doacross_clause->setSourceExpression(cleaned, OMPC_CLAUSE_SEP_space);
+                }
+            } else {
+                for (int32_t i = 0; i < len; ++i) {
+                    const char* expr = roup_string_list_get(vars, i);
+                    if (!expr) continue;
+                    std::string cleaned = trim_paren_padding(expr);
+                    cleaned = normalize_expression(cleaned.c_str());
+                    doacross_clause->addLangExpr(strdup(cleaned.c_str()), OMPC_CLAUSE_SEP_comma);
+                }
+            }
+        } else {
+            for (int32_t i = 0; i < len; ++i) {
+                const char* expr = roup_string_list_get(vars, i);
+                if (!expr) continue;
+                std::string cleaned = trim_paren_padding(expr);
+                cleaned = normalize_expression(cleaned.c_str());
+                doacross_clause->addSinkArg(cleaned, OMPC_CLAUSE_SEP_comma);
+            }
+        }
         roup_string_list_free(vars);
     }
 
@@ -3759,34 +3895,39 @@ static void convert_linear_clause(OpenMPDirective* dir, const OmpClause* rc) {
 
     const char* step = roup_clause_linear_step(rc);
     std::string step_text = (step && step[0]) ? std::string(step) : std::string();
-
-    // Merge with existing linear clauses that share modifier and step.
-    for (OpenMPClause* existing : *dir->getClauses(OMPC_linear)) {
-        auto* linear = static_cast<OpenMPLinearClause*>(existing);
-        if (linear->getModifier() != mod) {
-            continue;
-        }
-        if (linear->getUserDefinedStep() != step_text) {
-            continue;
-        }
-        OmpStringList* vars = roup_clause_variables(rc);
-        append_variables_to_clause(linear, vars);
-        if (vars) {
-            roup_string_list_free(vars);
-        }
-        return;
+    if (std::getenv("ROUP_DEBUG_LINEAR") != nullptr) {
+        fprintf(stderr, "[linear] modifier=%d step=\"%s\"\n",
+                static_cast<int>(mod),
+                step_text.c_str());
     }
 
-    OpenMPClause* clause = OpenMPLinearClause::addLinearClause(dir, mod);
+    OpenMPClause* clause = nullptr;
+    OpenMPLinearClause* linear_clause = nullptr;
+    if (normalize_clauses_global) {
+        auto* existing_list = dir->getClauses(OMPC_linear);
+        for (OpenMPClause* existing : *existing_list) {
+            auto* lin = static_cast<OpenMPLinearClause*>(existing);
+            if (lin->getModifier() == mod &&
+                lin->getUserDefinedStep() == step_text) {
+                clause = existing;
+                linear_clause = lin;
+                break;
+            }
+        }
+    }
     if (!clause) {
-        return;
-    }
-    if (step && step[0]) {
-        static_cast<OpenMPLinearClause*>(clause)->setUserDefinedStep(step);
-    }
-    // Modifier means modifier-first syntax (val/ref/uval(variable):step)
-    if (mod != OMPC_LINEAR_MODIFIER_unspecified) {
-        static_cast<OpenMPLinearClause*>(clause)->setModifierFirstSyntax(true);
+        clause = OpenMPLinearClause::addLinearClause(dir, mod);
+        if (!clause) {
+            return;
+        }
+        linear_clause = static_cast<OpenMPLinearClause*>(clause);
+        if (step && step[0]) {
+            linear_clause->setUserDefinedStep(step);
+        }
+        // Modifier means modifier-first syntax (val/ref/uval(variable):step)
+        if (mod != OMPC_LINEAR_MODIFIER_unspecified) {
+            linear_clause->setModifierFirstSyntax(true);
+        }
     }
 
     OmpStringList* vars = roup_clause_variables(rc);
@@ -3871,19 +4012,25 @@ static void convert_allocate_clause(OpenMPDirective* dir, const OmpClause* rc) {
     }
 
     OmpStringList* vars = roup_clause_variables(rc);
-    if (vars && clause->getClausePosition() == -1) {
-        // For allocate, keep original spacing from ROUP list (no extra parens)
-        int length = roup_string_list_len(vars);
-        for (int i = 0; i < length; ++i) {
-            const char* item = roup_string_list_get(vars, i);
-            if (item) {
-                clause->addLangExpr(strdup(normalize_expression(item).c_str()));
+    append_variables_to_clause(clause, vars);
+    if (vars) roup_string_list_free(vars);
+
+    if (std::getenv("ROUP_DEBUG_ALLOC") != nullptr && clause) {
+        auto* exprs = clause->getExpressions();
+        auto seps = clause->getExpressionSeparators();
+        fprintf(stderr, "[alloc-debug] expr_count=%zu sep_count=%zu\n",
+                exprs ? exprs->size() : 0,
+                seps.size());
+        if (exprs) {
+            for (size_t i = 0; i < exprs->size(); ++i) {
+                const char* e = exprs->at(i);
+                OpenMPClauseSeparator sep =
+                    (i < seps.size()) ? seps[i] : OMPC_CLAUSE_SEP_space;
+                fprintf(stderr, "  [%zu] \"%s\" sep=%d\n", i, e ? e : "(null)",
+                        static_cast<int>(sep));
             }
         }
-    } else {
-        append_variables_to_clause(clause, vars);
     }
-    if (vars) roup_string_list_free(vars);
     if (clause->getClausePosition() == -1) {
         dir->getClausesInOriginalOrder()->push_back(clause);
         clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
@@ -3919,7 +4066,7 @@ static void convert_collapse_clause(OpenMPDirective* dir, const OmpClause* rc) {
     const char* expr = roup_clause_arguments(rc);
     OpenMPClause* clause = dir->addOpenMPClause(OMPC_collapse, "");
     if (clause && expr && expr[0]) {
-        clause->addLangExpr(strdup(expr));
+        clause->addLangExpr(strdup(expr), OMPC_CLAUSE_SEP_comma);
     }
     if (clause && clause->getClausePosition() == -1) {
         dir->getClausesInOriginalOrder()->push_back(clause);
@@ -4052,33 +4199,6 @@ static void convert_simple_expr_clause(OpenMPDirective* dir, const OmpClause* rc
         clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
     }
 }
-
-static std::string normalize_list_arguments(const char* args, bool spaced) {
-    if (!args) return "()";
-    std::string content(args);
-    // Trim leading/trailing spaces
-    auto l = content.find_first_not_of(" \t\n\r");
-    auto r = content.find_last_not_of(" \t\n\r");
-    if (l == std::string::npos) return "()";
-    content = content.substr(l, r - l + 1);
-    if (content.size() >= 2 && content.front() == '(' && content.back() == ')') {
-        content = content.substr(1, content.size() - 2);
-    }
-    std::string normalized;
-    for (size_t i = 0; i < content.size(); ++i) {
-        char c = content[i];
-        if (c == ',') {
-            normalized += spaced ? ", " : ",";
-            while (i + 1 < content.size() && content[i + 1] == ' ') {
-                ++i;
-            }
-        } else {
-            normalized += c;
-        }
-    }
-    return "(" + normalized + ")";
-}
-
 
 static void convert_defaultmap_clause(OpenMPDirective* dir, const OmpClause* rc) {
     int32_t behavior = roup_clause_defaultmap_behavior(rc);
