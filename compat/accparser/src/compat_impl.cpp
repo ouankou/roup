@@ -732,7 +732,8 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                 auto* self_clause = static_cast<OpenACCSelfClause*>(clause);
                 auto* existing = dir->getClauses(ACCC_self);
                 if (existing != nullptr) {
-                    const bool has_condition = !self_clause->getCondition().empty();
+                    const auto& condition = self_clause->getCondition();
+                    const bool has_condition = !condition.text.empty();
                     bool drop_current = false;
                     std::vector<OpenACCSelfClause*> remove_list;
 
@@ -742,31 +743,46 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                             break;
                         }
                         auto* prev = static_cast<OpenACCSelfClause*>(*it);
-                        const bool prev_has_condition = !prev->getCondition().empty();
+                        const auto& prev_condition = prev->getCondition();
+                        const bool prev_has_condition = !prev_condition.text.empty();
                         if (has_condition || prev_has_condition) {
                             if (has_condition && prev_has_condition &&
-                                prev->getCondition() == self_clause->getCondition()) {
+                                prev_condition.text == condition.text &&
+                                prev_condition.separator == condition.separator) {
                                 remove_list.push_back(prev);
                             }
                             continue;
                         }
 
                         // Both are var-list clauses: drop subsets/duplicates.
-                        auto normalize_vars = [](const std::vector<std::string>& raw_vars) {
+                        auto normalize_vars =
+                            [](const std::vector<OpenACCExpressionItem>& raw_vars) {
                             std::vector<std::string> tokens;
-                            for (const auto& raw : raw_vars) {
-                                std::stringstream ss(raw);
-                                std::string part;
-                                while (std::getline(ss, part, ',')) {
-                                    const auto first = part.find_first_not_of(" \t");
-                                    const auto last = part.find_last_not_of(" \t");
+                            tokens.reserve(raw_vars.size());
+                            for (const auto& raw_item : raw_vars) {
+                                const auto& raw = raw_item.text;
+                                if (raw.find(',') != std::string::npos) {
+                                    std::stringstream ss(raw);
+                                    std::string part;
+                                    while (std::getline(ss, part, ',')) {
+                                        const auto first = part.find_first_not_of(" \t");
+                                        const auto last = part.find_last_not_of(" \t");
+                                        if (first == std::string::npos) {
+                                            continue;
+                                        }
+                                        tokens.emplace_back(
+                                            part.substr(first, last - first + 1));
+                                    }
+                                } else {
+                                    const auto first = raw.find_first_not_of(" \t");
+                                    const auto last = raw.find_last_not_of(" \t");
                                     if (first == std::string::npos) {
                                         continue;
                                     }
-                                    tokens.emplace_back(part.substr(first, last - first + 1));
+                                    tokens.emplace_back(raw.substr(first, last - first + 1));
                                 }
                             }
-                            return tokens.empty() ? raw_vars : tokens;
+                            return tokens;
                         };
 
                         const auto incoming_vars = normalize_vars(self_clause->getVars());
