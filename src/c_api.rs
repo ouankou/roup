@@ -3956,6 +3956,8 @@ fn clause_kind_uses_variable_list(kind: i32) -> bool {
             | CLAUSE_KIND_TO
             | CLAUSE_KIND_FROM
             | CLAUSE_KIND_LINK
+            | CLAUSE_KIND_INCLUSIVE
+            | CLAUSE_KIND_EXCLUSIVE
     )
 }
 
@@ -4597,11 +4599,11 @@ fn convert_clause_from_ast(
             "notinbranch",
         ),
         Inclusive => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_INCLUSIVE),
+            convert_scan_clause_from_ast(CLAUSE_KIND_INCLUSIVE, payload),
             "inclusive",
         ),
         Exclusive => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_EXCLUSIVE),
+            convert_scan_clause_from_ast(CLAUSE_KIND_EXCLUSIVE, payload),
             "exclusive",
         ),
         When => build_metadirective_clause(CLAUSE_KIND_WHEN, payload),
@@ -4953,6 +4955,10 @@ fn render_arguments_from_payload(payload: &IrClauseData) -> Option<String> {
                 .as_ref()
                 .and_then(|u| u.condition.as_ref().map(ToString::to_string))
         }),
+        IrClauseData::Scan { mode, items } => {
+            let rendered = format_clause_items(items).unwrap_or_default();
+            Some(format!("{mode}({rendered})"))
+        }
         IrClauseData::Private { items }
         | IrClauseData::Firstprivate { items }
         | IrClauseData::Shared { items }
@@ -6598,6 +6604,20 @@ fn build_directive_list_from_ast(
 fn convert_item_list_clause_from_ast(code: i32, payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::ItemList(items) = payload {
         return Some(build_variable_clause(code, items));
+    }
+    None
+}
+
+fn convert_scan_clause_from_ast(code: i32, payload: &IrClauseData) -> Option<OmpClause> {
+    if let IrClauseData::Scan { mode: _, items } = payload {
+        return Some(OmpClause {
+            kind: code,
+            arguments: ptr::null(),
+            data: ClauseData {
+                variables: build_string_list_from_items(items),
+            },
+            separator: 1,
+        });
     }
     None
 }

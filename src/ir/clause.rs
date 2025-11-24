@@ -930,6 +930,22 @@ impl fmt::Display for DoacrossType {
     }
 }
 
+/// Scan clause mode (inclusive/exclusive) used for `scan` clauses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ScanClauseMode {
+    Inclusive,
+    Exclusive,
+}
+
+impl fmt::Display for ScanClauseMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ScanClauseMode::Inclusive => write!(f, "inclusive"),
+            ScanClauseMode::Exclusive => write!(f, "exclusive"),
+        }
+    }
+}
+
 impl fmt::Display for OrderModifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -1261,6 +1277,11 @@ pub enum ClauseData {
     // ========================================================================
     /// List of items (e.g., `private(x, y, z)`)
     ItemList(Vec<ClauseItem>),
+    /// `scan` clause operands with inclusive/exclusive mode
+    Scan {
+        mode: ScanClauseMode,
+        items: Vec<ClauseItem>,
+    },
 
     // ========================================================================
     // Argument-adjustment clauses
@@ -2002,6 +2023,16 @@ impl fmt::Display for ClauseData {
                         }
                         write!(f, "{item}")?;
                     }
+                }
+                write!(f, ")")
+            }
+            ClauseData::Scan { mode, items } => {
+                write!(f, "{mode}(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{item}")?;
                 }
                 write!(f, ")")
             }

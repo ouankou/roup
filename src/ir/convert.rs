@@ -57,6 +57,7 @@ use crate::ast::{
     OmpSelectorConstructs, OmpSelectorDevice, OmpSelectorImpl, OmpSelectorScoredValue,
     OmpSelectorUser,
 };
+use crate::ir::clause::ScanClauseMode;
 use crate::lexer::Language as LexerLanguage;
 use crate::parser::clause::lookup_clause_name;
 use crate::parser::directive_kind::lookup_directive_name;
@@ -3152,8 +3153,28 @@ pub fn parse_clause_data<'a>(
         },
         "inbranch" => Ok(ClauseData::Bare(Identifier::new("inbranch"))),
         "notinbranch" => Ok(ClauseData::Bare(Identifier::new("notinbranch"))),
-        "inclusive" => Ok(ClauseData::Bare(Identifier::new("inclusive"))),
-        "exclusive" => Ok(ClauseData::Bare(Identifier::new("exclusive"))),
+        "inclusive" | "exclusive" => {
+            let mode = if clause_name == "inclusive" {
+                ScanClauseMode::Inclusive
+            } else {
+                ScanClauseMode::Exclusive
+            };
+            let items = match &clause.kind {
+                ClauseKind::Parenthesized(content) => {
+                    parse_identifier_list(content.as_ref(), config)?
+                }
+                ClauseKind::VariableList(vars) => {
+                    let joined = vars.join(", ");
+                    parse_identifier_list(&joined, config)?
+                }
+                _ => {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "scan clause requires a variable list".to_string(),
+                    ))
+                }
+            };
+            Ok(ClauseData::Scan { mode, items })
+        }
 
         // uses_allocators(allocator[(traits)], ...)
         "uses_allocators" => parse_uses_allocators_clause(&clause.kind, config),
