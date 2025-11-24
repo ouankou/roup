@@ -4056,16 +4056,6 @@ static void convert_num_threads_clause(OpenMPDirective* dir, const OmpClause* rc
 
 static void convert_collapse_clause(OpenMPDirective* dir, const OmpClause* rc) {
     const char* expr = roup_clause_arguments(rc);
-    if (normalize_clauses_global) {
-        auto* existing_list = dir->getClauses(OMPC_collapse);
-        if (existing_list != nullptr && !existing_list->empty()) {
-            OpenMPClause* existing = existing_list->at(0);
-            if (existing && expr && expr[0]) {
-                existing->addLangExpr(strdup(expr), OMPC_CLAUSE_SEP_comma);
-            }
-            return;
-        }
-    }
     OpenMPClause* clause = dir->addOpenMPClause(OMPC_collapse, "");
     if (clause && expr && expr[0]) {
         clause->addLangExpr(strdup(expr), OMPC_CLAUSE_SEP_comma);
