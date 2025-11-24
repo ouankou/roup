@@ -158,7 +158,7 @@ fn test_ast_display() {
 
 #[test]
 fn test_custom_parser_scan_directive() {
-    // scan has a custom parser with special parameter syntax
+    // scan has a custom parser with a required inclusive/exclusive clause
     let input = "#pragma omp scan exclusive(x, y)";
     let config = DebugConfig::openmp();
 
@@ -166,14 +166,15 @@ fn test_custom_parser_scan_directive() {
 
     let directive = session.final_directive.as_ref().unwrap();
     assert_eq!(directive.name, "scan");
-    assert!(directive.parameter.is_some());
-    assert_eq!(directive.parameter.as_ref().unwrap(), "exclusive(x, y)");
+    assert!(directive.parameter.is_none());
+    assert_eq!(directive.clauses.len(), 1);
+    assert_eq!(directive.clauses[0].name, "exclusive");
 
-    // Verify we captured a DirectiveParameter step
+    // Verify we captured a ClauseName step for the scan clause
     assert!(session
         .steps
         .iter()
-        .any(|s| matches!(s.kind, roup::debugger::StepKind::DirectiveParameter)));
+        .any(|s| matches!(s.kind, roup::debugger::StepKind::ClauseName)));
 }
 
 #[test]
@@ -260,7 +261,7 @@ fn test_bare_clauses() {
 fn test_directive_parameter_vs_clause() {
     // Test that we distinguish directive parameters from clauses correctly
     let inputs = vec![
-        ("#pragma omp scan exclusive(x)", true, 0), // parameter, no clauses
+        ("#pragma omp scan exclusive(x)", false, 1), // clauses only
         ("#pragma omp parallel private(x)", false, 1), // no parameter, has clauses
         ("#pragma omp allocate(x) align(16)", true, 1), // both parameter and clauses
     ];

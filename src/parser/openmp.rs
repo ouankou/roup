@@ -894,12 +894,19 @@ fn parse_scan_directive<'a>(
                 rest,
                 Directive {
                     name: crate::parser::directive_kind::lookup_directive_name("scan"),
-                    // Store the parameter without a leading space; the display/formatting layer
-                    // is responsible for spacing when rendering the directive.
-                    parameter: Some(std::borrow::Cow::Owned(format!(
-                        "exclusive({list_content})"
-                    ))),
-                    clauses,
+                    parameter: None,
+                    clauses: {
+                        let mut all = Vec::with_capacity(clauses.len() + 1);
+                        all.push(crate::parser::Clause {
+                            name: std::borrow::Cow::Owned("exclusive".to_string()),
+                            kind: crate::parser::ClauseKind::Parenthesized(
+                                std::borrow::Cow::Owned(list_content),
+                            ),
+                            separator: crate::parser::ClauseSeparator::Space,
+                        });
+                        all.extend(clauses);
+                        all
+                    },
                     wait_data: None,
                     cache_data: None,
                 },
@@ -933,10 +940,19 @@ fn parse_scan_directive<'a>(
                 rest,
                 Directive {
                     name: crate::parser::directive_kind::lookup_directive_name("scan"),
-                    parameter: Some(std::borrow::Cow::Owned(format!(
-                        "inclusive({list_content})"
-                    ))),
-                    clauses,
+                    parameter: None,
+                    clauses: {
+                        let mut all = Vec::with_capacity(clauses.len() + 1);
+                        all.push(crate::parser::Clause {
+                            name: std::borrow::Cow::Owned("inclusive".to_string()),
+                            kind: crate::parser::ClauseKind::Parenthesized(
+                                std::borrow::Cow::Owned(list_content),
+                            ),
+                            separator: crate::parser::ClauseSeparator::Space,
+                        });
+                        all.extend(clauses);
+                        all
+                    },
                     wait_data: None,
                     cache_data: None,
                 },

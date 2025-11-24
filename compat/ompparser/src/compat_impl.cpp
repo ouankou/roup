@@ -735,42 +735,19 @@ static void convert_clause_from_roup(
                     for (int32_t i = 0; i < len; ++i) {
                         const char* v = roup_string_list_get(vars, i);
                         if (!v) continue;
-                        std::string cleaned = trim_paren_padding(v);
-                        cleaned = normalize_expression(cleaned.c_str());
+                        std::string cleaned = normalize_expression(v);
                         scan_clause->addOperand(cleaned, OMPC_CLAUSE_SEP_comma);
                     }
                     roup_string_list_free(vars);
+                } else if (vars) {
+                    roup_string_list_free(vars);
                 }
-                if (scan_clause) {
-                    const char* args = roup_clause_arguments(roup_clause);
-                    if ((vars == nullptr || scan_clause->getOperands().empty()) && args && args[0]) {
-                        std::string arg_str(args);
-                        int depth = 0;
-                        std::string current;
-                        auto flush = [&]() {
-                            std::string trimmed = current;
-                            trimmed = normalize_expression(trim_paren_padding(trimmed).c_str());
-                            if (!trimmed.empty()) {
-                                scan_clause->addOperand(trimmed, OMPC_CLAUSE_SEP_comma);
-                            }
-                            current.clear();
-                        };
-                        for (char c : arg_str) {
-                            if (c == '(') depth++;
-                            if (c == ')') depth--;
-                            if (c == ',' && depth == 0) {
-                                flush();
-                                continue;
-                            }
-                            current.push_back(c);
-                        }
-                        flush();
-                    }
+                if (scan_clause && scan_clause->getOperands().empty()) {
+                    fprintf(stderr,
+                            "[roup compat] fatal: scan clause missing operands from C API\n");
+                    std::abort();
                 }
-                if (scan_clause && clause->getClausePosition() == -1) {
-                    dir->getClausesInOriginalOrder()->push_back(clause);
-                    clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
-                } else if (clause && clause->getClausePosition() == -1) {
+                if (clause && clause->getClausePosition() == -1) {
                     dir->getClausesInOriginalOrder()->push_back(clause);
                     clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
                 }
