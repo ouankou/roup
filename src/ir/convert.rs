@@ -3173,6 +3173,11 @@ pub fn parse_clause_data<'a>(
                     ))
                 }
             };
+            if items.is_empty() {
+                return Err(ConversionError::InvalidClauseSyntax(
+                    "scan clause requires a non-empty variable list".to_string(),
+                ));
+            }
             Ok(ClauseData::Scan { mode, items })
         }
 
