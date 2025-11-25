@@ -6,7 +6,7 @@ This page points to the primary surfaces for Rust and C/C++/Fortran users. Full 
 
 ## Rust
 
-- **Rustdoc:** `mdbook build docs/book` also produces `docs/book/src/api/roup/index.html`.
+- **Rustdoc:** `cargo doc --no-deps` generates the full API docs.
 - **Parsing:** `parser::openmp::parser()` and `parser::openacc::parser()` return a `Parser` that accepts C or Fortran sentinels via `with_language(...)`. Convenience helpers `parse_omp_directive` / `parse_acc_directive` are also available.
 - **AST/IR:** `Parser::parse_ast(...)` converts parsed directives into the IR layer for semantic queries and unparsing.
 - **Translation:** `ir::translate::{translate_c_to_fortran, translate_fortran_to_c}` (and their `_ir` variants) map OpenMP directives between languages.

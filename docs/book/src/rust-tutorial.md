@@ -65,8 +65,8 @@ let (_, directive) = parser.parse("#pragma omp parallel private(x) reduction(+:s
 
 for clause in &directive.clauses {
     match clause.name.as_ref() {
-        "private" => println!("private({})", clause.kind),
-        "reduction" => println!("reduction({})", clause.kind),
+        "private" => println!("private({:?})", clause.kind),
+        "reduction" => println!("reduction({:?})", clause.kind),
         other => println!("clause: {other}"),
     }
 }
