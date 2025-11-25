@@ -4,7 +4,7 @@ This tutorial demonstrates how to use ROUP's **minimal unsafe pointer-based C AP
 
 > **API Design**: Direct pointers (`*mut OmpDirective`, `*mut OmpClause`) with manual memory management. No global state, no handles.
 >
-> **Source**: `src/c_api.rs` - 16 FFI functions, ~60 lines of unsafe code
+> **Source**: `src/c_api.rs` - minimal unsafe code confined to the FFI boundary
 
 ---
 

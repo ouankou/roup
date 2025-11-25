@@ -2,9 +2,9 @@
 
 <div align="center">
 
-**Rust-based OpenMP Parser**
+**Rust-based OpenMP & OpenACC Parser**
 
-*Safe, fast, and comprehensive OpenMP directive parsing*
+*Safe, fast, and comprehensive directive parsing*
 
 [Get Started](./getting-started.md) · [Tutorials](./rust-tutorial.md) · [API Reference](./api-reference.md) · [GitHub](https://github.com/ouankou/roup)
 
@@ -14,7 +14,7 @@
 
 ## What is ROUP?
 
-ROUP is an **experimental** parser for OpenMP directives, written in safe Rust with C and C++ APIs. Parse OpenMP pragmas like `#pragma omp parallel for` into structured data that your tools can analyze, transform, and process.
+ROUP is an **experimental** parser for OpenMP **and** OpenACC directives, written in safe Rust with C, C++, and Fortran bindings. Parse pragmas like `#pragma omp parallel for` or `!$acc parallel` into structured data that your tools can analyze, transform, and process.
 
 > **⚠️ Experimental Status**: ROUP is under active development and not yet production-ready. APIs may change, and some OpenMP features are still being implemented. Use in research and experimental projects.
 
@@ -30,33 +30,31 @@ ROUP is an **experimental** parser for OpenMP directives, written in safe Rust w
 
 ### 🚀 Fast & Lightweight
 
-- **Microsecond parsing** - Parse directives in ~500ns
-- **Zero-copy lexer** - Minimal memory allocations
-- **No LLVM dependency** - Standalone library, small binary size
-- **16 FFI functions** - Simple, focused C API
+- Zero-copy lexer and hand-written parsers
+- Standalone library (no LLVM/ANTLR dependencies)
+- Compatibility shims for ompparser and accparser
 
 ### 🛡️ Safe & Reliable
 
-- **99.1% safe Rust** - Memory safety guaranteed
-- **620 passing tests** - Comprehensive test coverage
-- **Fuzzing tested** - Handles malformed input gracefully
-- **NULL-safe C API** - Defensive checks at FFI boundary
+- Memory safety guaranteed except for the narrow FFI boundary
+- Extensive automated tests plus OpenMP_VV/OpenACCV-V validation and compat ctests
+- NULL-safe C API with defensive checks
 
-### 📚 Comprehensive OpenMP Support
+### 📚 Comprehensive Directive Support
 
-- **128 directive keywords** - From `parallel` to every combined OpenMP 6.0 form
-- **132 clause keywords** - Extensive OpenMP 3.0 through 6.0 coverage
-- **Version tracking** - Know which OpenMP version introduced each feature
-- **Spec compliant** - Follows official OpenMP specifications
+- OpenMP 3.0–6.0 directives, clauses, combined forms, and metadirectives
+- OpenACC 3.4 directives, clauses, aliases, and end-paired constructs
+- Canonical keyword handling and clause alias preservation
+- Interactive parser debugger (`roup_debug`) for OpenMP/OpenACC (C and Fortran sentinels)
 
 ### 🔌 Multi-Language APIs
 
 | Language | API Style | Memory Management | Status |
 |----------|-----------|-------------------|--------|
-| **Rust** | Native | Automatic (ownership) | ✅ Stable |
-| **C** | Pointer-based | Manual (malloc/free pattern) | ✅ Stable |
-| **C++** | RAII wrappers | Automatic (destructors) | ✅ Stable |
-| **Fortran** | C interop | Manual (via iso_c_binding) | ⚠️ Experimental |
+| **Rust** | Native | Automatic (ownership) | ✅ |
+| **C** | Pointer-based | Manual (malloc/free pattern) | ✅ |
+| **C++** | RAII wrappers | Automatic (destructors) | ✅ |
+| **Fortran** | C interop | Manual (via iso_c_binding) | ✅ (via C API) |
 
 ---
 
@@ -94,7 +92,7 @@ std::cout << "Clauses: " << dir.clause_count() << "\n";
 // Automatic cleanup!
 ```
 
-### Parse Fortran (Experimental)
+### Parse Fortran
 
 ```fortran
 ! Free-form Fortran
@@ -194,72 +192,6 @@ directive_ptr = roup_parse_with_language("!$OMP PARALLEL PRIVATE(A)", &
 | **Dependencies** | `depend(in:x)`, `depend(out:y)`, `depend(inout:z)` |
 
 [Complete clause reference →](./api-reference.md)
-
----
-
-## Architecture
-
-```text
-┌──────────────────────────────────────┐
-│  Your Application                    │
-├──────────────────────────────────────┤
-│  Language Bindings                   │
-│  ├─ Rust API (native)                │
-│  ├─ C API (16 functions)             │
-│  └─ C++ API (RAII wrappers)          │
-├──────────────────────────────────────┤
-│  Parser Layer (99.1% safe Rust)      │
-│  ├─ Directive Parser                 │
-│  ├─ Clause Parser                    │
-│  └─ Error Recovery                   │
-├──────────────────────────────────────┤
-│  Lexer (nom-based, zero-copy)        │
-└──────────────────────────────────────┘
-```
-
-**Design Principles:**
-- **Safety first** - Rust ownership prevents memory bugs
-- **Zero-copy** - Parse directly from input string
-- **Minimal FFI** - Only ~60 lines of unsafe code (0.9%)
-- **Extensible** - Easy to add new directives/clauses
-
-[Learn more about the architecture →](./architecture.md)
-
----
-
-## Comparison
-
-### ROUP vs LLVM/Clang
-
-| Feature | ROUP | LLVM/Clang |
-|---------|------|------------|
-| **Purpose** | OpenMP parsing only | Full C/C++ compiler |
-| **Binary size** | ~500KB | ~50MB+ |
-| **Parse time** | ~500ns - 1µs | ~10-100µs |
-| **Dependencies** | None | LLVM, Clang, libc++ |
-| **API complexity** | 16 C functions | 1000s of functions |
-| **Learning curve** | Minutes | Weeks |
-| **Use case** | Analysis, tools, IDE plugins | Compilation |
-
-**Use ROUP when:**
-- ✅ You only need to parse OpenMP, not compile
-- ✅ You want minimal dependencies
-- ✅ You need fast integration into tools
-- ✅ You value simplicity and safety
-
-**Use LLVM when:**
-- You need full C/C++ compilation
-- You're building a complete compiler
-- You need LLVM IR generation
-
-### ROUP vs Custom Parser
-
-| Aspect | ROUP | Custom Parser |
-|--------|------|---------------|
-| **Development time** | Minutes (add dependency) | Weeks/months |
-| **OpenMP coverage** | 128 directives | You must implement all |
-| **Testing** | 620 tests included | You must write tests |
-| **Maintenance** | Active, updated for new OpenMP | You must maintain |
 | **Edge cases** | Handled (fuzzing tested) | Likely has bugs |
 | **Spec compliance** | Verified | Uncertain |
 
@@ -291,39 +223,6 @@ ROUP prioritizes safety without compromising usability:
 - Validates UTF-8 encoding
 - Documents all safety contracts
 
-### Testing
-
-- **620 tests** covering all features
-- **Fuzzing** with random inputs
-- **Valgrind** verified (no leaks)
-- **Thread sanitizer** verified (no races)
-- **Address sanitizer** verified (no memory errors)
-
-[Read the safety analysis →](./architecture.md#safety-boundaries)
-
----
-
-## Performance
-
-Typical performance characteristics:
-
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Parse `#pragma omp parallel` | ~500ns | Simple directive |
-| Parse with clauses | ~800ns | `num_threads(4)` |
-| Complex directive | ~1.2µs | Multiple clauses |
-| Iterator creation | ~10ns | FFI overhead |
-
-**Scalability:**
-- ✅ Thread-safe - Parse from multiple threads
-- ✅ Zero-copy - No string allocations during lexing
-- ✅ Minimal allocations - ~3 allocations per directive
-- ✅ Fast enough - Parsing is rarely the bottleneck
-
-[Performance details →](./architecture.md#performance-characteristics)
-
----
-
 ## Getting Started
 
 Choose your language:
@@ -337,7 +236,7 @@ Choose your language:
 **Install:**
 ```toml
 [dependencies]
-roup = "0.5"
+roup = "0.7"
 ```
 
 **Learn:**
@@ -573,40 +472,7 @@ See the [OpenMP Support Matrix](https://github.com/ouankou/roup/blob/main/docs/O
 
 ## Safety Guarantees
 
-ROUP is built with safety as a core principle:
-
-| Metric | Value | Notes |
-|--------|-------|-------|
-| **Safe Rust** | 99.1% | All core logic is safe |
-| **Unsafe blocks** | 18 | Only at FFI boundary |
-| **Unsafe lines** | ~60 | Well-documented, NULL-checked |
-| **Memory leaks** | 0 | Rust's RAII prevents leaks |
-| **Segfaults** | 0 | Ownership system prevents use-after-free |
-
-All `unsafe` code is:
-- **Documented** with safety requirements
-- **NULL-checked** before dereferencing
-- **Isolated** to `src/c_api.rs`
-- **Tested** with 620 tests
-
----
-
-## Testing
-
-ROUP has comprehensive test coverage:
-
-- **285 unit tests** - Core parsing logic
-- **234 integration tests** - Real-world usage scenarios
-- **62 doc tests** - Examples in documentation are auto-tested
-- **620 total tests** - All passing, zero warnings
-- **Cross-platform** - Tested on Linux, macOS, Windows
-
-Test categories:
-- ✅ Basic directives (parallel, for, task, teams, target)
-- ✅ Complex features (reductions, metadirectives, nesting)
-- ✅ Edge cases (comments, whitespace, error handling)
-- ✅ Roundtrip parsing (parse → format → parse)
-- ✅ FFI safety (C and C++ examples)
+All `unsafe` code is isolated to the FFI boundary (`src/c_api.rs`), documented with safety requirements, and NULL-checked before dereferencing.
 
 ---
 

@@ -8,9 +8,9 @@ This directory contains git hooks that help maintain code quality and prevent br
 
 Runs the comprehensive test suite (`./test.sh`) before allowing a push to proceed.
 
-- **What it does**: Executes all 23 test categories including formatting, builds, tests, examples, documentation, and round-trip validation
+- **What it does**: Executes formatting, builds, tests, docs, OpenMP_VV/OpenACCV-V checks, and ompparser/accparser compatibility ctests.
 - **Why it matters**: Ensures CI won't fail due to preventable issues
-- **Duration**: Typically 2-5 minutes depending on system
+- **Duration**: Can be lengthy (compat builds and validation suites); plan ahead before pushing
 - **Failure handling**: If any tests fail, the push is aborted and you'll see which tests failed
 
 ## Installation

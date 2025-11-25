@@ -25,7 +25,7 @@ The script will:
 2. Initialize accparser submodule
 3. Build ROUP core library
 4. Build `libaccparser.so`
-5. Run all 38 tests
+5. Run the full upstream accparser ctest suite (900+ cases)
 
 ### Manual Build
 
@@ -124,20 +124,7 @@ Single self-contained library with:
 
 ### Comprehensive Testing
 
-38 tests covering:
-- **Basic directives**: parallel, loop, kernels, data, enter_data, exit_data
-- **Compute clauses**: num_gangs, num_workers, vector_length, async, wait, private, firstprivate, reduction
-- **Data clauses**: copy, copyin, copyout, create, present
-- **Loop clauses**: gang, worker, vector, seq, independent, collapse, tile
-- **String generation**: toString()
-- **Error handling**: null input, invalid directives, malformed pragmas
-- **Language modes**: C, C++, Fortran via setLang()
-
-Run tests:
-```bash
-cd compat/accparser/build
-ctest --output-on-failure
-```
+The bundled ctest run exercises the upstream accparser test matrix (directives, clauses, aliases, unparsing) against the ROUP-backed shim. It also validates end-paired directives, wait/cache data, and alias spellings under the ROUP_ACC_* namespace.
 
 ## Architecture
 
@@ -181,18 +168,7 @@ generated OpenACC macros now use the `ROUP_ACC_*` prefix (for example
 
 ## Known Limitations
 
-### Clause Parameters 🔄
-
-Basic clause detection works, but parameter extraction not yet implemented.
-
-**Example**:
-```cpp
-parseOpenACC("acc parallel num_gangs(4)", nullptr)
-// Detects: num_gangs clause ✅
-// Extracts "4": ❌ (TODO)
-```
-
-**Status**: Planned wrapper enhancement using ROUP's clause expression API.
+The shim inherits ROUP’s canonical token choices. Generated OpenACC macros use the `ROUP_ACC_*` prefix (for example `ROUP_ACCD_parallel`); legacy `ACC_*` names are intentionally not emitted.
 
 ## Documentation
 

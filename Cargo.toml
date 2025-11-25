@@ -1,6 +1,6 @@
 [package]
 name = "roup"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["Anjia Wang <anjia@ouankou.com>"]
 edition = "2021"
 rust-version = "1.88.0"  # MSRV: Aligns with mdBook 0.5.x and current deps
