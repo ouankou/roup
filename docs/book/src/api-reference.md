@@ -43,7 +43,9 @@ Key function families (OpenACC):
 - Clause queries: `acc_clause_kind`, `acc_clause_expressions_count`, `acc_clause_expression_at`, `acc_clause_modifier`, `acc_clause_operator`, `acc_clause_original_keyword`
 - Directive extras: cache and wait accessors, routine name, end-paired mapping
 
-All pointer arguments are NULL-checked and return `-1` on invalid inputs.
+Error handling:
+- Functions returning pointers (e.g., `*_parse`, `*_iter`, string accessors) return `NULL` on error and must be checked before use.
+- Functions returning integers (e.g., kind lookups) return `-1` for invalid inputs or unknown kinds.
 
 ---
 
