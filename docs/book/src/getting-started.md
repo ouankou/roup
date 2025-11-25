@@ -26,7 +26,7 @@ Add ROUP to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-roup = "0.5"
+roup = "0.7"
 ```
 
 Example program:
@@ -37,9 +37,9 @@ use roup::lexer::Language;
 
 fn main() {
     let input = "#pragma omp parallel for num_threads(4)";
-    let parser = openmp::parser();
+    let parser = openmp::parser().with_language(Language::C);
 
-    match parser.parse_with_language(input, Language::C) {
+    match parser.parse(input) {
         Ok((_, directive)) => {
             println!("directive: {}", directive.name);
             println!("clauses: {}", directive.clauses.len());
@@ -141,3 +141,4 @@ Compile with clang++ or g++ in the same way as the C example.
 - Explore the complete examples in `examples/` (C, C++, Fortran).
 - Read the [Rust tutorial](./rust-tutorial.md) for more detailed use cases.
 - Consult the [Testing guide](../../TESTING.md) before contributing changes.
+- Try the interactive debugger: `cargo run --release --bin roup_debug '#pragma omp parallel' -- --non-interactive`.

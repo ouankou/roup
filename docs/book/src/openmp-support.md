@@ -12,10 +12,9 @@ specification. The canonical listings live in the generated reference chapters:
 | Feature | Details |
 | --- | --- |
 | OpenMP versions | 3.0 – 6.0 |
-| Directive keywords | 128 |
-| Clause keywords | 132 |
+| Directive/Clause coverage | Complete registry mirroring the spec |
 | Languages | C, C++, Fortran |
-| Automated tests | 620 |
+| Automated tests | Keyword coverage, round-trips, IR/display parity, and VV suites |
 
 Unknown directives and clauses are rejected so unsupported constructs fail fast.
 The `tests/openmp_keyword_coverage.rs` integration test keeps the registry in

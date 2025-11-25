@@ -50,9 +50,9 @@ kind IDs as their canonical forms.【F:tests/openacc_keyword_coverage.rs†L101-
 
 The accparser bridge exercises the new coverage, ensuring the C++ drop-in
 replacement emits the same directive kinds and serialises aliases without
-normalisation. The extended `compat/accparser/tests/comprehensive_test.cpp`
-suite now exercises mixed alias usage, host-data spacing variants, dtype
-shorthands, and atomic update round-tripping through `OpenACCIR::toString`.【F:compat/accparser/tests/comprehensive_test.cpp†L1-L320】
+normalisation. The upstream accparser ctest suite (run via `compat/accparser/build.sh`)
+now exercises mixed alias usage, host-data spacing variants, dtype shorthands,
+and atomic update round-tripping through `OpenACCIR::toString`.
 
 ## Regression protection
 

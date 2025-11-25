@@ -1,5 +1,16 @@
 # Release Notes
 
+## Unreleased
+
+## 0.7.0 (2025-11-25)
+
+- **Interactive debugger:** `roup_debug` now traces OpenMP and OpenACC parsing step-by-step (interactive and batch), including Fortran sentinels and EOF handling fixes.
+- **OpenACC drop-in:** accparser compatibility layer reaches 100% of the upstream ctest suite with ROUP_ACC_* constants and expression/modifier support.
+- **Fortran validation:** Expanded Fortran coverage in validation suites and debugger detection; OpenACC end-paired directives now mapped in compat shims.
+- **Keyword canonicalisation:** Enforced canonical keyword forms across parsers and generators; OpenACC tokens preserve original spelling for custom parsers.
+- **MSRV:** Bumped to Rust 1.88.0 (aligned with mdBook 0.5.x and dependencies).
+- **CI/docs:** mdBook fixes, accparser ctests added to scripts, and consistent unknown sentinel (-1) in generated headers and docs.
+
 ## 0.6.0 (2025-10-23)
 
 ### OpenACC 3.4 support

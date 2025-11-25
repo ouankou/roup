@@ -433,6 +433,10 @@ roup_debug '#pragma omp parallel'
 
 # Auto-detects OpenACC
 roup_debug '#pragma acc parallel'
+
+# Fortran sentinels are supported (free and fixed form)
+roup_debug '!$omp parallel do private(i)' --non-interactive
+roup_debug 'c$acc parallel' --non-interactive
 ```
 
 Force a specific dialect:
@@ -619,14 +623,7 @@ For production parsing, use the standard parser API directly.
 
 ### Planned Features
 
-#### 1. **Fortran Support in Debugger**
-Currently, the debugger's step-by-step instrumentation only handles C-style `#pragma` prefixes. Fortran sentinels (`!$omp`, `c$omp`, etc.) work in the main parser but not in the debugger's prefix parsing step.
-
-**Implementation**:
-- Extend `parse_pragma_prefix_static()` to detect and handle Fortran sentinels
-- Add language-specific step descriptions
-
-#### 2. **Web-Based UI**
+#### 1. **Web-Based UI**
 Export debug sessions as JSON for web visualization:
 
 ```rust
@@ -641,7 +638,7 @@ pub fn export_session_json(&self) -> Result<String, serde_json::Error> {
 - Step-through animations
 - Shareable session URLs
 
-#### 3. **Colorized Output**
+#### 2. **Colorized Output**
 Add terminal colors to highlight:
 - Step kinds (different colors for pragma, directive, clause, etc.)
 - Consumed text (green)
@@ -650,7 +647,7 @@ Add terminal colors to highlight:
 
 **Implementation**: Use `termcolor` or `colored` crate
 
-#### 4. **Breakpoints**
+#### 3. **Breakpoints**
 Set breakpoints on specific step kinds:
 
 ```bash
@@ -658,14 +655,14 @@ roup_debug --break-on clause '#pragma omp parallel shared(x)'
 # Automatically pause when encountering clause steps
 ```
 
-#### 5. **Diff Mode**
+#### 4. **Diff Mode**
 Compare two parsing sessions side-by-side:
 
 ```bash
 roup_debug --diff '#pragma omp parallel' '#pragma acc parallel'
 ```
 
-#### 6. **Performance Profiling**
+#### 5. **Performance Profiling**
 Show time spent in each parsing step:
 
 ```bash
@@ -676,14 +673,14 @@ roup_debug --profile '#pragma omp parallel for collapse(2)'
 # ...
 ```
 
-#### 7. **Export Formats**
+#### 6. **Export Formats**
 Support multiple export formats:
 - JSON (for web UI)
 - Markdown (for documentation)
 - GraphViz DOT (for diagram generation)
 - CSV (for analysis)
 
-#### 8. **Replay Mode**
+#### 7. **Replay Mode**
 Save and replay debug sessions:
 
 ```bash
@@ -856,6 +853,6 @@ The ROUP debugger is part of the ROUP project and is licensed under the BSD-3-Cl
 
 ---
 
-**Last Updated**: 2025-01-XX
+**Last Updated**: 2025-02-01
 **Author**: ROUP Development Team
 **Contact**: https://github.com/ouankou/roup/issues

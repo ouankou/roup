@@ -1,8 +1,6 @@
 # ompparser Compatibility Layer
 
-⚠️ **Experimental Feature** - This compatibility layer is under active development.
-
-ROUP provides a drop-in compatibility layer for projects using [ompparser](https://github.com/ouankou/ompparser), allowing you to switch to ROUP's expected-to-be faster, safer Rust-based parser without changing your code.
+ROUP provides a drop-in compatibility layer for projects using [ompparser](https://github.com/ouankou/ompparser), allowing you to switch to ROUP's faster, safer Rust-based parser without changing your code.
 
 ## What is it?
 
@@ -26,7 +24,7 @@ The script will:
 2. Initialize ompparser submodule
 3. Build ROUP core library
 4. Build `libompparser.so` (size varies by build configuration)
-5. Run all 46 tests
+5. Run the upstream ompparser ctest suite
 
 ### Manual Build
 
@@ -122,19 +120,7 @@ Single self-contained library with:
 
 ### Comprehensive Testing
 
-46 tests covering:
-- **Basic directives**: parallel, for, sections, single, task, barrier, taskwait, critical, master
-- **Clauses**: num_threads, private, shared, reduction, schedule, if, nowait, etc.
-- **String generation**: toString(), generatePragmaString()
-- **Error handling**: null input, invalid directives, malformed pragmas
-- **Memory management**: allocations, deletion, reuse
-- **Language modes**: C, C++, Fortran via setLang()
-
-Run tests:
-```bash
-cd compat/ompparser/build
-ctest --output-on-failure
-```
+The shim is validated via the ompparser ctest suite bundled in the submodule. It covers directive kinds (including combined/end-paired forms), clause parameters, unparsing, and language modes.
 
 ## Architecture
 
@@ -157,32 +143,7 @@ Returns: OpenMPDirective with ompparser methods
 
 ## Known Limitations
 
-### 1. Combined Directives ⚠️
-
-Combined directives like `parallel for` are currently parsed as the first directive only.
-
-**Example**:
-```cpp
-parseOpenMP("omp parallel for", nullptr)
-// Returns: OMPD_parallel (should be OMPD_parallel_for)
-```
-
-**Status**: ROUP core limitation, tracked for future improvement.
-
-**Workaround**: Tests document expected behavior with clear warnings.
-
-### 2. Clause Parameters 🔄
-
-Basic clause detection works, but parameter extraction not yet implemented.
-
-**Example**:
-```cpp
-parseOpenMP("omp parallel num_threads(4)", nullptr)
-// Detects: num_threads clause ✅
-// Extracts "4": ❌ (TODO)
-```
-
-**Status**: Planned wrapper enhancement using ROUP's clause expression API.
+The shim uses the generated `ROUP_OMPD_*`/`ROUP_OMPC_*` constants from `src/roup_constants.h` and preserves the canonical keyword spellings from ROUP. Legacy ompparser enum values are mapped internally.
 
 ## Documentation
 

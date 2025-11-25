@@ -4,9 +4,9 @@
 
 ### What is ROUP?
 
-ROUP is a Rust library that parses OpenMP directives and exposes the result to
-Rust, C, C++, and Fortran consumers.  It focuses on analysing and transforming
-existing OpenMP code rather than compiling it.
+ROUP is a Rust library that parses OpenMP and OpenACC directives and exposes the result to
+Rust, C, C++, and Fortran consumers. It focuses on analysing and transforming
+existing pragma-based code rather than compiling it.
 
 ### Is ROUP production ready?
 
@@ -14,12 +14,11 @@ Not yet.  The project is actively developed and APIs may change between
 releases.  Treat the current builds as experimental and review the release notes
 for the latest status updates.
 
-### Which OpenMP versions are supported?
+### Which versions are supported?
 
-The parser tracks the OpenMP 6.0 specification.  Integration tests exercise the
-keyword registry, loop-transform directives, meta-directives, and device
-constructs.  Unsupported constructs fail with descriptive parse errors instead
-of being silently accepted.
+- **OpenMP:** Up to 6.0. Integration tests exercise the keyword registry, loop-transform directives, metadirectives, and device constructs.
+- **OpenACC:** 3.4 with full directive/clause coverage and aliases.
+Unsupported constructs fail with descriptive parse errors instead of being silently accepted.
 
 ## Installation
 
@@ -29,15 +28,14 @@ Add the crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-roup = "0.5"
+roup = "0.7"
 ```
 
 ### How do I use ROUP from C or C++?
 
 Build the library with `cargo build --release` and link against the generated
-artefact (`libroup.so`, `libroup.dylib`, or `roup.dll`).  The C API is declared
-in `compat/include/roup.h`, which is generated from `src/c_api.rs` by the build
-script.
+artefact (`libroup.so`, `libroup.dylib`, or `roup.dll`). The generated constants
+header lives at `src/roup_constants.h`. See the C/C++ tutorials for function prototypes and RAII helpers.
 
 ### What toolchains are required?
 
@@ -72,9 +70,9 @@ roup_clause_iterator_free(it);
 
 ### Which tests should I run before sending a change?
 
-At minimum run `cargo test`.  For thorough coverage run `./test.sh` and
-`./test_rust_versions.sh` (see `TESTING.md` for details).  These scripts build
-examples, execute the ompparser compatibility tests, and verify the
+At minimum run `cargo test`. For thorough coverage run `./test.sh` and
+`./test_rust_versions.sh` (see `TESTING.md` for details). These scripts build
+examples, execute the ompparser and accparser compatibility tests, and verify the
 documentation.
 
 ### Where can I learn more?
@@ -82,3 +80,4 @@ documentation.
 - [Getting started](./getting-started.md)
 - [Architecture](./architecture.md)
 - [OpenMP support overview](./openmp-support.md)
+- [OpenACC support overview](./openacc/openacc-3-4-directives-clauses.md)

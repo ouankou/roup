@@ -36,7 +36,7 @@ Runs the comprehensive local suite on the active toolchain:
 - Unit, integration, and doctests
 - Example builds (Rust, C, C++)
 - mdBook build
-- ompparser compatibility checks
+- ompparser and accparser compatibility ctests (submodules are initialised automatically)
 - OpenMP_VV and OpenACCV-V round-trip validation (skips when prerequisites are
   unavailable)
 
@@ -55,12 +55,8 @@ version-specific failure.
 
 ## Continuous integration
 
-GitHub Actions runs six jobs:
-
-- **Toolchains:** 1.88 (MSRV) and stable
-- **Operating systems:** Ubuntu 24.04, Windows, and macOS
-
-The build job performs the same checks as `test.sh`; the docs job rebuilds the
+GitHub Actions runs multi-platform jobs on MSRV (1.88) and stable across Linux, Windows, and macOS.
+The main build job performs the same checks as `test.sh`; the docs job rebuilds the
 mdBook and API documentation with warnings denied.
 
 ## Validation suites

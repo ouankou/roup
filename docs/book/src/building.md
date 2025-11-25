@@ -35,20 +35,19 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-roup = "0.5"
+roup = "0.7"
 ```
 
 Then use in your code:
 
 ```rust,ignore
-use roup::parser::parse;
+use roup::parser::openmp;
+use roup::lexer::Language;
 
 fn main() {
-    let result = parse("#pragma omp parallel for");
-    match result {
-        Ok(directive) => println!("Parsed: {:?}", directive),
-        Err(e) => eprintln!("Error: {}", e),
-    }
+    let parser = openmp::parser().with_language(Language::C);
+    let (_, directive) = parser.parse("#pragma omp parallel for").unwrap();
+    println!("Parsed directive: {}", directive.name);
 }
 ```
 
@@ -66,17 +65,7 @@ roup = { git = "https://github.com/ouankou/roup.git" }
 roup = { path = "../roup" }
 ```
 
-### Building Your Rust Project
-
-```bash
-# Standard cargo commands
-cargo build           # Debug build
-cargo build --release # Optimized build
-cargo test            # Run tests
-cargo doc --open      # Generate and view docs
-```
-
-See [Rust Tutorial](./rust-tutorial.md) for complete usage examples.
+See [Rust Tutorial](./rust-tutorial.md) for complete usage examples and `roup_debug` for interactive inspection.
 
 ---
 
@@ -102,7 +91,7 @@ This creates:
 
 ### Step 2: Create Header File
 
-Create `roup_ffi.h` with function declarations (see [C Tutorial](./c-tutorial.md#step-1-setup-and-compilation) for complete header).
+Create `roup_ffi.h` with function declarations (see [C Tutorial](./c-tutorial.md#step-1-setup-and-compilation) for complete header). The generated constants header lives at `src/roup_constants.h` after a build.
 
 ### Step 3: Compile Your C Program
 
@@ -392,20 +381,7 @@ cargo test parser::
 
 ### Run Examples
 
-```bash
-# List available examples
-cargo run --example
-
-# Run specific example (if any exist)
-cargo run --example parse_simple
-```
-
-### Benchmarks
-
-```bash
-# If benchmarks are available
-cargo bench
-```
+Examples live under `examples/` for C, C++, and Fortran. Build them with the provided Makefiles in those directories.
 
 ---
 
