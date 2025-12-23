@@ -893,7 +893,7 @@ fn parse_gang_clause<'a>(
         let (input, _) = nom::bytes::complete::tag("(")(input)?;
         let (input, _) = lexer::skip_space_and_comments(input)?;
 
-        // Try to parse "num:" or "static:" modifier (case-insensitive)
+        // Try to parse "num:" / "static:" / "dim:" modifier (case-insensitive)
         let input_lower = input.trim_start().to_lowercase();
         let (input, modifier) =
             if input_lower.starts_with("num:") || input_lower.starts_with("num :") {
@@ -904,6 +904,10 @@ fn parse_gang_clause<'a>(
                 let colon_idx = input.find(':').unwrap();
                 let after_colon = &input[colon_idx + 1..];
                 (after_colon, Some(GangModifier::Static))
+            } else if input_lower.starts_with("dim:") || input_lower.starts_with("dim :") {
+                let colon_idx = input.find(':').unwrap();
+                let after_colon = &input[colon_idx + 1..];
+                (after_colon, Some(GangModifier::Dim))
             } else {
                 (input, None)
             };

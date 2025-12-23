@@ -455,6 +455,7 @@ pub enum ReductionModifier {
 pub enum GangModifier {
     Num,    // num
     Static, // static
+    Dim,    // dim
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -591,6 +592,7 @@ impl fmt::Display for Clause<'_> {
                         let mod_str = match mod_val {
                             GangModifier::Num => "num",
                             GangModifier::Static => "static",
+                            GangModifier::Dim => "dim",
                         };
                         write!(f, "{mod_str}: ")?;
                     }

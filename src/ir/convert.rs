@@ -1912,6 +1912,33 @@ fn classify_allocator_name(name: &str) -> UsesAllocatorKind {
     }
 }
 
+fn parse_scan_clause(
+    mode: ScanClauseMode,
+    clause: &Clause<'_>,
+    config: &ParserConfig,
+) -> Result<ClauseData, ConversionError> {
+    let items = match &clause.kind {
+        ClauseKind::Parenthesized(content) => parse_identifier_list(content.as_ref(), config)?,
+        ClauseKind::VariableList(vars) => {
+            let joined = vars.join(", ");
+            parse_identifier_list(&joined, config)?
+        }
+        _ => {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "scan clause requires a variable list".to_string(),
+            ))
+        }
+    };
+
+    if items.is_empty() {
+        return Err(ConversionError::InvalidClauseSyntax(
+            "scan clause requires a non-empty variable list".to_string(),
+        ));
+    }
+
+    Ok(ClauseData::Scan { mode, items })
+}
+
 /// Convert a parser Clause to IR ClauseData
 ///
 /// This is the main conversion function that handles all clause types.
@@ -3153,33 +3180,8 @@ pub fn parse_clause_data<'a>(
         },
         "inbranch" => Ok(ClauseData::Bare(Identifier::new("inbranch"))),
         "notinbranch" => Ok(ClauseData::Bare(Identifier::new("notinbranch"))),
-        "inclusive" | "exclusive" => {
-            let mode = if clause_name == "inclusive" {
-                ScanClauseMode::Inclusive
-            } else {
-                ScanClauseMode::Exclusive
-            };
-            let items = match &clause.kind {
-                ClauseKind::Parenthesized(content) => {
-                    parse_identifier_list(content.as_ref(), config)?
-                }
-                ClauseKind::VariableList(vars) => {
-                    let joined = vars.join(", ");
-                    parse_identifier_list(&joined, config)?
-                }
-                _ => {
-                    return Err(ConversionError::InvalidClauseSyntax(
-                        "scan clause requires a variable list".to_string(),
-                    ))
-                }
-            };
-            if items.is_empty() {
-                return Err(ConversionError::InvalidClauseSyntax(
-                    "scan clause requires a non-empty variable list".to_string(),
-                ));
-            }
-            Ok(ClauseData::Scan { mode, items })
-        }
+        "inclusive" => parse_scan_clause(ScanClauseMode::Inclusive, clause, config),
+        "exclusive" => parse_scan_clause(ScanClauseMode::Exclusive, clause, config),
 
         // uses_allocators(allocator[(traits)], ...)
         "uses_allocators" => parse_uses_allocators_clause(&clause.kind, config),
@@ -3203,6 +3205,31 @@ pub fn parse_clause_data<'a>(
                 }
             };
             Ok(ClauseData::Fail { order })
+        }
+
+        // assume/assumes clauses: absent(directive-name-list) / contains(directive-name-list)
+        "absent" | "contains" => {
+            let content = match &clause.kind {
+                ClauseKind::Parenthesized(content) => content.as_ref(),
+                _ => {
+                    return Err(ConversionError::InvalidClauseSyntax(format!(
+                        "{clause_name} clause requires parenthesized directive-name list"
+                    )))
+                }
+            };
+            let directives: Vec<crate::parser::directive_kind::DirectiveName> =
+                split_top_level_items(content)
+                    .into_iter()
+                    .map(str::trim)
+                    .filter(|token| !token.is_empty())
+                    .map(crate::parser::directive_kind::lookup_directive_name)
+                    .collect();
+
+            if clause_name.eq_ignore_ascii_case("absent") {
+                Ok(ClauseData::Absent { directives })
+            } else {
+                Ok(ClauseData::Contains { directives })
+            }
         }
 
         // requires(...) with modifiers

@@ -134,17 +134,6 @@ impl ValidationContext {
                     })
                 }
             }
-            ClauseData::Bare(name) if name.to_string() == "nowait" => {
-                if self.directive.is_worksharing() || self.directive == DirectiveKind::Target {
-                    Ok(())
-                } else {
-                    Err(ValidationError::ClauseNotAllowed {
-                        clause_name,
-                        directive: self.directive.to_string(),
-                        reason: "nowait only allowed on worksharing constructs (for, sections, single) or target".to_string(),
-                    })
-                }
-            }
 
             // reduction requires parallel or worksharing or simd
             ClauseData::Reduction { .. } => {

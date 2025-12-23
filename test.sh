@@ -365,7 +365,24 @@ if [ ! -d "examples/fortran" ] || [ ! -f "examples/fortran/Makefile" ]; then
 fi
 
 echo -n "Building Fortran examples... "
-if (cd examples/fortran && make clean > /dev/null 2>&1 && make > /tmp/fortran_examples.log 2>&1); then
+fortran_compiler="${FC:-}"
+if [ -z "$fortran_compiler" ]; then
+    if command -v gfortran >/dev/null 2>&1; then
+        fortran_compiler="gfortran"
+    elif command -v flang-new >/dev/null 2>&1; then
+        fortran_compiler="flang-new"
+    elif command -v flang >/dev/null 2>&1; then
+        fortran_compiler="flang"
+    fi
+fi
+
+if [ -z "$fortran_compiler" ]; then
+    echo -e "${RED}✗ FAIL - no Fortran compiler found${NC}"
+    echo "   Install gfortran, or put flang/flang-new on PATH"
+    exit 1
+fi
+
+if (cd examples/fortran && make clean > /dev/null 2>&1 && make FC="$fortran_compiler" > /tmp/fortran_examples.log 2>&1); then
     echo -e "${GREEN}✓ PASS${NC}"
 else
     echo -e "${RED}✗ FAIL${NC}"

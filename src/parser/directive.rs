@@ -63,69 +63,71 @@ impl<'a> Directive<'a> {
     ///
     /// Example: `gang(a,b) gang(b,c)` becomes `gang(a,b,c)`
     pub fn merge_clauses(&mut self) {
-        use super::clause::{parse_variable_list, Clause, ClauseKind};
+        use super::clause::{
+            lookup_clause_name, parse_variable_list, Clause, ClauseKind, ClauseName,
+        };
         use std::collections::{HashMap, HashSet};
         // Group clauses by name AND modifier/kind for merging
         // Key: (name, kind_discriminant, modifier_value)
-        type MergeKey = (String, u8, u32);
+        type MergeKey = (ClauseName, u8, u32);
         let mut merged: HashMap<MergeKey, Vec<Clause<'a>>> = HashMap::new();
         let mut order: Vec<MergeKey> = Vec::new();
 
         for clause in self.clauses.drain(..) {
+            let clause_name_kind = lookup_clause_name(clause.name.as_ref());
             // Create key based on clause name, kind, and modifier/content
             // For Parenthesized clauses, we hash the content to distinguish collapse(1) from collapse(2)
             let kind_disc = match &clause.kind {
                 ClauseKind::Bare => 0,
                 ClauseKind::Parenthesized(content) => {
                     // Merge common list-based clauses regardless of exact list
-                    let name_lower = clause.name.to_ascii_lowercase();
-                    if matches!(
-                        name_lower.as_str(),
-                        "shared"
-                            | "private"
-                            | "firstprivate"
-                            | "copyprivate"
-                            | "copyin"
-                            | "copyout"
-                            | "aligned"
-                            | "nontemporal"
-                    ) {
-                        0
-                    } else if name_lower == "uses_allocators" {
-                        // Preserve multiple occurrences; give each a unique key.
-                        2_000_000 + order.len() as u32
-                    } else if name_lower == "depend" {
-                        // Merge depend clauses that share the same modifier/iterator prefix.
-                        use std::collections::hash_map::DefaultHasher;
-                        use std::hash::{Hash, Hasher};
-                        let mut depth = 0i32;
-                        let mut split_at = content.len();
-                        for (idx, ch) in content.char_indices() {
-                            match ch {
-                                '(' | '[' | '{' => depth += 1,
-                                ')' | ']' | '}' => {
-                                    if depth > 0 {
-                                        depth -= 1;
-                                    }
-                                }
-                                ':' if depth == 0 => {
-                                    split_at = idx;
-                                    break;
-                                }
-                                _ => {}
-                            }
+                    match &clause_name_kind {
+                        ClauseName::Shared
+                        | ClauseName::Private
+                        | ClauseName::Firstprivate
+                        | ClauseName::Copyprivate
+                        | ClauseName::CopyIn
+                        | ClauseName::CopyOut
+                        | ClauseName::Aligned
+                        | ClauseName::Nontemporal => 0,
+                        ClauseName::UsesAllocators => {
+                            // Preserve multiple occurrences; give each a unique key.
+                            2_000_000 + order.len() as u32
                         }
-                        let prefix = content[..split_at].trim().to_ascii_lowercase();
-                        let mut hasher = DefaultHasher::new();
-                        prefix.hash(&mut hasher);
-                        2 + (hasher.finish() % 1_000_000) as u32
-                    } else {
-                        // Use hash of content to distinguish different parameter values
-                        use std::collections::hash_map::DefaultHasher;
-                        use std::hash::{Hash, Hasher};
-                        let mut hasher = DefaultHasher::new();
-                        content.as_ref().hash(&mut hasher);
-                        1_000_000 + (hasher.finish() % 1_000_000) as u32
+                        ClauseName::Depend => {
+                            // Merge depend clauses that share the same modifier/iterator prefix.
+                            use std::collections::hash_map::DefaultHasher;
+                            use std::hash::{Hash, Hasher};
+                            let mut depth = 0i32;
+                            let mut split_at = content.len();
+                            for (idx, ch) in content.char_indices() {
+                                match ch {
+                                    '(' | '[' | '{' => depth += 1,
+                                    ')' | ']' | '}' => {
+                                        if depth > 0 {
+                                            depth -= 1;
+                                        }
+                                    }
+                                    ':' if depth == 0 => {
+                                        split_at = idx;
+                                        break;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            let prefix = content[..split_at].trim().to_ascii_lowercase();
+                            let mut hasher = DefaultHasher::new();
+                            prefix.hash(&mut hasher);
+                            2 + (hasher.finish() % 1_000_000) as u32
+                        }
+                        _ => {
+                            // Use hash of content to distinguish different parameter values
+                            use std::collections::hash_map::DefaultHasher;
+                            use std::hash::{Hash, Hasher};
+                            let mut hasher = DefaultHasher::new();
+                            content.as_ref().hash(&mut hasher);
+                            1_000_000 + (hasher.finish() % 1_000_000) as u32
+                        }
                     }
                 }
                 ClauseKind::VariableList(_) => 2,
@@ -184,7 +186,7 @@ impl<'a> Directive<'a> {
                 ClauseKind::CreateClause { modifier, .. } => 60 + modifier.map_or(0, |m| m as u32),
             };
 
-            let key = (clause.name.to_string(), kind_disc as u8, kind_disc);
+            let key = (clause_name_kind.clone(), kind_disc as u8, kind_disc);
             let entry = merged.entry(key.clone()).or_default();
             if entry.is_empty() {
                 order.push(key.clone());
@@ -204,6 +206,7 @@ impl<'a> Directive<'a> {
             } else {
                 // Multiple occurrences - merge based on clause kind
                 let first = group[0].clone();
+                let clause_name_kind = &key.0;
                 match &first.kind {
                     ClauseKind::GangClause { .. }
                     | ClauseKind::WorkerClause { .. }
@@ -263,8 +266,7 @@ impl<'a> Directive<'a> {
                         new_clauses.push(merged_clause);
                     }
                     ClauseKind::Parenthesized(_) => {
-                        let name_lower = first.name.to_ascii_lowercase();
-                        if name_lower == "depend" {
+                        if matches!(clause_name_kind, ClauseName::Depend) {
                             // Merge depend clauses by preserving the modifier prefix once and
                             // concatenating the unique variable list.
                             let mut merged_prefix = String::new();

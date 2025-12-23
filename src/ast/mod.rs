@@ -277,11 +277,12 @@ pub enum AccClausePayload {
     Copy(AccCopyClause),
     Create(AccCreateClause),
     Data(AccDataClause),
-    DeviceType(Vec<String>),
+    DeviceType(Vec<AccDeviceType>),
     Gang(AccGangClause),
-    Worker(AccGangClause),
-    Vector(AccGangClause),
+    Worker(AccWorkerClause),
+    Vector(AccVectorClause),
     Wait(AccWaitClause),
+    Indirect(AccIndirectClause),
     Reduction(AccReductionClause),
 }
 
@@ -289,7 +290,7 @@ pub enum AccClausePayload {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AccCopyClause {
     pub kind: AccCopyKind,
-    pub modifier: Option<AccCopyModifier>,
+    pub modifiers: Vec<AccDataModifier>,
     pub variables: Vec<Identifier>,
 }
 
@@ -297,7 +298,7 @@ pub struct AccCopyClause {
 #[derive(Debug, Clone, PartialEq)]
 pub struct AccCreateClause {
     pub kind: AccCreateKind,
-    pub modifier: Option<AccCreateModifier>,
+    pub modifiers: Vec<AccDataModifier>,
     pub variables: Vec<Identifier>,
 }
 
@@ -308,11 +309,65 @@ pub struct AccDataClause {
     pub variables: Vec<Identifier>,
 }
 
-/// Gang/worker/vector clause payload with optional modifiers.
+/// OpenACC data clause modifiers (shared across copy/copyin/copyout/create).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AccDataModifier {
+    Always,
+    AlwaysIn,
+    AlwaysOut,
+    Capture,
+    Readonly,
+    Zero,
+}
+
+/// OpenACC device types for `device_type(...)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccDeviceType {
+    Host,
+    Any,
+    Multicore,
+    Default,
+    Unknown(String),
+}
+
+/// Gang clause payload (single modifier + value list, accparser-compatible).
 #[derive(Debug, Clone, PartialEq)]
 pub struct AccGangClause {
-    pub modifier: Option<String>,
+    pub modifier: Option<AccGangModifier>,
     pub values: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AccGangModifier {
+    Num,
+    Static,
+    Dim,
+}
+
+/// Worker clause payload (optional modifier + expression list).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AccWorkerClause {
+    pub modifier: Option<AccWorkerModifier>,
+    pub values: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AccWorkerModifier {
+    Num,
+    ExprOnly,
+}
+
+/// Vector clause payload (optional modifier + expression list).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AccVectorClause {
+    pub modifier: Option<AccVectorModifier>,
+    pub values: Vec<Expression>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AccVectorModifier {
+    Length,
+    ExprOnly,
 }
 
 /// Wait clause payload (mirrors directive form).
@@ -323,11 +378,42 @@ pub struct AccWaitClause {
     pub explicit_queues: bool,
 }
 
+/// OpenACC indirect clause payload (optional binding).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AccIndirectClause {
+    pub value: Option<String>,
+    pub is_string_literal: bool,
+}
+
 /// OpenACC reduction clause payload.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AccReductionClause {
-    pub operator: String,
+    pub operator: AccReductionOperator,
     pub variables: Vec<Identifier>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AccReductionOperator {
+    Unspecified,
+    Readonly,
+    Add,
+    Sub,
+    Mul,
+    Max,
+    Min,
+    BitAnd,
+    BitOr,
+    BitXor,
+    LogAnd,
+    LogOr,
+    FortAnd,
+    FortOr,
+    FortEqv,
+    FortNeqv,
+    FortIand,
+    FortIor,
+    FortIeor,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -350,10 +436,20 @@ pub enum AccCopyKind {
     PresentOrCopyOut,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum AccCopyModifier {
-    Readonly,
-    Zero,
+impl AccCopyKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            AccCopyKind::Copy => "copy",
+            AccCopyKind::PCopy => "pcopy",
+            AccCopyKind::PresentOrCopy => "present_or_copy",
+            AccCopyKind::CopyIn => "copyin",
+            AccCopyKind::PCopyIn => "pcopyin",
+            AccCopyKind::PresentOrCopyIn => "present_or_copyin",
+            AccCopyKind::CopyOut => "copyout",
+            AccCopyKind::PCopyOut => "pcopyout",
+            AccCopyKind::PresentOrCopyOut => "present_or_copyout",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -363,9 +459,14 @@ pub enum AccCreateKind {
     PresentOrCreate,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum AccCreateModifier {
-    Zero,
+impl AccCreateKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            AccCreateKind::Create => "create",
+            AccCreateKind::PCreate => "pcreate",
+            AccCreateKind::PresentOrCreate => "present_or_create",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -937,6 +1038,7 @@ define_acc_clause_kind! {
     If => "if",
     IfPresent => "if_present",
     Independent => "independent",
+    Indirect => "indirect",
     Link => "link",
     NoCreate => "no_create",
     NoHost => "nohost",

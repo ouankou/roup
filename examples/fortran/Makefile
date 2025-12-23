@@ -4,8 +4,8 @@
 .PHONY: all clean help
 
 # Compilers
-FC = gfortran
-CC = gcc
+FC ?= gfortran
+CC ?= gcc
 
 # Directories
 ROUP_ROOT = ../..

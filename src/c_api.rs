@@ -382,6 +382,7 @@ union ClauseData {
     init: *mut InitData,
     doacross: *mut DoacrossData,
     default_clause: *mut DefaultClauseData,
+    directive_kinds: *mut DirectiveKindListData,
 }
 
 /// Structured directive parameter information to avoid string parsing in compat.
@@ -609,6 +610,11 @@ struct DoacrossData {
 struct DefaultClauseData {
     default_kind: i32,
     directive: *mut OmpDirective,
+}
+
+#[repr(C)]
+struct DirectiveKindListData {
+    kinds: Vec<i32>,
 }
 
 const REQUIRE_MOD_REVERSE_OFFLOAD: i32 = 0;
@@ -3316,6 +3322,52 @@ pub extern "C" fn roup_clause_arguments(clause: *const OmpClause) -> *const c_ch
     }
 }
 
+/// Get number of directive kinds carried by an `absent(...)` / `contains(...)` clause.
+///
+/// Returns 0 if clause is NULL or not an `absent`/`contains` clause.
+#[no_mangle]
+pub extern "C" fn roup_clause_directive_list_count(clause: *const OmpClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != CLAUSE_KIND_ABSENT && c.kind != CLAUSE_KIND_CONTAINS {
+            return 0;
+        }
+        let ptr = c.data.directive_kinds;
+        if ptr.is_null() {
+            0
+        } else {
+            (&*ptr).kinds.len() as i32
+        }
+    }
+}
+
+/// Get directive kind code at index from an `absent(...)` / `contains(...)` clause.
+///
+/// Returns -1 on NULL/out-of-bounds or if clause is not an `absent`/`contains` clause.
+#[no_mangle]
+pub extern "C" fn roup_clause_directive_list_kind_at(clause: *const OmpClause, index: i32) -> i32 {
+    if clause.is_null() || index < 0 {
+        return -1;
+    }
+
+    unsafe {
+        let c = &*clause;
+        if c.kind != CLAUSE_KIND_ABSENT && c.kind != CLAUSE_KIND_CONTAINS {
+            return -1;
+        }
+        let ptr = c.data.directive_kinds;
+        if ptr.is_null() {
+            return -1;
+        }
+        let idx = index as usize;
+        (&*ptr).kinds.get(idx).copied().unwrap_or(-1)
+    }
+}
+
 // ============================================================================
 // Variable List Functions (UNSAFE BLOCKS 9-11)
 // ============================================================================
@@ -4552,6 +4604,14 @@ fn convert_clause_from_ast(
         Depend => expect_clause(convert_depend_clause_from_ast(payload), "depend"),
         Device => expect_clause(convert_device_clause_from_ast(payload), "device"),
         DeviceType => expect_clause(convert_device_type_clause_from_ast(payload), "device_type"),
+        Absent => expect_clause(
+            convert_directive_name_list_clause_from_ast(CLAUSE_KIND_ABSENT, payload),
+            "absent",
+        ),
+        Contains => expect_clause(
+            convert_directive_name_list_clause_from_ast(CLAUSE_KIND_CONTAINS, payload),
+            "contains",
+        ),
         DepobjUpdate => expect_clause(
             convert_depobj_update_clause_from_ast(payload),
             "depobj_update",
@@ -4885,6 +4945,48 @@ fn convert_init_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     None
 }
 
+fn convert_directive_name_list_clause_from_ast(
+    kind: i32,
+    payload: &IrClauseData,
+) -> Option<OmpClause> {
+    let directives = match payload {
+        IrClauseData::Absent { directives } if kind == CLAUSE_KIND_ABSENT => directives,
+        IrClauseData::Contains { directives } if kind == CLAUSE_KIND_CONTAINS => directives,
+        _ => return None,
+    };
+
+    let mut kinds = Vec::with_capacity(directives.len());
+    let mut rendered = Vec::with_capacity(directives.len());
+    for directive in directives {
+        let code = directive_name_enum_to_kind(directive.clone());
+        if code >= 0 {
+            kinds.push(code);
+        }
+        rendered.push(directive.as_ref().to_string());
+    }
+
+    let arguments = if rendered.is_empty() {
+        ptr::null()
+    } else {
+        allocate_c_string(&rendered.join(", "))
+    };
+
+    let data_ptr = if kinds.is_empty() {
+        ptr::null_mut()
+    } else {
+        Box::into_raw(Box::new(DirectiveKindListData { kinds }))
+    };
+
+    Some(OmpClause {
+        kind,
+        arguments,
+        data: ClauseData {
+            directive_kinds: data_ptr,
+        },
+        separator: 0,
+    })
+}
+
 fn convert_generic_clause_from_ast(clause_name: ClauseName, payload: &IrClauseData) -> OmpClause {
     let kind = clause_name_enum_to_kind(clause_name);
     let (arguments, data) = match payload {
@@ -4959,6 +5061,13 @@ fn render_arguments_from_payload(payload: &IrClauseData) -> Option<String> {
             let rendered = format_clause_items(items).unwrap_or_default();
             Some(format!("{mode}({rendered})"))
         }
+        IrClauseData::Absent { directives } | IrClauseData::Contains { directives } => Some(
+            directives
+                .iter()
+                .map(|d| d.as_ref().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+        ),
         IrClauseData::Private { items }
         | IrClauseData::Firstprivate { items }
         | IrClauseData::Shared { items }
@@ -7750,6 +7859,11 @@ fn free_clause_data(clause: &OmpClause) {
                 if !boxed.variables.is_null() {
                     roup_string_list_free(boxed.variables);
                 }
+            }
+        } else if clause.kind == CLAUSE_KIND_ABSENT || clause.kind == CLAUSE_KIND_CONTAINS {
+            let ptr = clause.data.directive_kinds;
+            if !ptr.is_null() {
+                drop(Box::from_raw(ptr));
             }
         } else if clause.kind == CLAUSE_KIND_DEFAULT {
             let ptr = clause.data.default_clause;
