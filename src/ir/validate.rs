@@ -162,6 +162,8 @@ impl ValidationContext {
                         | DirectiveKind::TargetTeamsDistributeParallelDoSimd
                         // Task synchronization
                         | DirectiveKind::Taskwait
+                        // Target construct
+                        | DirectiveKind::Target
                         // Target data-motion
                         | DirectiveKind::TargetUpdate
                         | DirectiveKind::TargetEnterData
@@ -172,7 +174,7 @@ impl ValidationContext {
                     Err(ValidationError::ClauseNotAllowed {
                         clause_name,
                         directive: self.directive.to_string(),
-                        reason: "nowait only allowed on worksharing/distribute constructs, taskwait, or target update/enter data/exit data"
+                        reason: "nowait only allowed on worksharing/distribute constructs, taskwait, target, or target update/enter data/exit data"
                             .to_string(),
                     })
                 }
@@ -573,6 +575,13 @@ mod tests {
     #[test]
     fn test_nowait_allowed_on_target_update() {
         let context = ValidationContext::new(DirectiveKind::TargetUpdate);
+        let clause = ClauseData::Nowait { modifier: None };
+        assert!(context.is_clause_allowed(&clause).is_ok());
+    }
+
+    #[test]
+    fn test_nowait_allowed_on_target() {
+        let context = ValidationContext::new(DirectiveKind::Target);
         let clause = ClauseData::Nowait { modifier: None };
         assert!(context.is_clause_allowed(&clause).is_ok());
     }
