@@ -12,6 +12,7 @@ fn parses_basic_parallel_loop() {
         directive.clauses[0].kind,
         ClauseKind::GangClause {
             modifier: None,
+            space_after_colon: false,
             variables: vec![]
         }
     );
@@ -194,6 +195,7 @@ fn parses_case_insensitive_modifiers() {
         ClauseKind::GangClause {
             modifier,
             variables,
+            ..
         } => {
             assert_eq!(*modifier, Some(GangModifier::Num));
             assert_eq!(variables, &vec![Cow::Borrowed("4")]);
@@ -208,6 +210,7 @@ fn parses_case_insensitive_modifiers() {
         ClauseKind::GangClause {
             modifier,
             variables,
+            ..
         } => {
             assert_eq!(*modifier, Some(GangModifier::Static));
             assert_eq!(variables, &vec![Cow::Borrowed("*")]);

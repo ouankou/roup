@@ -5,10 +5,10 @@ use std::ptr;
 use bitflags::bitflags;
 
 use crate::ast::{
-    AccClause as AstAccClause, AccClauseKind as AstAccClauseKind,
-    AccClausePayload as AstAccClausePayload, AccCopyKind, AccCopyModifier, AccCreateKind,
-    AccCreateModifier, AccDefaultKind, AccDirective as AstAccDirective, AccDirectiveParameter,
-    AccGangClause, DirectiveBody,
+    AccClause as AstAccClause, AccClausePayload as AstAccClausePayload, AccCopyKind, AccCreateKind,
+    AccDataModifier, AccDefaultKind, AccDeviceType, AccDirective as AstAccDirective,
+    AccDirectiveParameter, AccGangModifier, AccReductionOperator, AccVectorModifier,
+    AccWorkerModifier, DirectiveBody,
 };
 use crate::ir::ParserConfig;
 use crate::lexer::Language;
@@ -55,7 +55,17 @@ struct WaitDirectiveData {
 
 pub struct AccClause {
     kind: i32,
-    modifier: i32,
+    legacy_modifier: i32,
+    data_variant: Option<AccDataClauseVariantCode>,
+    data_modifiers: Vec<AccDataClauseModifierCode>,
+    reduction_operator: Option<AccReductionOperatorCode>,
+    vector_modifier: Option<AccVectorModifierCode>,
+    worker_modifier: Option<AccWorkerModifierCode>,
+    gang_arg_kind: Option<AccGangArgKindCode>,
+    device_type_kinds: Vec<AccDeviceTypeCode>,
+    indirect_present: bool,
+    indirect_value: Option<CString>,
+    indirect_value_is_string_literal: bool,
     original_keyword: Option<CString>,
     expressions: Vec<CString>,
     wait_devnum: Option<CString>,
@@ -67,51 +77,230 @@ pub struct AccClauseIterator {
     index: usize,
 }
 
-const ACC_CACHE_MODIFIER_UNSPECIFIED: i32 = 0;
-const ACC_CACHE_MODIFIER_READONLY: i32 = 1;
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccCacheModifierCode {
+    Unspecified = 0,
+    Readonly = 1,
+}
 
-const ACC_COPYIN_MODIFIER_UNSPECIFIED: i32 = 0;
-const ACC_COPYIN_MODIFIER_READONLY: i32 = 1;
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccDefaultKindCode {
+    Unspecified = 0,
+    None = 1,
+    Present = 2,
+}
 
-const ACC_COPYOUT_MODIFIER_UNSPECIFIED: i32 = 0;
-const ACC_COPYOUT_MODIFIER_ZERO: i32 = 1;
+// Mirror accparser's OpenACCDataClauseVariant (OpenACCKinds.h).
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum AccDataClauseVariantCode {
+    CopyUnspecified = 0,
+    CopyCopy = 1,
+    CopyPCopy = 2,
+    CopyPresentOrCopy = 3,
+    CopyInCopyin = 4,
+    CopyInPCopyin = 5,
+    CopyInPresentOrCopyin = 6,
+    CopyOutCopyout = 7,
+    CopyOutPCopyout = 8,
+    CopyOutPresentOrCopyout = 9,
+    CreateCreate = 10,
+    CreatePCreate = 11,
+    CreatePresentOrCreate = 12,
+}
 
-const ACC_CREATE_MODIFIER_UNSPECIFIED: i32 = 0;
-const ACC_CREATE_MODIFIER_ZERO: i32 = 1;
+impl AccDataClauseVariantCode {
+    fn from_copy_kind(kind: AccCopyKind) -> Option<Self> {
+        Some(match kind {
+            AccCopyKind::Copy => Self::CopyCopy,
+            AccCopyKind::PCopy => Self::CopyPCopy,
+            AccCopyKind::PresentOrCopy => Self::CopyPresentOrCopy,
+            AccCopyKind::CopyIn => Self::CopyInCopyin,
+            AccCopyKind::PCopyIn => Self::CopyInPCopyin,
+            AccCopyKind::PresentOrCopyIn => Self::CopyInPresentOrCopyin,
+            AccCopyKind::CopyOut => Self::CopyOutCopyout,
+            AccCopyKind::PCopyOut => Self::CopyOutPCopyout,
+            AccCopyKind::PresentOrCopyOut => Self::CopyOutPresentOrCopyout,
+        })
+    }
 
-const ACC_DEFAULT_KIND_UNSPECIFIED: i32 = 0;
-const ACC_DEFAULT_KIND_NONE: i32 = 1;
-const ACC_DEFAULT_KIND_PRESENT: i32 = 2;
+    fn from_create_kind(kind: AccCreateKind) -> Self {
+        match kind {
+            AccCreateKind::Create => Self::CreateCreate,
+            AccCreateKind::PCreate => Self::CreatePCreate,
+            AccCreateKind::PresentOrCreate => Self::CreatePresentOrCreate,
+        }
+    }
+}
 
-const ACC_VECTOR_MODIFIER_UNSPECIFIED: i32 = 0;
-const ACC_VECTOR_MODIFIER_LENGTH: i32 = 1;
+// Mirror accparser's OpenACCDataClauseModifierKind (OpenACCKinds.h).
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum AccDataClauseModifierCode {
+    Always = 0,
+    AlwaysIn = 1,
+    AlwaysOut = 2,
+    Capture = 3,
+    Readonly = 4,
+    Zero = 5,
+    Unknown = 6,
+}
 
-const ACC_WORKER_MODIFIER_UNSPECIFIED: i32 = 0;
-const ACC_WORKER_MODIFIER_NUM: i32 = 1;
+impl From<AccDataModifier> for AccDataClauseModifierCode {
+    fn from(value: AccDataModifier) -> Self {
+        match value {
+            AccDataModifier::Always => Self::Always,
+            AccDataModifier::AlwaysIn => Self::AlwaysIn,
+            AccDataModifier::AlwaysOut => Self::AlwaysOut,
+            AccDataModifier::Capture => Self::Capture,
+            AccDataModifier::Readonly => Self::Readonly,
+            AccDataModifier::Zero => Self::Zero,
+        }
+    }
+}
 
-const ACC_GANG_MODIFIER_UNSPECIFIED: i32 = 0;
-const ACC_GANG_MODIFIER_NUM: i32 = 1;
-const ACC_GANG_MODIFIER_STATIC: i32 = 2;
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum AccVectorModifierCode {
+    Unspecified = 0,
+    Length = 1,
+    ExprOnly = 2,
+    Unknown = 3,
+}
 
-const ACC_REDUCTION_OP_UNSPECIFIED: i32 = 0;
-const ACC_REDUCTION_OP_READONLY: i32 = 1;
-const ACC_REDUCTION_OP_ADD: i32 = 2;
-const ACC_REDUCTION_OP_SUB: i32 = 3;
-const ACC_REDUCTION_OP_MUL: i32 = 4;
-const ACC_REDUCTION_OP_MAX: i32 = 5;
-const ACC_REDUCTION_OP_MIN: i32 = 6;
-const ACC_REDUCTION_OP_BITAND: i32 = 7;
-const ACC_REDUCTION_OP_BITOR: i32 = 8;
-const ACC_REDUCTION_OP_BITXOR: i32 = 9;
-const ACC_REDUCTION_OP_LOGAND: i32 = 10;
-const ACC_REDUCTION_OP_LOGOR: i32 = 11;
-const ACC_REDUCTION_OP_FORT_AND: i32 = 12;
-const ACC_REDUCTION_OP_FORT_OR: i32 = 13;
-const ACC_REDUCTION_OP_FORT_EQV: i32 = 14;
-const ACC_REDUCTION_OP_FORT_NEQV: i32 = 15;
-const ACC_REDUCTION_OP_FORT_IAND: i32 = 16;
-const ACC_REDUCTION_OP_FORT_IOR: i32 = 17;
-const ACC_REDUCTION_OP_FORT_IEOR: i32 = 18;
+impl From<Option<AccVectorModifier>> for AccVectorModifierCode {
+    fn from(value: Option<AccVectorModifier>) -> Self {
+        match value {
+            Some(AccVectorModifier::Length) => Self::Length,
+            Some(AccVectorModifier::ExprOnly) => Self::ExprOnly,
+            None => Self::Unspecified,
+        }
+    }
+}
+
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum AccWorkerModifierCode {
+    Unspecified = 0,
+    Num = 1,
+    ExprOnly = 2,
+    Unknown = 3,
+}
+
+impl From<Option<AccWorkerModifier>> for AccWorkerModifierCode {
+    fn from(value: Option<AccWorkerModifier>) -> Self {
+        match value {
+            Some(AccWorkerModifier::Num) => Self::Num,
+            Some(AccWorkerModifier::ExprOnly) => Self::ExprOnly,
+            None => Self::Unspecified,
+        }
+    }
+}
+
+// Mirror accparser's OpenACCGangArgKind (OpenACCKinds.h).
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccGangArgKindCode {
+    Unknown = 0,
+    Num = 1,
+    NumNoKeyword = 2,
+    Dim = 3,
+    Static = 4,
+    Other = 5,
+}
+
+impl From<Option<AccGangModifier>> for AccGangArgKindCode {
+    fn from(value: Option<AccGangModifier>) -> Self {
+        match value {
+            Some(AccGangModifier::Num) => Self::Num,
+            Some(AccGangModifier::Static) => Self::Static,
+            Some(AccGangModifier::Dim) => Self::Dim,
+            None => Self::NumNoKeyword,
+        }
+    }
+}
+
+// Mirror accparser's OpenACCDeviceTypeKind (OpenACCKinds.h).
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccDeviceTypeCode {
+    Unknown = 0,
+    Host = 1,
+    Any = 2,
+    Multicore = 3,
+    Default = 4,
+}
+
+impl From<&AccDeviceType> for AccDeviceTypeCode {
+    fn from(value: &AccDeviceType) -> Self {
+        match value {
+            AccDeviceType::Host => Self::Host,
+            AccDeviceType::Any => Self::Any,
+            AccDeviceType::Multicore => Self::Multicore,
+            AccDeviceType::Default => Self::Default,
+            AccDeviceType::Unknown(_) => Self::Unknown,
+        }
+    }
+}
+
+// Mirror accparser's OpenACCReductionClauseOperator (OpenACCKinds.h).
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AccReductionOperatorCode {
+    Unspecified = 0,
+    Readonly = 1,
+    Add = 2,
+    Sub = 3,
+    Mul = 4,
+    Max = 5,
+    Min = 6,
+    BitAnd = 7,
+    BitOr = 8,
+    BitXor = 9,
+    LogAnd = 10,
+    LogOr = 11,
+    FortAnd = 12,
+    FortOr = 13,
+    FortEqv = 14,
+    FortNeqv = 15,
+    FortIand = 16,
+    FortIor = 17,
+    FortIeor = 18,
+    Unknown = 19,
+}
+
+impl From<AccReductionOperator> for AccReductionOperatorCode {
+    fn from(value: AccReductionOperator) -> Self {
+        match value {
+            AccReductionOperator::Unspecified => Self::Unspecified,
+            AccReductionOperator::Readonly => Self::Readonly,
+            AccReductionOperator::Add => Self::Add,
+            AccReductionOperator::Sub => Self::Sub,
+            AccReductionOperator::Mul => Self::Mul,
+            AccReductionOperator::Max => Self::Max,
+            AccReductionOperator::Min => Self::Min,
+            AccReductionOperator::BitAnd => Self::BitAnd,
+            AccReductionOperator::BitOr => Self::BitOr,
+            AccReductionOperator::BitXor => Self::BitXor,
+            AccReductionOperator::LogAnd => Self::LogAnd,
+            AccReductionOperator::LogOr => Self::LogOr,
+            AccReductionOperator::FortAnd => Self::FortAnd,
+            AccReductionOperator::FortOr => Self::FortOr,
+            AccReductionOperator::FortEqv => Self::FortEqv,
+            AccReductionOperator::FortNeqv => Self::FortNeqv,
+            AccReductionOperator::FortIand => Self::FortIand,
+            AccReductionOperator::FortIor => Self::FortIor,
+            AccReductionOperator::FortIeor => Self::FortIeor,
+            AccReductionOperator::Unknown => Self::Unknown,
+        }
+    }
+}
 
 #[no_mangle]
 pub extern "C" fn acc_parse(input: *const c_char) -> *mut AccDirective {
@@ -262,9 +451,9 @@ fn apply_ast_parameters(result: &mut AccDirective, parameter: Option<AccDirectiv
             Cache(cache) => {
                 result.cache_data = Some(CacheData {
                     modifier: if cache.readonly {
-                        ACC_CACHE_MODIFIER_READONLY
+                        AccCacheModifierCode::Readonly as i32
                     } else {
-                        ACC_CACHE_MODIFIER_UNSPECIFIED
+                        AccCacheModifierCode::Unspecified as i32
                     },
                     expressions: cache
                         .variables
@@ -310,9 +499,9 @@ fn build_clauses_from_ast(ast: &AstAccDirective) -> Vec<AccClause> {
 
 fn convert_cache_directive_data(data: &ParserCacheDirectiveData<'_>) -> CacheData {
     let modifier = if data.readonly {
-        ACC_CACHE_MODIFIER_READONLY
+        AccCacheModifierCode::Readonly as i32
     } else {
-        ACC_CACHE_MODIFIER_UNSPECIFIED
+        AccCacheModifierCode::Unspecified as i32
     };
 
     let expressions = data
@@ -539,7 +728,176 @@ pub extern "C" fn acc_clause_modifier(clause: *const AccClause) -> i32 {
         return 0;
     }
 
-    unsafe { (*clause).modifier }
+    unsafe { (*clause).legacy_modifier }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_data_variant(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        (*clause)
+            .data_variant
+            .map(|value| value as i32)
+            .unwrap_or(-1)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_data_modifier_count(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe { (*clause).data_modifiers.len() as i32 }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_data_modifier_at(clause: *const AccClause, index: i32) -> i32 {
+    if clause.is_null() || index < 0 {
+        return -1;
+    }
+
+    unsafe {
+        let clause_ref = &*clause;
+
+        clause_ref
+            .data_modifiers
+            .get(index as usize)
+            .copied()
+            .map(|value| value as i32)
+            .unwrap_or(-1)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_reduction_operator(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return AccReductionOperatorCode::Unspecified as i32;
+    }
+
+    unsafe {
+        (*clause)
+            .reduction_operator
+            .map(|value| value as i32)
+            .unwrap_or(AccReductionOperatorCode::Unspecified as i32)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_vector_modifier(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return AccVectorModifierCode::Unspecified as i32;
+    }
+
+    unsafe {
+        (*clause)
+            .vector_modifier
+            .map(|value| value as i32)
+            .unwrap_or(AccVectorModifierCode::Unspecified as i32)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_worker_modifier(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return AccWorkerModifierCode::Unspecified as i32;
+    }
+
+    unsafe {
+        (*clause)
+            .worker_modifier
+            .map(|value| value as i32)
+            .unwrap_or(AccWorkerModifierCode::Unspecified as i32)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_gang_arg_kind(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return AccGangArgKindCode::Unknown as i32;
+    }
+
+    unsafe {
+        (*clause)
+            .gang_arg_kind
+            .map(|value| value as i32)
+            .unwrap_or(AccGangArgKindCode::Unknown as i32)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_device_type_count(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe { (*clause).device_type_kinds.len() as i32 }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_device_type_kind_at(clause: *const AccClause, index: i32) -> i32 {
+    if clause.is_null() || index < 0 {
+        return -1;
+    }
+
+    unsafe {
+        let clause_ref = &*clause;
+
+        clause_ref
+            .device_type_kinds
+            .get(index as usize)
+            .copied()
+            .map(|value| value as i32)
+            .unwrap_or(-1)
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_indirect_present(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        if (*clause).indirect_present {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_indirect_value(clause: *const AccClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+
+    unsafe {
+        (*clause)
+            .indirect_value
+            .as_ref()
+            .map(|value| value.as_ptr())
+            .unwrap_or(ptr::null())
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn acc_clause_indirect_value_is_string_literal(clause: *const AccClause) -> i32 {
+    if clause.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        if (*clause).indirect_value_is_string_literal {
+            1
+        } else {
+            0
+        }
+    }
 }
 
 #[no_mangle]
@@ -616,7 +974,7 @@ pub extern "C" fn acc_clause_wait_has_queues(clause: *const AccClause) -> i32 {
 #[no_mangle]
 pub extern "C" fn acc_cache_directive_modifier(directive: *const AccDirective) -> i32 {
     if directive.is_null() {
-        return ACC_CACHE_MODIFIER_UNSPECIFIED;
+        return AccCacheModifierCode::Unspecified as i32;
     }
 
     unsafe {
@@ -624,7 +982,7 @@ pub extern "C" fn acc_cache_directive_modifier(directive: *const AccDirective) -
             .cache_data
             .as_ref()
             .map(|data| data.modifier)
-            .unwrap_or(ACC_CACHE_MODIFIER_UNSPECIFIED)
+            .unwrap_or(AccCacheModifierCode::Unspecified as i32)
     }
 }
 
@@ -761,7 +1119,17 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
     let kind_code = clause_name_to_kind(ast_clause.kind.as_str());
     let mut clause = AccClause {
         kind: kind_code,
-        modifier: 0,
+        legacy_modifier: 0,
+        data_variant: None,
+        data_modifiers: Vec::new(),
+        reduction_operator: None,
+        vector_modifier: None,
+        worker_modifier: None,
+        gang_arg_kind: None,
+        device_type_kinds: Vec::new(),
+        indirect_present: false,
+        indirect_value: None,
+        indirect_value_is_string_literal: false,
         original_keyword: None,
         expressions: Vec::new(),
         wait_devnum: None,
@@ -779,50 +1147,43 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
         }
         Copy(copy) => {
             clause.expressions = identifiers_to_cstrings(&copy.variables);
-            clause.modifier = match copy.kind {
-                AccCopyKind::CopyIn
-                | AccCopyKind::PCopyIn
-                | AccCopyKind::PresentOrCopyIn
-                | AccCopyKind::Copy => match copy.modifier {
-                    Some(AccCopyModifier::Readonly) => ACC_COPYIN_MODIFIER_READONLY,
-                    _ => ACC_COPYIN_MODIFIER_UNSPECIFIED,
-                },
-                AccCopyKind::CopyOut | AccCopyKind::PCopyOut | AccCopyKind::PresentOrCopyOut => {
-                    match copy.modifier {
-                        Some(AccCopyModifier::Zero) => ACC_COPYOUT_MODIFIER_ZERO,
-                        _ => ACC_COPYOUT_MODIFIER_UNSPECIFIED,
-                    }
-                }
-                _ => ACC_COPYIN_MODIFIER_UNSPECIFIED,
-            };
+            clause.data_variant = AccDataClauseVariantCode::from_copy_kind(copy.kind);
+            clause.data_modifiers = copy.modifiers.iter().copied().map(Into::into).collect();
+            clause.original_keyword = Some(make_c_string(copy.kind.as_str()));
         }
         Create(create) => {
             clause.expressions = identifiers_to_cstrings(&create.variables);
-            clause.modifier = match create.modifier {
-                Some(AccCreateModifier::Zero) => ACC_CREATE_MODIFIER_ZERO,
-                _ => ACC_CREATE_MODIFIER_UNSPECIFIED,
-            };
-            clause.original_keyword = Some(make_c_string(match create.kind {
-                AccCreateKind::Create => "create",
-                AccCreateKind::PCreate => "pcreate",
-                AccCreateKind::PresentOrCreate => "present_or_create",
-            }));
+            clause.data_variant = Some(AccDataClauseVariantCode::from_create_kind(create.kind));
+            clause.data_modifiers = create.modifiers.iter().copied().map(Into::into).collect();
+            clause.original_keyword = Some(make_c_string(create.kind.as_str()));
         }
         Reduction(reduction) => {
             clause.expressions = identifiers_to_cstrings(&reduction.variables);
-            clause.modifier = acc_reduction_operator_code(&reduction.operator);
+            let op: AccReductionOperatorCode = reduction.operator.into();
+            clause.reduction_operator = Some(op);
+            clause.legacy_modifier = op as i32;
         }
         Data(data) => {
             clause.expressions = identifiers_to_cstrings(&data.variables);
         }
         DeviceType(values) => {
-            clause.expressions = values.iter().map(|v| make_c_string(v)).collect();
+            clause.device_type_kinds = values.iter().map(Into::into).collect();
+            clause.expressions = values
+                .iter()
+                .map(|v| match v {
+                    AccDeviceType::Host => make_c_string("host"),
+                    AccDeviceType::Any => make_c_string("any"),
+                    AccDeviceType::Multicore => make_c_string("multicore"),
+                    AccDeviceType::Default => make_c_string("default"),
+                    AccDeviceType::Unknown(raw) => make_c_string(raw),
+                })
+                .collect();
         }
         Default(kind) => {
-            clause.modifier = match kind {
-                AccDefaultKind::Unspecified => ACC_DEFAULT_KIND_UNSPECIFIED,
-                AccDefaultKind::None => ACC_DEFAULT_KIND_NONE,
-                AccDefaultKind::Present => ACC_DEFAULT_KIND_PRESENT,
+            clause.legacy_modifier = match kind {
+                AccDefaultKind::Unspecified => AccDefaultKindCode::Unspecified as i32,
+                AccDefaultKind::None => AccDefaultKindCode::None as i32,
+                AccDefaultKind::Present => AccDefaultKindCode::Present as i32,
             };
         }
         Wait(wait) => {
@@ -843,22 +1204,37 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
             }
         }
         Vector(data) => {
-            set_vector_worker_payload(&mut clause, data, AstAccClauseKind::Vector);
-        }
-        Worker(data) => {
-            set_vector_worker_payload(&mut clause, data, AstAccClauseKind::Worker);
-        }
-        Gang(data) => {
-            clause.modifier = match data.modifier.as_deref() {
-                Some("num") => ACC_GANG_MODIFIER_NUM,
-                Some("static") => ACC_GANG_MODIFIER_STATIC,
-                _ => ACC_GANG_MODIFIER_UNSPECIFIED,
-            };
             clause.expressions = data
                 .values
                 .iter()
                 .map(|expr| make_c_string(&expr.to_string()))
                 .collect();
+            clause.vector_modifier = Some(data.modifier.into());
+        }
+        Worker(data) => {
+            clause.expressions = data
+                .values
+                .iter()
+                .map(|expr| make_c_string(&expr.to_string()))
+                .collect();
+            clause.worker_modifier = Some(data.modifier.into());
+        }
+        Gang(data) => {
+            clause.gang_arg_kind = Some(if data.values.is_empty() {
+                AccGangArgKindCode::Other
+            } else {
+                data.modifier.into()
+            });
+            clause.expressions = data
+                .values
+                .iter()
+                .map(|expr| make_c_string(&expr.to_string()))
+                .collect();
+        }
+        Indirect(indirect) => {
+            clause.indirect_present = true;
+            clause.indirect_value = indirect.value.as_ref().map(|value| make_c_string(value));
+            clause.indirect_value_is_string_literal = indirect.is_string_literal;
         }
     }
 
@@ -872,53 +1248,7 @@ fn identifiers_to_cstrings(items: &[crate::ir::Identifier]) -> Vec<CString> {
         .collect()
 }
 
-fn set_vector_worker_payload(clause: &mut AccClause, data: &AccGangClause, kind: AstAccClauseKind) {
-    clause.expressions = data
-        .values
-        .iter()
-        .map(|expr| make_c_string(&expr.to_string()))
-        .collect();
-
-    match kind {
-        AstAccClauseKind::Vector => {
-            clause.modifier = match data.modifier.as_deref() {
-                Some("length") => ACC_VECTOR_MODIFIER_LENGTH,
-                _ => ACC_VECTOR_MODIFIER_UNSPECIFIED,
-            };
-        }
-        AstAccClauseKind::Worker => {
-            clause.modifier = match data.modifier.as_deref() {
-                Some("num") => ACC_WORKER_MODIFIER_NUM,
-                _ => ACC_WORKER_MODIFIER_UNSPECIFIED,
-            };
-        }
-        _ => {}
-    }
-}
-
-fn acc_reduction_operator_code(token: &str) -> i32 {
-    match token.to_ascii_lowercase().as_str() {
-        "readonly" => ACC_REDUCTION_OP_READONLY,
-        "+" => ACC_REDUCTION_OP_ADD,
-        "-" => ACC_REDUCTION_OP_SUB,
-        "*" => ACC_REDUCTION_OP_MUL,
-        "max" => ACC_REDUCTION_OP_MAX,
-        "min" => ACC_REDUCTION_OP_MIN,
-        "&" => ACC_REDUCTION_OP_BITAND,
-        "|" => ACC_REDUCTION_OP_BITOR,
-        "^" => ACC_REDUCTION_OP_BITXOR,
-        "&&" => ACC_REDUCTION_OP_LOGAND,
-        "||" => ACC_REDUCTION_OP_LOGOR,
-        "and" | ".and." => ACC_REDUCTION_OP_FORT_AND,
-        "or" | ".or." => ACC_REDUCTION_OP_FORT_OR,
-        "eqv" | ".eqv." => ACC_REDUCTION_OP_FORT_EQV,
-        "neqv" | ".neqv." => ACC_REDUCTION_OP_FORT_NEQV,
-        "iand" => ACC_REDUCTION_OP_FORT_IAND,
-        "ior" => ACC_REDUCTION_OP_FORT_IOR,
-        "ieor" => ACC_REDUCTION_OP_FORT_IEOR,
-        _ => ACC_REDUCTION_OP_UNSPECIFIED,
-    }
-}
+// Legacy vector/worker payload helper removed in favor of typed modifiers.
 
 fn make_c_string(value: &str) -> CString {
     if value.contains('\0') {
@@ -1089,7 +1419,7 @@ fn clause_name_to_kind(name: &str) -> i32 {
         ClauseName::Transparent => -1,
         ClauseName::Replayable => -1,
         ClauseName::Threadset => -1,
-        ClauseName::Indirect => -1,
+        ClauseName::Indirect => 2034,
         ClauseName::Local => -1,
         ClauseName::Init => -1,
         ClauseName::InitComplete => -1,

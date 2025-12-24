@@ -1,11 +1,13 @@
 use crate::ast::{
     AccCacheDirective, AccClause, AccClauseKind, AccClausePayload, AccCopyClause, AccCopyKind,
-    AccCopyModifier, AccCreateClause, AccCreateKind, AccCreateModifier, AccDataClause, AccDataKind,
-    AccDefaultKind, AccDirective, AccDirectiveKind, AccDirectiveParameter, AccGangClause,
-    AccReductionClause, AccRoutineDirective, AccWaitClause, AccWaitDirective,
-    ClauseNormalizationMode, DirectiveBody, OmpClause, OmpClauseKind, OmpConstructType,
-    OmpDeclareMapper, OmpDeclareMapperId, OmpDeclareReduction, OmpDirective, OmpDirectiveKind,
-    OmpDirectiveParameter, OmpSimdTarget, ReductionOperatorToken, RoupDirective, RoupLanguage,
+    AccCreateClause, AccCreateKind, AccDataClause, AccDataKind, AccDataModifier, AccDefaultKind,
+    AccDeviceType, AccDirective, AccDirectiveKind, AccDirectiveParameter, AccGangClause,
+    AccGangModifier, AccIndirectClause, AccReductionClause, AccReductionOperator,
+    AccRoutineDirective, AccVectorClause, AccVectorModifier, AccWaitClause, AccWaitDirective,
+    AccWorkerClause, AccWorkerModifier, ClauseNormalizationMode, DirectiveBody, OmpClause,
+    OmpClauseKind, OmpConstructType, OmpDeclareMapper, OmpDeclareMapperId, OmpDeclareReduction,
+    OmpDirective, OmpDirectiveKind, OmpDirectiveParameter, OmpSimdTarget, ReductionOperatorToken,
+    RoupDirective, RoupLanguage,
 };
 use crate::ir::{
     convert::{parse_clause_data, parse_identifier_list},
@@ -15,9 +17,9 @@ use crate::ir::{
 use std::borrow::Cow;
 
 use super::clause::{
-    lookup_clause_name, Clause, ClauseKind, ClauseName, CopyinModifier, CopyoutModifier,
-    CreateModifier, GangModifier, ReductionOperator as ParserReductionOperator, VectorModifier,
-    WorkerModifier,
+    lookup_clause_name, parse_variable_list, Clause, ClauseKind, ClauseName, CopyinModifier,
+    CopyoutModifier, CreateModifier, GangModifier, ReductionOperator as ParserReductionOperator,
+    VectorModifier, WorkerModifier,
 };
 use super::directive::Directive;
 use super::Dialect;
@@ -170,12 +172,18 @@ fn build_omp_directive_parameter(
 ) -> Option<OmpDirectiveParameter> {
     directive.parameter.as_ref().and_then(|param| {
         let param_str = param.as_ref();
-        let name_lower = directive.name.as_ref().to_ascii_lowercase();
+        use crate::parser::directive_kind::DirectiveName;
 
         // Typed construct parameter for cancel / cancellation point
-        if name_lower == "cancel" || name_lower == "cancellation point" {
+        if matches!(
+            &directive.name,
+            DirectiveName::Cancel | DirectiveName::CancellationPoint
+        ) {
             if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
-                eprintln!("[ast] construct param directive={name_lower} value={param_str}");
+                eprintln!(
+                    "[ast] construct param directive={} value={param_str}",
+                    directive.name.as_ref()
+                );
             }
             let construct = match param_str.trim().to_ascii_lowercase().as_str() {
                 "parallel" => OmpConstructType::Parallel,
@@ -188,7 +196,7 @@ fn build_omp_directive_parameter(
         }
 
         // Critical name
-        if name_lower == "critical" {
+        if matches!(&directive.name, DirectiveName::Critical) {
             let trimmed = param_str.trim();
             let cleaned = if trimmed.starts_with('(') && trimmed.ends_with(')') && trimmed.len() > 1
             {
@@ -205,7 +213,7 @@ fn build_omp_directive_parameter(
         }
 
         // depobj target identifier
-        if name_lower == "depobj" {
+        if matches!(&directive.name, DirectiveName::Depobj) {
             if let Some(list) = parse_identifier_list_parameter(param_str, parser_config) {
                 if let Some(first) = list.first() {
                     return Some(OmpDirectiveParameter::Depobj(first.clone()));
@@ -215,7 +223,7 @@ fn build_omp_directive_parameter(
         }
 
         // flush variable list
-        if name_lower == "flush" {
+        if matches!(&directive.name, DirectiveName::Flush) {
             if let Some(list) = parse_identifier_list_parameter(param_str, parser_config) {
                 return Some(OmpDirectiveParameter::FlushList(list));
             }
@@ -223,25 +231,25 @@ fn build_omp_directive_parameter(
             return None;
         }
 
-        if name_lower == "declare simd" {
+        if matches!(&directive.name, DirectiveName::DeclareSimd) {
             return Some(OmpDirectiveParameter::DeclareSimd(
                 parse_declare_simd_target(param_str),
             ));
         }
 
-        if name_lower == "declare mapper" {
+        if matches!(&directive.name, DirectiveName::DeclareMapper) {
             if let Some(mapper) = parse_declare_mapper_param(param_str, parser_config) {
                 return Some(OmpDirectiveParameter::DeclareMapper(mapper));
             }
         }
 
-        if name_lower == "declare reduction" {
+        if matches!(&directive.name, DirectiveName::DeclareReduction) {
             if let Some(reduction) = parse_declare_reduction_param(param_str, parser_config) {
                 return Some(OmpDirectiveParameter::DeclareReduction(reduction));
             }
         }
 
-        if directive_expects_identifier_list(directive.name.as_ref()) {
+        if directive_expects_identifier_list(&directive.name) {
             if let Some(list) = parse_identifier_list_parameter(param_str, parser_config) {
                 return Some(OmpDirectiveParameter::IdentifierList(list));
             }
@@ -252,10 +260,11 @@ fn build_omp_directive_parameter(
     })
 }
 
-fn directive_expects_identifier_list(name: &str) -> bool {
+fn directive_expects_identifier_list(name: &crate::parser::directive_kind::DirectiveName) -> bool {
+    use crate::parser::directive_kind::DirectiveName;
     matches!(
-        name.to_ascii_lowercase().as_str(),
-        "allocate" | "threadprivate" | "groupprivate"
+        name,
+        DirectiveName::Allocate | DirectiveName::Threadprivate | DirectiveName::Groupprivate
     )
 }
 
@@ -781,9 +790,11 @@ fn build_acc_clause_payload(
         Device => build_acc_data_clause(clause, AccDataKind::Device),
         Delete => build_acc_data_clause(clause, AccDataKind::Delete),
         DeviceType => Ok(build_acc_device_type_clause(clause)),
+        Indirect => Ok(build_acc_indirect_clause(clause)),
+        SelfClause => Ok(build_acc_self_clause(clause, parser_config)),
         Async | Bind | Collapse | NumGangs | NumWorkers | VectorLength | Seq | Independent
-        | Auto | DefaultAsync | NoCreate | NoHost | SelfClause | Tile | Finalize | IfPresent
-        | DevicePtr | DeviceNum => Ok(build_fallback_clause_payload(clause, parser_config)),
+        | Auto | DefaultAsync | NoCreate | NoHost | Tile | Finalize | IfPresent | DevicePtr
+        | DeviceNum => Ok(build_fallback_clause_payload(clause, parser_config)),
         _ => Ok(build_fallback_clause_payload(clause, parser_config)),
     }
 }
@@ -830,18 +841,17 @@ fn build_acc_copy_clause(
         }
     };
 
-    let (modifier, variables) = match &clause.kind {
+    let (modifiers, variables) = match &clause.kind {
         ClauseKind::CopyinClause {
             modifier,
             variables,
         } => (
-            modifier.and_then(|m| {
-                if matches!(m, CopyinModifier::Readonly) {
-                    Some(AccCopyModifier::Readonly)
-                } else {
-                    None
-                }
-            }),
+            modifier
+                .and_then(|m| {
+                    matches!(m, CopyinModifier::Readonly).then_some(AccDataModifier::Readonly)
+                })
+                .into_iter()
+                .collect(),
             variables
                 .iter()
                 .map(|item| Identifier::new(item.as_ref()))
@@ -851,20 +861,17 @@ fn build_acc_copy_clause(
             modifier,
             variables,
         } => (
-            modifier.and_then(|m| {
-                if matches!(m, CopyoutModifier::Zero) {
-                    Some(AccCopyModifier::Zero)
-                } else {
-                    None
-                }
-            }),
+            modifier
+                .and_then(|m| matches!(m, CopyoutModifier::Zero).then_some(AccDataModifier::Zero))
+                .into_iter()
+                .collect(),
             variables
                 .iter()
                 .map(|item| Identifier::new(item.as_ref()))
                 .collect(),
         ),
         ClauseKind::VariableList(items) => (
-            None,
+            Vec::new(),
             items
                 .iter()
                 .map(|item| Identifier::new(item.as_ref()))
@@ -879,7 +886,7 @@ fn build_acc_copy_clause(
 
     Ok(AccClausePayload::Copy(AccCopyClause {
         kind,
-        modifier,
+        modifiers,
         variables,
     }))
 }
@@ -900,25 +907,22 @@ fn build_acc_create_clause(
         }
     };
 
-    let (modifier, variables) = match &clause.kind {
+    let (modifiers, variables) = match &clause.kind {
         ClauseKind::CreateClause {
             modifier,
             variables,
         } => (
-            modifier.and_then(|m| {
-                if matches!(m, CreateModifier::Zero) {
-                    Some(AccCreateModifier::Zero)
-                } else {
-                    None
-                }
-            }),
+            modifier
+                .and_then(|m| matches!(m, CreateModifier::Zero).then_some(AccDataModifier::Zero))
+                .into_iter()
+                .collect(),
             variables
                 .iter()
                 .map(|item| Identifier::new(item.as_ref()))
                 .collect(),
         ),
         ClauseKind::VariableList(items) => (
-            None,
+            Vec::new(),
             items
                 .iter()
                 .map(|item| Identifier::new(item.as_ref()))
@@ -933,7 +937,7 @@ fn build_acc_create_clause(
 
     Ok(AccClausePayload::Create(AccCreateClause {
         kind,
-        modifier,
+        modifiers,
         variables,
     }))
 }
@@ -944,32 +948,30 @@ fn build_acc_reduction_clause(
 ) -> Result<AccClausePayload, AstBuildError> {
     if let ClauseKind::ReductionClause {
         operator,
-        user_defined_identifier,
+        user_defined_identifier: _,
         variables,
         ..
     } = &clause.kind
     {
-        let operator_text = match operator {
-            ParserReductionOperator::Add => "+",
-            ParserReductionOperator::Sub => "-",
-            ParserReductionOperator::Mul => "*",
-            ParserReductionOperator::Max => "max",
-            ParserReductionOperator::Min => "min",
-            ParserReductionOperator::BitAnd => "&",
-            ParserReductionOperator::BitOr => "|",
-            ParserReductionOperator::BitXor => "^",
-            ParserReductionOperator::LogAnd => "&&",
-            ParserReductionOperator::LogOr => "||",
-            ParserReductionOperator::FortAnd => ".and.",
-            ParserReductionOperator::FortOr => ".or.",
-            ParserReductionOperator::FortEqv => ".eqv.",
-            ParserReductionOperator::FortNeqv => ".neqv.",
-            ParserReductionOperator::FortIand => "iand",
-            ParserReductionOperator::FortIor => "ior",
-            ParserReductionOperator::FortIeor => "ieor",
-            ParserReductionOperator::UserDefined => {
-                user_defined_identifier.as_deref().unwrap_or("user")
-            }
+        let op = match operator {
+            ParserReductionOperator::Add => AccReductionOperator::Add,
+            ParserReductionOperator::Sub => AccReductionOperator::Sub,
+            ParserReductionOperator::Mul => AccReductionOperator::Mul,
+            ParserReductionOperator::Max => AccReductionOperator::Max,
+            ParserReductionOperator::Min => AccReductionOperator::Min,
+            ParserReductionOperator::BitAnd => AccReductionOperator::BitAnd,
+            ParserReductionOperator::BitOr => AccReductionOperator::BitOr,
+            ParserReductionOperator::BitXor => AccReductionOperator::BitXor,
+            ParserReductionOperator::LogAnd => AccReductionOperator::LogAnd,
+            ParserReductionOperator::LogOr => AccReductionOperator::LogOr,
+            ParserReductionOperator::FortAnd => AccReductionOperator::FortAnd,
+            ParserReductionOperator::FortOr => AccReductionOperator::FortOr,
+            ParserReductionOperator::FortEqv => AccReductionOperator::FortEqv,
+            ParserReductionOperator::FortNeqv => AccReductionOperator::FortNeqv,
+            ParserReductionOperator::FortIand => AccReductionOperator::FortIand,
+            ParserReductionOperator::FortIor => AccReductionOperator::FortIor,
+            ParserReductionOperator::FortIeor => AccReductionOperator::FortIeor,
+            ParserReductionOperator::UserDefined => AccReductionOperator::Unknown,
         };
 
         let variables = variables
@@ -978,7 +980,7 @@ fn build_acc_reduction_clause(
             .collect();
 
         return Ok(AccClausePayload::Reduction(AccReductionClause {
-            operator: operator_text.to_string(),
+            operator: op,
             variables,
         }));
     }
@@ -1031,15 +1033,17 @@ fn build_acc_vector_clause(
         variables,
     } = &clause.kind
     {
-        let label = modifier.map(|m| match m {
-            VectorModifier::Length => "length".to_string(),
-        });
+        let modifier = match modifier {
+            Some(VectorModifier::Length) => Some(AccVectorModifier::Length),
+            None if !variables.is_empty() => Some(AccVectorModifier::ExprOnly),
+            _ => None,
+        };
         let values = variables
             .iter()
             .map(|value| Expression::new(value.as_ref(), parser_config))
             .collect();
-        return Ok(AccClausePayload::Vector(AccGangClause {
-            modifier: label,
+        return Ok(AccClausePayload::Vector(AccVectorClause {
+            modifier,
             values,
         }));
     }
@@ -1058,15 +1062,17 @@ fn build_acc_worker_clause(
         variables,
     } = &clause.kind
     {
-        let label = modifier.map(|m| match m {
-            WorkerModifier::Num => "num".to_string(),
-        });
+        let modifier = match modifier {
+            Some(WorkerModifier::Num) => Some(AccWorkerModifier::Num),
+            None if !variables.is_empty() => Some(AccWorkerModifier::ExprOnly),
+            _ => None,
+        };
         let values = variables
             .iter()
             .map(|value| Expression::new(value.as_ref(), parser_config))
             .collect();
-        return Ok(AccClausePayload::Worker(AccGangClause {
-            modifier: label,
+        return Ok(AccClausePayload::Worker(AccWorkerClause {
+            modifier,
             values,
         }));
     }
@@ -1083,20 +1089,19 @@ fn build_acc_gang_clause(
     if let ClauseKind::GangClause {
         modifier,
         variables,
+        ..
     } = &clause.kind
     {
-        let label = modifier.map(|m| match m {
-            GangModifier::Num => "num".to_string(),
-            GangModifier::Static => "static".to_string(),
+        let modifier = modifier.map(|m| match m {
+            GangModifier::Num => AccGangModifier::Num,
+            GangModifier::Static => AccGangModifier::Static,
+            GangModifier::Dim => AccGangModifier::Dim,
         });
         let values = variables
             .iter()
             .map(|value| Expression::new(value.as_ref(), parser_config))
             .collect();
-        return Ok(AccClausePayload::Gang(AccGangClause {
-            modifier: label,
-            values,
-        }));
+        return Ok(AccClausePayload::Gang(AccGangClause { modifier, values }));
     }
 
     Ok(build_identifier_list_payload(clause))
@@ -1113,12 +1118,95 @@ fn build_acc_data_clause(
 }
 
 fn build_acc_device_type_clause(clause: &Clause<'_>) -> AccClausePayload {
-    let values = clause_variable_strings(&clause.kind);
+    let values = clause_variable_strings(&clause.kind)
+        .into_iter()
+        .map(|value| match value.trim().to_ascii_lowercase().as_str() {
+            "host" => AccDeviceType::Host,
+            "any" => AccDeviceType::Any,
+            "multicore" => AccDeviceType::Multicore,
+            "default" => AccDeviceType::Default,
+            _ => AccDeviceType::Unknown(value),
+        })
+        .collect();
     AccClausePayload::DeviceType(values)
+}
+
+fn build_acc_indirect_clause(clause: &Clause<'_>) -> AccClausePayload {
+    match &clause.kind {
+        ClauseKind::Bare => AccClausePayload::Indirect(AccIndirectClause {
+            value: None,
+            is_string_literal: false,
+        }),
+        ClauseKind::Parenthesized(content) => {
+            let trimmed = content.as_ref().trim();
+            if trimmed.is_empty() {
+                return AccClausePayload::Indirect(AccIndirectClause {
+                    value: None,
+                    is_string_literal: false,
+                });
+            }
+
+            if trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2 {
+                return AccClausePayload::Indirect(AccIndirectClause {
+                    value: Some(trimmed[1..trimmed.len() - 1].to_string()),
+                    is_string_literal: true,
+                });
+            }
+
+            AccClausePayload::Indirect(AccIndirectClause {
+                value: Some(trimmed.to_string()),
+                is_string_literal: false,
+            })
+        }
+        other => {
+            let raw = clause_content_from_kind(other)
+                .unwrap_or_default()
+                .into_owned();
+            let trimmed = raw.trim();
+            let value = if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            };
+            AccClausePayload::Indirect(AccIndirectClause {
+                value,
+                is_string_literal: false,
+            })
+        }
+    }
 }
 
 fn build_identifier_list_payload(clause: &Clause<'_>) -> AccClausePayload {
     AccClausePayload::IdentifierList(clause_variable_list(&clause.kind))
+}
+
+fn build_acc_self_clause(clause: &Clause<'_>, parser_config: &ParserConfig) -> AccClausePayload {
+    match &clause.kind {
+        ClauseKind::Bare => AccClausePayload::Bare,
+        ClauseKind::Parenthesized(content) => {
+            let trimmed = content.as_ref().trim();
+            if trimmed.is_empty() {
+                return AccClausePayload::Bare;
+            }
+            let vars = parse_variable_list(trimmed);
+            if vars.len() > 1 {
+                AccClausePayload::IdentifierList(
+                    vars.into_iter()
+                        .map(|v| Identifier::new(v.as_ref()))
+                        .collect(),
+                )
+            } else {
+                AccClausePayload::Expression(Expression::new(trimmed, parser_config))
+            }
+        }
+        ClauseKind::VariableList(items) => AccClausePayload::IdentifierList(
+            items
+                .iter()
+                .map(|item| Identifier::new(item.as_ref()))
+                .collect(),
+        ),
+        _ => build_identifier_list_payload(clause),
+    }
 }
 
 fn build_fallback_clause_payload(
@@ -1178,8 +1266,13 @@ fn clause_content_from_kind<'a>(kind: &'a ClauseKind<'a>) -> Option<Cow<'a, str>
         ClauseKind::VariableList(values) => Some(Cow::Owned(join_variable_list(values))),
         ClauseKind::GangClause {
             modifier,
+            space_after_colon,
             variables,
-        } => Some(Cow::Owned(format_gang_clause(*modifier, variables))),
+        } => Some(Cow::Owned(format_gang_clause(
+            *modifier,
+            *space_after_colon,
+            variables,
+        ))),
         ClauseKind::WorkerClause {
             modifier,
             variables,
@@ -1241,11 +1334,28 @@ fn format_with_optional_prefix(
     }
 }
 
-fn format_gang_clause(modifier: Option<GangModifier>, variables: &[Cow<'_, str>]) -> String {
-    match modifier {
-        Some(GangModifier::Num) => format_with_optional_prefix("num", true, variables),
-        Some(GangModifier::Static) => format_with_optional_prefix("static", true, variables),
-        None => join_variable_list(variables),
+fn format_gang_clause(
+    modifier: Option<GangModifier>,
+    space_after_colon: bool,
+    variables: &[Cow<'_, str>],
+) -> String {
+    let joined = join_variable_list(variables);
+    let Some(modifier) = modifier else {
+        return joined;
+    };
+
+    let prefix = match modifier {
+        GangModifier::Num => "num",
+        GangModifier::Static => "static",
+        GangModifier::Dim => "dim",
+    };
+
+    if joined.is_empty() {
+        prefix.to_string()
+    } else if space_after_colon {
+        format!("{prefix}: {joined}")
+    } else {
+        format!("{prefix}:{joined}")
     }
 }
 

@@ -124,24 +124,58 @@ impl ValidationContext {
         match clause {
             // nowait is only for worksharing, not parallel
             ClauseData::Nowait { .. } => {
-                if self.directive.is_worksharing() || self.directive == DirectiveKind::Target {
+                if matches!(
+                    self.directive,
+                    // Worksharing constructs
+                    DirectiveKind::For
+                        | DirectiveKind::ForSimd
+                        | DirectiveKind::Sections
+                        | DirectiveKind::Single
+                        | DirectiveKind::Workshare
+                        | DirectiveKind::Workdistribute
+                        | DirectiveKind::Do
+                        | DirectiveKind::DoSimd
+                        // Distribute constructs
+                        | DirectiveKind::Distribute
+                        | DirectiveKind::DistributeSimd
+                        | DirectiveKind::DistributeParallelFor
+                        | DirectiveKind::DistributeParallelForSimd
+                        | DirectiveKind::DistributeParallelLoop
+                        | DirectiveKind::DistributeParallelLoopSimd
+                        | DirectiveKind::DistributeParallelDo
+                        | DirectiveKind::DistributeParallelDoSimd
+                        | DirectiveKind::TeamsDistribute
+                        | DirectiveKind::TeamsDistributeSimd
+                        | DirectiveKind::TeamsDistributeParallelFor
+                        | DirectiveKind::TeamsDistributeParallelForSimd
+                        | DirectiveKind::TeamsDistributeParallelLoop
+                        | DirectiveKind::TeamsDistributeParallelLoopSimd
+                        | DirectiveKind::TeamsDistributeParallelDo
+                        | DirectiveKind::TeamsDistributeParallelDoSimd
+                        | DirectiveKind::TargetTeamsDistribute
+                        | DirectiveKind::TargetTeamsDistributeSimd
+                        | DirectiveKind::TargetTeamsDistributeParallelFor
+                        | DirectiveKind::TargetTeamsDistributeParallelForSimd
+                        | DirectiveKind::TargetTeamsDistributeParallelLoop
+                        | DirectiveKind::TargetTeamsDistributeParallelLoopSimd
+                        | DirectiveKind::TargetTeamsDistributeParallelDo
+                        | DirectiveKind::TargetTeamsDistributeParallelDoSimd
+                        // Task synchronization
+                        | DirectiveKind::Taskwait
+                        // Target construct
+                        | DirectiveKind::Target
+                        // Target data-motion
+                        | DirectiveKind::TargetUpdate
+                        | DirectiveKind::TargetEnterData
+                        | DirectiveKind::TargetExitData
+                ) {
                     Ok(())
                 } else {
                     Err(ValidationError::ClauseNotAllowed {
                         clause_name,
                         directive: self.directive.to_string(),
-                        reason: "nowait only allowed on worksharing constructs (for, sections, single) or target".to_string(),
-                    })
-                }
-            }
-            ClauseData::Bare(name) if name.to_string() == "nowait" => {
-                if self.directive.is_worksharing() || self.directive == DirectiveKind::Target {
-                    Ok(())
-                } else {
-                    Err(ValidationError::ClauseNotAllowed {
-                        clause_name,
-                        directive: self.directive.to_string(),
-                        reason: "nowait only allowed on worksharing constructs (for, sections, single) or target".to_string(),
+                        reason: "nowait only allowed on worksharing/distribute constructs, taskwait, target, or target update/enter data/exit data"
+                            .to_string(),
                     })
                 }
             }
@@ -529,6 +563,27 @@ mod tests {
         let context = ValidationContext::new(DirectiveKind::Parallel);
         let clause = ClauseData::Nowait { modifier: None };
         assert!(context.is_clause_allowed(&clause).is_err());
+    }
+
+    #[test]
+    fn test_nowait_allowed_on_taskwait() {
+        let context = ValidationContext::new(DirectiveKind::Taskwait);
+        let clause = ClauseData::Nowait { modifier: None };
+        assert!(context.is_clause_allowed(&clause).is_ok());
+    }
+
+    #[test]
+    fn test_nowait_allowed_on_target_update() {
+        let context = ValidationContext::new(DirectiveKind::TargetUpdate);
+        let clause = ClauseData::Nowait { modifier: None };
+        assert!(context.is_clause_allowed(&clause).is_ok());
+    }
+
+    #[test]
+    fn test_nowait_allowed_on_target() {
+        let context = ValidationContext::new(DirectiveKind::Target);
+        let clause = ClauseData::Nowait { modifier: None };
+        assert!(context.is_clause_allowed(&clause).is_ok());
     }
 
     #[test]

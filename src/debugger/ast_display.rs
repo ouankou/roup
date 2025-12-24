@@ -98,10 +98,12 @@ pub fn display_ast_tree(directive: &Directive) -> String {
                 ClauseKind::GangClause {
                     modifier,
                     variables,
+                    ..
                 } => {
                     let mod_str = match modifier {
                         Some(crate::parser::GangModifier::Num) => " num",
                         Some(crate::parser::GangModifier::Static) => " static",
+                        Some(crate::parser::GangModifier::Dim) => " dim",
                         None => "",
                     };
                     output.push_str(&format!(

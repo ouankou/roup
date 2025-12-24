@@ -893,19 +893,37 @@ fn parse_gang_clause<'a>(
         let (input, _) = nom::bytes::complete::tag("(")(input)?;
         let (input, _) = lexer::skip_space_and_comments(input)?;
 
-        // Try to parse "num:" or "static:" modifier (case-insensitive)
+        // Try to parse "num:" / "static:" / "dim:" modifier (case-insensitive)
+        // Preserve whether a space existed after the ':' for stable round-tripping
+        // across preprocessors (e.g., `dim:2` vs `dim: 2`).
         let input_lower = input.trim_start().to_lowercase();
-        let (input, modifier) =
+        let (input, modifier, space_after_colon) =
             if input_lower.starts_with("num:") || input_lower.starts_with("num :") {
                 let colon_idx = input.find(':').unwrap();
                 let after_colon = &input[colon_idx + 1..];
-                (after_colon, Some(GangModifier::Num))
+                let space_after_colon = after_colon
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_whitespace());
+                (after_colon, Some(GangModifier::Num), space_after_colon)
             } else if input_lower.starts_with("static:") || input_lower.starts_with("static :") {
                 let colon_idx = input.find(':').unwrap();
                 let after_colon = &input[colon_idx + 1..];
-                (after_colon, Some(GangModifier::Static))
+                let space_after_colon = after_colon
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_whitespace());
+                (after_colon, Some(GangModifier::Static), space_after_colon)
+            } else if input_lower.starts_with("dim:") || input_lower.starts_with("dim :") {
+                let colon_idx = input.find(':').unwrap();
+                let after_colon = &input[colon_idx + 1..];
+                let space_after_colon = after_colon
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_whitespace());
+                (after_colon, Some(GangModifier::Dim), space_after_colon)
             } else {
-                (input, None)
+                (input, None, false)
             };
 
         let (input, _) = lexer::skip_space_and_comments(input)?;
@@ -941,6 +959,7 @@ fn parse_gang_clause<'a>(
                 name,
                 kind: ClauseKind::GangClause {
                     modifier,
+                    space_after_colon,
                     variables,
                 },
             },
@@ -954,6 +973,7 @@ fn parse_gang_clause<'a>(
                 name,
                 kind: ClauseKind::GangClause {
                     modifier: None,
+                    space_after_colon: false,
                     variables: vec![],
                 },
             },

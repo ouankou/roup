@@ -34,6 +34,7 @@
 use std::fmt;
 
 use super::{Expression, Identifier, Variable};
+use crate::parser::directive_kind::DirectiveName;
 
 // ============================================================================
 // Reduction Operators (OpenMP 5.2 spec section 5.5.5)
@@ -1284,6 +1285,14 @@ pub enum ClauseData {
     },
 
     // ========================================================================
+    // Directive-name list clauses (OpenMP 5.1 assume/assumes)
+    // ========================================================================
+    /// `absent(directive-name-list)` - list of directives assumed to be absent.
+    Absent { directives: Vec<DirectiveName> },
+    /// `contains(directive-name-list)` - list of directives assumed to appear.
+    Contains { directives: Vec<DirectiveName> },
+
+    // ========================================================================
     // Argument-adjustment clauses
     // ========================================================================
     /// `adjust_args([modifier:] list)` used by declare variant/dispatch
@@ -2033,6 +2042,26 @@ impl fmt::Display for ClauseData {
                         write!(f, ", ")?;
                     }
                     write!(f, "{item}")?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Absent { directives } => {
+                write!(f, "absent(")?;
+                for (i, directive) in directives.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", directive.as_str())?;
+                }
+                write!(f, ")")
+            }
+            ClauseData::Contains { directives } => {
+                write!(f, "contains(")?;
+                for (i, directive) in directives.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", directive.as_str())?;
                 }
                 write!(f, ")")
             }

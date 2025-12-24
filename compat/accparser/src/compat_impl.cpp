@@ -48,6 +48,18 @@ extern "C" {
     int32_t acc_clause_expressions_count(const AccClause* clause);
     const char* acc_clause_expression_at(const AccClause* clause, int32_t index);
     int32_t acc_clause_modifier(const AccClause* clause);
+    int32_t acc_clause_data_variant(const AccClause* clause);
+    int32_t acc_clause_data_modifier_count(const AccClause* clause);
+    int32_t acc_clause_data_modifier_at(const AccClause* clause, int32_t index);
+    int32_t acc_clause_reduction_operator(const AccClause* clause);
+    int32_t acc_clause_vector_modifier(const AccClause* clause);
+    int32_t acc_clause_worker_modifier(const AccClause* clause);
+    int32_t acc_clause_gang_arg_kind(const AccClause* clause);
+    int32_t acc_clause_device_type_count(const AccClause* clause);
+    int32_t acc_clause_device_type_kind_at(const AccClause* clause, int32_t index);
+    int32_t acc_clause_indirect_present(const AccClause* clause);
+    const char* acc_clause_indirect_value(const AccClause* clause);
+    int32_t acc_clause_indirect_value_is_string_literal(const AccClause* clause);
     int32_t acc_clause_operator(const AccClause* clause);
     const char* acc_clause_wait_devnum(const AccClause* clause);
     int32_t acc_clause_wait_has_queues(const AccClause* clause);
@@ -297,6 +309,7 @@ static OpenACCClauseKind mapRoupToAccparserClause(int32_t roup_kind) {
         case ROUP_ACCC_device_num:      return ACCC_device_num;
         case ROUP_ACCC_device_resident: return ACCC_device_resident;
         case ROUP_ACCC_host:            return ACCC_host;
+        case ROUP_ACCC_indirect:        return ACCC_indirect;
         default:                         return ACCC_unknown;
     }
 }
@@ -487,10 +500,6 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                 continue;
             }
 
-            if (const char* original_keyword = acc_clause_original_keyword(roup_clause)) {
-                clause->setOriginalKeyword(std::string(original_keyword));
-            }
-
             // Collect clause expressions up front
             std::vector<std::string> expressions;
             {
@@ -503,52 +512,29 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                     }
                 }
             }
-            if (std::getenv("ROUP_DEBUG_ACC_COMPAT")) {
-                fprintf(stderr, "[compat] clause %d expr_count=%zu\n", static_cast<int>(clause_kind), expressions.size());
-            }
-
-            {
-                // Handle modifiers for clauses that have them
-                int32_t modifier = acc_clause_modifier(roup_clause);
-                if (modifier != 0) {
-                    switch (clause_kind) {
-                        case ACCC_copyin:
-                            if (modifier == 1) {
-                                static_cast<OpenACCCopyinClause*>(clause)->setModifier(ACCC_COPYIN_readonly);
-                            }
-                            break;
-                        case ACCC_copyout:
-                            if (modifier == 1) {
-                                static_cast<OpenACCCopyoutClause*>(clause)->setModifier(ACCC_COPYOUT_zero);
-                            }
-                            break;
-                        case ACCC_create:
-                            if (modifier == 1) {
-                                static_cast<OpenACCCreateClause*>(clause)->setModifier(ACCC_CREATE_zero);
-                            }
-                            break;
-                        case ACCC_vector:
-                            if (modifier == 1) {
-                                static_cast<OpenACCVectorClause*>(clause)->setModifier(ACCC_VECTOR_length);
-                            }
-                            break;
-                        case ACCC_worker:
-                            if (modifier == 1) {
-                                static_cast<OpenACCWorkerClause*>(clause)->setModifier(ACCC_WORKER_num);
-                            }
-                            break;
-                        case ACCC_reduction: {
-                            OpenACCReductionClauseOperator acc_op = static_cast<OpenACCReductionClauseOperator>(modifier);
-                            static_cast<OpenACCReductionClause*>(clause)->setOperator(acc_op);
-                            break;
-                        }
-                        case ACCC_default:
-                            static_cast<OpenACCDefaultClause*>(clause)->setKind(static_cast<OpenACCDefaultClauseKind>(modifier));
-                            break;
-                        default:
-                            break;
+            // Apply typed, enum-based payload fields (no string/number inspection).
+            if (auto* data_clause = dynamic_cast<OpenACCDataClause*>(clause)) {
+                const int32_t variant_code = acc_clause_data_variant(roup_clause);
+                if (variant_code >= 0) {
+                    data_clause->setVariant(static_cast<OpenACCDataClauseVariant>(variant_code));
+                }
+                const int32_t mod_count = acc_clause_data_modifier_count(roup_clause);
+                for (int32_t i = 0; i < mod_count; ++i) {
+                    const int32_t mod_code = acc_clause_data_modifier_at(roup_clause, i);
+                    if (mod_code >= 0) {
+                        data_clause->addModifier(static_cast<OpenACCDataClauseModifierKind>(mod_code));
                     }
                 }
+            }
+
+            if (clause_kind == ACCC_reduction) {
+                const int32_t op_code = acc_clause_reduction_operator(roup_clause);
+                static_cast<OpenACCReductionClause*>(clause)->setOperator(
+                    static_cast<OpenACCReductionClauseOperator>(op_code));
+            } else if (clause_kind == ACCC_default) {
+                const int32_t kind_code = acc_clause_modifier(roup_clause);
+                static_cast<OpenACCDefaultClause*>(clause)->setKind(
+                    static_cast<OpenACCDefaultClauseKind>(kind_code));
             }
 
             // Populate clause-specific payloads using structured data
@@ -627,6 +613,8 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                 }
                 case ACCC_vector: {
                     auto* vec = static_cast<OpenACCVectorClause*>(clause);
+                    vec->setModifier(static_cast<OpenACCVectorClauseModifier>(
+                        acc_clause_vector_modifier(roup_clause)));
                     if (!expressions.empty()) {
                         vec->setLengthExpr(expressions.front());
                     }
@@ -634,6 +622,8 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                 }
                 case ACCC_worker: {
                     auto* worker = static_cast<OpenACCWorkerClause*>(clause);
+                    worker->setModifier(static_cast<OpenACCWorkerClauseModifier>(
+                        acc_clause_worker_modifier(roup_clause)));
                     if (!expressions.empty()) {
                         worker->setNumExpr(expressions.front());
                     }
@@ -641,13 +631,10 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                 }
                 case ACCC_gang: {
                     auto* gang = static_cast<OpenACCGangClause*>(clause);
-                    OpenACCGangArgKind arg_kind = ACCC_GANG_ARG_other;
-                    const int32_t modifier = acc_clause_modifier(roup_clause);
-                    if (modifier == 1) {
-                        arg_kind = ACCC_GANG_ARG_num;
-                    } else if (modifier == 2) {
-                        arg_kind = ACCC_GANG_ARG_static;
-                    }
+                    const int32_t kind_code = acc_clause_gang_arg_kind(roup_clause);
+                    OpenACCGangArgKind arg_kind = (kind_code >= 0)
+                        ? static_cast<OpenACCGangArgKind>(kind_code)
+                        : ACCC_GANG_ARG_other;
                     for (const auto& expr : expressions) {
                         gang->addArg(arg_kind, expr);
                     }
@@ -655,19 +642,29 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                 }
                 case ACCC_device_type: {
                     auto* dtype = static_cast<OpenACCDeviceTypeClause*>(clause);
-                    for (const auto& expr : expressions) {
-                        std::string lowered = expr;
-                        std::transform(lowered.begin(), lowered.end(), lowered.begin(), ::tolower);
-                        if (lowered == "host") {
-                            dtype->addDeviceType(ACCC_DEVICE_TYPE_host);
-                        } else if (lowered == "any") {
-                            dtype->addDeviceType(ACCC_DEVICE_TYPE_any);
-                        } else if (lowered == "multicore") {
-                            dtype->addDeviceType(ACCC_DEVICE_TYPE_multicore);
-                        } else if (lowered == "default") {
-                            dtype->addDeviceType(ACCC_DEVICE_TYPE_default);
-                        } else {
-                            dtype->addDeviceTypeString(expr);
+                    const int32_t count = acc_clause_device_type_count(roup_clause);
+                    for (int32_t i = 0; i < count; ++i) {
+                        const int32_t kind_code = acc_clause_device_type_kind_at(roup_clause, i);
+                        if (kind_code == ACCC_DEVICE_TYPE_unknown) {
+                            const char* raw = acc_clause_expression_at(roup_clause, i);
+                            if (raw && raw[0] != '\0') {
+                                dtype->addDeviceTypeString(std::string(raw));
+                            }
+                        } else if (kind_code >= 0) {
+                            dtype->addDeviceType(static_cast<OpenACCDeviceTypeKind>(kind_code));
+                        }
+                    }
+                    break;
+                }
+                case ACCC_indirect: {
+                    auto* indirect = static_cast<OpenACCIndirectClause*>(clause);
+                    if (acc_clause_indirect_present(roup_clause)) {
+                        indirect->setPresent(true);
+                        const char* value = acc_clause_indirect_value(roup_clause);
+                        if (value && value[0] != '\0') {
+                            const bool is_str =
+                                acc_clause_indirect_value_is_string_literal(roup_clause) != 0;
+                            indirect->setValue(std::string(value), is_str);
                         }
                     }
                     break;
@@ -695,15 +692,7 @@ OpenACCDirective* parseOpenACC(const char* input, void* exprParse(const char* ex
                 };
 
                 for (const auto& expr : expressions) {
-                    if (expr.find(',') != std::string::npos) {
-                        std::stringstream ss(expr);
-                        std::string part;
-                        while (std::getline(ss, part, ',')) {
-                            add_var_token(part);
-                        }
-                    } else {
-                        add_var_token(expr);
-                    }
+                    add_var_token(expr);
                 }
             } else if (expressions.empty() == false) {
                 // For non-varlist clauses that still carry expressions, preserve them

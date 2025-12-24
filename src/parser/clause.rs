@@ -455,6 +455,7 @@ pub enum ReductionModifier {
 pub enum GangModifier {
     Num,    // num
     Static, // static
+    Dim,    // dim
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -476,6 +477,8 @@ pub enum ClauseKind<'a> {
     /// Structured gang clause with optional modifier and variables
     GangClause {
         modifier: Option<GangModifier>,
+        /// True if source used `modifier: <expr>` (space after `:`), false for `modifier:<expr>`.
+        space_after_colon: bool,
         variables: Vec<Cow<'a, str>>,
     },
     /// Structured worker clause with optional modifier and variables
@@ -581,6 +584,7 @@ impl fmt::Display for Clause<'_> {
             }
             ClauseKind::GangClause {
                 modifier,
+                space_after_colon,
                 variables,
             } => {
                 if modifier.is_none() && variables.is_empty() {
@@ -591,8 +595,12 @@ impl fmt::Display for Clause<'_> {
                         let mod_str = match mod_val {
                             GangModifier::Num => "num",
                             GangModifier::Static => "static",
+                            GangModifier::Dim => "dim",
                         };
-                        write!(f, "{mod_str}: ")?;
+                        write!(f, "{mod_str}:")?;
+                        if *space_after_colon {
+                            write!(f, " ")?;
+                        }
                     }
                     write!(f, "{})", variables.join(", "))
                 }
