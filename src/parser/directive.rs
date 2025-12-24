@@ -134,6 +134,7 @@ impl<'a> Directive<'a> {
                 ClauseKind::GangClause {
                     modifier,
                     variables,
+                    ..
                 } => {
                     if variables.is_empty() {
                         0 // Bare gang - same as Bare
@@ -237,11 +238,16 @@ impl<'a> Directive<'a> {
                                 name: first.name.clone(),
                                 kind: ClauseKind::VariableList(vars),
                             },
-                            ClauseKind::GangClause { modifier, .. } => Clause {
+                            ClauseKind::GangClause {
+                                modifier,
+                                space_after_colon,
+                                ..
+                            } => Clause {
                                 separator: crate::parser::ClauseSeparator::Space,
                                 name: first.name.clone(),
                                 kind: ClauseKind::GangClause {
                                     modifier: *modifier,
+                                    space_after_colon: *space_after_colon,
                                     variables: vars,
                                 },
                             },

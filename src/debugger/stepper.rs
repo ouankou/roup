@@ -318,9 +318,11 @@ impl DebugSession {
                             },
                             crate::parser::ClauseKind::GangClause {
                                 modifier,
+                                space_after_colon,
                                 variables,
                             } => crate::parser::ClauseKind::GangClause {
                                 modifier: *modifier,
+                                space_after_colon: *space_after_colon,
                                 variables: variables
                                     .iter()
                                     .map(|v| Cow::Owned(v.to_string()))

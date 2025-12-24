@@ -1089,6 +1089,7 @@ fn build_acc_gang_clause(
     if let ClauseKind::GangClause {
         modifier,
         variables,
+        ..
     } = &clause.kind
     {
         let modifier = modifier.map(|m| match m {
@@ -1265,8 +1266,13 @@ fn clause_content_from_kind<'a>(kind: &'a ClauseKind<'a>) -> Option<Cow<'a, str>
         ClauseKind::VariableList(values) => Some(Cow::Owned(join_variable_list(values))),
         ClauseKind::GangClause {
             modifier,
+            space_after_colon,
             variables,
-        } => Some(Cow::Owned(format_gang_clause(*modifier, variables))),
+        } => Some(Cow::Owned(format_gang_clause(
+            *modifier,
+            *space_after_colon,
+            variables,
+        ))),
         ClauseKind::WorkerClause {
             modifier,
             variables,
@@ -1328,12 +1334,28 @@ fn format_with_optional_prefix(
     }
 }
 
-fn format_gang_clause(modifier: Option<GangModifier>, variables: &[Cow<'_, str>]) -> String {
-    match modifier {
-        Some(GangModifier::Num) => format_with_optional_prefix("num", true, variables),
-        Some(GangModifier::Static) => format_with_optional_prefix("static", true, variables),
-        Some(GangModifier::Dim) => format_with_optional_prefix("dim", true, variables),
-        None => join_variable_list(variables),
+fn format_gang_clause(
+    modifier: Option<GangModifier>,
+    space_after_colon: bool,
+    variables: &[Cow<'_, str>],
+) -> String {
+    let joined = join_variable_list(variables);
+    let Some(modifier) = modifier else {
+        return joined;
+    };
+
+    let prefix = match modifier {
+        GangModifier::Num => "num",
+        GangModifier::Static => "static",
+        GangModifier::Dim => "dim",
+    };
+
+    if joined.is_empty() {
+        prefix.to_string()
+    } else if space_after_colon {
+        format!("{prefix}: {joined}")
+    } else {
+        format!("{prefix}:{joined}")
     }
 }
 

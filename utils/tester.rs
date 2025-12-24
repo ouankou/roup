@@ -55,6 +55,7 @@ fn main() {
                     ClauseKind::GangClause {
                         ref modifier,
                         ref variables,
+                        ..
                     } => {
                         println!(
                             "Clause: {}(modifier: {:?}, vars: {:?})",

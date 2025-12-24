@@ -59,6 +59,7 @@ fn assert_clause_case(pragma: &str, expected_name: &str, expected_kind: ClauseEx
             ClauseKind::GangClause {
                 modifier: None,
                 variables,
+                ..
             },
         ) if variables.is_empty() => {}
         (
