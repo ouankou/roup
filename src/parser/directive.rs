@@ -68,13 +68,26 @@ impl<'a> Directive<'a> {
         };
         use std::collections::{HashMap, HashSet};
         // Group clauses by name AND modifier/kind for merging
-        // Key: (name, kind_discriminant, modifier_value)
-        type MergeKey = (ClauseName, u8, u32);
-        let mut merged: HashMap<MergeKey, Vec<Clause<'a>>> = HashMap::new();
-        let mut order: Vec<MergeKey> = Vec::new();
+        // Key: (canonical_name, optional_spelling, kind_discriminant, modifier_value)
+        //
+        // The spelling is needed for OpenACC data-clause variants where multiple
+        // keywords map to the same canonical ClauseName but have different
+        // semantics (e.g. `copy`, `pcopy`, `present_or_copy`). We must not merge
+        // these across spellings; otherwise variables inherit the wrong data
+        // movement semantics after normalization.
+        type MergeKey<'b> = (ClauseName, Option<Cow<'b, str>>, u8, u32);
+        let mut merged: HashMap<MergeKey<'a>, Vec<Clause<'a>>> = HashMap::new();
+        let mut order: Vec<MergeKey<'a>> = Vec::new();
 
         for clause in self.clauses.drain(..) {
             let clause_name_kind = lookup_clause_name(clause.name.as_ref());
+            let clause_name_spelling = match clause_name_kind {
+                ClauseName::Copy
+                | ClauseName::CopyIn
+                | ClauseName::CopyOut
+                | ClauseName::Create => Some(clause.name.clone()),
+                _ => None,
+            };
             // Create key based on clause name, kind, and modifier/content
             // For Parenthesized clauses, we hash the content to distinguish collapse(1) from collapse(2)
             let kind_disc = match &clause.kind {
@@ -187,7 +200,12 @@ impl<'a> Directive<'a> {
                 ClauseKind::CreateClause { modifier, .. } => 60 + modifier.map_or(0, |m| m as u32),
             };
 
-            let key = (clause_name_kind.clone(), kind_disc as u8, kind_disc);
+            let key = (
+                clause_name_kind.clone(),
+                clause_name_spelling.clone(),
+                kind_disc as u8,
+                kind_disc,
+            );
             let entry = merged.entry(key.clone()).or_default();
             if entry.is_empty() {
                 order.push(key.clone());
@@ -208,7 +226,7 @@ impl<'a> Directive<'a> {
                 // Multiple occurrences - merge based on clause kind
                 let first = group[0].clone();
                 let clause_name_kind = &key.0;
-                match &first.kind {
+                match first.kind.clone() {
                     ClauseKind::GangClause { .. }
                     | ClauseKind::WorkerClause { .. }
                     | ClauseKind::VectorClause { .. }
@@ -232,44 +250,32 @@ impl<'a> Directive<'a> {
                             }
                         }
                         // Create merged clause with same structure as first
-                        let merged_clause = match &first.kind {
-                            ClauseKind::VariableList(_) => Clause {
-                                separator: crate::parser::ClauseSeparator::Space,
-                                name: first.name.clone(),
-                                kind: ClauseKind::VariableList(vars),
-                            },
+                        let kind = match first.kind.clone() {
+                            ClauseKind::VariableList(_) => ClauseKind::VariableList(vars),
                             ClauseKind::GangClause {
                                 modifier,
                                 space_after_colon,
                                 ..
-                            } => Clause {
-                                separator: crate::parser::ClauseSeparator::Space,
-                                name: first.name.clone(),
-                                kind: ClauseKind::GangClause {
-                                    modifier: *modifier,
-                                    space_after_colon: *space_after_colon,
-                                    variables: vars,
-                                },
+                            } => ClauseKind::GangClause {
+                                modifier,
+                                space_after_colon,
+                                variables: vars,
                             },
-                            ClauseKind::WorkerClause { modifier, .. } => Clause {
-                                separator: crate::parser::ClauseSeparator::Space,
-                                name: first.name.clone(),
-                                kind: ClauseKind::WorkerClause {
-                                    modifier: *modifier,
-                                    variables: vars,
-                                },
+                            ClauseKind::WorkerClause { modifier, .. } => ClauseKind::WorkerClause {
+                                modifier,
+                                variables: vars,
                             },
-                            ClauseKind::VectorClause { modifier, .. } => Clause {
-                                separator: crate::parser::ClauseSeparator::Space,
-                                name: first.name.clone(),
-                                kind: ClauseKind::VectorClause {
-                                    modifier: *modifier,
-                                    variables: vars,
-                                },
+                            ClauseKind::VectorClause { modifier, .. } => ClauseKind::VectorClause {
+                                modifier,
+                                variables: vars,
                             },
                             _ => unreachable!(),
                         };
-                        new_clauses.push(merged_clause);
+                        new_clauses.push(Clause {
+                            separator: crate::parser::ClauseSeparator::Space,
+                            name: first.name.clone(),
+                            kind,
+                        });
                     }
                     ClauseKind::Parenthesized(_) => {
                         if matches!(clause_name_kind, ClauseName::Depend) {
@@ -375,12 +381,12 @@ impl<'a> Directive<'a> {
                             separator: crate::parser::ClauseSeparator::Space,
                             name: first.name.clone(),
                             kind: ClauseKind::ReductionClause {
-                                modifiers: modifiers.clone(),
+                                modifiers,
                                 modifier_items: Vec::new(),
-                                operator: *operator,
-                                user_defined_identifier: user_defined_identifier.clone(),
+                                operator,
+                                user_defined_identifier,
                                 variables: vars,
-                                space_after_colon: *space_after_colon,
+                                space_after_colon,
                             },
                         });
                     }
@@ -404,34 +410,28 @@ impl<'a> Directive<'a> {
                                 }
                             }
                         }
-                        let merged_clause = match &first.kind {
-                            ClauseKind::CopyinClause { modifier, .. } => Clause {
-                                separator: crate::parser::ClauseSeparator::Space,
-                                name: first.name.clone(),
-                                kind: ClauseKind::CopyinClause {
-                                    modifier: *modifier,
-                                    variables: vars,
-                                },
+                        let kind = match first.kind.clone() {
+                            ClauseKind::CopyinClause { modifier, .. } => ClauseKind::CopyinClause {
+                                modifier,
+                                variables: vars,
                             },
-                            ClauseKind::CopyoutClause { modifier, .. } => Clause {
-                                separator: crate::parser::ClauseSeparator::Space,
-                                name: first.name.clone(),
-                                kind: ClauseKind::CopyoutClause {
-                                    modifier: *modifier,
+                            ClauseKind::CopyoutClause { modifier, .. } => {
+                                ClauseKind::CopyoutClause {
+                                    modifier,
                                     variables: vars,
-                                },
-                            },
-                            ClauseKind::CreateClause { modifier, .. } => Clause {
-                                separator: crate::parser::ClauseSeparator::Space,
-                                name: first.name.clone(),
-                                kind: ClauseKind::CreateClause {
-                                    modifier: *modifier,
-                                    variables: vars,
-                                },
+                                }
+                            }
+                            ClauseKind::CreateClause { modifier, .. } => ClauseKind::CreateClause {
+                                modifier,
+                                variables: vars,
                             },
                             _ => unreachable!(),
                         };
-                        new_clauses.push(merged_clause);
+                        new_clauses.push(Clause {
+                            separator: crate::parser::ClauseSeparator::Space,
+                            name: first.name.clone(),
+                            kind,
+                        });
                     }
                     _ => {
                         // For other clause types, keep only the first occurrence
@@ -978,5 +978,48 @@ mod tests {
 
         assert_eq!(directive.to_string(), "#pragma omp barrier");
         assert_eq!(directive.to_pragma_string(), "#pragma omp barrier");
+    }
+
+    #[test]
+    fn merge_clauses_keeps_distinct_openacc_copy_variants() {
+        let mut directive = Directive {
+            name: "data".into(),
+            parameter: None,
+            clauses: vec![
+                Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
+                    name: Cow::Borrowed("copy"),
+                    kind: ClauseKind::VariableList(vec![Cow::Borrowed("a")]),
+                },
+                Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
+                    name: Cow::Borrowed("pcopy"),
+                    kind: ClauseKind::VariableList(vec![Cow::Borrowed("b")]),
+                },
+                Clause {
+                    separator: crate::parser::ClauseSeparator::Space,
+                    name: Cow::Borrowed("copy"),
+                    kind: ClauseKind::VariableList(vec![Cow::Borrowed("c")]),
+                },
+            ],
+            wait_data: None,
+            cache_data: None,
+        };
+
+        directive.merge_clauses();
+
+        assert_eq!(directive.clauses.len(), 2);
+
+        assert_eq!(directive.clauses[0].name, "copy");
+        assert_eq!(
+            directive.clauses[0].kind,
+            ClauseKind::VariableList(vec![Cow::Borrowed("a"), Cow::Borrowed("c")])
+        );
+
+        assert_eq!(directive.clauses[1].name, "pcopy");
+        assert_eq!(
+            directive.clauses[1].kind,
+            ClauseKind::VariableList(vec![Cow::Borrowed("b")])
+        );
     }
 }
