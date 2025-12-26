@@ -3623,11 +3623,11 @@ static std::vector<std::vector<const char*>> collect_depend_iterators(const OmpC
     for (int32_t i = 0; i < count; ++i) {
         std::vector<const char*> entry;
         entry.reserve(5);
-        entry.push_back(duplicate_c_string(roup_clause_depend_iterator_type(rc, i)));
-        entry.push_back(duplicate_c_string(roup_clause_depend_iterator_name(rc, i)));
-        entry.push_back(duplicate_c_string(roup_clause_depend_iterator_start(rc, i)));
-        entry.push_back(duplicate_c_string(roup_clause_depend_iterator_end(rc, i)));
-        entry.push_back(duplicate_c_string(roup_clause_depend_iterator_step(rc, i)));
+        entry.push_back(roup_clause_depend_iterator_type(rc, i));
+        entry.push_back(roup_clause_depend_iterator_name(rc, i));
+        entry.push_back(roup_clause_depend_iterator_start(rc, i));
+        entry.push_back(roup_clause_depend_iterator_end(rc, i));
+        entry.push_back(roup_clause_depend_iterator_step(rc, i));
         defs.push_back(std::move(entry));
     }
     return defs;
@@ -3639,23 +3639,14 @@ static std::vector<std::vector<const char*>> collect_affinity_iterators(const Om
     for (int32_t i = 0; i < count; ++i) {
         std::vector<const char*> entry;
         entry.reserve(5);
-        entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_type(rc, i)));
-        entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_name(rc, i)));
-        entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_start(rc, i)));
-        entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_end(rc, i)));
-        entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_step(rc, i)));
+        entry.push_back(roup_clause_affinity_iterator_type(rc, i));
+        entry.push_back(roup_clause_affinity_iterator_name(rc, i));
+        entry.push_back(roup_clause_affinity_iterator_start(rc, i));
+        entry.push_back(roup_clause_affinity_iterator_end(rc, i));
+        entry.push_back(roup_clause_affinity_iterator_step(rc, i));
         defs.push_back(std::move(entry));
     }
     return defs;
-}
-
-static void free_iterator_defs(std::vector<std::vector<const char*>> &defs) {
-    for (auto &def : defs) {
-        for (const char* s : def) {
-            free(const_cast<char*>(s));
-        }
-    }
-    defs.clear();
 }
 
 static void convert_depend_clause(OpenMPDirective* dir, const OmpClause* rc) {
@@ -3699,13 +3690,12 @@ static void convert_depend_clause(OpenMPDirective* dir, const OmpClause* rc) {
                     continue;
                 }
             }
-            // Append variables to the existing clause and release iterator strings.
+            // Append variables to the existing clause.
             OmpStringList* vars = roup_clause_variables(rc);
             append_variables_to_clause(depend_clause, vars);
             if (vars) {
                 roup_string_list_free(vars);
             }
-            free_iterator_defs(iter_defs);
             return;
         }
     }
@@ -3718,7 +3708,6 @@ static void convert_depend_clause(OpenMPDirective* dir, const OmpClause* rc) {
     if (!iter_defs.empty()) {
         static_cast<OpenMPDependClause*>(clause)->setDependIteratorsDefinitionClass(iter_defs);
     }
-    free_iterator_defs(iter_defs);
 
     OmpStringList* vars = roup_clause_variables(rc);
     append_variables_to_clause(clause, vars);
@@ -3799,7 +3788,6 @@ static void convert_affinity_clause(OpenMPDirective* dir, const OmpClause* rc) {
     for (const auto& def : iter_defs) {
         affinity_clause->addIteratorsDefinitionClass(def);
     }
-    free_iterator_defs(iter_defs);
 
     OmpStringList* vars = roup_clause_variables(rc);
     append_variables_to_clause(clause, vars);
