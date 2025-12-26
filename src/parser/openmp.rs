@@ -716,7 +716,7 @@ fn parse_declare_target_extended<'a>(
         Ok((
             rest,
             Directive {
-                name: crate::parser::directive_kind::lookup_directive_name("declare target"),
+                name: name.clone().into(),
                 parameter: Some(std::borrow::Cow::Owned(format!("({list_content})"))),
                 clauses,
                 wait_data: None,
@@ -747,9 +747,7 @@ fn parse_declare_target_extended<'a>(
                 return Ok((
                     rest,
                     Directive {
-                        name: crate::parser::directive_kind::lookup_directive_name(
-                            "declare target",
-                        ),
+                        name: name.clone().into(),
                         parameter: Some(std::borrow::Cow::Owned(param_str.to_string())),
                         clauses,
                         wait_data: None,

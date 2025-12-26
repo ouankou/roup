@@ -23,7 +23,7 @@ use super::clause::{
 };
 use super::directive::Directive;
 use super::Dialect;
-use crate::parser::directive_kind::{lookup_directive_name, DirectiveName};
+use crate::parser::directive_kind::lookup_directive_name;
 
 /// Error raised during AST materialization from parser structures.
 #[derive(Debug)]
@@ -95,10 +95,7 @@ fn build_omp_directive(
     parser_config: &ParserConfig,
     host_language: Language,
 ) -> Result<OmpDirective, AstBuildError> {
-    let directive_name = match directive.name.clone() {
-        DirectiveName::EndScope => DirectiveName::Scope,
-        other => other,
-    };
+    let directive_name = directive.name.clone();
 
     let kind = OmpDirectiveKind::try_from(directive_name).map_err(|name| {
         AstBuildError::UnsupportedDirective(format!("{name:?} not supported for OpenMP"))

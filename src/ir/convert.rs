@@ -5,7 +5,7 @@
 //!
 //! ## Learning Objectives
 //!
-//! - **Pattern matching on strings**: Mapping clause names to semantic types
+//! - **Pattern matching on enums**: Mapping clause names to semantic types
 //! - **Error handling**: Using Result for fallible conversions
 //! - **Parsing clause data**: Extracting semantic meaning from strings
 //! - **Gradual refinement**: Starting simple, adding complexity incrementally
@@ -66,7 +66,7 @@ use crate::parser::{
         ReductionModifier as ParserReductionModifier, ReductionOperator as ParserReductionOperator,
     },
     directive_kind::DirectiveName,
-    Clause, ClauseKind, Directive,
+    Clause, ClauseKind, ClauseName, Directive,
 };
 use std::collections::HashSet;
 
@@ -231,9 +231,15 @@ pub fn parse_directive_kind(
         // Declare constructs
         DirectiveName::DeclareReduction => Ok(DirectiveKind::DeclareReduction),
         DirectiveName::DeclareMapper => Ok(DirectiveKind::DeclareMapper),
-        DirectiveName::DeclareTarget => Ok(DirectiveKind::DeclareTarget),
-        DirectiveName::BeginDeclareTarget => Ok(DirectiveKind::BeginDeclareTarget),
-        DirectiveName::EndDeclareTarget => Ok(DirectiveKind::EndDeclareTarget),
+        DirectiveName::DeclareTarget | DirectiveName::DeclareTargetUnderscore => {
+            Ok(DirectiveKind::DeclareTarget)
+        }
+        DirectiveName::BeginDeclareTarget | DirectiveName::BeginDeclareTargetUnderscore => {
+            Ok(DirectiveKind::BeginDeclareTarget)
+        }
+        DirectiveName::EndDeclareTarget | DirectiveName::EndDeclareTargetUnderscore => {
+            Ok(DirectiveKind::EndDeclareTarget)
+        }
         DirectiveName::DeclareVariant => Ok(DirectiveKind::DeclareVariant),
         DirectiveName::BeginDeclareVariant => Ok(DirectiveKind::BeginDeclareVariant),
         DirectiveName::EndDeclareVariant => Ok(DirectiveKind::EndDeclareVariant),
@@ -278,7 +284,7 @@ pub fn parse_directive_kind(
         DirectiveName::CancellationPoint => Ok(DirectiveKind::CancellationPoint),
         DirectiveName::Dispatch => Ok(DirectiveKind::Dispatch),
         DirectiveName::Interop => Ok(DirectiveKind::Interop),
-        DirectiveName::Scope => Ok(DirectiveKind::Scope),
+        DirectiveName::Scope | DirectiveName::EndScope => Ok(DirectiveKind::Scope),
         DirectiveName::Groupprivate => Ok(DirectiveKind::Groupprivate),
         DirectiveName::Workdistribute => Ok(DirectiveKind::Workdistribute),
 
@@ -1952,10 +1958,11 @@ pub fn parse_clause_data<'a>(
     config: &ParserConfig,
 ) -> Result<ClauseData, ConversionError> {
     let clause_name = clause.name.as_ref();
+    let clause_kind = lookup_clause_name(clause_name);
 
-    match clause_name {
+    match clause_kind {
         // Bare clauses (no parameters)
-        "nowait" => match &clause.kind {
+        ClauseName::Nowait => match &clause.kind {
             ClauseKind::Bare => Ok(ClauseData::Nowait { modifier: None }),
             ClauseKind::Parenthesized(content)
                 if content.as_ref().trim().eq_ignore_ascii_case("is_deferred") =>
@@ -1969,8 +1976,14 @@ pub fn parse_clause_data<'a>(
             )),
         },
 
-        "nogroup" | "untied" | "mergeable" | "seq_cst" | "relaxed" | "release" | "acquire"
-        | "acq_rel" => match &clause.kind {
+        ClauseName::Nogroup
+        | ClauseName::Untied
+        | ClauseName::Mergeable
+        | ClauseName::SeqCst
+        | ClauseName::Relaxed
+        | ClauseName::Release
+        | ClauseName::Acquire
+        | ClauseName::AcqRel => match &clause.kind {
             ClauseKind::Bare => Ok(ClauseData::Bare(Identifier::new(clause_name))),
             _ => Err(ConversionError::InvalidClauseSyntax(format!(
                 "{clause_name} clause does not take arguments"
@@ -1978,7 +1991,7 @@ pub fn parse_clause_data<'a>(
         },
 
         // default(kind)
-        "default" => {
+        ClauseName::Default => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let kind_str = content.trim();
@@ -2008,13 +2021,15 @@ pub fn parse_clause_data<'a>(
         }
 
         // Metadirective selectors: parse into typed selector data (raw today)
-        "when" | "otherwise" | "match" => parse_metadirective_selector(clause, config),
+        ClauseName::When | ClauseName::Otherwise | ClauseName::Match => {
+            parse_metadirective_selector(clause, config)
+        }
 
         // defaultmap(behavior[:category])
-        "defaultmap" => parse_defaultmap_clause(&clause.kind),
+        ClauseName::Defaultmap => parse_defaultmap_clause(&clause.kind),
 
         // sizes(list) on tile directive
-        "sizes" => {
+        ClauseName::Sizes => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let items = parse_identifier_list(content.as_ref(), config)?;
                 Ok(ClauseData::ItemList(items))
@@ -2026,7 +2041,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // private(list)
-        "private" => {
+        ClauseName::Private => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let items = parse_identifier_list(content, config)?;
@@ -2037,7 +2052,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // firstprivate(list)
-        "firstprivate" => {
+        ClauseName::Firstprivate => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let items = parse_identifier_list(content, config)?;
@@ -2048,7 +2063,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // shared(list)
-        "shared" => {
+        ClauseName::Shared => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let items = parse_identifier_list(content, config)?;
@@ -2059,7 +2074,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // to/from/link(list) used by declare target and friends
-        "to" | "from" | "link" => {
+        ClauseName::To | ClauseName::From | ClauseName::Link => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 match parse_identifier_list(content.as_ref(), config) {
                     Ok(items) => {
@@ -2084,7 +2099,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // num_threads(expr)
-        "num_threads" => {
+        ClauseName::NumThreads => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 Ok(ClauseData::NumThreads {
@@ -2098,7 +2113,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // if(expr)
-        "if" => {
+        ClauseName::If => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 // Check for directive-name modifier: "if(parallel: condition)"
@@ -2121,7 +2136,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // collapse(n)
-        "collapse" => {
+        ClauseName::Collapse => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 Ok(ClauseData::Collapse {
@@ -2135,7 +2150,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // ordered or ordered(n)
-        "ordered" => match clause.kind {
+        ClauseName::Ordered => match clause.kind {
             ClauseKind::Bare => Ok(ClauseData::Ordered { n: None }),
             ClauseKind::Parenthesized(ref content) => Ok(ClauseData::Ordered {
                 n: Some(Expression::new(content.as_ref().trim(), config)),
@@ -2147,7 +2162,7 @@ pub fn parse_clause_data<'a>(
         },
 
         // reduction(operator: list)
-        "reduction" => match &clause.kind {
+        ClauseName::Reduction => match &clause.kind {
             ClauseKind::Parenthesized(ref content) => {
                 let content = content.as_ref();
                 // Find the colon separator between operator and list
@@ -2285,7 +2300,7 @@ pub fn parse_clause_data<'a>(
         },
 
         // schedule([modifier[, modifier]:] kind[, chunk_size])
-        "schedule" => {
+        ClauseName::Schedule => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 parse_schedule_clause(content, config)
@@ -2297,7 +2312,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // map([[mapper(mapper-identifier),] map-type:] list)
-        "map" => {
+        ClauseName::Map => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 parse_map_clause(content, config)
@@ -2309,7 +2324,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // depend(dependence-type: list) or depend(source) or depend(sink)
-        "depend" => {
+        ClauseName::Depend => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let mut remaining = content.as_ref().trim();
                 let mut iterators = Vec::new();
@@ -2355,7 +2370,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // doacross(source|sink : deps)
-        "doacross" => {
+        ClauseName::Doacross => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let inner = content.as_ref();
                 let (kind_text, rest) = match inner.split_once(':') {
@@ -2389,7 +2404,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // linear([modifier(list):] list[:step])
-        "linear" => {
+        ClauseName::Linear => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 parse_linear_clause(content, config)
@@ -2401,7 +2416,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // bind(parallel|teams|thread|user)
-        "bind" => {
+        ClauseName::Bind => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let kind_str = content.as_ref().trim().to_ascii_lowercase();
                 let binding = match kind_str.as_str() {
@@ -2424,7 +2439,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // proc_bind(master|close|spread|primary)
-        "proc_bind" => {
+        ClauseName::ProcBind => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let kind_str = content.trim().to_ascii_lowercase();
@@ -2448,7 +2463,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // lastprivate([modifier:] list)
-        "lastprivate" => {
+        ClauseName::Lastprivate => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let (modifier, list_str) =
@@ -2479,7 +2494,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // copyin(list)
-        "copyin" => {
+        ClauseName::CopyIn => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let items = parse_identifier_list(content.as_ref(), config)?;
                 Ok(ClauseData::Copyin { items })
@@ -2491,7 +2506,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // copyprivate(list)
-        "copyprivate" => {
+        ClauseName::Copyprivate => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let items = parse_identifier_list(content.as_ref(), config)?;
                 Ok(ClauseData::Copyprivate { items })
@@ -2503,7 +2518,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // num_teams(expr)
-        "num_teams" => {
+        ClauseName::NumTeams => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 Ok(ClauseData::NumTeams {
                     num: Expression::new(content.as_ref().trim(), config),
@@ -2516,7 +2531,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // thread_limit(expr)
-        "thread_limit" => {
+        ClauseName::ThreadLimit => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 Ok(ClauseData::ThreadLimit {
                     limit: Expression::new(content.as_ref().trim(), config),
@@ -2529,7 +2544,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // aligned(list[:alignment])
-        "aligned" => {
+        ClauseName::Aligned => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let (items_part, alignment_part) =
@@ -2565,7 +2580,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // safelen(length)
-        "safelen" => {
+        ClauseName::Safelen => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 if content.as_ref().trim().is_empty() {
                     return Err(ConversionError::InvalidClauseSyntax(
@@ -2583,7 +2598,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // simdlen(length)
-        "simdlen" => {
+        ClauseName::Simdlen => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 if content.as_ref().trim().is_empty() {
                     return Err(ConversionError::InvalidClauseSyntax(
@@ -2601,7 +2616,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // in_reduction/task_reduction share the reduction parser
-        "in_reduction" | "task_reduction" => match &clause.kind {
+        ClauseName::InReduction | ClauseName::TaskReduction => match &clause.kind {
             ClauseKind::Parenthesized(ref content) => {
                 let content = content.as_ref();
                 if let Some((op_str, items_str)) = lang::split_once_top_level(content, ':') {
@@ -2678,7 +2693,7 @@ pub fn parse_clause_data<'a>(
         },
 
         // dist_schedule(kind[, chunk])
-        "dist_schedule" => {
+        ClauseName::DistSchedule => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let parts: Vec<&str> = content
                     .as_ref()
@@ -2713,7 +2728,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // grainsize(expression)
-        "grainsize" => {
+        ClauseName::Grainsize => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let trimmed = content.as_ref().trim();
                 let mut modifier = GrainsizeModifier::Unspecified;
@@ -2739,7 +2754,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // num_tasks(expression)
-        "num_tasks" => {
+        ClauseName::NumTasks => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let trimmed = content.as_ref().trim();
                 let mut modifier = NumTasksModifier::Unspecified;
@@ -2765,7 +2780,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // adjust_args([modifier:] expr-list)
-        "adjust_args" => {
+        ClauseName::AdjustArgs => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let text = content.as_ref().trim();
                 let (modifier_text, args_text) =
@@ -2809,7 +2824,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // apply([label:] transform-list)
-        "apply" => {
+        ClauseName::Apply => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let (label, transforms, comma_separated) =
                     parse_apply_clause(content.as_ref().trim())?;
@@ -2826,7 +2841,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // collector(expression)
-        "collector" => {
+        ClauseName::Collector => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 Ok(ClauseData::Collector {
                     expression: Expression::unparsed(content.as_ref().trim()),
@@ -2839,10 +2854,10 @@ pub fn parse_clause_data<'a>(
         }
 
         // induction(step(...), [label:]expr, ...)
-        "induction" => parse_induction_clause(&clause.kind, config),
+        ClauseName::Induction => parse_induction_clause(&clause.kind, config),
 
         // filter(expression)
-        "filter" => {
+        ClauseName::Filter => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 Ok(ClauseData::Filter {
                     thread_num: Expression::new(content.as_ref().trim(), config),
@@ -2855,7 +2870,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // affinity(list)
-        "affinity" => {
+        ClauseName::Affinity => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let mut modifier = AffinityModifier::Unspecified;
                 let mut iterators = Vec::new();
@@ -2884,7 +2899,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // depobj_update(kind)
-        "depobj_update" => {
+        ClauseName::DepobjUpdate => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let dep = match content.as_ref().trim() {
                     "in" => DepobjUpdateDependence::In,
@@ -2910,7 +2925,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // priority(expression)
-        "priority" => {
+        ClauseName::Priority => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 Ok(ClauseData::Priority {
                     priority: Expression::new(content.as_ref().trim(), config),
@@ -2923,10 +2938,10 @@ pub fn parse_clause_data<'a>(
         }
 
         // device(expression)
-        "device" => parse_device_clause(&clause.kind, config),
+        ClauseName::Device => parse_device_clause(&clause.kind, config),
 
         // device_type(host|nohost|any)
-        "device_type" => {
+        ClauseName::DeviceType => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let value = content.as_ref().trim();
                 let device_type = match value {
@@ -2948,10 +2963,10 @@ pub fn parse_clause_data<'a>(
         }
 
         // at(compilation|execution) for error directive
-        "at" => parse_at_clause(&clause.kind),
+        ClauseName::At => parse_at_clause(&clause.kind),
 
         // severity(fatal|warning) for error directive
-        "severity" => {
+        ClauseName::Severity => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let value = content.as_ref().trim().to_ascii_lowercase();
                 let kind = match value.as_str() {
@@ -2973,10 +2988,10 @@ pub fn parse_clause_data<'a>(
         }
 
         // init([kind][:operand]) for interop
-        "init" => parse_init_clause(&clause.kind, config),
+        ClauseName::Init => parse_init_clause(&clause.kind, config),
 
         // use_device_ptr(list)
-        "use_device_ptr" => {
+        ClauseName::UseDevicePtr => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let items = parse_identifier_list(content.as_ref(), config)?;
                 Ok(ClauseData::UseDevicePtr { items })
@@ -2988,7 +3003,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // use_device_addr(list)
-        "use_device_addr" => {
+        ClauseName::UseDeviceAddr => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let items = parse_identifier_list(content.as_ref(), config)?;
                 Ok(ClauseData::UseDeviceAddr { items })
@@ -3000,7 +3015,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // is_device_ptr(list)
-        "is_device_ptr" => {
+        ClauseName::IsDevicePtr => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let items = parse_identifier_list(content.as_ref(), config)?;
                 Ok(ClauseData::IsDevicePtr { items })
@@ -3012,7 +3027,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // has_device_addr(list)
-        "has_device_addr" => {
+        ClauseName::HasDeviceAddr => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let items = parse_identifier_list(content.as_ref(), config)?;
                 Ok(ClauseData::HasDeviceAddr { items })
@@ -3024,7 +3039,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // allocate([allocator:] list)
-        "allocate" => {
+        ClauseName::Allocate => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref();
                 let (allocator_part, list_part) =
@@ -3046,7 +3061,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // allocator(allocator-handle)
-        "allocator" => {
+        ClauseName::Allocator => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let content = content.as_ref().trim();
                 if content.contains(':') {
@@ -3065,7 +3080,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // order(concurrent)
-        "order" => {
+        ClauseName::Order => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let value = content.as_ref().trim();
                 let (modifier, kind_str) =
@@ -3102,7 +3117,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // atomic_default_mem_order(seq_cst|acq_rel|...)
-        "atomic_default_mem_order" => {
+        ClauseName::AtomicDefaultMemOrder => {
             if let ClauseKind::Parenthesized(ref content) = clause.kind {
                 let order = match content.as_ref().trim() {
                     "seq_cst" => MemoryOrder::SeqCst,
@@ -3125,15 +3140,15 @@ pub fn parse_clause_data<'a>(
         }
 
         // atomic operation clauses (read/write/update/capture)
-        "read" => Ok(ClauseData::AtomicOperation {
+        ClauseName::Read => Ok(ClauseData::AtomicOperation {
             op: AtomicOp::Read,
             memory_order: None,
         }),
-        "write" => Ok(ClauseData::AtomicOperation {
+        ClauseName::Write => Ok(ClauseData::AtomicOperation {
             op: AtomicOp::Write,
             memory_order: None,
         }),
-        "update" => match &clause.kind {
+        ClauseName::Update => match &clause.kind {
             ClauseKind::Parenthesized(ref content) => {
                 let dep = match content.as_ref().trim() {
                     "in" => DepobjUpdateDependence::In,
@@ -3157,13 +3172,13 @@ pub fn parse_clause_data<'a>(
                 memory_order: None,
             }),
         },
-        "capture" => Ok(ClauseData::AtomicOperation {
+        ClauseName::Capture => Ok(ClauseData::AtomicOperation {
             op: AtomicOp::Capture,
             memory_order: None,
         }),
 
         // branch hints and SIMD modifiers
-        "nontemporal" | "uniform" => match &clause.kind {
+        ClauseName::Nontemporal | ClauseName::Uniform => match &clause.kind {
             ClauseKind::Parenthesized(content) => {
                 let items = parse_identifier_list(content.as_ref(), config)?;
                 Ok(ClauseData::ItemList(items))
@@ -3178,16 +3193,16 @@ pub fn parse_clause_data<'a>(
                 "{clause_name} clause requires a variable list"
             ))),
         },
-        "inbranch" => Ok(ClauseData::Bare(Identifier::new("inbranch"))),
-        "notinbranch" => Ok(ClauseData::Bare(Identifier::new("notinbranch"))),
-        "inclusive" => parse_scan_clause(ScanClauseMode::Inclusive, clause, config),
-        "exclusive" => parse_scan_clause(ScanClauseMode::Exclusive, clause, config),
+        ClauseName::Inbranch => Ok(ClauseData::Bare(Identifier::new("inbranch"))),
+        ClauseName::Notinbranch => Ok(ClauseData::Bare(Identifier::new("notinbranch"))),
+        ClauseName::Inclusive => parse_scan_clause(ScanClauseMode::Inclusive, clause, config),
+        ClauseName::Exclusive => parse_scan_clause(ScanClauseMode::Exclusive, clause, config),
 
         // uses_allocators(allocator[(traits)], ...)
-        "uses_allocators" => parse_uses_allocators_clause(&clause.kind, config),
+        ClauseName::UsesAllocators => parse_uses_allocators_clause(&clause.kind, config),
 
         // fail(memory-order) for atomic compare fail
-        "fail" => {
+        ClauseName::Fail => {
             let order = match &clause.kind {
                 ClauseKind::Parenthesized(content) => {
                     let trimmed = content.as_ref().trim();
@@ -3208,7 +3223,7 @@ pub fn parse_clause_data<'a>(
         }
 
         // assume/assumes clauses: absent(directive-name-list) / contains(directive-name-list)
-        "absent" | "contains" => {
+        clause_kind @ (ClauseName::Absent | ClauseName::Contains) => {
             let content = match &clause.kind {
                 ClauseKind::Parenthesized(content) => content.as_ref(),
                 _ => {
@@ -3225,15 +3240,15 @@ pub fn parse_clause_data<'a>(
                     .map(crate::parser::directive_kind::lookup_directive_name)
                     .collect();
 
-            if clause_name.eq_ignore_ascii_case("absent") {
-                Ok(ClauseData::Absent { directives })
-            } else {
-                Ok(ClauseData::Contains { directives })
+            match clause_kind {
+                ClauseName::Absent => Ok(ClauseData::Absent { directives }),
+                ClauseName::Contains => Ok(ClauseData::Contains { directives }),
+                _ => unreachable!("clause_kind filtered for absent/contains"),
             }
         }
 
         // requires(...) with modifiers
-        "requires" => parse_requires_clause(&clause.kind, config),
+        ClauseName::Requires => parse_requires_clause(&clause.kind, config),
 
         // --------------------------------------------------------------------
         // Generic fallback: preserve clause structure even when the clause
