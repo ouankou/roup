@@ -743,10 +743,10 @@ pub fn lookup_directive_name(name: &str) -> DirectiveName {
     if name.trim().eq_ignore_ascii_case("declare_target") {
         return DirectiveName::DeclareTargetUnderscore;
     }
-    if name.trim().eq_ignore_ascii_case("begin declare_target") {
+    if name.trim().eq_ignore_ascii_case("begin_declare_target") {
         return DirectiveName::BeginDeclareTargetUnderscore;
     }
-    if name.trim().eq_ignore_ascii_case("end declare_target") {
+    if name.trim().eq_ignore_ascii_case("end_declare_target") {
         return DirectiveName::EndDeclareTargetUnderscore;
     }
 
