@@ -730,27 +730,37 @@ fn normalize_directive_key(name: &str) -> String {
 
 /// Lookup a DirectiveName from a normalized name string. If not found, returns Other variant
 pub fn lookup_directive_name(name: &str) -> DirectiveName {
+    let trimmed = name.trim();
     // Some OpenACC directives intentionally require underscores rather than
     // accepting space-separated aliases (e.g., `host_data`). Recognize the
     // canonical underscore form before the general normalization that replaces
     // underscores with spaces.
-    if name.trim().eq_ignore_ascii_case("host_data") {
+    if trimmed.eq_ignore_ascii_case("host_data") {
         return DirectiveName::HostData;
     }
-    if name.trim().eq_ignore_ascii_case("target_data") {
+    if trimmed.eq_ignore_ascii_case("target_data") {
         return DirectiveName::TargetDataUnderscore;
     }
-    if name.trim().eq_ignore_ascii_case("declare_target") {
+    if trimmed.eq_ignore_ascii_case("declare_target") {
         return DirectiveName::DeclareTargetUnderscore;
     }
-    if name.trim().eq_ignore_ascii_case("begin declare_target")
-        || name.trim().eq_ignore_ascii_case("begin_declare_target")
-    {
+    // Preserve underscore spelling in begin/end declare_target even when
+    // whitespace separates the tokens (e.g., "begin declare_target").
+    let mut parts = trimmed.split_whitespace();
+    if let (Some(first), Some(second), None) = (parts.next(), parts.next(), parts.next()) {
+        if second.eq_ignore_ascii_case("declare_target") {
+            if first.eq_ignore_ascii_case("begin") {
+                return DirectiveName::BeginDeclareTargetUnderscore;
+            }
+            if first.eq_ignore_ascii_case("end") {
+                return DirectiveName::EndDeclareTargetUnderscore;
+            }
+        }
+    }
+    if trimmed.eq_ignore_ascii_case("begin_declare_target") {
         return DirectiveName::BeginDeclareTargetUnderscore;
     }
-    if name.trim().eq_ignore_ascii_case("end declare_target")
-        || name.trim().eq_ignore_ascii_case("end_declare_target")
-    {
+    if trimmed.eq_ignore_ascii_case("end_declare_target") {
         return DirectiveName::EndDeclareTargetUnderscore;
     }
 
