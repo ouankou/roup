@@ -3622,6 +3622,7 @@ static std::vector<std::vector<const char*>> collect_depend_iterators(const OmpC
     int32_t count = roup_clause_depend_iterator_count(rc);
     for (int32_t i = 0; i < count; ++i) {
         std::vector<const char*> entry;
+        entry.reserve(5);
         entry.push_back(duplicate_c_string(roup_clause_depend_iterator_type(rc, i)));
         entry.push_back(duplicate_c_string(roup_clause_depend_iterator_name(rc, i)));
         entry.push_back(duplicate_c_string(roup_clause_depend_iterator_start(rc, i)));
@@ -3637,6 +3638,7 @@ static std::vector<std::vector<const char*>> collect_affinity_iterators(const Om
     int32_t count = roup_clause_affinity_iterator_count(rc);
     for (int32_t i = 0; i < count; ++i) {
         std::vector<const char*> entry;
+        entry.reserve(5);
         entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_type(rc, i)));
         entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_name(rc, i)));
         entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_start(rc, i)));
