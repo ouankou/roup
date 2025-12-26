@@ -1368,64 +1368,55 @@ pub extern "C" fn roup_directive_name(directive: *const OmpDirective) -> *const 
 /// Whether the raw input used underscore spelling (e.g., declare_target).
 #[no_mangle]
 pub extern "C" fn roup_directive_has_underscore(directive: *const OmpDirective) -> i32 {
-    if directive.is_null() {
-        return 0;
-    }
-    unsafe { (*directive).underscore_hint as i32 }
+    directive_flag(directive, |dir| dir.underscore_hint)
 }
 
 /// Whether raw input spelled "compare capture".
 #[no_mangle]
 pub extern "C" fn roup_directive_is_compare_capture(directive: *const OmpDirective) -> i32 {
-    if directive.is_null() {
-        return 0;
-    }
-    unsafe { (*directive).compare_capture_hint as i32 }
+    directive_flag(directive, |dir| dir.compare_capture_hint)
 }
 
 /// Whether raw input spelled "end scope".
 #[no_mangle]
 pub extern "C" fn roup_directive_is_end_scope(directive: *const OmpDirective) -> i32 {
-    if directive.is_null() {
-        return 0;
-    }
-    unsafe { (*directive).end_scope_hint as i32 }
+    directive_flag(directive, |dir| dir.end_scope_hint)
 }
 
 /// Whether raw input used the compact Fortran "paralleldo" spelling.
 #[no_mangle]
 pub extern "C" fn roup_directive_is_compact_parallel_do(directive: *const OmpDirective) -> i32 {
-    if directive.is_null() {
-        return 0;
-    }
-    unsafe { (*directive).compact_parallel_do as i32 }
+    directive_flag(directive, |dir| dir.compact_parallel_do)
 }
 
 /// Whether raw input used the compact Fortran "enddo"/"enddosimd" spelling.
 #[no_mangle]
 pub extern "C" fn roup_directive_is_compact_end_do(directive: *const OmpDirective) -> i32 {
-    if directive.is_null() {
-        return 0;
-    }
-    unsafe { (*directive).compact_end_do as i32 }
+    directive_flag(directive, |dir| dir.compact_end_do)
 }
 
 /// Whether raw input spelled "end parallel single".
 #[no_mangle]
 pub extern "C" fn roup_directive_is_end_parallel_single(directive: *const OmpDirective) -> i32 {
-    if directive.is_null() {
-        return 0;
-    }
-    unsafe { (*directive).end_parallel_single as i32 }
+    directive_flag(directive, |dir| dir.end_parallel_single)
 }
 
 /// Whether raw input spelled "end metadirective".
 #[no_mangle]
 pub extern "C" fn roup_directive_is_end_metadirective(directive: *const OmpDirective) -> i32 {
+    directive_flag(directive, |dir| dir.end_metadirective)
+}
+
+#[inline]
+fn directive_flag(
+    directive: *const OmpDirective,
+    getter: impl FnOnce(&OmpDirective) -> bool,
+) -> i32 {
     if directive.is_null() {
         return 0;
     }
-    unsafe { (*directive).end_metadirective as i32 }
+    let directive = unsafe { &*directive };
+    getter(directive) as i32
 }
 
 /// Get directive parameter as a C string (e.g., "(a,b,c)" for allocate/threadprivate).
