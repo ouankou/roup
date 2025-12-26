@@ -19,6 +19,7 @@ pub enum DirectiveName {
     Barrier,
     BeginAssumes,
     BeginDeclareTarget,
+    BeginDeclareTargetUnderscore,
     BeginDeclareVariant,
     Cancel,
     CancellationPoint,
@@ -45,6 +46,7 @@ pub enum DirectiveName {
     DoSimd,
     EndAssumes,
     EndDeclareTarget,
+    EndDeclareTargetUnderscore,
     EndDeclareVariant,
     Error,
     Flush,
@@ -741,6 +743,12 @@ pub fn lookup_directive_name(name: &str) -> DirectiveName {
     if name.trim().eq_ignore_ascii_case("declare_target") {
         return DirectiveName::DeclareTargetUnderscore;
     }
+    if name.trim().eq_ignore_ascii_case("begin declare_target") {
+        return DirectiveName::BeginDeclareTargetUnderscore;
+    }
+    if name.trim().eq_ignore_ascii_case("end declare_target") {
+        return DirectiveName::EndDeclareTargetUnderscore;
+    }
 
     let normalized = normalize_directive_key(name);
     let key = normalized.to_ascii_lowercase();
@@ -784,6 +792,7 @@ impl DirectiveName {
             DirectiveName::Barrier => "barrier",
             DirectiveName::BeginAssumes => "begin assumes",
             DirectiveName::BeginDeclareTarget => "begin declare target",
+            DirectiveName::BeginDeclareTargetUnderscore => "begin declare_target",
             DirectiveName::DeclareTargetUnderscore => "declare_target",
             DirectiveName::BeginDeclareVariant => "begin declare variant",
             DirectiveName::Cancel => "cancel",
@@ -809,6 +818,7 @@ impl DirectiveName {
             DirectiveName::DoSimd => "do simd",
             DirectiveName::EndAssumes => "end assumes",
             DirectiveName::EndDeclareTarget => "end declare target",
+            DirectiveName::EndDeclareTargetUnderscore => "end declare_target",
             DirectiveName::EndDeclareVariant => "end declare variant",
             DirectiveName::Error => "error",
             DirectiveName::Flush => "flush",

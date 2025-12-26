@@ -68,7 +68,7 @@ use std::ptr;
 
 use crate::ast::{
     ClauseNormalizationMode, DirectiveBody, OmpClauseKind, OmpConstructType, OmpDeclareMapperId,
-    OmpDirectiveParameter, OmpScanMode, ReductionOperatorToken,
+    OmpDirectiveKind, OmpDirectiveParameter, OmpScanMode, ReductionOperatorToken,
 };
 use crate::ir::{
     convert_directive, AffinityModifier, AtomicOp, ClauseData as IrClauseData, ClauseItem,
@@ -335,6 +335,10 @@ pub struct OmpDirective {
     underscore_hint: bool,      // whether raw input used underscore spelling (e.g., declare_target)
     compare_capture_hint: bool, // whether raw input spelled "compare capture"
     end_scope_hint: bool,       // whether raw input spelled "end scope"
+    compact_parallel_do: bool,  // whether raw input used paralleldo compact form
+    compact_end_do: bool,       // whether raw input used enddo/enddosimd compact form
+    end_parallel_single: bool,  // whether raw input spelled "end parallel single"
+    end_metadirective: bool,    // whether raw input spelled "end metadirective"
 }
 
 /// Opaque clause type (C-compatible)
@@ -936,11 +940,6 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
         Err(_) => return ptr::null_mut(), // Invalid UTF-8
     };
 
-    let lower = rust_str.to_ascii_lowercase();
-    let _underscore_hint = lower.contains("declare_target");
-    let compare_capture_hint = lower.contains("compare capture");
-    let end_scope_hint = lower.contains("end scope");
-
     let parser = openmp::parser();
     let ast = match parser.parse_ast(
         rust_str,
@@ -961,15 +960,7 @@ pub extern "C" fn roup_parse(input: *const c_char) -> *mut OmpDirective {
         _ => return ptr::null_mut(),
     };
 
-    let underscore_hint = rust_str.contains("declare_target");
-
-    let c_directive = build_c_api_directive_from_ast(
-        &omp_ast,
-        Language::C,
-        underscore_hint,
-        compare_capture_hint,
-        end_scope_hint,
-    );
+    let c_directive = build_c_api_directive_from_ast(&omp_ast, Language::C);
 
     Box::into_raw(Box::new(c_directive))
 }
@@ -1125,11 +1116,6 @@ pub extern "C" fn roup_parse_with_language(
         Err(_) => return ptr::null_mut(),
     };
 
-    let lower = rust_str.to_ascii_lowercase();
-    let _underscore_hint = lower.contains("declare_target");
-    let compare_capture_hint = lower.contains("compare capture");
-    let end_scope_hint = lower.contains("end scope");
-
     let parser = openmp::parser().with_language(lang);
     let ast = match parser.parse_ast(
         rust_str,
@@ -1150,15 +1136,7 @@ pub extern "C" fn roup_parse_with_language(
         _ => return ptr::null_mut(),
     };
 
-    let underscore_hint = rust_str.contains("declare_target");
-
-    let c_directive = build_c_api_directive_from_ast(
-        &omp_ast,
-        lang,
-        underscore_hint,
-        compare_capture_hint,
-        end_scope_hint,
-    );
+    let c_directive = build_c_api_directive_from_ast(&omp_ast, lang);
 
     Box::into_raw(Box::new(c_directive))
 }
@@ -1425,6 +1403,66 @@ pub extern "C" fn roup_directive_is_end_scope(directive: *const OmpDirective) ->
     }
     unsafe {
         if (*directive).end_scope_hint {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+/// Whether raw input used the compact Fortran "paralleldo" spelling.
+#[no_mangle]
+pub extern "C" fn roup_directive_is_compact_parallel_do(directive: *const OmpDirective) -> i32 {
+    if directive.is_null() {
+        return 0;
+    }
+    unsafe {
+        if (*directive).compact_parallel_do {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+/// Whether raw input used the compact Fortran "enddo"/"enddosimd" spelling.
+#[no_mangle]
+pub extern "C" fn roup_directive_is_compact_end_do(directive: *const OmpDirective) -> i32 {
+    if directive.is_null() {
+        return 0;
+    }
+    unsafe {
+        if (*directive).compact_end_do {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+/// Whether raw input spelled "end parallel single".
+#[no_mangle]
+pub extern "C" fn roup_directive_is_end_parallel_single(directive: *const OmpDirective) -> i32 {
+    if directive.is_null() {
+        return 0;
+    }
+    unsafe {
+        if (*directive).end_parallel_single {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+/// Whether raw input spelled "end metadirective".
+#[no_mangle]
+pub extern "C" fn roup_directive_is_end_metadirective(directive: *const OmpDirective) -> i32 {
+    if directive.is_null() {
+        return 0;
+    }
+    unsafe {
+        if (*directive).end_metadirective {
             1
         } else {
             0
@@ -4139,12 +4177,25 @@ unsafe fn get_order_data(clause: &OmpClause) -> Option<&OrderData> {
 fn build_c_api_directive_from_ast(
     directive: &crate::ast::OmpDirective,
     language: Language,
-    underscore_hint: bool,
-    compare_capture_hint: bool,
-    end_scope_hint: bool,
 ) -> OmpDirective {
     with_clause_language(language, || {
         let directive_name: DirectiveName = directive.kind.into();
+        let underscore_hint = matches!(
+            directive.kind,
+            OmpDirectiveKind::DeclareTargetUnderscore
+                | OmpDirectiveKind::BeginDeclareTargetUnderscore
+                | OmpDirectiveKind::EndDeclareTargetUnderscore
+                | OmpDirectiveKind::TargetDataUnderscore
+        );
+        let compare_capture_hint = matches!(directive.kind, OmpDirectiveKind::AtomicCompareCapture);
+        let end_scope_hint = matches!(directive.kind, OmpDirectiveKind::EndScope);
+        let compact_parallel_do = matches!(directive.kind, OmpDirectiveKind::ParallelDoCompact);
+        let compact_end_do = matches!(
+            directive.kind,
+            OmpDirectiveKind::EndDoCompact | OmpDirectiveKind::EndDoSimdCompact
+        );
+        let end_parallel_single = matches!(directive.kind, OmpDirectiveKind::EndParallelSingle);
+        let end_metadirective = matches!(directive.kind, OmpDirectiveKind::EndMetadirective);
         let (name, extra_clause) =
             atomic_directive_info(directive_name.clone(), compare_capture_hint);
 
@@ -4201,6 +4252,10 @@ fn build_c_api_directive_from_ast(
             underscore_hint,
             compare_capture_hint,
             end_scope_hint,
+            compact_parallel_do,
+            compact_end_do,
+            end_parallel_single,
+            end_metadirective,
         }
     })
 }
@@ -5530,7 +5585,7 @@ fn build_selector_data(selector: &OmpSelector) -> *mut SelectorData {
         .nested_directive
         .as_ref()
         .map(|d| {
-            let c_dir = build_c_api_directive_from_ast(d, language, false, false, false);
+            let c_dir = build_c_api_directive_from_ast(d, language);
             Box::into_raw(Box::new(c_dir))
         })
         .unwrap_or(ptr::null_mut());
@@ -5628,13 +5683,7 @@ fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
             })
         }
         IrClauseData::MetadirectiveDefault { directive } => {
-            let nested = build_c_api_directive_from_ast(
-                directive,
-                current_clause_language(),
-                false,
-                false,
-                false,
-            );
+            let nested = build_c_api_directive_from_ast(directive, current_clause_language());
             let data_ptr = Box::into_raw(Box::new(DefaultClauseData {
                 default_kind: 4,
                 directive: Box::into_raw(Box::new(nested)),
@@ -6704,7 +6753,7 @@ fn build_directive_list_from_ast(
     }
     let mut items = Vec::with_capacity(directives.len());
     for dir in directives {
-        let c_dir = build_c_api_directive_from_ast(dir, language, false, false, false);
+        let c_dir = build_c_api_directive_from_ast(dir, language);
         items.push(Box::into_raw(Box::new(c_dir)));
     }
     Box::into_raw(Box::new(OmpDirectiveList { items }))
@@ -7351,67 +7400,67 @@ fn directive_name_enum_to_kind(name: DirectiveName) -> i32 {
     // These must match the sequential order in OpenMPKinds.h exactly
     // Generated from compat/ompparser/ompparser/src/OpenMPKinds.h
     let result = match name {
-        Parallel => 0,                                 // OMPD_parallel
-        For => 1,                                      // OMPD_for
-        Do => 2,                                       // OMPD_do
-        Simd => 3,                                     // OMPD_simd
-        ForSimd => 4,                                  // OMPD_for_simd
-        DoSimd => 5,                                   // OMPD_do_simd
-        ParallelForSimd => 6,                          // OMPD_parallel_for_simd
-        ParallelDoSimd => 7,                           // OMPD_parallel_do_simd
-        DeclareSimd => 8,                              // OMPD_declare_simd
-        Distribute => 9,                               // OMPD_distribute
-        DistributeSimd => 10,                          // OMPD_distribute_simd
-        DistributeParallelFor => 11,                   // OMPD_distribute_parallel_for
-        DistributeParallelDo => 12,                    // OMPD_distribute_parallel_do
-        DistributeParallelForSimd => 13,               // OMPD_distribute_parallel_for_simd
-        DistributeParallelDoSimd => 14,                // OMPD_distribute_parallel_do_simd
-        Loop => 15,                                    // OMPD_loop
-        Scan => 16,                                    // OMPD_scan
-        Sections => 17,                                // OMPD_sections
-        Section => 18,                                 // OMPD_section
-        Single => 19,                                  // OMPD_single
-        Workshare => 20,                               // OMPD_workshare
-        Cancel => 21,                                  // OMPD_cancel
-        CancellationPoint => 22,                       // OMPD_cancellation_point
-        Allocate => 23,                                // OMPD_allocate
-        Threadprivate => 24,                           // OMPD_threadprivate
-        DeclareReduction => 25,                        // OMPD_declare_reduction
-        DeclareMapper => 26,                           // OMPD_declare_mapper
-        ParallelFor => 27,                             // OMPD_parallel_for
-        ParallelDo | ParallelDoCompact => 28,          // OMPD_parallel_do
-        ParallelLoop => 29,                            // OMPD_parallel_loop
-        ParallelSections => 30,                        // OMPD_parallel_sections
-        ParallelSingle => 31,                          // OMPD_parallel_single
-        ParallelWorkshare => 32,                       // OMPD_parallel_workshare
-        ParallelMaster => 33,                          // OMPD_parallel_master
-        MasterTaskloop => 34,                          // OMPD_master_taskloop
-        MasterTaskloopSimd => 35,                      // OMPD_master_taskloop_simd
-        ParallelMasterTaskloop => 36,                  // OMPD_parallel_master_taskloop
-        ParallelMasterTaskloopSimd => 37,              // OMPD_parallel_master_taskloop_simd
-        Teams => 38,                                   // OMPD_teams
-        Metadirective => 39,                           // OMPD_metadirective
-        DeclareVariant => 40,                          // OMPD_declare_variant
-        BeginDeclareVariant => 41,                     // OMPD_begin_declare_variant
-        EndDeclareVariant => 42,                       // OMPD_end_declare_variant
-        Task => 43,                                    // OMPD_task
-        Taskloop => 44,                                // OMPD_taskloop
-        TaskloopSimd => 45,                            // OMPD_taskloop_simd
-        Taskyield => 46,                               // OMPD_taskyield
-        Requires => 47,                                // OMPD_requires
-        TargetData | TargetDataUnderscore => 48,       // OMPD_target_data
-        TargetDataComposite => 49,                     // OMPD_target_data_composite
-        TargetEnterData => 50,                         // OMPD_target_enter_data
-        TargetUpdate => 51,                            // OMPD_target_update
-        TargetExitData => 52,                          // OMPD_target_exit_data
-        Target => 53,                                  // OMPD_target
+        Parallel => 0,                                           // OMPD_parallel
+        For => 1,                                                // OMPD_for
+        Do => 2,                                                 // OMPD_do
+        Simd => 3,                                               // OMPD_simd
+        ForSimd => 4,                                            // OMPD_for_simd
+        DoSimd => 5,                                             // OMPD_do_simd
+        ParallelForSimd => 6,                                    // OMPD_parallel_for_simd
+        ParallelDoSimd => 7,                                     // OMPD_parallel_do_simd
+        DeclareSimd => 8,                                        // OMPD_declare_simd
+        Distribute => 9,                                         // OMPD_distribute
+        DistributeSimd => 10,                                    // OMPD_distribute_simd
+        DistributeParallelFor => 11,                             // OMPD_distribute_parallel_for
+        DistributeParallelDo => 12,                              // OMPD_distribute_parallel_do
+        DistributeParallelForSimd => 13, // OMPD_distribute_parallel_for_simd
+        DistributeParallelDoSimd => 14,  // OMPD_distribute_parallel_do_simd
+        Loop => 15,                      // OMPD_loop
+        Scan => 16,                      // OMPD_scan
+        Sections => 17,                  // OMPD_sections
+        Section => 18,                   // OMPD_section
+        Single => 19,                    // OMPD_single
+        Workshare => 20,                 // OMPD_workshare
+        Cancel => 21,                    // OMPD_cancel
+        CancellationPoint => 22,         // OMPD_cancellation_point
+        Allocate => 23,                  // OMPD_allocate
+        Threadprivate => 24,             // OMPD_threadprivate
+        DeclareReduction => 25,          // OMPD_declare_reduction
+        DeclareMapper => 26,             // OMPD_declare_mapper
+        ParallelFor => 27,               // OMPD_parallel_for
+        ParallelDo | ParallelDoCompact => 28, // OMPD_parallel_do
+        ParallelLoop => 29,              // OMPD_parallel_loop
+        ParallelSections => 30,          // OMPD_parallel_sections
+        ParallelSingle => 31,            // OMPD_parallel_single
+        ParallelWorkshare => 32,         // OMPD_parallel_workshare
+        ParallelMaster => 33,            // OMPD_parallel_master
+        MasterTaskloop => 34,            // OMPD_master_taskloop
+        MasterTaskloopSimd => 35,        // OMPD_master_taskloop_simd
+        ParallelMasterTaskloop => 36,    // OMPD_parallel_master_taskloop
+        ParallelMasterTaskloopSimd => 37, // OMPD_parallel_master_taskloop_simd
+        Teams => 38,                     // OMPD_teams
+        Metadirective => 39,             // OMPD_metadirective
+        DeclareVariant => 40,            // OMPD_declare_variant
+        BeginDeclareVariant => 41,       // OMPD_begin_declare_variant
+        EndDeclareVariant => 42,         // OMPD_end_declare_variant
+        Task => 43,                      // OMPD_task
+        Taskloop => 44,                  // OMPD_taskloop
+        TaskloopSimd => 45,              // OMPD_taskloop_simd
+        Taskyield => 46,                 // OMPD_taskyield
+        Requires => 47,                  // OMPD_requires
+        TargetData | TargetDataUnderscore => 48, // OMPD_target_data
+        TargetDataComposite => 49,       // OMPD_target_data_composite
+        TargetEnterData => 50,           // OMPD_target_enter_data
+        TargetUpdate => 51,              // OMPD_target_update
+        TargetExitData => 52,            // OMPD_target_exit_data
+        Target => 53,                    // OMPD_target
         DeclareTarget | DeclareTargetUnderscore => 54, // OMPD_declare_target
-        BeginDeclareTarget => 55,                      // OMPD_begin_declare_target
-        EndDeclareTarget => 56,                        // OMPD_end_declare_target
-        Master => 57,                                  // OMPD_master
-        End => 58,                                     // OMPD_end (bare "end" only)
-        EndMetadirective => 58,                        // treat as end
-        EndParallelSingle => 58,                       // treat as end
+        BeginDeclareTarget | BeginDeclareTargetUnderscore => 55, // OMPD_begin_declare_target
+        EndDeclareTarget | EndDeclareTargetUnderscore => 56, // OMPD_end_declare_target
+        Master => 57,                    // OMPD_master
+        End => 58,                       // OMPD_end (bare "end" only)
+        EndMetadirective => 58,          // treat as end
+        EndParallelSingle => 58,         // treat as end
         // End directives - each gets unique constant for enum-based compat layer
         // These map to OMPD_end in ompparser but need unique ROUP constants
         EndParallel => 131,

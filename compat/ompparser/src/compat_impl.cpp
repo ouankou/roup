@@ -229,6 +229,10 @@ extern "C" {
     int32_t roup_directive_has_underscore(const OmpDirective* directive);
     int32_t roup_directive_is_compare_capture(const OmpDirective* directive);
     int32_t roup_directive_is_end_scope(const OmpDirective* directive);
+    int32_t roup_directive_is_compact_parallel_do(const OmpDirective* directive);
+    int32_t roup_directive_is_compact_end_do(const OmpDirective* directive);
+    int32_t roup_directive_is_end_parallel_single(const OmpDirective* directive);
+    int32_t roup_directive_is_end_metadirective(const OmpDirective* directive);
 
     // Iterator operations (updated API with out parameter)
     int32_t roup_clause_iterator_next(OmpClauseIterator* iter, const OmpClause** out);
@@ -1011,17 +1015,17 @@ static OpenMPDirective* convert_roup_directive_to_ompparser(
     const bool underscore_hint = roup_directive_has_underscore(roup_dir) != 0;
     const bool compare_capture_hint = roup_directive_is_compare_capture(roup_dir) != 0;
     const bool end_scope_hint = roup_directive_is_end_scope(roup_dir) != 0;
-    const bool name_has_underscore = underscore_hint || (dir_name && strchr(dir_name, '_'));
+    const bool compact_parallel_do = roup_directive_is_compact_parallel_do(roup_dir) != 0;
+    const bool compact_end_do = roup_directive_is_compact_end_do(roup_dir) != 0;
+    const bool end_parallel_single = roup_directive_is_end_parallel_single(roup_dir) != 0;
+    const bool end_metadirective = roup_directive_is_end_metadirective(roup_dir) != 0;
+    const bool name_has_underscore = underscore_hint;
     OpenMPDirectiveKind kind = mapRoupToOmpparserDirective(roup_kind);
     if (debug_logging) {
         fprintf(stderr, "[compat] convert: roup_kind=%d mapped=%d\n", roup_kind, static_cast<int>(kind));
     }
 
     if (end_scope_hint && kind != OMPD_end) {
-        kind = OMPD_end;
-    }
-
-    if (dir_name && strncasecmp(dir_name, "end scope", 9) == 0) {
         kind = OMPD_end;
     }
 
@@ -1038,21 +1042,17 @@ static OpenMPDirective* convert_roup_directive_to_ompparser(
             OpenMPDirectiveKind paired_kind = getEndDirectivePairedKind(roup_kind);
             OpenMPEndDirective* end_dir = new OpenMPEndDirective();
             end_dir->setBaseLang(current_lang);
-            if (dir_name && (strcasecmp(dir_name, "enddo") == 0 || strcasecmp(dir_name, "enddosimd") == 0)) {
+            if (compact_end_do) {
                 end_dir->setUseCompactEndDo(true);
             }
             if (end_scope_hint) {
                 paired_kind = OMPD_scope;
             }
-            if (paired_kind == OMPD_unknown && dir_name) {
-                if (strcasecmp(dir_name, "end scope") == 0) {
-                    paired_kind = OMPD_scope;
-                } else if (strcasecmp(dir_name, "end parallel single") == 0 ||
-                           strcasecmp(dir_name, "endparallel single") == 0) {
-                    paired_kind = OMPD_parallel_single;
-                } else if (strncasecmp(dir_name, "end metadirective", 17) == 0) {
-                    paired_kind = OMPD_metadirective;
-                }
+            if (end_parallel_single) {
+                paired_kind = OMPD_parallel_single;
+            }
+            if (end_metadirective) {
+                paired_kind = OMPD_metadirective;
             }
             end_dir_owner = end_dir;
             if (paired_kind != OMPD_unknown) {
@@ -1153,7 +1153,7 @@ static OpenMPDirective* convert_roup_directive_to_ompparser(
     }
 
     // Preserve compact Fortran spelling (paralleldo) when requested.
-    if (dir && kind == OMPD_parallel_do && dir_name && strcasecmp(dir_name, "paralleldo") == 0) {
+    if (dir && kind == OMPD_parallel_do && compact_parallel_do) {
         dir->setCompactParallelDo(true);
     }
 
@@ -3617,34 +3617,43 @@ static void convert_clause_with_payload(
     }
 }
 
-static std::vector<std::vector<const char *>*> collect_depend_iterators(const OmpClause* rc) {
-    std::vector<std::vector<const char *>*> defs;
+static std::vector<std::vector<const char*>> collect_depend_iterators(const OmpClause* rc) {
+    std::vector<std::vector<const char*>> defs;
     int32_t count = roup_clause_depend_iterator_count(rc);
     for (int32_t i = 0; i < count; ++i) {
-        auto* entry = new std::vector<const char*>();
-        entry->push_back(duplicate_c_string(roup_clause_depend_iterator_type(rc, i)));
-        entry->push_back(duplicate_c_string(roup_clause_depend_iterator_name(rc, i)));
-        entry->push_back(duplicate_c_string(roup_clause_depend_iterator_start(rc, i)));
-        entry->push_back(duplicate_c_string(roup_clause_depend_iterator_end(rc, i)));
-        entry->push_back(duplicate_c_string(roup_clause_depend_iterator_step(rc, i)));
-        defs.push_back(entry);
+        std::vector<const char*> entry;
+        entry.push_back(duplicate_c_string(roup_clause_depend_iterator_type(rc, i)));
+        entry.push_back(duplicate_c_string(roup_clause_depend_iterator_name(rc, i)));
+        entry.push_back(duplicate_c_string(roup_clause_depend_iterator_start(rc, i)));
+        entry.push_back(duplicate_c_string(roup_clause_depend_iterator_end(rc, i)));
+        entry.push_back(duplicate_c_string(roup_clause_depend_iterator_step(rc, i)));
+        defs.push_back(std::move(entry));
     }
     return defs;
 }
 
-static std::vector<std::vector<const char *>*> collect_affinity_iterators(const OmpClause* rc) {
-    std::vector<std::vector<const char *>*> defs;
+static std::vector<std::vector<const char*>> collect_affinity_iterators(const OmpClause* rc) {
+    std::vector<std::vector<const char*>> defs;
     int32_t count = roup_clause_affinity_iterator_count(rc);
     for (int32_t i = 0; i < count; ++i) {
-        auto* entry = new std::vector<const char*>();
-        entry->push_back(duplicate_c_string(roup_clause_affinity_iterator_type(rc, i)));
-        entry->push_back(duplicate_c_string(roup_clause_affinity_iterator_name(rc, i)));
-        entry->push_back(duplicate_c_string(roup_clause_affinity_iterator_start(rc, i)));
-        entry->push_back(duplicate_c_string(roup_clause_affinity_iterator_end(rc, i)));
-        entry->push_back(duplicate_c_string(roup_clause_affinity_iterator_step(rc, i)));
-        defs.push_back(entry);
+        std::vector<const char*> entry;
+        entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_type(rc, i)));
+        entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_name(rc, i)));
+        entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_start(rc, i)));
+        entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_end(rc, i)));
+        entry.push_back(duplicate_c_string(roup_clause_affinity_iterator_step(rc, i)));
+        defs.push_back(std::move(entry));
     }
     return defs;
+}
+
+static void free_iterator_defs(std::vector<std::vector<const char*>> &defs) {
+    for (auto &def : defs) {
+        for (const char* s : def) {
+            free(const_cast<char*>(s));
+        }
+    }
+    defs.clear();
 }
 
 static void convert_depend_clause(OpenMPDirective* dir, const OmpClause* rc) {
@@ -3654,7 +3663,7 @@ static void convert_depend_clause(OpenMPDirective* dir, const OmpClause* rc) {
             : OMPC_DEPEND_MODIFIER_unspecified;
     OpenMPDependClauseType dep_type = mapRoupDependType(roup_clause_depend_type(rc));
 
-    std::vector<std::vector<const char *>*> iter_defs = collect_depend_iterators(rc);
+    std::vector<std::vector<const char*>> iter_defs = collect_depend_iterators(rc);
     if (normalize_clauses_global) {
         // Merge with an existing depend clause when modifier, type, and iterators match.
         for (OpenMPClause* existing : *dir->getClauses(OMPC_depend)) {
@@ -3669,17 +3678,17 @@ static void convert_depend_clause(OpenMPDirective* dir, const OmpClause* rc) {
                 }
                 bool equal_iters = true;
                 for (size_t i = 0; i < existing_iters.size(); ++i) {
-                    const auto* def = iter_defs[i];
-                    if (def == nullptr || def->size() < 5) {
+                    const auto& def = iter_defs[i];
+                    if (def.size() < 5) {
                         equal_iters = false;
                         break;
                     }
                     auto as_str = [](const char* s) -> std::string { return s ? std::string(s) : std::string(); };
-                    if (existing_iters[i].qualifier != as_str((*def)[0]) ||
-                        existing_iters[i].var != as_str((*def)[1]) ||
-                        existing_iters[i].begin != as_str((*def)[2]) ||
-                        existing_iters[i].end != as_str((*def)[3]) ||
-                        existing_iters[i].step != as_str((*def)[4])) {
+                    if (existing_iters[i].qualifier != as_str(def[0]) ||
+                        existing_iters[i].var != as_str(def[1]) ||
+                        existing_iters[i].begin != as_str(def[2]) ||
+                        existing_iters[i].end != as_str(def[3]) ||
+                        existing_iters[i].step != as_str(def[4])) {
                         equal_iters = false;
                         break;
                     }
@@ -3694,13 +3703,7 @@ static void convert_depend_clause(OpenMPDirective* dir, const OmpClause* rc) {
             if (vars) {
                 roup_string_list_free(vars);
             }
-            for (auto* def : iter_defs) {
-                if (def == nullptr) continue;
-                for (const char* s : *def) {
-                    free(const_cast<char*>(s));
-                }
-                delete def;
-            }
+            free_iterator_defs(iter_defs);
             return;
         }
     }
@@ -3711,8 +3714,9 @@ static void convert_depend_clause(OpenMPDirective* dir, const OmpClause* rc) {
     }
 
     if (!iter_defs.empty()) {
-        static_cast<OpenMPDependClause*>(clause)->setDependIteratorsDefinitionClass(&iter_defs);
+        static_cast<OpenMPDependClause*>(clause)->setDependIteratorsDefinitionClass(iter_defs);
     }
+    free_iterator_defs(iter_defs);
 
     OmpStringList* vars = roup_clause_variables(rc);
     append_variables_to_clause(clause, vars);
@@ -3788,11 +3792,12 @@ static void convert_affinity_clause(OpenMPDirective* dir, const OmpClause* rc) {
         return;
     }
 
-    std::vector<std::vector<const char *>*> iter_defs = collect_affinity_iterators(rc);
+    std::vector<std::vector<const char*>> iter_defs = collect_affinity_iterators(rc);
     OpenMPAffinityClause* affinity_clause = static_cast<OpenMPAffinityClause*>(clause);
-    for (auto* def : iter_defs) {
+    for (const auto& def : iter_defs) {
         affinity_clause->addIteratorsDefinitionClass(def);
     }
+    free_iterator_defs(iter_defs);
 
     OmpStringList* vars = roup_clause_variables(rc);
     append_variables_to_clause(clause, vars);

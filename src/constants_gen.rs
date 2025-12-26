@@ -133,6 +133,8 @@ fn ensure_no_underscore_variants(mappings: &[(String, i32)]) {
     let allowed: std::collections::HashSet<_> = [
         "target_data_underscore".to_string(),
         "declare_target_underscore".to_string(),
+        "begin_declare_target_underscore".to_string(),
+        "end_declare_target_underscore".to_string(),
     ]
     .into_iter()
     .collect();
