@@ -226,7 +226,7 @@ impl<'a> DirectiveBuilder {
     /// Add an if clause
     pub fn if_clause(mut self, condition: &'a str) -> Self {
         self.clauses.push(ClauseData::If {
-            directive_name: None,
+            modifier: None,
             condition: Expression::unparsed(condition),
         });
         self

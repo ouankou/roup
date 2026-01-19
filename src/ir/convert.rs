@@ -46,11 +46,11 @@ use super::{
     AtomicOp, BindModifier, ClauseData, ClauseItem, ConversionError, DefaultKind,
     DefaultmapBehavior, DefaultmapCategory, DependIterator, DependType, DepobjUpdateDependence,
     DeviceModifier, DeviceType, DirectiveIR, DirectiveKind, DoacrossType, Expression,
-    GrainsizeModifier, Identifier, InductionItem, InitKind, Language, LastprivateModifier,
-    LinearModifier, MapModifier, MapType, MemoryOrder, NowaitModifier, NumTasksModifier, OrderKind,
-    OrderModifier, ParserConfig, ProcBind, ReductionModifier, ReductionOperator, RequireModifier,
-    ScheduleKind, ScheduleModifier, SeverityKind, SourceLocation, UsesAllocatorBuiltin,
-    UsesAllocatorKind, UsesAllocatorSpec,
+    GrainsizeModifier, Identifier, IfModifier, InductionItem, InitKind, Language,
+    LastprivateModifier, LinearModifier, MapModifier, MapType, MemoryOrder, NowaitModifier,
+    NumTasksModifier, OrderKind, OrderModifier, ParserConfig, ProcBind, ReductionModifier,
+    ReductionOperator, RequireModifier, ScheduleKind, ScheduleModifier, SeverityKind,
+    SourceLocation, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
 };
 use crate::ast::{
     OmpClauseKind, OmpDirective, OmpDirectiveKind, OmpSelector, OmpSelectorConstruct,
@@ -571,6 +571,25 @@ pub fn parse_depend_type(type_str: &str) -> Result<DependType, ConversionError> 
         _ => Err(ConversionError::InvalidClauseSyntax(format!(
             "Unknown depend type: {type_str}"
         ))),
+    }
+}
+
+fn parse_if_modifier(text: &str) -> IfModifier {
+    let trimmed = text.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    match lower.as_str() {
+        "parallel" => IfModifier::Parallel,
+        "task" => IfModifier::Task,
+        "taskloop" => IfModifier::Taskloop,
+        "target" => IfModifier::Target,
+        "target data" => IfModifier::TargetData,
+        "target enter data" => IfModifier::TargetEnterData,
+        "target exit data" => IfModifier::TargetExitData,
+        "target update" => IfModifier::TargetUpdate,
+        "simd" => IfModifier::Simd,
+        "cancel" => IfModifier::Cancel,
+        "" => IfModifier::Unspecified,
+        _ => IfModifier::User(Identifier::new(trimmed)),
     }
 }
 
@@ -2133,12 +2152,12 @@ pub fn parse_clause_data<'a>(
                 // Check for directive-name modifier: "if(parallel: condition)"
                 if let Some((modifier, condition)) = lang::split_once_top_level(content, ':') {
                     Ok(ClauseData::If {
-                        directive_name: Some(Identifier::new(modifier.trim())),
+                        modifier: Some(parse_if_modifier(modifier)),
                         condition: Expression::new(condition.trim(), config),
                     })
                 } else {
                     Ok(ClauseData::If {
-                        directive_name: None,
+                        modifier: None,
                         condition: Expression::new(content.trim(), config),
                     })
                 }
@@ -3064,7 +3083,7 @@ pub fn parse_clause_data<'a>(
                     };
                 let allocator = allocator_part
                     .filter(|value| !value.is_empty())
-                    .map(Identifier::new);
+                    .map(classify_allocator_name);
                 let items = parse_identifier_list(list_part.trim(), config)?;
                 Ok(ClauseData::Allocate { allocator, items })
             } else {
@@ -3084,7 +3103,7 @@ pub fn parse_clause_data<'a>(
                     ));
                 }
                 Ok(ClauseData::Allocator {
-                    allocator: Identifier::new(content),
+                    allocator: classify_allocator_name(content),
                 })
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
@@ -3688,11 +3707,11 @@ mod tests {
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
         if let ClauseData::If {
-            directive_name,
+            modifier,
             condition,
         } = data
         {
-            assert!(directive_name.is_none());
+            assert!(modifier.is_none());
             assert_eq!(condition.to_string(), "n > 100");
         } else {
             panic!("Expected If clause");
@@ -3709,12 +3728,12 @@ mod tests {
         let config = ParserConfig::default();
         let data = parse_clause_data(&clause, &config).unwrap();
         if let ClauseData::If {
-            directive_name,
+            modifier,
             condition,
         } = data
         {
-            assert!(directive_name.is_some());
-            assert_eq!(directive_name.unwrap().to_string(), "parallel");
+            assert!(modifier.is_some());
+            assert_eq!(modifier.unwrap().to_string(), "parallel");
             assert_eq!(condition.to_string(), "n > 100");
         } else {
             panic!("Expected If clause");

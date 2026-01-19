@@ -519,6 +519,46 @@ impl fmt::Display for BindModifier {
 }
 
 // ============================================================================
+// If Clause Modifier (OpenMP 5.x)
+// ============================================================================
+
+/// Directive-name modifier for `if(...)` clauses.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum IfModifier {
+    Parallel,
+    Task,
+    Taskloop,
+    Target,
+    TargetData,
+    TargetEnterData,
+    TargetExitData,
+    TargetUpdate,
+    Simd,
+    Cancel,
+    Unspecified,
+    User(Identifier),
+}
+
+impl fmt::Display for IfModifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IfModifier::Parallel => write!(f, "parallel"),
+            IfModifier::Task => write!(f, "task"),
+            IfModifier::Taskloop => write!(f, "taskloop"),
+            IfModifier::Target => write!(f, "target"),
+            IfModifier::TargetData => write!(f, "target data"),
+            IfModifier::TargetEnterData => write!(f, "target enter data"),
+            IfModifier::TargetExitData => write!(f, "target exit data"),
+            IfModifier::TargetUpdate => write!(f, "target update"),
+            IfModifier::Simd => write!(f, "simd"),
+            IfModifier::Cancel => write!(f, "cancel"),
+            IfModifier::Unspecified => write!(f, ""),
+            IfModifier::User(id) => write!(f, "{id}"),
+        }
+    }
+}
+
+// ============================================================================
 // Atomic Default Memory Order (OpenMP 5.2 spec section 2.17.7)
 // ============================================================================
 
@@ -680,6 +720,12 @@ impl UsesAllocatorKind {
             UsesAllocatorKind::Builtin(builtin) => builtin.as_str(),
             UsesAllocatorKind::Custom(identifier) => identifier.as_str(),
         }
+    }
+}
+
+impl fmt::Display for UsesAllocatorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.canonical_name())
     }
 }
 
@@ -1456,7 +1502,7 @@ pub enum ClauseData {
     // ========================================================================
     /// `if([directive-name-modifier:] expression)` - Conditional execution
     If {
-        directive_name: Option<Identifier>,
+        modifier: Option<IfModifier>,
         condition: Expression,
     },
 
@@ -1535,12 +1581,12 @@ pub enum ClauseData {
     // ========================================================================
     /// `allocate([allocator:] list)` - Memory allocator
     Allocate {
-        allocator: Option<Identifier>,
+        allocator: Option<UsesAllocatorKind>,
         items: Vec<ClauseItem>,
     },
 
     /// `allocator(allocator-handle)` - Specify allocator
-    Allocator { allocator: Identifier },
+    Allocator { allocator: UsesAllocatorKind },
 
     // ========================================================================
     // Other clauses
@@ -1907,12 +1953,12 @@ impl fmt::Display for ClauseData {
                 write!(f, ")")
             }
             ClauseData::If {
-                directive_name,
+                modifier,
                 condition,
             } => {
                 write!(f, "if(")?;
-                if let Some(name) = directive_name {
-                    write!(f, "{name}: ")?;
+                if let Some(modifier) = modifier {
+                    write!(f, "{modifier}: ")?;
                 }
                 write!(f, "{condition})")
             }
@@ -2858,17 +2904,17 @@ mod tests {
     fn test_clause_data_if_simple() {
         let condition = Expression::unparsed("n > 100");
         let clause = ClauseData::If {
-            directive_name: None,
+            modifier: None,
             condition,
         };
         assert_eq!(clause.to_string(), "if(n > 100)");
     }
 
     #[test]
-    fn test_clause_data_if_with_directive_name() {
+    fn test_clause_data_if_with_modifier() {
         let condition = Expression::unparsed("n > 100");
         let clause = ClauseData::If {
-            directive_name: Some(Identifier::new("parallel")),
+            modifier: Some(IfModifier::Parallel),
             condition,
         };
         assert_eq!(clause.to_string(), "if(parallel: n > 100)");

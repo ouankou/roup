@@ -124,7 +124,7 @@ fn build_omp_directive(
 
     validate_omp_directive(kind, &clauses, host_language)?;
 
-    let parameter = build_omp_directive_parameter(directive, &clause_config);
+    let parameter = build_omp_directive_parameter(directive, &clause_config)?;
 
     Ok(OmpDirective {
         kind,
@@ -166,95 +166,127 @@ fn validate_omp_directive(
 fn build_omp_directive_parameter(
     directive: &Directive<'_>,
     parser_config: &ParserConfig,
-) -> Option<OmpDirectiveParameter> {
-    directive.parameter.as_ref().and_then(|param| {
-        let param_str = param.as_ref();
-        use crate::parser::directive_kind::DirectiveName;
+) -> Result<Option<OmpDirectiveParameter>, AstBuildError> {
+    let param = match directive.parameter.as_ref() {
+        Some(param) => param,
+        None => return Ok(None),
+    };
+    let param_str = param.as_ref();
+    use crate::parser::directive_kind::DirectiveName;
 
-        // Typed construct parameter for cancel / cancellation point
-        if matches!(
-            &directive.name,
-            DirectiveName::Cancel | DirectiveName::CancellationPoint
-        ) {
-            if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
-                eprintln!(
-                    "[ast] construct param directive={} value={param_str}",
-                    directive.name.as_ref()
-                );
-            }
-            let construct = match param_str.trim().to_ascii_lowercase().as_str() {
-                "parallel" => OmpConstructType::Parallel,
-                "sections" => OmpConstructType::Sections,
-                "for" | "do" => OmpConstructType::For,
-                "taskgroup" => OmpConstructType::Taskgroup,
-                other => OmpConstructType::Other(other.to_string()),
-            };
-            return Some(OmpDirectiveParameter::Construct(construct));
+    // Typed construct parameter for cancel / cancellation point
+    if matches!(
+        &directive.name,
+        DirectiveName::Cancel | DirectiveName::CancellationPoint
+    ) {
+        if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
+            eprintln!(
+                "[ast] construct param directive={} value={param_str}",
+                directive.name.as_ref()
+            );
         }
-
-        // Critical name
-        if matches!(&directive.name, DirectiveName::Critical) {
-            let trimmed = param_str.trim();
-            let cleaned = if trimmed.starts_with('(') && trimmed.ends_with(')') && trimmed.len() > 1
-            {
-                &trimmed[1..trimmed.len() - 1]
-            } else {
-                trimmed
-            };
-            if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
-                eprintln!("[ast] critical param value={param_str} cleaned={cleaned}");
+        let construct = match param_str.trim().to_ascii_lowercase().as_str() {
+            "parallel" => OmpConstructType::Parallel,
+            "sections" => OmpConstructType::Sections,
+            "for" | "do" => OmpConstructType::For,
+            "taskgroup" => OmpConstructType::Taskgroup,
+            other => {
+                return Err(AstBuildError::ParseFailure(format!(
+                    "unknown cancel construct: {other}"
+                )))
             }
-            return Some(OmpDirectiveParameter::CriticalSection(Identifier::new(
-                cleaned,
-            )));
-        }
+        };
+        return Ok(Some(OmpDirectiveParameter::Construct(construct)));
+    }
 
-        // depobj target identifier
-        if matches!(&directive.name, DirectiveName::Depobj) {
-            if let Some(list) = parse_identifier_list_parameter(param_str, parser_config) {
-                if let Some(first) = list.first() {
-                    return Some(OmpDirectiveParameter::Depobj(first.clone()));
-                }
-            }
-            return Some(OmpDirectiveParameter::Depobj(Identifier::new(param_str)));
+    // Critical name
+    if matches!(&directive.name, DirectiveName::Critical) {
+        let trimmed = param_str.trim();
+        let cleaned = if trimmed.starts_with('(') && trimmed.ends_with(')') && trimmed.len() > 1 {
+            &trimmed[1..trimmed.len() - 1]
+        } else {
+            trimmed
+        };
+        if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
+            eprintln!("[ast] critical param value={param_str} cleaned={cleaned}");
         }
+        return Ok(Some(OmpDirectiveParameter::CriticalSection(
+            Identifier::new(cleaned),
+        )));
+    }
 
-        // flush variable list
-        if matches!(&directive.name, DirectiveName::Flush) {
-            if let Some(list) = parse_identifier_list_parameter(param_str, parser_config) {
-                return Some(OmpDirectiveParameter::FlushList(list));
-            }
-            // No list: treat as empty list rather than raw string
-            return None;
+    // depobj target identifier
+    if matches!(&directive.name, DirectiveName::Depobj) {
+        let list = parse_identifier_list_parameter(param_str, parser_config)?;
+        let first = list.first().ok_or_else(|| {
+            AstBuildError::ParseFailure("depobj requires a target identifier".to_string())
+        })?;
+        return Ok(Some(OmpDirectiveParameter::Depobj(first.clone())));
+    }
+
+    // flush variable list
+    if matches!(&directive.name, DirectiveName::Flush) {
+        let trimmed = param_str.trim();
+        if trimmed.is_empty()
+            || (trimmed.starts_with('(')
+                && trimmed.ends_with(')')
+                && trimmed[1..trimmed.len() - 1].trim().is_empty())
+        {
+            return Ok(None);
         }
+        let list = parse_identifier_list_parameter(param_str, parser_config)?;
+        return Ok(Some(OmpDirectiveParameter::FlushList(list)));
+    }
 
-        if matches!(&directive.name, DirectiveName::DeclareSimd) {
-            return Some(OmpDirectiveParameter::DeclareSimd(
-                parse_declare_simd_target(param_str),
+    if matches!(&directive.name, DirectiveName::DeclareSimd) {
+        return Ok(Some(OmpDirectiveParameter::DeclareSimd(
+            parse_declare_simd_target(param_str),
+        )));
+    }
+
+    if matches!(&directive.name, DirectiveName::DeclareMapper) {
+        let mapper = parse_declare_mapper_param(param_str, parser_config).ok_or_else(|| {
+            AstBuildError::ParseFailure("declare mapper parameter is invalid".to_string())
+        })?;
+        return Ok(Some(OmpDirectiveParameter::DeclareMapper(mapper)));
+    }
+
+    if matches!(&directive.name, DirectiveName::DeclareReduction) {
+        let reduction =
+            parse_declare_reduction_param(param_str, parser_config).ok_or_else(|| {
+                AstBuildError::ParseFailure("declare reduction parameter is invalid".to_string())
+            })?;
+        return Ok(Some(OmpDirectiveParameter::DeclareReduction(reduction)));
+    }
+
+    if matches!(
+        &directive.name,
+        DirectiveName::DeclareVariant | DirectiveName::BeginDeclareVariant
+    ) {
+        let trimmed = param_str.trim();
+        let cleaned = if trimmed.starts_with('(') && trimmed.ends_with(')') && trimmed.len() > 1 {
+            trimmed[1..trimmed.len() - 1].trim()
+        } else {
+            trimmed
+        };
+        if cleaned.is_empty() {
+            return Err(AstBuildError::ParseFailure(
+                "declare variant requires a variant function".to_string(),
             ));
         }
+        return Ok(Some(OmpDirectiveParameter::VariantFunction(
+            Identifier::new(cleaned),
+        )));
+    }
 
-        if matches!(&directive.name, DirectiveName::DeclareMapper) {
-            if let Some(mapper) = parse_declare_mapper_param(param_str, parser_config) {
-                return Some(OmpDirectiveParameter::DeclareMapper(mapper));
-            }
-        }
+    if directive_expects_identifier_list(&directive.name) {
+        let list = parse_identifier_list_parameter(param_str, parser_config)?;
+        return Ok(Some(OmpDirectiveParameter::IdentifierList(list)));
+    }
 
-        if matches!(&directive.name, DirectiveName::DeclareReduction) {
-            if let Some(reduction) = parse_declare_reduction_param(param_str, parser_config) {
-                return Some(OmpDirectiveParameter::DeclareReduction(reduction));
-            }
-        }
-
-        if directive_expects_identifier_list(&directive.name) {
-            if let Some(list) = parse_identifier_list_parameter(param_str, parser_config) {
-                return Some(OmpDirectiveParameter::IdentifierList(list));
-            }
-        }
-        Some(OmpDirectiveParameter::Identifier(Identifier::new(
-            param_str,
-        )))
-    })
+    Ok(Some(OmpDirectiveParameter::Identifier(Identifier::new(
+        param_str,
+    ))))
 }
 
 fn directive_expects_identifier_list(name: &crate::parser::directive_kind::DirectiveName) -> bool {
@@ -268,22 +300,25 @@ fn directive_expects_identifier_list(name: &crate::parser::directive_kind::Direc
 fn parse_identifier_list_parameter(
     raw: &str,
     parser_config: &ParserConfig,
-) -> Option<Vec<Identifier>> {
+) -> Result<Vec<Identifier>, AstBuildError> {
     let trimmed = raw.trim();
     if !(trimmed.starts_with('(') && trimmed.ends_with(')')) {
-        return None;
+        return Err(AstBuildError::ParseFailure(
+            "expected a parenthesized identifier list".to_string(),
+        ));
     }
     let content = &trimmed[1..trimmed.len() - 1];
-    let items = parse_identifier_list(content, parser_config).ok()?;
+    let items = parse_identifier_list(content, parser_config)
+        .map_err(|err| AstBuildError::ParseFailure(err.to_string()))?;
     if items.is_empty() {
-        return None;
+        return Err(AstBuildError::ParseFailure(
+            "identifier list cannot be empty".to_string(),
+        ));
     }
-    Some(
-        items
-            .into_iter()
-            .map(clause_item_to_identifier)
-            .collect::<Vec<_>>(),
-    )
+    Ok(items
+        .into_iter()
+        .map(clause_item_to_identifier)
+        .collect::<Vec<_>>())
 }
 
 fn parse_declare_simd_target(raw: &str) -> OmpSimdTarget {

@@ -181,7 +181,6 @@ pub enum OmpConstructType {
     Sections,
     For,
     Taskgroup,
-    Other(String),
 }
 
 /// Structured data for `scan` directives.

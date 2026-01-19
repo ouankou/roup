@@ -1494,7 +1494,8 @@ static OpenMPDirective* convert_roup_directive_to_ompparser(
                 record_clause_in_order(init_clause);
             }
             handled_param = true;
-        } else if ((param_kind == ROUPO_PARAM_IDENTIFIER_LIST || param_kind == ROUPO_PARAM_IDENTIFIER) &&
+        } else if ((param_kind == ROUPO_PARAM_IDENTIFIER_LIST || param_kind == ROUPO_PARAM_IDENTIFIER ||
+                    param_kind == ROUPO_PARAM_VARIANT_FUNCTION) &&
                    (kind == OMPD_allocate || kind == OMPD_threadprivate ||
                     kind == OMPD_groupprivate || kind == OMPD_declare_mapper ||
                     kind == OMPD_declare_variant || kind == OMPD_declare_simd)) {
