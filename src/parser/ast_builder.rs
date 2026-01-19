@@ -587,7 +587,24 @@ fn build_requires_from_clauses(
                 }
             }
             ClauseName::ExtImplementationDefinedRequirement => {
-                requirements.push(RequireModifier::ExtImplementationDefinedRequirement(None))
+                let value = match &clause.kind {
+                    ClauseKind::Parenthesized(content) => {
+                        let trimmed = content.as_ref().trim();
+                        (!trimmed.is_empty()).then(|| Identifier::new(trimmed))
+                    }
+                    ClauseKind::VariableList(items) => items
+                        .first()
+                        .map(|item| item.as_ref().trim())
+                        .filter(|item| !item.is_empty())
+                        .map(Identifier::new),
+                    ClauseKind::Bare => None,
+                    _ => {
+                        return Err(AstBuildError::ClauseConversion(
+                            "invalid ext_implementation_defined_requirement payload".to_string(),
+                        ))
+                    }
+                };
+                requirements.push(RequireModifier::ExtImplementationDefinedRequirement(value))
             }
             ClauseName::Other(name) => {
                 requirements.push(RequireModifier::ExtImplementationDefinedRequirement(Some(

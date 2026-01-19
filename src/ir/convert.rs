@@ -1471,10 +1471,13 @@ fn parse_constructs_selector(
         } else {
             // If we cannot fully parse the nested directive, fall back to a bare directive kind
             // to keep structured (enum) representation without raw strings.
-            let name_token = directive_text.split_whitespace().next().ok_or_else(|| {
-                ConversionError::InvalidClauseSyntax("Empty construct selector".into())
-            })?;
-            if let Some(kind) = lookup_omp_construct(name_token) {
+            let trimmed = directive_text.trim();
+            if trimmed.is_empty() {
+                return Err(ConversionError::InvalidClauseSyntax(
+                    "Empty construct selector".into(),
+                ));
+            }
+            if let Some(kind) = lookup_omp_construct(trimmed) {
                 constructs.constructs.push(OmpSelectorConstruct {
                     score: score.clone(),
                     kind,
@@ -1498,14 +1501,8 @@ fn parse_constructs_selector(
 
 #[allow(dead_code)]
 fn lookup_omp_construct(name: &str) -> Option<OmpDirectiveKind> {
-    let normalized = name.trim().replace(' ', "");
-    for kind in OmpDirectiveKind::ALL {
-        let candidate = kind.as_str().replace(' ', "");
-        if candidate.eq_ignore_ascii_case(&normalized) {
-            return Some(*kind);
-        }
-    }
-    None
+    let canonical = crate::parser::directive_kind::lookup_directive_name(name);
+    OmpDirectiveKind::try_from(canonical).ok()
 }
 
 fn parse_scored_value(input: &str) -> (Option<String>, String) {
@@ -2001,6 +1998,7 @@ pub fn parse_clause_data<'a>(
                     "none" => Some(DefaultKind::None),
                     "private" => Some(DefaultKind::Private),
                     "firstprivate" => Some(DefaultKind::Firstprivate),
+                    "variant" => Some(DefaultKind::Variant),
                     _ => None,
                 };
                 if let Some(kind) = kind {
@@ -2097,6 +2095,22 @@ pub fn parse_clause_data<'a>(
                 )))
             }
         }
+
+        // interop/enter/local clauses expect a variable list payload
+        ClauseName::Interop | ClauseName::Enter | ClauseName::Local => match &clause.kind {
+            ClauseKind::Parenthesized(content) => {
+                let items = parse_identifier_list(content.as_ref(), config)?;
+                Ok(ClauseData::ItemList(items))
+            }
+            ClauseKind::VariableList(vars) => {
+                let joined = vars.join(", ");
+                let items = parse_identifier_list(&joined, config)?;
+                Ok(ClauseData::ItemList(items))
+            }
+            _ => Err(ConversionError::InvalidClauseSyntax(format!(
+                "{clause_name} clause requires a variable list"
+            ))),
+        },
 
         // num_threads(expr)
         ClauseName::NumThreads => {
@@ -3149,28 +3163,13 @@ pub fn parse_clause_data<'a>(
             memory_order: None,
         }),
         ClauseName::Update => match &clause.kind {
-            ClauseKind::Parenthesized(ref content) => {
-                let dep = match content.as_ref().trim() {
-                    "in" => DepobjUpdateDependence::In,
-                    "out" => DepobjUpdateDependence::Out,
-                    "inout" => DepobjUpdateDependence::Inout,
-                    "inoutset" => DepobjUpdateDependence::Inoutset,
-                    "mutexinoutset" => DepobjUpdateDependence::Mutexinoutset,
-                    "depobj" => DepobjUpdateDependence::Depobj,
-                    "sink" => DepobjUpdateDependence::Sink,
-                    "source" => DepobjUpdateDependence::Source,
-                    other => {
-                        return Err(ConversionError::InvalidClauseSyntax(format!(
-                            "Unknown depobj update dependence: {other}"
-                        )))
-                    }
-                };
-                Ok(ClauseData::DepobjUpdate { dependence: dep })
-            }
-            _ => Ok(ClauseData::AtomicOperation {
+            ClauseKind::Bare => Ok(ClauseData::AtomicOperation {
                 op: AtomicOp::Update,
                 memory_order: None,
             }),
+            _ => Err(ConversionError::InvalidClauseSyntax(
+                "update clause does not accept arguments outside depobj".to_string(),
+            )),
         },
         ClauseName::Capture => Ok(ClauseData::AtomicOperation {
             op: AtomicOp::Capture,
@@ -3540,7 +3539,12 @@ mod tests {
         let clause = directive
             .clauses
             .iter()
-            .find(|c| c.name.as_ref() == "uniform")
+            .find(|c| {
+                matches!(
+                    crate::parser::lookup_clause_name(c.name.as_ref()),
+                    ClauseName::Uniform
+                )
+            })
             .expect("uniform clause present");
 
         if let ClauseKind::Parenthesized(content) = &clause.kind {

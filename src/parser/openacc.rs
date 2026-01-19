@@ -479,12 +479,18 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("end", parse_end_directive);
     builder = builder.register_custom("routine", parse_routine_directive);
 
+    const CUSTOM_ACC_DIRECTIVES: &[OpenAccDirective] = &[
+        OpenAccDirective::Cache,
+        OpenAccDirective::Wait,
+        OpenAccDirective::End,
+        OpenAccDirective::Routine,
+    ];
+
     for directive in OpenAccDirective::ALL {
         let name = directive.as_str();
-        if matches!(name, "cache" | "wait" | "end" | "routine") {
-            continue;
+        if !CUSTOM_ACC_DIRECTIVES.contains(directive) {
+            builder = builder.register_generic(name);
         }
-        builder = builder.register_generic(name);
     }
 
     builder.build()

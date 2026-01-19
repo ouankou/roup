@@ -56,10 +56,16 @@ openmp_clauses! {
     Contains => { name: "contains", rule: ClauseRule::Parenthesized },
     Copyin => { name: "copyin", rule: ClauseRule::Parenthesized },
     Copyprivate => { name: "copyprivate", rule: ClauseRule::Parenthesized },
+    Parallel => { name: "parallel", rule: ClauseRule::Bare },
+    Sections => { name: "sections", rule: ClauseRule::Bare },
+    For => { name: "for", rule: ClauseRule::Bare },
+    Do => { name: "do", rule: ClauseRule::Bare },
+    Taskgroup => { name: "taskgroup", rule: ClauseRule::Bare },
     Counts => { name: "counts", rule: ClauseRule::Parenthesized },
     Default => { name: "default", rule: ClauseRule::Parenthesized },
     Defaultmap => { name: "defaultmap", rule: ClauseRule::Parenthesized },
     Depend => { name: "depend", rule: ClauseRule::Parenthesized },
+    DepobjUpdate => { name: "depobj_update", rule: ClauseRule::Parenthesized },
     Destroy => { name: "destroy", rule: ClauseRule::Flexible },
     Detach => { name: "detach", rule: ClauseRule::Parenthesized },
     Device => { name: "device", rule: ClauseRule::Parenthesized },
@@ -69,6 +75,7 @@ openmp_clauses! {
     DistSchedule => { name: "dist_schedule", rule: ClauseRule::Parenthesized },
     Doacross => { name: "doacross", rule: ClauseRule::Parenthesized },
     DynamicAllocators => { name: "dynamic_allocators", rule: ClauseRule::Bare },
+    ExtImplementationDefinedRequirement => { name: "ext_implementation_defined_requirement", rule: ClauseRule::Flexible },
     Enter => { name: "enter", rule: ClauseRule::Parenthesized },
     Exclusive => { name: "exclusive", rule: ClauseRule::Bare },
     Fail => { name: "fail", rule: ClauseRule::Flexible },
@@ -830,7 +837,8 @@ fn parse_depobj_directive<'a>(
 
     // Try to parse parenthesized depobj identifier (extended form)
     if let Ok((rest, depobj_id)) = parse_parenthesized_content(input) {
-        let (rest, clauses) = clause_registry.parse_sequence(rest)?;
+        let (rest, mut clauses) = clause_registry.parse_sequence(rest)?;
+        remap_depobj_update_clauses(&mut clauses);
 
         Ok((
             rest,
@@ -844,8 +852,18 @@ fn parse_depobj_directive<'a>(
         ))
     } else {
         // Fall back to standard clause parsing (bare form)
-        let (rest, clauses) = clause_registry.parse_sequence(input)?;
+        let (rest, mut clauses) = clause_registry.parse_sequence(input)?;
+        remap_depobj_update_clauses(&mut clauses);
         Ok((rest, Directive::new(name, None, clauses)))
+    }
+}
+
+fn remap_depobj_update_clauses(clauses: &mut [crate::parser::Clause<'_>]) {
+    for clause in clauses {
+        let kind = crate::parser::lookup_clause_name(clause.name.as_ref());
+        if matches!(kind, crate::parser::ClauseName::Update) {
+            clause.name = std::borrow::Cow::Owned("depobj_update".to_string());
+        }
     }
 }
 
@@ -1308,23 +1326,25 @@ fn parse_declare_induction_directive<'a>(
     ))
 }
 
-// Directive names that have custom parsers (excluding target_data underscore variant)
-const CUSTOM_PARSER_DIRECTIVES: &[&str] = &[
-    "allocate",
-    "threadprivate",
-    "declare target",
-    "declare induction",
-    "declare mapper",
-    "declare variant",
-    "declare reduction",
-    "declare simd",
-    "depobj",
-    "scan",
-    "cancel",
-    "cancellation point",
-    "groupprivate",
-    "critical",
-    "flush",
+// Directives that have custom parsers (enum-based, no string comparisons).
+const CUSTOM_PARSER_DIRECTIVES: &[OpenMpDirective] = &[
+    OpenMpDirective::Allocate,
+    OpenMpDirective::Threadprivate,
+    OpenMpDirective::DeclareTarget,
+    OpenMpDirective::DeclareInduction,
+    OpenMpDirective::DeclareMapper,
+    OpenMpDirective::DeclareVariant,
+    OpenMpDirective::DeclareReduction,
+    OpenMpDirective::DeclareSimd,
+    OpenMpDirective::Depobj,
+    OpenMpDirective::Scan,
+    OpenMpDirective::Cancel,
+    OpenMpDirective::CancellationPoint,
+    OpenMpDirective::Groupprivate,
+    OpenMpDirective::Critical,
+    OpenMpDirective::Flush,
+    OpenMpDirective::TargetData,
+    OpenMpDirective::TargetDataUnderscore,
 ];
 
 pub fn directive_registry() -> DirectiveRegistry {
@@ -1363,7 +1383,7 @@ pub fn directive_registry() -> DirectiveRegistry {
     for directive in OpenMpDirective::ALL {
         let name = directive.as_str();
         // Skip directives that already have custom parsers
-        if !CUSTOM_PARSER_DIRECTIVES.contains(&name) {
+        if !CUSTOM_PARSER_DIRECTIVES.contains(directive) {
             builder = builder.register_generic(name);
         }
     }
@@ -1412,7 +1432,7 @@ mod tests {
         // Check that "end atomic" is in the OpenMpDirective enum
         let found = OpenMpDirective::ALL
             .iter()
-            .any(|d| d.as_str() == "end atomic");
+            .any(|d| matches!(d, OpenMpDirective::EndAtomic));
         assert!(found, "end atomic not found in OpenMpDirective::ALL");
     }
 
@@ -1427,7 +1447,10 @@ mod tests {
         }
         assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
-        assert_eq!(directive.name.as_str(), "end atomic");
+        assert_eq!(
+            directive.name,
+            crate::parser::directive_kind::DirectiveName::EndAtomic
+        );
     }
 
     #[test]
@@ -1438,7 +1461,10 @@ mod tests {
         let result = parser.parse(input);
         assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
-        assert_eq!(directive.name.as_str(), "end critical");
+        assert_eq!(
+            directive.name,
+            crate::parser::directive_kind::DirectiveName::EndCritical
+        );
     }
 
     #[test]
@@ -1449,7 +1475,10 @@ mod tests {
         let result = parser.parse(input);
         assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
-        assert_eq!(directive.name.as_str(), "end distribute");
+        assert_eq!(
+            directive.name,
+            crate::parser::directive_kind::DirectiveName::EndDistribute
+        );
     }
 
     #[test]
@@ -1460,7 +1489,10 @@ mod tests {
         let result = parser.parse(input);
         assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
-        assert_eq!(directive.name.as_str(), "end parallel");
+        assert_eq!(
+            directive.name,
+            crate::parser::directive_kind::DirectiveName::EndParallel
+        );
     }
 
     #[test]
@@ -1471,7 +1503,10 @@ mod tests {
         let result = parser.parse(input);
         assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
-        assert_eq!(directive.name.as_str(), "end target");
+        assert_eq!(
+            directive.name,
+            crate::parser::directive_kind::DirectiveName::EndTarget
+        );
     }
 
     #[test]
@@ -1482,7 +1517,10 @@ mod tests {
         let result = parser.parse(input);
         assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
-        assert_eq!(directive.name.as_str(), "end do");
+        assert_eq!(
+            directive.name,
+            crate::parser::directive_kind::DirectiveName::EndDo
+        );
     }
 
     #[test]
@@ -1496,6 +1534,9 @@ mod tests {
         }
         assert!(result.is_ok(), "Failed to parse: {input}");
         let (_, directive) = result.unwrap();
-        assert_eq!(directive.name.as_str(), "masked");
+        assert_eq!(
+            directive.name,
+            crate::parser::directive_kind::DirectiveName::Masked
+        );
     }
 }

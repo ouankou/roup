@@ -376,6 +376,8 @@ pub enum DefaultKind {
     Private = 2,
     /// Variables are firstprivate by default
     Firstprivate = 3,
+    /// Default variant clause (OpenMP 6.0 metadirective fallback)
+    Variant = 4,
 }
 
 impl fmt::Display for DefaultKind {
@@ -385,6 +387,7 @@ impl fmt::Display for DefaultKind {
             DefaultKind::None => write!(f, "none"),
             DefaultKind::Private => write!(f, "private"),
             DefaultKind::Firstprivate => write!(f, "firstprivate"),
+            DefaultKind::Variant => write!(f, "variant"),
         }
     }
 }
@@ -2388,6 +2391,7 @@ mod tests {
         assert_eq!(DefaultKind::None.to_string(), "none");
         assert_eq!(DefaultKind::Private.to_string(), "private");
         assert_eq!(DefaultKind::Firstprivate.to_string(), "firstprivate");
+        assert_eq!(DefaultKind::Variant.to_string(), "variant");
     }
 
     #[test]

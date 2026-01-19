@@ -178,6 +178,7 @@ pub enum ClauseName {
     NoParallelism,
     Nocontext,
     Novariants,
+    Interop,
     Enter,
     Use,
     Other(Cow<'static, str>),
@@ -382,6 +383,7 @@ static CLAUSE_MAP: Lazy<HashMap<&'static str, ClauseName>> = Lazy::new(|| {
     insert!("no_parallelism", ClauseName::NoParallelism);
     insert!("nocontext", ClauseName::Nocontext);
     insert!("novariants", ClauseName::Novariants);
+    insert!("interop", ClauseName::Interop);
     insert!("enter", ClauseName::Enter);
     insert!("use", ClauseName::Use);
 
