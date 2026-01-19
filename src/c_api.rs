@@ -73,11 +73,12 @@ use crate::ast::{
 use crate::ir::{
     convert_directive, AffinityModifier, AtomicOp, ClauseData as IrClauseData, ClauseItem,
     DefaultKind, DefaultmapBehavior, DefaultmapCategory, DependIterator, DependType,
-    DepobjUpdateDependence, DeviceModifier, GrainsizeModifier, Identifier, InductionItem,
-    Language as IrLanguage, LastprivateModifier, LinearModifier, MapModifier, MapType, MemoryOrder,
-    NumTasksModifier, OmpSelector, OrderModifier, ParserConfig, ReductionModifier,
-    ReductionOperator, RequireModifier, ScheduleKind as IrScheduleKind, ScheduleModifier,
-    SourceLocation, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec, Variable,
+    DepobjUpdateDependence, DeviceModifier, GrainsizeModifier, Identifier, IfModifier,
+    InductionItem, Language as IrLanguage, LastprivateModifier, LinearModifier, MapModifier,
+    MapType, MemoryOrder, NumTasksModifier, OmpSelector, OrderModifier, ParserConfig,
+    ReductionModifier, ReductionOperator, RequireModifier, ScheduleKind as IrScheduleKind,
+    ScheduleModifier, SourceLocation, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
+    Variable,
 };
 use crate::lexer::Language;
 use crate::parser::directive_kind::{lookup_directive_name, DirectiveName};
@@ -769,7 +770,7 @@ const CLAUSE_KIND_FILTER: i32 = 90;
 #[allow(dead_code)] // still used by header generation; runtime uses AST constants
 const CLAUSE_KIND_COMPARE: i32 = 91;
 #[allow(dead_code)] // still used by header generation; runtime uses AST constants
-const CLAUSE_KIND_COMPARE_CAPTURE: i32 = 91;
+const CLAUSE_KIND_COMPARE_CAPTURE: i32 = 133;
 const CLAUSE_KIND_OTHERWISE: i32 = 101;
 const CLAUSE_KIND_FAIL: i32 = 92;
 const CLAUSE_KIND_WEAK: i32 = 93;
@@ -859,7 +860,6 @@ const ROUP_CONSTRUCT_TYPE_PARALLEL: i32 = 0;
 const ROUP_CONSTRUCT_TYPE_SECTIONS: i32 = 1;
 const ROUP_CONSTRUCT_TYPE_FOR: i32 = 2;
 const ROUP_CONSTRUCT_TYPE_TASKGROUP: i32 = 3;
-const ROUP_CONSTRUCT_TYPE_OTHER: i32 = 4;
 
 /// Iterator over clauses
 ///
@@ -4154,31 +4154,8 @@ fn build_c_api_directive_from_ast(
         let (name, extra_clause) =
             atomic_directive_info(directive_name.clone(), compare_capture_hint);
 
-        let (parameter_text, mut parameter_data) =
+        let (parameter_text, parameter_data) =
             directive_parameter_data_from_ast(directive.parameter.as_ref(), language);
-
-        if matches!(
-            directive_name,
-            DirectiveName::Allocate | DirectiveName::Threadprivate | DirectiveName::Groupprivate
-        ) && parameter_data.identifiers.is_null()
-        {
-            if let Some(param_text) = parameter_text.as_ref() {
-                let trimmed = param_text.trim();
-                if trimmed.starts_with('(') && trimmed.ends_with(')') {
-                    let inner = &trimmed[1..trimmed.len() - 1];
-                    let ids: Vec<String> = inner
-                        .split(',')
-                        .map(|s| s.trim())
-                        .filter(|s| !s.is_empty())
-                        .map(|s| s.to_string())
-                        .collect();
-                    if !ids.is_empty() {
-                        parameter_data.kind = ROUP_DIRECTIVE_PARAM_IDENTIFIER_LIST;
-                        parameter_data.identifiers = build_string_list_from_strings(&ids);
-                    }
-                }
-            }
-        }
 
         let mut clauses: Vec<OmpClause> = directive
             .clauses
@@ -4218,35 +4195,35 @@ fn build_c_api_directive_from_ast(
 fn atomic_directive_info(
     kind: DirectiveName,
     compare_capture_hint: bool,
-) -> (String, Option<&'static str>) {
+) -> (String, Option<ClauseName>) {
     match kind {
-        DirectiveName::AtomicRead => ("atomic".to_string(), Some("read")),
-        DirectiveName::AtomicWrite => ("atomic".to_string(), Some("write")),
-        DirectiveName::AtomicUpdate => ("atomic".to_string(), Some("update")),
-        DirectiveName::AtomicCapture => ("atomic".to_string(), Some("capture")),
+        DirectiveName::AtomicRead => ("atomic".to_string(), Some(ClauseName::Read)),
+        DirectiveName::AtomicWrite => ("atomic".to_string(), Some(ClauseName::Write)),
+        DirectiveName::AtomicUpdate => ("atomic".to_string(), Some(ClauseName::Update)),
+        DirectiveName::AtomicCapture => ("atomic".to_string(), Some(ClauseName::Capture)),
         DirectiveName::AtomicCompareCapture => {
             if compare_capture_hint {
                 (
                     "atomic compare capture".to_string(),
-                    Some("compare capture"),
+                    Some(ClauseName::CompareCapture),
                 )
             } else {
-                ("atomic compare".to_string(), Some("compare"))
+                ("atomic compare".to_string(), Some(ClauseName::Compare))
             }
         }
         _ => (kind.as_ref().to_string(), None),
     }
 }
 
-fn convert_atomic_suffix_clause(name: &str) -> OmpClause {
+fn convert_atomic_suffix_clause(name: ClauseName) -> OmpClause {
     let kind = match name {
-        "read" => CLAUSE_KIND_ATOMIC_READ,
-        "write" => CLAUSE_KIND_ATOMIC_WRITE,
-        "update" => CLAUSE_KIND_ATOMIC_UPDATE,
-        "capture" => CLAUSE_KIND_ATOMIC_CAPTURE,
-        "compare" => CLAUSE_KIND_COMPARE,
-        "compare capture" => CLAUSE_KIND_COMPARE_CAPTURE,
-        _ => panic!("unexpected atomic suffix clause: {name}"),
+        ClauseName::Read => CLAUSE_KIND_ATOMIC_READ,
+        ClauseName::Write => CLAUSE_KIND_ATOMIC_WRITE,
+        ClauseName::Update => CLAUSE_KIND_ATOMIC_UPDATE,
+        ClauseName::Capture => CLAUSE_KIND_ATOMIC_CAPTURE,
+        ClauseName::Compare => CLAUSE_KIND_COMPARE,
+        ClauseName::CompareCapture => CLAUSE_KIND_COMPARE_CAPTURE,
+        other => panic!("unexpected atomic suffix clause: {other:?}"),
     };
 
     OmpClause {
@@ -4300,7 +4277,6 @@ fn format_directive_parameter(param: &OmpDirectiveParameter) -> String {
             OmpConstructType::Sections => "sections".to_string(),
             OmpConstructType::For => "for".to_string(),
             OmpConstructType::Taskgroup => "taskgroup".to_string(),
-            OmpConstructType::Other(v) => v.clone(),
         },
         FlushList(list) => format!("({})", join_identifiers(list)),
         DeclareReduction(dr) => {
@@ -4351,29 +4327,6 @@ fn directive_parameter_data_from_ast(
         );
     }
 
-    // Helper to parse a parenthesized identifier list parameter into identifiers.
-    fn parse_param_identifier_list(
-        raw: &str,
-        _language: Language,
-    ) -> Option<(*mut OmpStringList, i32)> {
-        let trimmed = raw.trim();
-        if !(trimmed.starts_with('(') && trimmed.ends_with(')')) {
-            return None;
-        }
-        let inner = &trimmed[1..trimmed.len() - 1];
-        let ids: Vec<String> = inner
-            .split(',')
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_string())
-            .collect();
-        if ids.is_empty() {
-            return None;
-        }
-        let list = build_string_list_from_strings(&ids);
-        Some((list, ROUP_DIRECTIVE_PARAM_IDENTIFIER_LIST))
-    }
-
     if let Some(param) = parameter {
         if std::env::var_os("ROUP_DEBUG_CONSTRUCT").is_some() {
             let kind_name = match param {
@@ -4402,22 +4355,17 @@ fn directive_parameter_data_from_ast(
             | OmpDirectiveParameter::Mapper(id)
             | OmpDirectiveParameter::VariantFunction(id)
             | OmpDirectiveParameter::Depobj(id) => {
-                if let Some((list, kind)) = parse_param_identifier_list(id.name(), language) {
-                    data.kind = kind;
-                    data.identifiers = list;
-                } else {
-                    data.kind = match param {
-                        OmpDirectiveParameter::Identifier(_) => ROUP_DIRECTIVE_PARAM_IDENTIFIER,
-                        OmpDirectiveParameter::Mapper(_) => ROUP_DIRECTIVE_PARAM_MAPPER,
-                        OmpDirectiveParameter::VariantFunction(_) => {
-                            ROUP_DIRECTIVE_PARAM_VARIANT_FUNCTION
-                        }
-                        OmpDirectiveParameter::Depobj(_) => ROUP_DIRECTIVE_PARAM_DEPOBJ,
-                        _ => ROUP_DIRECTIVE_PARAM_IDENTIFIER,
-                    };
-                    data.identifiers =
-                        build_string_list_from_identifiers(std::slice::from_ref(id), language);
-                }
+                data.kind = match param {
+                    OmpDirectiveParameter::Identifier(_) => ROUP_DIRECTIVE_PARAM_IDENTIFIER,
+                    OmpDirectiveParameter::Mapper(_) => ROUP_DIRECTIVE_PARAM_MAPPER,
+                    OmpDirectiveParameter::VariantFunction(_) => {
+                        ROUP_DIRECTIVE_PARAM_VARIANT_FUNCTION
+                    }
+                    OmpDirectiveParameter::Depobj(_) => ROUP_DIRECTIVE_PARAM_DEPOBJ,
+                    _ => ROUP_DIRECTIVE_PARAM_IDENTIFIER,
+                };
+                data.identifiers =
+                    build_string_list_from_identifiers(std::slice::from_ref(id), language);
             }
             OmpDirectiveParameter::DeclareMapper(mapper) => {
                 data.kind = ROUP_DIRECTIVE_PARAM_MAPPER;
@@ -4452,7 +4400,6 @@ fn directive_parameter_data_from_ast(
                     OmpConstructType::Sections => ROUP_CONSTRUCT_TYPE_SECTIONS,
                     OmpConstructType::For => ROUP_CONSTRUCT_TYPE_FOR,
                     OmpConstructType::Taskgroup => ROUP_CONSTRUCT_TYPE_TASKGROUP,
-                    OmpConstructType::Other(_) => ROUP_CONSTRUCT_TYPE_OTHER,
                 };
             }
             OmpDirectiveParameter::DeclareReduction(dr) => {
@@ -4488,15 +4435,6 @@ fn directive_parameter_data_from_ast(
             "[c_api] parameter_kind={} construct_type={}",
             data.kind, data.construct_type
         );
-    }
-
-    if data.identifiers.is_null() {
-        if let Some(param_text) = text.as_ref() {
-            if let Some((list, kind)) = parse_param_identifier_list(param_text.trim(), language) {
-                data.kind = kind;
-                data.identifiers = list;
-            }
-        }
     }
 
     (text, data)
@@ -5233,12 +5171,12 @@ fn render_arguments_from_payload(payload: &IrClauseData) -> Option<String> {
         IrClauseData::Collapse { n } => Some(n.to_string()),
         IrClauseData::Ordered { n } => n.as_ref().map(|expr| expr.to_string()),
         IrClauseData::If {
-            directive_name,
+            modifier,
             condition,
         } => {
             let mut args = String::new();
-            if let Some(name) = directive_name {
-                args.push_str(&name.to_string());
+            if let Some(modifier) = modifier {
+                args.push_str(&modifier.to_string());
                 args.push_str(": ");
             }
             args.push_str(&condition.to_string());
@@ -5690,11 +5628,11 @@ fn convert_num_threads_clause_from_ast(payload: &IrClauseData) -> Option<OmpClau
 
 fn convert_if_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::If {
-        directive_name,
+        modifier,
         condition,
     } = payload
     {
-        let modifier_code = directive_name
+        let modifier_code = modifier
             .as_ref()
             .map(if_modifier_code)
             .unwrap_or(ROUP_IF_MODIFIER_UNSPECIFIED);
@@ -6295,10 +6233,9 @@ fn convert_allocate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
         let (allocator_text, allocator_kind) =
             allocator
                 .as_ref()
-                .map_or((ptr::null(), ROUP_OMPA_USES_ALLOCATOR_USER), |id| {
-                    let allocator_kind = allocator_kind_from_identifier(id);
-                    let kind_code = uses_allocator_kind_code(&allocator_kind).0;
-                    let text_ptr = allocate_c_string(id.name());
+                .map_or((ptr::null(), ROUP_OMPA_USES_ALLOCATOR_USER), |kind| {
+                    let kind_code = uses_allocator_kind_code(kind).0;
+                    let text_ptr = allocate_c_string(kind.canonical_name());
                     (text_ptr, kind_code)
                 });
         let variables = build_string_list_from_items(items);
@@ -6324,7 +6261,7 @@ fn convert_allocate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
 
 fn convert_allocator_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Allocator { allocator } = payload {
-        let (kind_code, _) = uses_allocator_kind_code(&allocator_kind_from_identifier(allocator));
+        let (kind_code, _) = uses_allocator_kind_code(allocator);
         return Some(OmpClause {
             kind: CLAUSE_KIND_ALLOCATOR,
             arguments: allocate_c_string(&allocator.to_string()),
@@ -7092,35 +7029,20 @@ fn uses_allocator_builtin_code(kind: UsesAllocatorBuiltin) -> i32 {
     }
 }
 
-fn allocator_kind_from_identifier(id: &Identifier) -> UsesAllocatorKind {
-    match id.as_str() {
-        "omp_default_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::Default),
-        "omp_large_cap_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::LargeCap),
-        "omp_const_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::Const),
-        "omp_high_bw_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::HighBw),
-        "omp_low_lat_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::LowLat),
-        "omp_cgroup_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::Cgroup),
-        "omp_pteam_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::Pteam),
-        "omp_thread_mem_alloc" => UsesAllocatorKind::Builtin(UsesAllocatorBuiltin::Thread),
-        _ => UsesAllocatorKind::Custom(id.clone()),
-    }
-}
-
-fn if_modifier_code(name: &Identifier) -> i32 {
-    let normalized = name.as_str().to_ascii_lowercase();
-    match normalized.as_str() {
-        "parallel" => ROUP_IF_MODIFIER_PARALLEL,
-        "task" => ROUP_IF_MODIFIER_TASK,
-        "taskloop" => ROUP_IF_MODIFIER_TASKLOOP,
-        "target" => ROUP_IF_MODIFIER_TARGET,
-        "target data" => ROUP_IF_MODIFIER_TARGET_DATA,
-        "target enter data" => ROUP_IF_MODIFIER_TARGET_ENTER_DATA,
-        "target exit data" => ROUP_IF_MODIFIER_TARGET_EXIT_DATA,
-        "target update" => ROUP_IF_MODIFIER_TARGET_UPDATE,
-        "simd" => ROUP_IF_MODIFIER_SIMD,
-        "cancel" => ROUP_IF_MODIFIER_CANCEL,
-        "" => ROUP_IF_MODIFIER_UNSPECIFIED,
-        _ => ROUP_IF_MODIFIER_USER,
+fn if_modifier_code(modifier: &IfModifier) -> i32 {
+    match modifier {
+        IfModifier::Parallel => ROUP_IF_MODIFIER_PARALLEL,
+        IfModifier::Task => ROUP_IF_MODIFIER_TASK,
+        IfModifier::Taskloop => ROUP_IF_MODIFIER_TASKLOOP,
+        IfModifier::Target => ROUP_IF_MODIFIER_TARGET,
+        IfModifier::TargetData => ROUP_IF_MODIFIER_TARGET_DATA,
+        IfModifier::TargetEnterData => ROUP_IF_MODIFIER_TARGET_ENTER_DATA,
+        IfModifier::TargetExitData => ROUP_IF_MODIFIER_TARGET_EXIT_DATA,
+        IfModifier::TargetUpdate => ROUP_IF_MODIFIER_TARGET_UPDATE,
+        IfModifier::Simd => ROUP_IF_MODIFIER_SIMD,
+        IfModifier::Cancel => ROUP_IF_MODIFIER_CANCEL,
+        IfModifier::Unspecified => ROUP_IF_MODIFIER_UNSPECIFIED,
+        IfModifier::User(_) => ROUP_IF_MODIFIER_USER,
     }
 }
 
@@ -7155,33 +7077,6 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
         }
     }
     0 // Default to static
-}
-
-/// Parse default clause data-sharing attribute.
-///
-/// Extracts the default sharing from clause like "default(shared)".
-/// Returns integer code for the default policy.
-///
-/// ## Default Codes:
-/// - 0 = shared
-/// - 1 = none
-/// - 2 = private
-/// - 3 = firstprivate
-/// - 4 = variant
-#[allow(dead_code)] // Used by constants/header generation tooling
-fn parse_default_kind(clause: &Clause) -> i32 {
-    if let ClauseKind::Parenthesized(ref args) = clause.kind {
-        let args = args.as_ref();
-        match args.trim().to_ascii_lowercase().as_str() {
-            "shared" => return DefaultKind::Shared as i32,
-            "none" => return DefaultKind::None as i32,
-            "private" => return DefaultKind::Private as i32,
-            "firstprivate" => return DefaultKind::Firstprivate as i32,
-            "variant" => return DefaultKind::Variant as i32,
-            _ => {}
-        }
-    }
-    DefaultKind::Shared as i32
 }
 
 /// Map a typed clause name to the ompparser clause kind code.

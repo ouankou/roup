@@ -53,10 +53,10 @@ pub use clause::{
     AdjustArgsModifier, AffinityModifier, ApplyTransform, ApplyTransformKind, AtKind, AtomicOp,
     BindModifier, ClauseData, ClauseItem, DefaultKind, DefaultmapBehavior, DefaultmapCategory,
     DependIterator, DependType, DepobjUpdateDependence, DeviceModifier, DeviceType, DoacrossType,
-    GrainsizeModifier, InductionItem, InitKind, LastprivateModifier, LinearModifier, MapModifier,
-    MapType, MemoryOrder, NowaitModifier, NumTasksModifier, OrderKind, OrderModifier, ProcBind,
-    ReductionModifier, ReductionOperator, RequireModifier, ScheduleKind, ScheduleModifier,
-    SeverityKind, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
+    GrainsizeModifier, IfModifier, InductionItem, InitKind, LastprivateModifier, LinearModifier,
+    MapModifier, MapType, MemoryOrder, NowaitModifier, NumTasksModifier, OrderKind, OrderModifier,
+    ProcBind, ReductionModifier, ReductionOperator, RequireModifier, ScheduleKind,
+    ScheduleModifier, SeverityKind, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
 };
 pub use convert::convert_directive;
 pub use directive::{DirectiveIR, DirectiveKind};
