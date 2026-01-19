@@ -240,6 +240,7 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
         ClauseName::NoParallelism => CLAUSE_KIND_NOPARALLELISM,
         ClauseName::Nocontext => CLAUSE_KIND_NOCONTEXT,
         ClauseName::Novariants => CLAUSE_KIND_NOVARIANTS,
+        ClauseName::Interop => CLAUSE_KIND_INTEROP,
         ClauseName::Enter => CLAUSE_KIND_ENTER,
         ClauseName::Use => CLAUSE_KIND_USE,
         // OpenACC-only clauses are not part of the OpenMP kind space; return UNKNOWN_KIND.
@@ -616,6 +617,8 @@ struct DefaultClauseData {
     directive: *mut OmpDirective,
 }
 
+const DEFAULT_KIND_VARIANT: i32 = DefaultKind::Variant as i32;
+
 #[repr(C)]
 struct DirectiveKindListData {
     kinds: Vec<i32>,
@@ -672,141 +675,142 @@ const MEMORY_ORDER_NAMES: [&[u8]; 5] = [
 const STRICT_MODIFIER_NAMES: [&[u8]; 1] = [b"strict\0"];
 const DEVICE_TYPE_NAMES: [&[u8]; 3] = [b"host\0", b"nohost\0", b"any\0"];
 // OpenMP clause kind codes (match compat/ompparser OpenMPClauseKind order)
-const CLAUSE_KIND_IF: i32 = 1;
-const CLAUSE_KIND_NUM_THREADS: i32 = 2;
-const CLAUSE_KIND_DEFAULT: i32 = 3;
-const CLAUSE_KIND_PRIVATE: i32 = 4;
-const CLAUSE_KIND_FIRSTPRIVATE: i32 = 5;
-const CLAUSE_KIND_SHARED: i32 = 6;
-const CLAUSE_KIND_COPYIN: i32 = 7;
-const CLAUSE_KIND_ALIGN: i32 = 8;
-const CLAUSE_KIND_REDUCTION: i32 = 9;
-const CLAUSE_KIND_PROC_BIND: i32 = 10;
-const CLAUSE_KIND_ALLOCATE: i32 = 11;
-const CLAUSE_KIND_NUM_TEAMS: i32 = 12;
-const CLAUSE_KIND_THREAD_LIMIT: i32 = 13;
-const CLAUSE_KIND_LASTPRIVATE: i32 = 14;
-const CLAUSE_KIND_COLLAPSE: i32 = 15;
-const CLAUSE_KIND_ORDERED: i32 = 16;
-const CLAUSE_KIND_PARTIAL: i32 = 17;
-const CLAUSE_KIND_NOWAIT: i32 = 18;
-const CLAUSE_KIND_FULL: i32 = 19;
-const CLAUSE_KIND_ORDER: i32 = 20;
-const CLAUSE_KIND_LINEAR: i32 = 21;
-const CLAUSE_KIND_SCHEDULE: i32 = 22;
-const CLAUSE_KIND_SAFELEN: i32 = 23;
-const CLAUSE_KIND_SIMDLEN: i32 = 24;
-const CLAUSE_KIND_ALIGNED: i32 = 25;
-const CLAUSE_KIND_NONTEMPORAL: i32 = 26;
-const CLAUSE_KIND_UNIFORM: i32 = 27;
-const CLAUSE_KIND_INBRANCH: i32 = 28;
-const CLAUSE_KIND_NOTINBRANCH: i32 = 29;
-const CLAUSE_KIND_DIST_SCHEDULE: i32 = 30;
-const CLAUSE_KIND_BIND: i32 = 31;
-const CLAUSE_KIND_INCLUSIVE: i32 = 32;
-const CLAUSE_KIND_EXCLUSIVE: i32 = 33;
-const CLAUSE_KIND_COPYPRIVATE: i32 = 34;
-const CLAUSE_KIND_PARALLEL: i32 = 35;
-const CLAUSE_KIND_SECTIONS: i32 = 36;
-const CLAUSE_KIND_FOR: i32 = 37;
-const CLAUSE_KIND_DO: i32 = 38;
-const CLAUSE_KIND_TASKGROUP: i32 = 39;
-const CLAUSE_KIND_ALLOCATOR: i32 = 40;
-const CLAUSE_KIND_INITIALIZER: i32 = 41;
-const CLAUSE_KIND_FINAL: i32 = 42;
-const CLAUSE_KIND_UNTIED: i32 = 43;
-const CLAUSE_KIND_REQUIRES: i32 = 44;
-const CLAUSE_KIND_MERGEABLE: i32 = 45;
-const CLAUSE_KIND_IN_REDUCTION: i32 = 46;
-const CLAUSE_KIND_DEPEND: i32 = 47;
-const CLAUSE_KIND_PRIORITY: i32 = 48;
-const CLAUSE_KIND_AFFINITY: i32 = 49;
-const CLAUSE_KIND_DETACH: i32 = 50;
-const CLAUSE_KIND_GRAINSIZE: i32 = 51;
-const CLAUSE_KIND_NUM_TASKS: i32 = 52;
-const CLAUSE_KIND_NOGROUP: i32 = 53;
-const CLAUSE_KIND_REVERSE_OFFLOAD: i32 = 54;
-const CLAUSE_KIND_UNIFIED_ADDRESS: i32 = 55;
-const CLAUSE_KIND_UNIFIED_SHARED_MEMORY: i32 = 56;
-const CLAUSE_KIND_ATOMIC_DEFAULT_MEM_ORDER: i32 = 57;
-const CLAUSE_KIND_DYNAMIC_ALLOCATORS: i32 = 58;
-const CLAUSE_KIND_SELF: i32 = 59;
-const CLAUSE_KIND_EXT_IMPLEMENTATION_DEFINED_REQUIREMENT: i32 = 60;
-const CLAUSE_KIND_DEVICE: i32 = 61;
-const CLAUSE_KIND_MAP: i32 = 62;
-const CLAUSE_KIND_USE_DEVICE_PTR: i32 = 63;
-const CLAUSE_KIND_SIZES: i32 = 64;
-const CLAUSE_KIND_USE_DEVICE_ADDR: i32 = 65;
-const CLAUSE_KIND_IS_DEVICE_PTR: i32 = 66;
-const CLAUSE_KIND_HAS_DEVICE_ADDR: i32 = 67;
-const CLAUSE_KIND_DEFAULTMAP: i32 = 68;
-const CLAUSE_KIND_TO: i32 = 69;
-const CLAUSE_KIND_FROM: i32 = 70;
-const CLAUSE_KIND_USES_ALLOCATORS: i32 = 71;
-const CLAUSE_KIND_WHEN: i32 = 72;
-const CLAUSE_KIND_MATCH: i32 = 73;
-const CLAUSE_KIND_LINK: i32 = 74;
-const CLAUSE_KIND_DEVICE_TYPE: i32 = 75;
-const CLAUSE_KIND_TASK_REDUCTION: i32 = 76;
-const CLAUSE_KIND_ACQ_REL: i32 = 77;
-const CLAUSE_KIND_RELEASE: i32 = 78;
-const CLAUSE_KIND_ACQUIRE: i32 = 79;
-const CLAUSE_KIND_ATOMIC_READ: i32 = 80;
-const CLAUSE_KIND_ATOMIC_WRITE: i32 = 81;
-const CLAUSE_KIND_ATOMIC_UPDATE: i32 = 82;
-const CLAUSE_KIND_ATOMIC_CAPTURE: i32 = 83;
-const CLAUSE_KIND_SEQ_CST: i32 = 84;
-const CLAUSE_KIND_RELAXED: i32 = 85;
-const CLAUSE_KIND_HINT: i32 = 86;
-const CLAUSE_KIND_DESTROY: i32 = 87;
-const CLAUSE_KIND_DEPOBJ_UPDATE: i32 = 88;
-const CLAUSE_KIND_THREADS: i32 = 89;
-const CLAUSE_KIND_SIMD: i32 = 90;
-const CLAUSE_KIND_FILTER: i32 = 91;
+const CLAUSE_KIND_IF: i32 = 0;
+const CLAUSE_KIND_NUM_THREADS: i32 = 1;
+const CLAUSE_KIND_DEFAULT: i32 = 2;
+const CLAUSE_KIND_PRIVATE: i32 = 3;
+const CLAUSE_KIND_FIRSTPRIVATE: i32 = 4;
+const CLAUSE_KIND_SHARED: i32 = 5;
+const CLAUSE_KIND_COPYIN: i32 = 6;
+const CLAUSE_KIND_ALIGN: i32 = 7;
+const CLAUSE_KIND_REDUCTION: i32 = 8;
+const CLAUSE_KIND_PROC_BIND: i32 = 9;
+const CLAUSE_KIND_ALLOCATE: i32 = 10;
+const CLAUSE_KIND_NUM_TEAMS: i32 = 11;
+const CLAUSE_KIND_THREAD_LIMIT: i32 = 12;
+const CLAUSE_KIND_LASTPRIVATE: i32 = 13;
+const CLAUSE_KIND_COLLAPSE: i32 = 14;
+const CLAUSE_KIND_ORDERED: i32 = 15;
+const CLAUSE_KIND_PARTIAL: i32 = 16;
+const CLAUSE_KIND_NOWAIT: i32 = 17;
+const CLAUSE_KIND_FULL: i32 = 18;
+const CLAUSE_KIND_ORDER: i32 = 19;
+const CLAUSE_KIND_LINEAR: i32 = 20;
+const CLAUSE_KIND_SCHEDULE: i32 = 21;
+const CLAUSE_KIND_SAFELEN: i32 = 22;
+const CLAUSE_KIND_SIMDLEN: i32 = 23;
+const CLAUSE_KIND_ALIGNED: i32 = 24;
+const CLAUSE_KIND_NONTEMPORAL: i32 = 25;
+const CLAUSE_KIND_UNIFORM: i32 = 26;
+const CLAUSE_KIND_INBRANCH: i32 = 27;
+const CLAUSE_KIND_NOTINBRANCH: i32 = 28;
+const CLAUSE_KIND_DIST_SCHEDULE: i32 = 29;
+const CLAUSE_KIND_BIND: i32 = 30;
+const CLAUSE_KIND_INCLUSIVE: i32 = 31;
+const CLAUSE_KIND_EXCLUSIVE: i32 = 32;
+const CLAUSE_KIND_COPYPRIVATE: i32 = 33;
+const CLAUSE_KIND_PARALLEL: i32 = 34;
+const CLAUSE_KIND_SECTIONS: i32 = 35;
+const CLAUSE_KIND_FOR: i32 = 36;
+const CLAUSE_KIND_DO: i32 = 37;
+const CLAUSE_KIND_TASKGROUP: i32 = 38;
+const CLAUSE_KIND_ALLOCATOR: i32 = 39;
+const CLAUSE_KIND_INITIALIZER: i32 = 40;
+const CLAUSE_KIND_FINAL: i32 = 41;
+const CLAUSE_KIND_UNTIED: i32 = 42;
+const CLAUSE_KIND_REQUIRES: i32 = 43;
+const CLAUSE_KIND_MERGEABLE: i32 = 44;
+const CLAUSE_KIND_IN_REDUCTION: i32 = 45;
+const CLAUSE_KIND_DEPEND: i32 = 46;
+const CLAUSE_KIND_PRIORITY: i32 = 47;
+const CLAUSE_KIND_AFFINITY: i32 = 48;
+const CLAUSE_KIND_DETACH: i32 = 49;
+const CLAUSE_KIND_GRAINSIZE: i32 = 50;
+const CLAUSE_KIND_NUM_TASKS: i32 = 51;
+const CLAUSE_KIND_NOGROUP: i32 = 52;
+const CLAUSE_KIND_REVERSE_OFFLOAD: i32 = 53;
+const CLAUSE_KIND_UNIFIED_ADDRESS: i32 = 54;
+const CLAUSE_KIND_UNIFIED_SHARED_MEMORY: i32 = 55;
+const CLAUSE_KIND_ATOMIC_DEFAULT_MEM_ORDER: i32 = 56;
+const CLAUSE_KIND_DYNAMIC_ALLOCATORS: i32 = 57;
+const CLAUSE_KIND_SELF: i32 = 58;
+const CLAUSE_KIND_EXT_IMPLEMENTATION_DEFINED_REQUIREMENT: i32 = 59;
+const CLAUSE_KIND_DEVICE: i32 = 60;
+const CLAUSE_KIND_MAP: i32 = 61;
+const CLAUSE_KIND_USE_DEVICE_PTR: i32 = 62;
+const CLAUSE_KIND_SIZES: i32 = 63;
+const CLAUSE_KIND_USE_DEVICE_ADDR: i32 = 64;
+const CLAUSE_KIND_IS_DEVICE_PTR: i32 = 65;
+const CLAUSE_KIND_HAS_DEVICE_ADDR: i32 = 66;
+const CLAUSE_KIND_DEFAULTMAP: i32 = 67;
+const CLAUSE_KIND_TO: i32 = 68;
+const CLAUSE_KIND_FROM: i32 = 69;
+const CLAUSE_KIND_USES_ALLOCATORS: i32 = 70;
+const CLAUSE_KIND_WHEN: i32 = 71;
+const CLAUSE_KIND_MATCH: i32 = 72;
+const CLAUSE_KIND_LINK: i32 = 73;
+const CLAUSE_KIND_DEVICE_TYPE: i32 = 74;
+const CLAUSE_KIND_TASK_REDUCTION: i32 = 75;
+const CLAUSE_KIND_ACQ_REL: i32 = 76;
+const CLAUSE_KIND_RELEASE: i32 = 77;
+const CLAUSE_KIND_ACQUIRE: i32 = 78;
+const CLAUSE_KIND_ATOMIC_READ: i32 = 79;
+const CLAUSE_KIND_ATOMIC_WRITE: i32 = 80;
+const CLAUSE_KIND_ATOMIC_UPDATE: i32 = 81;
+const CLAUSE_KIND_ATOMIC_CAPTURE: i32 = 82;
+const CLAUSE_KIND_SEQ_CST: i32 = 83;
+const CLAUSE_KIND_RELAXED: i32 = 84;
+const CLAUSE_KIND_HINT: i32 = 85;
+const CLAUSE_KIND_DESTROY: i32 = 86;
+const CLAUSE_KIND_DEPOBJ_UPDATE: i32 = 87;
+const CLAUSE_KIND_THREADS: i32 = 88;
+const CLAUSE_KIND_SIMD: i32 = 89;
+const CLAUSE_KIND_FILTER: i32 = 90;
 #[allow(dead_code)] // still used by header generation; runtime uses AST constants
-const CLAUSE_KIND_COMPARE: i32 = 92;
+const CLAUSE_KIND_COMPARE: i32 = 91;
 #[allow(dead_code)] // still used by header generation; runtime uses AST constants
-const CLAUSE_KIND_COMPARE_CAPTURE: i32 = 92;
-const CLAUSE_KIND_OTHERWISE: i32 = 102;
-const CLAUSE_KIND_FAIL: i32 = 103;
-const CLAUSE_KIND_WEAK: i32 = 104;
-const CLAUSE_KIND_AT: i32 = 105;
-const CLAUSE_KIND_SEVERITY: i32 = 106;
-const CLAUSE_KIND_MESSAGE: i32 = 107;
-const CLAUSE_KIND_DOACROSS: i32 = 108;
-const CLAUSE_KIND_ABSENT: i32 = 109;
-const CLAUSE_KIND_CONTAINS: i32 = 110;
-const CLAUSE_KIND_HOLDS: i32 = 111;
-const CLAUSE_KIND_GRAPH_ID: i32 = 112;
-const CLAUSE_KIND_GRAPH_RESET: i32 = 113;
-const CLAUSE_KIND_TRANSPARENT: i32 = 114;
-const CLAUSE_KIND_REPLAYABLE: i32 = 115;
-const CLAUSE_KIND_THREADSET: i32 = 116;
-const CLAUSE_KIND_INDIRECT: i32 = 117;
-const CLAUSE_KIND_LOCAL: i32 = 118;
-const CLAUSE_KIND_INIT: i32 = 119;
-const CLAUSE_KIND_INIT_COMPLETE: i32 = 120;
-const CLAUSE_KIND_SAFESYNC: i32 = 121;
-const CLAUSE_KIND_DEVICE_SAFESYNC: i32 = 122;
-const CLAUSE_KIND_MEMSCOPE: i32 = 123;
-const CLAUSE_KIND_LOOPRANGE: i32 = 124;
-const CLAUSE_KIND_PERMUTATION: i32 = 125;
-const CLAUSE_KIND_COUNTS: i32 = 126;
-const CLAUSE_KIND_INDUCTION: i32 = 127;
-const CLAUSE_KIND_INDUCTOR: i32 = 128;
-const CLAUSE_KIND_COLLECTOR: i32 = 129;
-const CLAUSE_KIND_COMBINER: i32 = 130;
-const CLAUSE_KIND_ADJUST_ARGS: i32 = 131;
-const CLAUSE_KIND_APPEND_ARGS: i32 = 132;
-const CLAUSE_KIND_APPLY: i32 = 133;
-const CLAUSE_KIND_NOOPENMP: i32 = 134;
-const CLAUSE_KIND_NOOPENMP_CONSTRUCTS: i32 = 135;
-const CLAUSE_KIND_NOOPENMP_ROUTINES: i32 = 136;
-const CLAUSE_KIND_NOPARALLELISM: i32 = 137;
-const CLAUSE_KIND_NOCONTEXT: i32 = 138;
-const CLAUSE_KIND_NOVARIANTS: i32 = 139;
-const CLAUSE_KIND_ENTER: i32 = 140;
-const CLAUSE_KIND_USE: i32 = 141;
+const CLAUSE_KIND_COMPARE_CAPTURE: i32 = 91;
+const CLAUSE_KIND_OTHERWISE: i32 = 101;
+const CLAUSE_KIND_FAIL: i32 = 92;
+const CLAUSE_KIND_WEAK: i32 = 93;
+const CLAUSE_KIND_AT: i32 = 94;
+const CLAUSE_KIND_SEVERITY: i32 = 95;
+const CLAUSE_KIND_MESSAGE: i32 = 96;
+const CLAUSE_KIND_DOACROSS: i32 = 97;
+const CLAUSE_KIND_ABSENT: i32 = 98;
+const CLAUSE_KIND_CONTAINS: i32 = 99;
+const CLAUSE_KIND_HOLDS: i32 = 100;
+const CLAUSE_KIND_GRAPH_ID: i32 = 102;
+const CLAUSE_KIND_GRAPH_RESET: i32 = 103;
+const CLAUSE_KIND_TRANSPARENT: i32 = 104;
+const CLAUSE_KIND_REPLAYABLE: i32 = 105;
+const CLAUSE_KIND_THREADSET: i32 = 106;
+const CLAUSE_KIND_INDIRECT: i32 = 107;
+const CLAUSE_KIND_LOCAL: i32 = 108;
+const CLAUSE_KIND_INIT: i32 = 109;
+const CLAUSE_KIND_INIT_COMPLETE: i32 = 110;
+const CLAUSE_KIND_SAFESYNC: i32 = 111;
+const CLAUSE_KIND_DEVICE_SAFESYNC: i32 = 112;
+const CLAUSE_KIND_MEMSCOPE: i32 = 113;
+const CLAUSE_KIND_LOOPRANGE: i32 = 114;
+const CLAUSE_KIND_PERMUTATION: i32 = 115;
+const CLAUSE_KIND_COUNTS: i32 = 116;
+const CLAUSE_KIND_INDUCTION: i32 = 117;
+const CLAUSE_KIND_INDUCTOR: i32 = 118;
+const CLAUSE_KIND_COLLECTOR: i32 = 119;
+const CLAUSE_KIND_COMBINER: i32 = 120;
+const CLAUSE_KIND_ADJUST_ARGS: i32 = 121;
+const CLAUSE_KIND_APPEND_ARGS: i32 = 122;
+const CLAUSE_KIND_APPLY: i32 = 123;
+const CLAUSE_KIND_NOOPENMP: i32 = 124;
+const CLAUSE_KIND_NOOPENMP_CONSTRUCTS: i32 = 125;
+const CLAUSE_KIND_NOOPENMP_ROUTINES: i32 = 126;
+const CLAUSE_KIND_NOPARALLELISM: i32 = 127;
+const CLAUSE_KIND_NOCONTEXT: i32 = 128;
+const CLAUSE_KIND_NOVARIANTS: i32 = 129;
+const CLAUSE_KIND_INTEROP: i32 = 130;
+const CLAUSE_KIND_ENTER: i32 = 131;
+const CLAUSE_KIND_USE: i32 = 132;
 const ROUP_OMPA_USES_ALLOCATOR_DEFAULT: i32 = 0;
 const ROUP_OMPA_USES_ALLOCATOR_LARGE_CAP: i32 = 1;
 const ROUP_OMPA_USES_ALLOCATOR_CONST: i32 = 2;
@@ -2548,8 +2552,7 @@ pub extern "C" fn roup_clause_default_variant(clause: *const OmpClause) -> *cons
         if ptr.is_null() {
             return ptr::null();
         }
-        // Variant is encoded as default code 4 per compat expectations.
-        if (*ptr).default_kind == 4 {
+        if (*ptr).default_kind == DEFAULT_KIND_VARIANT {
             return c.arguments;
         }
         ptr::null()
@@ -3997,6 +4000,9 @@ fn clause_kind_uses_variable_list(kind: i32) -> bool {
             | CLAUSE_KIND_LINK
             | CLAUSE_KIND_INCLUSIVE
             | CLAUSE_KIND_EXCLUSIVE
+            | CLAUSE_KIND_ENTER
+            | CLAUSE_KIND_LOCAL
+            | CLAUSE_KIND_INTEROP
     )
 }
 
@@ -5597,14 +5603,8 @@ fn expect_clause(value: Option<OmpClause>, clause: &'static str) -> OmpClause {
 fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     match payload {
         IrClauseData::Default(kind) => {
-            let value = match kind {
-                DefaultKind::Shared => 0,
-                DefaultKind::None => 1,
-                DefaultKind::Private => 2,
-                DefaultKind::Firstprivate => 3,
-            };
             let data_ptr = Box::into_raw(Box::new(DefaultClauseData {
-                default_kind: value,
+                default_kind: *kind as i32,
                 directive: ptr::null_mut(),
             }));
             Some(OmpClause {
@@ -5618,13 +5618,13 @@ fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
         }
         IrClauseData::Expression(expr) => {
             let data_ptr = Box::into_raw(Box::new(DefaultClauseData {
-                default_kind: 4,
+                default_kind: DEFAULT_KIND_VARIANT,
                 directive: ptr::null_mut(),
             }));
             Some(OmpClause {
                 kind: CLAUSE_KIND_DEFAULT,
                 arguments: allocate_c_string(&expr.to_string()),
-                // Treat expression form as variant; encode default code 4 for compat.
+                // Treat expression form as variant; encode DEFAULT_KIND_VARIANT for compat.
                 data: ClauseData {
                     default_clause: data_ptr,
                 },
@@ -5634,7 +5634,7 @@ fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
         IrClauseData::MetadirectiveDefault { directive } => {
             let nested = build_c_api_directive_from_ast(directive, current_clause_language());
             let data_ptr = Box::into_raw(Box::new(DefaultClauseData {
-                default_kind: 4,
+                default_kind: DEFAULT_KIND_VARIANT,
                 directive: Box::into_raw(Box::new(nested)),
             }));
             Some(OmpClause {
@@ -7163,19 +7163,25 @@ fn parse_schedule_kind(clause: &Clause) -> i32 {
 /// Returns integer code for the default policy.
 ///
 /// ## Default Codes:
-/// - 0 = shared (all variables shared by default)
-/// - 1 = none   (must explicitly declare all variables)
+/// - 0 = shared
+/// - 1 = none
+/// - 2 = private
+/// - 3 = firstprivate
+/// - 4 = variant
 #[allow(dead_code)] // Used by constants/header generation tooling
 fn parse_default_kind(clause: &Clause) -> i32 {
     if let ClauseKind::Parenthesized(ref args) = clause.kind {
         let args = args.as_ref();
         match args.trim().to_ascii_lowercase().as_str() {
-            "shared" => return 0,
-            "none" => return 1,
+            "shared" => return DefaultKind::Shared as i32,
+            "none" => return DefaultKind::None as i32,
+            "private" => return DefaultKind::Private as i32,
+            "firstprivate" => return DefaultKind::Firstprivate as i32,
+            "variant" => return DefaultKind::Variant as i32,
             _ => {}
         }
     }
-    0 // Default to shared
+    DefaultKind::Shared as i32
 }
 
 /// Map a typed clause name to the ompparser clause kind code.
@@ -7316,6 +7322,7 @@ fn clause_name_enum_to_kind(name: ClauseName) -> i32 {
         NoParallelism => CLAUSE_KIND_NOPARALLELISM,
         Nocontext => CLAUSE_KIND_NOCONTEXT,
         Novariants => CLAUSE_KIND_NOVARIANTS,
+        Interop => CLAUSE_KIND_INTEROP,
         Enter => CLAUSE_KIND_ENTER,
         Use => CLAUSE_KIND_USE,
         _ => UNKNOWN_KIND,

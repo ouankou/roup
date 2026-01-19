@@ -1116,7 +1116,8 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
             ast_clause.kind, ast_clause.payload
         );
     }
-    let kind_code = clause_name_to_kind(ast_clause.kind.as_str());
+    let clause_name: crate::parser::ClauseName = ast_clause.kind.into();
+    let kind_code = clause_name_to_kind(clause_name);
     let mut clause = AccClause {
         kind: kind_code,
         legacy_modifier: 0,
@@ -1271,11 +1272,10 @@ fn language_code(language: Language) -> i32 {
 // `DirectiveName` lookup and the shared `directive_name_enum_to_kind`
 // helper in the parent module directly. Unknown directives return -1.
 
-fn clause_name_to_kind(name: &str) -> i32 {
-    let cname = crate::parser::lookup_clause_name(name);
+fn clause_name_to_kind(name: crate::parser::ClauseName) -> i32 {
     use crate::parser::ClauseName;
 
-    match cname {
+    match name {
         ClauseName::Copy => 35,
         ClauseName::CopyIn => 36,
         ClauseName::CopyOut => 37,
@@ -1442,6 +1442,7 @@ fn clause_name_to_kind(name: &str) -> i32 {
         ClauseName::NoParallelism => -1,
         ClauseName::Nocontext => -1,
         ClauseName::Novariants => -1,
+        ClauseName::Interop => -1,
         ClauseName::Enter => -1,
         ClauseName::Use => -1,
     }

@@ -6,7 +6,7 @@ use std::{
 
 use nom::{error::ErrorKind, IResult};
 
-use super::clause::{Clause, ClauseRegistry};
+use super::clause::{lookup_clause_name, Clause, ClauseName, ClauseRegistry};
 use crate::parser::directive_kind::DirectiveName;
 
 type DirectiveParserFn =
@@ -505,10 +505,28 @@ impl<'a> Directive<'a> {
                     }
                     output.push(' ');
                 }
-                output.push_str(&clause.to_string());
+                output.push_str(&self.format_clause_for_output(clause));
             }
         }
         output
+    }
+
+    fn format_clause_for_output(&self, clause: &Clause<'_>) -> String {
+        if matches!(self.name, DirectiveName::Depobj)
+            && matches!(
+                lookup_clause_name(clause.name.as_ref()),
+                ClauseName::DepobjUpdate
+            )
+        {
+            Clause {
+                name: Cow::Borrowed("update"),
+                kind: clause.kind.clone(),
+                separator: clause.separator,
+            }
+            .to_string()
+        } else {
+            clause.to_string()
+        }
     }
 }
 
@@ -527,7 +545,8 @@ impl fmt::Display for Directive<'_> {
                 if idx > 0 {
                     write!(f, " ")?;
                 }
-                write!(f, "{clause}")?;
+                let clause_text = self.format_clause_for_output(clause);
+                write!(f, "{clause_text}")?;
             }
         }
         Ok(())
