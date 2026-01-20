@@ -1,6 +1,8 @@
 //! Integration tests for the step-by-step debugger
 
 use roup::debugger::{DebugConfig, DebugSession};
+use roup::parser::directive_kind::DirectiveName;
+use roup::parser::{lookup_clause_name, ClauseName};
 
 #[test]
 fn test_debug_session_openmp_parallel() {
@@ -23,10 +25,16 @@ fn test_debug_session_openmp_parallel() {
     );
 
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "parallel");
+    assert_eq!(directive.name, DirectiveName::Parallel);
     assert_eq!(directive.clauses.len(), 2);
-    assert_eq!(directive.clauses[0].name, "shared");
-    assert_eq!(directive.clauses[1].name, "private");
+    assert_eq!(
+        lookup_clause_name(directive.clauses[0].name.as_ref()),
+        ClauseName::Shared
+    );
+    assert_eq!(
+        lookup_clause_name(directive.clauses[1].name.as_ref()),
+        ClauseName::Private
+    );
 }
 
 #[test]
@@ -40,7 +48,7 @@ fn test_debug_session_openacc() {
     assert!(session.final_directive.is_some());
 
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "parallel");
+    assert_eq!(directive.name, DirectiveName::Parallel);
     assert_eq!(directive.clauses.len(), 2);
 }
 
@@ -53,7 +61,7 @@ fn test_debug_session_complex_directive() {
 
     // Verify the directive was parsed correctly
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "parallel for simd");
+    assert_eq!(directive.name, DirectiveName::ParallelForSimd);
     assert_eq!(directive.clauses.len(), 2);
 }
 
@@ -165,10 +173,13 @@ fn test_custom_parser_scan_directive() {
     let session = DebugSession::new(input, config).expect("Failed to create debug session");
 
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "scan");
+    assert_eq!(directive.name, DirectiveName::Scan);
     assert!(directive.parameter.is_none());
     assert_eq!(directive.clauses.len(), 1);
-    assert_eq!(directive.clauses[0].name, "exclusive");
+    assert_eq!(
+        lookup_clause_name(directive.clauses[0].name.as_ref()),
+        ClauseName::Exclusive
+    );
 
     // Verify we captured a ClauseName step for the scan clause
     assert!(session
@@ -186,10 +197,13 @@ fn test_custom_parser_allocate_directive() {
     let session = DebugSession::new(input, config).expect("Failed to create debug session");
 
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "allocate");
+    assert_eq!(directive.name, DirectiveName::Allocate);
     assert!(directive.parameter.is_some());
     assert_eq!(directive.clauses.len(), 1);
-    assert_eq!(directive.clauses[0].name, "allocator");
+    assert_eq!(
+        lookup_clause_name(directive.clauses[0].name.as_ref()),
+        ClauseName::Allocator
+    );
 }
 
 #[test]
@@ -201,12 +215,15 @@ fn test_custom_parser_metadirective() {
     let session = DebugSession::new(input, config).expect("Failed to create debug session");
 
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "metadirective");
+    assert_eq!(directive.name, DirectiveName::Metadirective);
     assert_eq!(directive.clauses.len(), 2);
 
     // Verify clauses have complex arguments
     let when_clause = &directive.clauses[0];
-    assert_eq!(when_clause.name, "when");
+    assert_eq!(
+        lookup_clause_name(when_clause.name.as_ref()),
+        ClauseName::When
+    );
     assert!(matches!(
         &when_clause.kind,
         roup::parser::ClauseKind::Parenthesized(_)
@@ -222,7 +239,7 @@ fn test_custom_parser_cancel_directive() {
     let session = DebugSession::new(input, config).expect("Failed to create debug session");
 
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "cancel");
+    assert_eq!(directive.name, DirectiveName::Cancel);
 }
 
 // ===========================================================================
@@ -240,7 +257,10 @@ fn test_bare_clauses() {
     assert_eq!(directive.clauses.len(), 2);
 
     // Find the nowait clause (bare clause)
-    let nowait = directive.clauses.iter().find(|c| c.name == "nowait");
+    let nowait = directive
+        .clauses
+        .iter()
+        .find(|c| lookup_clause_name(c.name.as_ref()) == ClauseName::Nowait);
     assert!(nowait.is_some());
     assert!(matches!(
         nowait.unwrap().kind,
@@ -330,7 +350,7 @@ fn test_multiple_whitespace_steps() {
 
     // More importantly, verify the directive was parsed correctly despite extra whitespace
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "parallel");
+    assert_eq!(directive.name, DirectiveName::Parallel);
     assert_eq!(directive.clauses.len(), 1);
 }
 
@@ -346,7 +366,7 @@ fn test_openacc_data_directive() {
     let session = DebugSession::new(input, config).expect("Failed to parse");
 
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "data");
+    assert_eq!(directive.name, DirectiveName::Data);
     assert_eq!(directive.clauses.len(), 3);
 }
 
@@ -358,7 +378,7 @@ fn test_openacc_kernels_directive() {
     let session = DebugSession::new(input, config).expect("Failed to parse");
 
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "kernels");
+    assert_eq!(directive.name, DirectiveName::Kernels);
     assert_eq!(directive.clauses.len(), 3);
 }
 
@@ -375,9 +395,12 @@ fn test_fortran_free_form() {
 
     let session = DebugSession::new(input, config).expect("Failed to parse Fortran free-form");
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "parallel");
+    assert_eq!(directive.name, DirectiveName::Parallel);
     assert_eq!(directive.clauses.len(), 1);
-    assert_eq!(directive.clauses[0].name, "shared");
+    assert_eq!(
+        lookup_clause_name(directive.clauses[0].name.as_ref()),
+        ClauseName::Shared
+    );
 
     // Verify we captured Fortran sentinel parsing step
     assert!(session
@@ -403,9 +426,12 @@ fn test_fortran_fixed_form() {
 
     let session = DebugSession::new(input, config).expect("Failed to parse Fortran fixed-form");
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "parallel");
+    assert_eq!(directive.name, DirectiveName::Parallel);
     assert_eq!(directive.clauses.len(), 1);
-    assert_eq!(directive.clauses[0].name, "private");
+    assert_eq!(
+        lookup_clause_name(directive.clauses[0].name.as_ref()),
+        ClauseName::Private
+    );
 
     // Verify we captured Fortran sentinel parsing step
     assert!(session
@@ -431,9 +457,12 @@ fn test_openacc_fortran() {
 
     let session = DebugSession::new(input, config).expect("Failed to parse OpenACC Fortran");
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "parallel");
+    assert_eq!(directive.name, DirectiveName::Parallel);
     assert_eq!(directive.clauses.len(), 1);
-    assert_eq!(directive.clauses[0].name, "async");
+    assert_eq!(
+        lookup_clause_name(directive.clauses[0].name.as_ref()),
+        ClauseName::Async
+    );
 
     // Verify we captured Fortran sentinel parsing step
     assert!(session
@@ -465,7 +494,10 @@ fn test_complex_target_teams_distribute() {
     let session = DebugSession::new(input, config).expect("Failed to parse");
 
     let directive = session.final_directive.as_ref().unwrap();
-    assert_eq!(directive.name, "target teams distribute parallel for simd");
+    assert_eq!(
+        directive.name,
+        DirectiveName::TargetTeamsDistributeParallelForSimd
+    );
     assert!(directive.clauses.len() >= 5);
 
     // Should have many steps for this complex directive
@@ -487,9 +519,12 @@ fn test_reduction_with_operators() {
             DebugSession::new(input, config).unwrap_or_else(|_| panic!("Failed to parse: {input}"));
 
         let directive = session.final_directive.as_ref().unwrap();
-        assert_eq!(directive.name, "parallel");
+        assert_eq!(directive.name, DirectiveName::Parallel);
 
-        let reduction_clause = directive.clauses.iter().find(|c| c.name == "reduction");
+        let reduction_clause = directive
+            .clauses
+            .iter()
+            .find(|c| lookup_clause_name(c.name.as_ref()) == ClauseName::Reduction);
         assert!(
             reduction_clause.is_some(),
             "Missing reduction clause in: {input}"

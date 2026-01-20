@@ -428,7 +428,7 @@ extern "C" {
 // ============================================================================
 // Auto-generated from src/c_api/openacc.rs:clause_name_to_kind()
 
-#define ROUP_ACCC_num_threads                    0
+#define ROUP_ACCC_num_threads                    2
 #define ROUP_ACCC_collapse                       11
 #define ROUP_ACCC_if                             14
 #define ROUP_ACCC_default                        15
@@ -474,7 +474,6 @@ extern "C" {
 #define ROUP_ACCC_device_num                     2031
 #define ROUP_ACCC_device_resident                2032
 #define ROUP_ACCC_host                           2033
-#define ROUP_ACCC_shared                         21
 #define ROUP_ACCC_copy_in                        36
 #define ROUP_ACCC_copy_out                       37
 #define ROUP_ACCC_no_host                        2016
