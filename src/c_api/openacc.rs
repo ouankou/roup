@@ -1356,9 +1356,6 @@ fn acc_clause_kind_to_code(kind: AccClauseKind) -> i32 {
     }
 }
 
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
