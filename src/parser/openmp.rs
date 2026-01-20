@@ -862,7 +862,7 @@ fn remap_depobj_update_clauses(clauses: &mut [crate::parser::Clause<'_>]) {
     for clause in clauses {
         let kind = crate::parser::lookup_clause_name(clause.name.as_ref());
         if matches!(kind, crate::parser::ClauseName::Update) {
-            clause.name = std::borrow::Cow::Owned("depobj_update".to_string());
+            clause.name = std::borrow::Cow::Borrowed(OpenMpClause::DepobjUpdate.name());
         }
     }
 }
