@@ -576,19 +576,21 @@ pub fn parse_depend_type(type_str: &str) -> Result<DependType, ConversionError> 
 
 fn parse_if_modifier(text: &str) -> IfModifier {
     let trimmed = text.trim();
-    let lower = trimmed.to_ascii_lowercase();
-    match lower.as_str() {
-        "parallel" => IfModifier::Parallel,
-        "task" => IfModifier::Task,
-        "taskloop" => IfModifier::Taskloop,
-        "target" => IfModifier::Target,
-        "target data" => IfModifier::TargetData,
-        "target enter data" => IfModifier::TargetEnterData,
-        "target exit data" => IfModifier::TargetExitData,
-        "target update" => IfModifier::TargetUpdate,
-        "simd" => IfModifier::Simd,
-        "cancel" => IfModifier::Cancel,
-        "" => IfModifier::Unspecified,
+    if trimmed.is_empty() {
+        return IfModifier::Unspecified;
+    }
+    match lookup_directive_name(trimmed) {
+        DirectiveName::Parallel => IfModifier::Parallel,
+        DirectiveName::Task => IfModifier::Task,
+        DirectiveName::Taskloop => IfModifier::Taskloop,
+        DirectiveName::Target => IfModifier::Target,
+        DirectiveName::TargetData | DirectiveName::TargetDataUnderscore => IfModifier::TargetData,
+        DirectiveName::TargetEnterData => IfModifier::TargetEnterData,
+        DirectiveName::TargetExitData => IfModifier::TargetExitData,
+        DirectiveName::TargetUpdate => IfModifier::TargetUpdate,
+        DirectiveName::Simd => IfModifier::Simd,
+        DirectiveName::Cancel => IfModifier::Cancel,
+        DirectiveName::Other(name) => IfModifier::User(Identifier::new(name.as_ref())),
         _ => IfModifier::User(Identifier::new(trimmed)),
     }
 }
@@ -2151,6 +2153,7 @@ pub fn parse_clause_data<'a>(
                 let content = content.as_ref();
                 // Check for directive-name modifier: "if(parallel: condition)"
                 if let Some((modifier, condition)) = lang::split_once_top_level(content, ':') {
+                    let modifier = modifier.trim();
                     Ok(ClauseData::If {
                         modifier: Some(parse_if_modifier(modifier)),
                         condition: Expression::new(condition.trim(), config),
@@ -3558,12 +3561,7 @@ mod tests {
         let clause = directive
             .clauses
             .iter()
-            .find(|c| {
-                matches!(
-                    crate::parser::lookup_clause_name(c.name.as_ref()),
-                    ClauseName::Uniform
-                )
-            })
+            .find(|c| lookup_clause_name(c.name.as_ref()) == ClauseName::Uniform)
             .expect("uniform clause present");
 
         if let ClauseKind::Parenthesized(content) = &clause.kind {
@@ -3732,8 +3730,7 @@ mod tests {
             condition,
         } = data
         {
-            assert!(modifier.is_some());
-            assert_eq!(modifier.unwrap().to_string(), "parallel");
+            assert_eq!(modifier, Some(IfModifier::Parallel));
             assert_eq!(condition.to_string(), "n > 100");
         } else {
             panic!("Expected If clause");

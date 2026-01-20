@@ -5,23 +5,22 @@ use std::ptr;
 use bitflags::bitflags;
 
 use crate::ast::{
-    AccClause as AstAccClause, AccClausePayload as AstAccClausePayload, AccCopyKind, AccCreateKind,
-    AccDataModifier, AccDefaultKind, AccDeviceType, AccDirective as AstAccDirective,
-    AccDirectiveParameter, AccGangModifier, AccReductionOperator, AccVectorModifier,
-    AccWorkerModifier, DirectiveBody,
+    AccClause as AstAccClause, AccClauseKind, AccClausePayload as AstAccClausePayload, AccCopyKind,
+    AccCreateKind, AccDataModifier, AccDefaultKind, AccDeviceType, AccDirective as AstAccDirective,
+    AccDirectiveKind, AccDirectiveParameter, AccGangModifier, AccReductionOperator,
+    AccVectorModifier, AccWorkerModifier, DirectiveBody,
 };
 use crate::ir::ParserConfig;
 use crate::lexer::Language;
 use crate::parser::{
     ast_builder::{build_roup_directive, AstBuildError},
-    openacc as openacc_parser, CacheDirectiveData as ParserCacheDirectiveData, Directive,
-    WaitDirectiveData as ParserWaitDirectiveData,
+    openacc as openacc_parser, CacheDirectiveData as ParserCacheDirectiveData, ClauseName,
+    Directive, WaitDirectiveData as ParserWaitDirectiveData,
 };
 
 use super::{ROUP_LANG_C, ROUP_LANG_FORTRAN_FIXED, ROUP_LANG_FORTRAN_FREE};
 
 // Use the parser's canonical directive lookup and the shared enum->int helper
-use crate::parser::directive_kind::lookup_directive_name;
 
 bitflags! {
     struct AccClauseFlags: u32 {
@@ -32,6 +31,7 @@ bitflags! {
 
 pub struct AccDirective {
     name: CString,
+    kind: AccDirectiveKind,
     language: i32,
     clauses: Vec<AccClause>,
     cache_data: Option<CacheData>,
@@ -54,7 +54,7 @@ struct WaitDirectiveData {
 }
 
 pub struct AccClause {
-    kind: i32,
+    kind: AccClauseKind,
     legacy_modifier: i32,
     data_variant: Option<AccDataClauseVariantCode>,
     data_modifiers: Vec<AccDataClauseModifierCode>,
@@ -396,6 +396,7 @@ fn build_acc_directive(
 
     let mut result = AccDirective {
         name: make_c_string(parsed.name.as_ref()),
+        kind: ast.kind,
         language: language_code(language),
         clauses,
         cache_data: None,
@@ -408,8 +409,6 @@ fn build_acc_directive(
         apply_ast_parameters(&mut result, ast_parameter);
     }
 
-    let name = parsed.name.as_ref();
-
     if result.cache_data.is_none() {
         if let Some(cache) = parsed.cache_data.as_ref() {
             result.cache_data = Some(convert_cache_directive_data(cache));
@@ -419,25 +418,6 @@ fn build_acc_directive(
     if result.wait_data.is_none() {
         if let Some(wait_data) = parsed.wait_data.as_ref() {
             result.wait_data = Some(convert_wait_directive_data(wait_data));
-        }
-    }
-
-    // Use parameter field directly for routine name (set by parse_routine_directive)
-    // and for end directive paired kind (set by parse_end_directive)
-    if result.routine_name.is_none() || result.end_paired_kind.is_none() {
-        if let Some(param) = parsed.parameter.as_ref() {
-            if name.eq_ignore_ascii_case("routine") && result.routine_name.is_none() {
-                let routine_name = param.as_ref().trim();
-                let routine_name = routine_name
-                    .strip_prefix('(')
-                    .and_then(|s| s.strip_suffix(')'))
-                    .unwrap_or(routine_name);
-                result.routine_name = Some(make_c_string(routine_name));
-            } else if name.eq_ignore_ascii_case("end") && result.end_paired_kind.is_none() {
-                let dname = lookup_directive_name(param.as_ref());
-                let kind = acc_directive_name_to_kind(dname);
-                result.end_paired_kind = Some(kind);
-            }
         }
     }
 
@@ -550,21 +530,11 @@ pub extern "C" fn acc_directive_kind(directive: *const AccDirective) -> i32 {
     if directive.is_null() {
         return -1;
     }
-    unsafe {
-        let name = (*directive).name.as_c_str().to_str().unwrap_or("");
-        let dname = lookup_directive_name(name);
-        // Prefer an OpenACC-specific mapping when available so we can
-        // preserve directive codes expected by compatibility layers.
-        // The internal OpenACC mapping uses an ACC_DIRECTIVE_BASE offset
-        // The internal OpenACC mapping puts OpenACC directive numeric codes
-        // into their own numeric range (ACC_DIRECTIVE_BASE + raw). The C API
-        // must expose these canonical OpenACC numeric values directly so
-        // consumers (including compatibility layers) receive the authoritative
-        // mapping generated at build time. Do NOT normalize back to reduced
-        // 0..N values here — that leakage is the root cause of runtime
-        // mismatches and must be fixed at the producer.
-        acc_directive_name_to_kind(dname)
-    }
+    unsafe { acc_directive_kind_to_code((*directive).kind) }
+}
+
+fn acc_directive_kind_to_code(kind: AccDirectiveKind) -> i32 {
+    acc_directive_name_to_kind(kind.into())
 }
 
 /// OpenACC-specific mapping from `DirectiveName` -> integer kind code.
@@ -719,7 +689,7 @@ pub extern "C" fn acc_clause_kind(clause: *const AccClause) -> i32 {
         return -1;
     }
 
-    unsafe { (*clause).kind }
+    unsafe { acc_clause_kind_to_code((*clause).kind) }
 }
 
 #[no_mangle]
@@ -1116,10 +1086,9 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
             ast_clause.kind, ast_clause.payload
         );
     }
-    let clause_name: crate::parser::ClauseName = ast_clause.kind.into();
-    let kind_code = clause_name_to_kind(clause_name);
+    let kind = ast_clause.kind;
     let mut clause = AccClause {
-        kind: kind_code,
+        kind,
         legacy_modifier: 0,
         data_variant: None,
         data_modifiers: Vec::new(),
@@ -1272,179 +1241,121 @@ fn language_code(language: Language) -> i32 {
 // `DirectiveName` lookup and the shared `directive_name_enum_to_kind`
 // helper in the parent module directly. Unknown directives return -1.
 
-fn clause_name_to_kind(name: crate::parser::ClauseName) -> i32 {
-    use crate::parser::ClauseName;
+const UNKNOWN_KIND: i32 = -1;
+
+/// Map ClauseName to numeric OpenACC clause kind codes.
+/// Used by constants/header generation tooling (AST-only).
+#[allow(dead_code)]
+fn clause_name_to_kind(name: ClauseName) -> i32 {
+    use ClauseName::*;
 
     match name {
-        ClauseName::Copy => 35,
-        ClauseName::CopyIn => 36,
-        ClauseName::CopyOut => 37,
-        ClauseName::Create => 38,
-        ClauseName::Present => 39,
+        Async => 2000,
+        Wait => 2001,
+        NumGangs => 2002,
+        NumWorkers => 2003,
+        VectorLength => 2004,
+        Gang => 2005,
+        Worker => 2006,
+        Vector => 2007,
+        Seq => 2008,
+        Independent => 2009,
+        Auto => 2010,
+        DeviceType => 2011,
+        Bind => 2012,
+        DefaultAsync => 2013,
+        Link => 2014,
+        NoCreate => 2015,
+        NoHost => 2016,
+        Read => 2017,
+        SelfClause => 2018,
+        Tile => 2019,
+        UseDevice => 2020,
+        Attach => 2021,
+        Detach => 2022,
+        Finalize => 2023,
+        IfPresent => 2024,
+        Capture => 2025,
+        Write => 2026,
+        Update => 2027,
+        Delete => 2028,
+        Device => 2029,
+        DevicePtr => 2030,
+        DeviceNum => 2031,
+        DeviceResident => 2032,
+        Host => 2033,
+        Indirect => 2034,
+        Copy => 35,
+        CopyIn => 36,
+        CopyOut => 37,
+        Create => 38,
+        Present => 39,
+        Collapse => 11,
+        Default => 15,
+        Firstprivate => 16,
+        If => 14,
+        Private => 22,
+        Reduction => 23,
+        NumThreads => 2,
+        _ => UNKNOWN_KIND,
+    }
+}
+
+fn acc_clause_kind_to_code(kind: AccClauseKind) -> i32 {
+    use AccClauseKind::*;
+
+    match kind {
+        Copy => 35,
+        CopyIn => 36,
+        CopyOut => 37,
+        Create => 38,
+        Present => 39,
         // OpenACC-specific clause kind codes (match generated header expectations)
-        ClauseName::Async => 2000,
-        ClauseName::Wait => 2001,
-        ClauseName::NumGangs => 2002,
-        ClauseName::NumWorkers => 2003,
-        ClauseName::VectorLength => 2004,
-        ClauseName::Gang => 2005,
-        ClauseName::Worker => 2006,
-        ClauseName::Vector => 2007,
-        ClauseName::Seq => 2008,
-        ClauseName::Independent => 2009,
-        ClauseName::Auto => 2010,
-        ClauseName::DeviceType => 2011,
-        ClauseName::Bind => 2012,
-        ClauseName::DefaultAsync => 2013,
-        ClauseName::Link => 2014,
-        ClauseName::NoCreate => 2015,
-        ClauseName::NoHost => 2016,
-        ClauseName::Read => 2017,
-        ClauseName::SelfClause => 2018,
-        ClauseName::Tile => 2019,
-        ClauseName::UseDevice => 2020,
-        ClauseName::Attach => 2021,
-        ClauseName::Detach => 2022,
-        ClauseName::Finalize => 2023,
-        ClauseName::IfPresent => 2024,
-        ClauseName::Capture => 2025,
-        ClauseName::Write => 2026,
-        ClauseName::Update => 2027,
-        ClauseName::Delete => 2028,
-        ClauseName::Device => 2029,
-        ClauseName::DevicePtr => 2030,
-        ClauseName::DeviceNum => 2031,
-        ClauseName::DeviceResident => 2032,
-        ClauseName::Host => 2033,
-        ClauseName::Other(ref s) => panic!("Unknown OpenACC clause: {s}"),
-        ClauseName::NumThreads => 0,
-        ClauseName::If => 14,
-        ClauseName::Private => 22,
-        ClauseName::Shared => 21, // shared mapping
-        ClauseName::Firstprivate => 16,
-        ClauseName::Lastprivate => -1, // not present in OpenACC table above
-        ClauseName::Reduction => 23,
-        ClauseName::Schedule => -1, // not in OpenACC table
-        ClauseName::Collapse => 11,
-        ClauseName::Ordered => -1,
-        ClauseName::Nowait => -1,
-        ClauseName::Default => 15,
-        // OpenMP-specific atomic/map clauses (not present in OpenACC)
-        ClauseName::Hint => -1,
-        ClauseName::SeqCst => -1,
-        ClauseName::Release => -1,
-        ClauseName::Acquire => -1,
-        ClauseName::Relaxed => -1,
-        ClauseName::AcqRel => -1,
-        ClauseName::Map => -1,
-        ClauseName::Allocator => -1,
-        ClauseName::Align => -1,
-        // Additional OpenMP-only clauses (not in OpenACC)
-        ClauseName::InReduction => -1,
-        ClauseName::IsDevicePtr => -1,
-        ClauseName::Defaultmap => -1,
-        ClauseName::Depend => -1,
-        ClauseName::UsesAllocators => -1,
-        ClauseName::NumTeams => -1,
-        ClauseName::ThreadLimit => -1,
-        ClauseName::DistSchedule => -1,
-        // Additional OpenMP-only clauses (not in OpenACC)
-        ClauseName::ProcBind => -1,
-        ClauseName::Allocate => -1,
-        ClauseName::Linear => -1,
-        ClauseName::Safelen => -1,
-        ClauseName::Simdlen => -1,
-        ClauseName::Aligned => -1,
-        ClauseName::Nontemporal => -1,
-        ClauseName::Uniform => -1,
-        ClauseName::Inbranch => -1,
-        ClauseName::Notinbranch => -1,
-        ClauseName::Inclusive => -1,
-        ClauseName::Exclusive => -1,
-        ClauseName::Copyprivate => -1,
-        ClauseName::Parallel => -1,
-        ClauseName::Sections => -1,
-        ClauseName::For => -1,
-        ClauseName::Do => -1,
-        ClauseName::Taskgroup => -1,
-        ClauseName::Initializer => -1,
-        ClauseName::Final => -1,
-        ClauseName::Untied => -1,
-        ClauseName::Requires => -1,
-        ClauseName::Mergeable => -1,
-        ClauseName::Priority => -1,
-        ClauseName::Affinity => -1,
-        ClauseName::Grainsize => -1,
-        ClauseName::NumTasks => -1,
-        ClauseName::Nogroup => -1,
-        ClauseName::ReverseOffload => -1,
-        ClauseName::UnifiedAddress => -1,
-        ClauseName::UnifiedSharedMemory => -1,
-        ClauseName::AtomicDefaultMemOrder => -1,
-        ClauseName::DynamicAllocators => -1,
-        ClauseName::SelfMaps => -1,
-        ClauseName::ExtImplementationDefinedRequirement => -1,
-        ClauseName::UseDevicePtr => -1,
-        ClauseName::Sizes => -1,
-        ClauseName::UseDeviceAddr => -1,
-        ClauseName::HasDeviceAddr => -1,
-        ClauseName::To => -1,
-        ClauseName::From => -1,
-        ClauseName::When => -1,
-        ClauseName::Match => -1,
-        ClauseName::TaskReduction => -1,
-        ClauseName::Destroy => -1,
-        ClauseName::DepobjUpdate => -1,
-        ClauseName::Compare => -1,
-        ClauseName::CompareCapture => -1,
-        ClauseName::Partial => -1,
-        ClauseName::Full => -1,
-        ClauseName::Order => -1,
-        // Additional OpenMP-only clauses added for ompparser compatibility (not in OpenACC)
-        ClauseName::Threads => -1,
-        ClauseName::Simd => -1,
-        ClauseName::Filter => -1,
-        ClauseName::Fail => -1,
-        ClauseName::Weak => -1,
-        ClauseName::At => -1,
-        ClauseName::Severity => -1,
-        ClauseName::Message => -1,
-        ClauseName::Doacross => -1,
-        ClauseName::Absent => -1,
-        ClauseName::Contains => -1,
-        ClauseName::Holds => -1,
-        ClauseName::Otherwise => -1,
-        ClauseName::GraphId => -1,
-        ClauseName::GraphReset => -1,
-        ClauseName::Transparent => -1,
-        ClauseName::Replayable => -1,
-        ClauseName::Threadset => -1,
-        ClauseName::Indirect => 2034,
-        ClauseName::Local => -1,
-        ClauseName::Init => -1,
-        ClauseName::InitComplete => -1,
-        ClauseName::Safesync => -1,
-        ClauseName::DeviceSafesync => -1,
-        ClauseName::Memscope => -1,
-        ClauseName::Looprange => -1,
-        ClauseName::Permutation => -1,
-        ClauseName::Counts => -1,
-        ClauseName::Induction => -1,
-        ClauseName::Inductor => -1,
-        ClauseName::Collector => -1,
-        ClauseName::Combiner => -1,
-        ClauseName::AdjustArgs => -1,
-        ClauseName::AppendArgs => -1,
-        ClauseName::Apply => -1,
-        ClauseName::NoOpenmp => -1,
-        ClauseName::NoOpenmpConstructs => -1,
-        ClauseName::NoOpenmpRoutines => -1,
-        ClauseName::NoParallelism => -1,
-        ClauseName::Nocontext => -1,
-        ClauseName::Novariants => -1,
-        ClauseName::Interop => -1,
-        ClauseName::Enter => -1,
-        ClauseName::Use => -1,
+        Async => 2000,
+        Wait => 2001,
+        NumGangs => 2002,
+        NumWorkers => 2003,
+        VectorLength => 2004,
+        Gang => 2005,
+        Worker => 2006,
+        Vector => 2007,
+        Seq => 2008,
+        Independent => 2009,
+        Auto => 2010,
+        DeviceType => 2011,
+        Bind => 2012,
+        DefaultAsync => 2013,
+        Link => 2014,
+        NoCreate => 2015,
+        NoHost => 2016,
+        Read => 2017,
+        SelfClause => 2018,
+        Tile => 2019,
+        UseDevice => 2020,
+        Attach => 2021,
+        Detach => 2022,
+        Finalize => 2023,
+        IfPresent => 2024,
+        Capture => 2025,
+        Write => 2026,
+        Update => 2027,
+        Delete => 2028,
+        Device => 2029,
+        DevicePtr => 2030,
+        DeviceNum => 2031,
+        DeviceResident => 2032,
+        Host => 2033,
+        Indirect => 2034,
+        // Shared OpenACC/OpenMP clause codes used by compatibility layers.
+        Collapse => 11,
+        Default => 15,
+        Firstprivate => 16,
+        If => 14,
+        Private => 22,
+        Reduction => 23,
+    }
+}
+
     }
 }
 

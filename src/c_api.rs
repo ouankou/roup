@@ -81,7 +81,7 @@ use crate::ir::{
     Variable,
 };
 use crate::lexer::Language;
-use crate::parser::directive_kind::{lookup_directive_name, DirectiveName};
+use crate::parser::directive_kind::DirectiveName;
 use crate::parser::{openmp, Clause, ClauseKind, ClauseName};
 
 mod openacc;
@@ -276,6 +276,21 @@ fn clause_name_to_kind_for_constants(name: ClauseName) -> i32 {
     }
 }
 
+fn omp_directive_kind_to_code(kind: OmpDirectiveKind) -> i32 {
+    directive_name_enum_to_kind(kind.into())
+}
+
+fn omp_clause_kind_to_code(kind: OmpClauseKind) -> i32 {
+    clause_name_to_kind_for_constants(kind.into())
+}
+
+fn omp_clause_separator_to_code(separator: crate::ast::OmpClauseSeparator) -> i32 {
+    match separator {
+        crate::parser::ClauseSeparator::Space => 0,
+        crate::parser::ClauseSeparator::Comma => 1,
+    }
+}
+
 // ============================================================================
 // Language Constants for Fortran Support
 // ============================================================================
@@ -331,6 +346,7 @@ pub const ROUP_LANG_FORTRAN_FIXED: i32 = 2;
 #[repr(C)]
 pub struct OmpDirective {
     name: *const c_char,      // Directive name (e.g., "parallel")
+    kind: OmpDirectiveKind,   // Enum-based directive kind
     parameter: *const c_char, // Directive parameter (e.g., "(a,b,c)" for allocate/threadprivate)
     parameter_data: DirectiveParameterData,
     clauses: Vec<OmpClause>,    // Associated clauses
@@ -349,10 +365,10 @@ pub struct OmpDirective {
 /// Uses tagged union pattern for clause-specific data.
 #[repr(C)]
 pub struct OmpClause {
-    kind: i32,                // Clause type (num_threads=0, schedule=7, etc.)
-    arguments: *const c_char, // Raw clause arguments (NULL for bare clauses)
-    data: ClauseData,         // Clause-specific data (union)
-    separator: i32,           // 0=space, 1=comma
+    kind: OmpClauseKind,                       // Enum-based clause kind
+    arguments: *const c_char,                  // Raw clause arguments (NULL for bare clauses)
+    data: ClauseData,                          // Clause-specific data (union)
+    separator: crate::ast::OmpClauseSeparator, // Separator before clause
 }
 
 /// Clause-specific data stored in a C union
@@ -1332,21 +1348,7 @@ pub extern "C" fn roup_directive_kind(directive: *const OmpDirective) -> i32 {
     // Safety: Caller guarantees valid pointer from roup_parse
     unsafe {
         let dir = &*directive;
-
-        // Use the canonical lookup to map the stored directive name into
-        // a `DirectiveName` enum, then map that enum to the C integer code.
-        if dir.name.is_null() {
-            return -1;
-        }
-
-        let c_str = CStr::from_ptr(dir.name);
-        let name_str = match c_str.to_str() {
-            Ok(s) => s,
-            Err(_) => return -1,
-        };
-
-        let dname = lookup_directive_name(name_str);
-        directive_name_enum_to_kind(dname)
+        omp_directive_kind_to_code(dir.kind)
     }
 }
 
@@ -1629,7 +1631,7 @@ pub extern "C" fn roup_directive_critical_hint(directive: *const OmpDirective) -
     unsafe {
         let dir = &*directive;
         for clause in dir.clauses.iter() {
-            if clause.kind == CLAUSE_KIND_HINT {
+            if clause.kind == OmpClauseKind::Hint {
                 return clause.arguments;
             }
         }
@@ -1746,7 +1748,7 @@ pub extern "C" fn roup_clause_kind(clause: *const OmpClause) -> i32 {
     // Safety: Caller guarantees valid clause pointer
     unsafe {
         let c = &*clause;
-        c.kind
+        omp_clause_kind_to_code(c.kind)
     }
 }
 
@@ -1761,7 +1763,7 @@ pub extern "C" fn roup_clause_schedule_kind(clause: *const OmpClause) -> i32 {
 
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_SCHEDULE {
+        if c.kind != OmpClauseKind::Schedule {
             // Not a schedule clause
             return -1;
         }
@@ -1778,7 +1780,7 @@ pub extern "C" fn roup_clause_schedule_modifier_mask(clause: *const OmpClause) -
 
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_SCHEDULE {
+        if c.kind != OmpClauseKind::Schedule {
             return 0;
         }
         c.data.schedule.modifiers
@@ -1794,7 +1796,7 @@ pub extern "C" fn roup_clause_schedule_chunk(clause: *const OmpClause) -> *const
 
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_SCHEDULE {
+        if c.kind != OmpClauseKind::Schedule {
             return ptr::null();
         }
         c.data.schedule.chunk
@@ -1812,7 +1814,7 @@ pub extern "C" fn roup_clause_dist_schedule_kind(clause: *const OmpClause) -> i3
 
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_DIST_SCHEDULE {
+        if c.kind != OmpClauseKind::DistSchedule {
             return -1;
         }
         c.data.dist_schedule.kind
@@ -1828,7 +1830,7 @@ pub extern "C" fn roup_clause_dist_schedule_chunk(clause: *const OmpClause) -> *
 
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_DIST_SCHEDULE {
+        if c.kind != OmpClauseKind::DistSchedule {
             return ptr::null();
         }
         c.data.dist_schedule.chunk
@@ -1865,7 +1867,7 @@ pub extern "C" fn roup_clause_if_modifier(clause: *const OmpClause) -> i32 {
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_IF {
+        if c.kind != OmpClauseKind::If {
             return -1;
         }
         c.data.default
@@ -1880,7 +1882,7 @@ pub extern "C" fn roup_clause_if_expression(clause: *const OmpClause) -> *const 
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_IF {
+        if c.kind != OmpClauseKind::If {
             return ptr::null();
         }
         c.arguments
@@ -1894,7 +1896,7 @@ pub extern "C" fn roup_clause_nowait_modifier(clause: *const OmpClause) -> i32 {
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_NOWAIT {
+        if c.kind != OmpClauseKind::Nowait {
             return -1;
         }
         c.data.default
@@ -2055,7 +2057,7 @@ pub extern "C" fn roup_clause_separator(clause: *const OmpClause) -> i32 {
         return 0;
     }
 
-    unsafe { (*clause).separator }
+    unsafe { omp_clause_separator_to_code((*clause).separator) }
 }
 
 /// Get reduction modifier mask (bitfield of task/inscan/default).
@@ -2163,7 +2165,7 @@ pub extern "C" fn roup_clause_grainsize_modifier(clause: *const OmpClause) -> i3
     }
     unsafe {
         let c = &*clause;
-        if c.kind == CLAUSE_KIND_GRAINSIZE {
+        if c.kind == OmpClauseKind::Grainsize {
             c.data.default
         } else {
             -1
@@ -2178,7 +2180,7 @@ pub extern "C" fn roup_clause_grainsize_expr(clause: *const OmpClause) -> *const
     }
     unsafe {
         let c = &*clause;
-        if c.kind == CLAUSE_KIND_GRAINSIZE {
+        if c.kind == OmpClauseKind::Grainsize {
             c.arguments
         } else {
             ptr::null()
@@ -2193,7 +2195,7 @@ pub extern "C" fn roup_clause_num_tasks_modifier(clause: *const OmpClause) -> i3
     }
     unsafe {
         let c = &*clause;
-        if c.kind == CLAUSE_KIND_NUM_TASKS {
+        if c.kind == OmpClauseKind::NumTasks {
             c.data.default
         } else {
             -1
@@ -2208,7 +2210,7 @@ pub extern "C" fn roup_clause_num_tasks_expr(clause: *const OmpClause) -> *const
     }
     unsafe {
         let c = &*clause;
-        if c.kind == CLAUSE_KIND_NUM_TASKS {
+        if c.kind == OmpClauseKind::NumTasks {
             c.arguments
         } else {
             ptr::null()
@@ -2403,7 +2405,7 @@ pub extern "C" fn roup_clause_allocator_kind(clause: *const OmpClause) -> i32 {
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_ALLOCATOR {
+        if c.kind != OmpClauseKind::Allocator {
             return -1;
         }
         c.data.default
@@ -2525,7 +2527,7 @@ pub extern "C" fn roup_clause_default_data_sharing(clause: *const OmpClause) -> 
 
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_DEFAULT {
+        if c.kind != OmpClauseKind::Default {
             // Not a default clause
             return -1;
         }
@@ -2545,7 +2547,7 @@ pub extern "C" fn roup_clause_default_variant(clause: *const OmpClause) -> *cons
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_DEFAULT {
+        if c.kind != OmpClauseKind::Default {
             return ptr::null();
         }
         let ptr = c.data.default_clause;
@@ -2567,7 +2569,7 @@ pub extern "C" fn roup_clause_default_directive(clause: *const OmpClause) -> *mu
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_DEFAULT {
+        if c.kind != OmpClauseKind::Default {
             return ptr::null_mut();
         }
         let ptr = c.data.default_clause;
@@ -2585,7 +2587,7 @@ pub extern "C" fn roup_clause_adjust_args_modifier(clause: *const OmpClause) -> 
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_ADJUST_ARGS && c.kind != CLAUSE_KIND_APPEND_ARGS {
+        if c.kind != OmpClauseKind::AdjustArgs && c.kind != OmpClauseKind::AppendArgs {
             return -1;
         }
         let ptr = c.data.adjust_args;
@@ -2605,7 +2607,7 @@ pub extern "C" fn roup_clause_adjust_args_custom_modifier(
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_ADJUST_ARGS && c.kind != CLAUSE_KIND_APPEND_ARGS {
+        if c.kind != OmpClauseKind::AdjustArgs && c.kind != OmpClauseKind::AppendArgs {
             return ptr::null();
         }
         let ptr = c.data.adjust_args;
@@ -2625,7 +2627,7 @@ pub extern "C" fn roup_clause_adjust_args_arguments(
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_ADJUST_ARGS && c.kind != CLAUSE_KIND_APPEND_ARGS {
+        if c.kind != OmpClauseKind::AdjustArgs && c.kind != OmpClauseKind::AppendArgs {
             return ptr::null_mut();
         }
         let ptr = c.data.adjust_args;
@@ -2643,7 +2645,7 @@ pub extern "C" fn roup_clause_apply_label(clause: *const OmpClause) -> *const c_
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_APPLY {
+        if c.kind != OmpClauseKind::Apply {
             return ptr::null();
         }
         let ptr = c.data.apply;
@@ -2661,7 +2663,7 @@ pub extern "C" fn roup_clause_apply_use_comma(clause: *const OmpClause) -> i32 {
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_APPLY {
+        if c.kind != OmpClauseKind::Apply {
             return 1;
         }
         let ptr = c.data.apply;
@@ -2679,7 +2681,7 @@ pub extern "C" fn roup_clause_apply_transform_count(clause: *const OmpClause) ->
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_APPLY {
+        if c.kind != OmpClauseKind::Apply {
             return 0;
         }
         let ptr = c.data.apply;
@@ -2697,7 +2699,7 @@ pub extern "C" fn roup_clause_apply_transform_kind(clause: *const OmpClause, ind
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_APPLY {
+        if c.kind != OmpClauseKind::Apply {
             return -1;
         }
         let ptr = c.data.apply;
@@ -2719,7 +2721,7 @@ pub extern "C" fn roup_clause_apply_transform_argument(
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_APPLY {
+        if c.kind != OmpClauseKind::Apply {
             return ptr::null();
         }
         let ptr = c.data.apply;
@@ -2741,7 +2743,7 @@ pub extern "C" fn roup_clause_induction_item_count(clause: *const OmpClause) -> 
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_INDUCTION {
+        if c.kind != OmpClauseKind::Induction {
             return 0;
         }
         let ptr = c.data.induction;
@@ -2759,7 +2761,7 @@ pub extern "C" fn roup_clause_induction_item_kind(clause: *const OmpClause, inde
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_INDUCTION {
+        if c.kind != OmpClauseKind::Induction {
             return -1;
         }
         let ptr = c.data.induction;
@@ -2781,7 +2783,7 @@ pub extern "C" fn roup_clause_induction_item_label(
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_INDUCTION {
+        if c.kind != OmpClauseKind::Induction {
             return ptr::null();
         }
         let ptr = c.data.induction;
@@ -2806,7 +2808,7 @@ pub extern "C" fn roup_clause_induction_item_expression(
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_INDUCTION {
+        if c.kind != OmpClauseKind::Induction {
             return ptr::null();
         }
         let ptr = c.data.induction;
@@ -2828,7 +2830,7 @@ pub extern "C" fn roup_clause_doacross_kind(clause: *const OmpClause) -> i32 {
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_DOACROSS {
+        if c.kind != OmpClauseKind::Doacross {
             return -1;
         }
         let ptr = c.data.doacross;
@@ -2846,7 +2848,7 @@ pub extern "C" fn roup_clause_at_kind(clause: *const OmpClause) -> i32 {
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_AT {
+        if c.kind != OmpClauseKind::At {
             return -1;
         }
         c.data.default
@@ -2860,7 +2862,7 @@ pub extern "C" fn roup_clause_severity_kind(clause: *const OmpClause) -> i32 {
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_SEVERITY {
+        if c.kind != OmpClauseKind::Severity {
             return -1;
         }
         c.data.default
@@ -2874,7 +2876,7 @@ pub extern "C" fn roup_clause_fail_memory_order(clause: *const OmpClause) -> i32
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_FAIL {
+        if c.kind != OmpClauseKind::Fail {
             return -1;
         }
         c.data.default
@@ -2888,7 +2890,7 @@ pub extern "C" fn roup_clause_init_kind(clause: *const OmpClause) -> i32 {
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_INIT {
+        if c.kind != OmpClauseKind::Init {
             return -1;
         }
         let ptr = c.data.init;
@@ -2906,7 +2908,7 @@ pub extern "C" fn roup_clause_init_raw_kind(clause: *const OmpClause) -> *const 
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_INIT {
+        if c.kind != OmpClauseKind::Init {
             return ptr::null();
         }
         let ptr = c.data.init;
@@ -2924,7 +2926,7 @@ pub extern "C" fn roup_clause_init_operand(clause: *const OmpClause) -> *const c
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_INIT {
+        if c.kind != OmpClauseKind::Init {
             return ptr::null();
         }
         let ptr = c.data.init;
@@ -2973,7 +2975,7 @@ pub extern "C" fn roup_clause_proc_bind_policy(clause: *const OmpClause) -> i32 
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_PROC_BIND {
+        if c.kind != OmpClauseKind::ProcBind {
             return -1;
         }
         c.data.default
@@ -2988,7 +2990,7 @@ pub extern "C" fn roup_clause_device_type_kind(clause: *const OmpClause) -> i32 
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_DEVICE_TYPE {
+        if c.kind != OmpClauseKind::DeviceType {
             return -1;
         }
         c.data.default
@@ -3003,7 +3005,7 @@ pub extern "C" fn roup_clause_atomic_default_mem_order(clause: *const OmpClause)
     }
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_ATOMIC_DEFAULT_MEM_ORDER {
+        if c.kind != OmpClauseKind::AtomicDefaultMemOrder {
             return -1;
         }
         c.data.default
@@ -3264,7 +3266,7 @@ pub extern "C" fn roup_clause_bind_modifier(clause: *const OmpClause) -> i32 {
     unsafe {
         match (*clause).kind {
             // bind clause uses the default field to store the enum code in this mapping
-            CLAUSE_KIND_BIND => (*clause).data.default,
+            OmpClauseKind::Bind => (*clause).data.default,
             _ => -1,
         }
     }
@@ -3301,9 +3303,9 @@ pub extern "C" fn roup_clause_arguments(clause: *const OmpClause) -> *const c_ch
     unsafe {
         let c = &*clause;
         if c.arguments.is_null()
-            && (c.kind == CLAUSE_KIND_WHEN
-                || c.kind == CLAUSE_KIND_MATCH
-                || c.kind == CLAUSE_KIND_OTHERWISE)
+            && (c.kind == OmpClauseKind::When
+                || c.kind == OmpClauseKind::Match
+                || c.kind == OmpClauseKind::Otherwise)
         {
             // Provide a minimal non-empty marker to keep legacy compat paths alive while selectors are migrated.
             return allocate_c_string(" ");
@@ -3323,7 +3325,7 @@ pub extern "C" fn roup_clause_directive_list_count(clause: *const OmpClause) -> 
 
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_ABSENT && c.kind != CLAUSE_KIND_CONTAINS {
+        if c.kind != OmpClauseKind::Absent && c.kind != OmpClauseKind::Contains {
             return 0;
         }
         let ptr = c.data.directive_kinds;
@@ -3346,7 +3348,7 @@ pub extern "C" fn roup_clause_directive_list_kind_at(clause: *const OmpClause, i
 
     unsafe {
         let c = &*clause;
-        if c.kind != CLAUSE_KIND_ABSENT && c.kind != CLAUSE_KIND_CONTAINS {
+        if c.kind != OmpClauseKind::Absent && c.kind != OmpClauseKind::Contains {
             return -1;
         }
         let ptr = c.data.directive_kinds;
@@ -3377,7 +3379,7 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
     unsafe {
         let c = &*clause;
 
-        if c.kind == CLAUSE_KIND_DOACROSS {
+        if c.kind == OmpClauseKind::Doacross {
             let ptr = c.data.doacross;
             if ptr.is_null() || (*ptr).variables.is_null() {
                 return ptr::null_mut();
@@ -3438,7 +3440,7 @@ pub extern "C" fn roup_clause_variables(clause: *const OmpClause) -> *mut OmpStr
             }
         }
 
-        if c.kind == CLAUSE_KIND_ALIGNED {
+        if c.kind == OmpClauseKind::Aligned {
             if let Some(data) = get_aligned_data(c) {
                 if data.variables.is_null() {
                     return ptr::null_mut();
@@ -3476,9 +3478,9 @@ fn selector_data_from_clause(clause: *const OmpClause) -> Option<&'static Select
     }
     unsafe {
         let c = &*clause;
-        if c.kind == CLAUSE_KIND_WHEN
-            || c.kind == CLAUSE_KIND_MATCH
-            || c.kind == CLAUSE_KIND_OTHERWISE
+        if c.kind == OmpClauseKind::When
+            || c.kind == OmpClauseKind::Match
+            || c.kind == OmpClauseKind::Otherwise
         {
             let ptr = c.data.selector;
             if ptr.is_null() {
@@ -3901,11 +3903,10 @@ unsafe fn clone_string_list(src: *mut OmpStringList) -> *mut OmpStringList {
     Box::into_raw(Box::new(list))
 }
 
-#[allow(dead_code)] // Kept for constants/header generation; runtime uses enum-based path
-fn is_reduction_clause_kind(kind: i32) -> bool {
+fn is_reduction_clause_kind(kind: OmpClauseKind) -> bool {
     matches!(
         kind,
-        CLAUSE_KIND_REDUCTION | CLAUSE_KIND_IN_REDUCTION | CLAUSE_KIND_TASK_REDUCTION
+        OmpClauseKind::Reduction | OmpClauseKind::InReduction | OmpClauseKind::TaskReduction
     )
 }
 
@@ -3917,8 +3918,8 @@ unsafe fn get_reduction_data(clause: &OmpClause) -> Option<&ReductionData> {
     }
 }
 
-fn is_lastprivate_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_LASTPRIVATE
+fn is_lastprivate_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::Lastprivate
 }
 
 unsafe fn get_lastprivate_data(clause: &OmpClause) -> Option<&LastprivateData> {
@@ -3929,8 +3930,8 @@ unsafe fn get_lastprivate_data(clause: &OmpClause) -> Option<&LastprivateData> {
     }
 }
 
-fn is_defaultmap_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_DEFAULTMAP
+fn is_defaultmap_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::Defaultmap
 }
 
 unsafe fn get_defaultmap_data(clause: &OmpClause) -> Option<&DefaultmapData> {
@@ -3941,12 +3942,12 @@ unsafe fn get_defaultmap_data(clause: &OmpClause) -> Option<&DefaultmapData> {
     }
 }
 
-fn is_uses_allocators_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_USES_ALLOCATORS
+fn is_uses_allocators_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::UsesAllocators
 }
 
-fn is_depobj_update_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_DEPOBJ_UPDATE
+fn is_depobj_update_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::DepobjUpdate
 }
 
 fn depobj_update_dependence_code(dep: DepobjUpdateDependence) -> i32 {
@@ -3976,58 +3977,58 @@ unsafe fn get_uses_allocators_data(clause: &OmpClause) -> Option<&UsesAllocators
     }
 }
 
-fn is_requires_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_REQUIRES
+fn is_requires_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::Requires
 }
 
-fn clause_kind_uses_variable_list(kind: i32) -> bool {
+fn clause_kind_uses_variable_list(kind: OmpClauseKind) -> bool {
     matches!(
         kind,
-        CLAUSE_KIND_PRIVATE
-            | CLAUSE_KIND_FIRSTPRIVATE
-            | CLAUSE_KIND_SHARED
-            | CLAUSE_KIND_USE_DEVICE_PTR
-            | CLAUSE_KIND_USE_DEVICE_ADDR
-            | CLAUSE_KIND_IS_DEVICE_PTR
-            | CLAUSE_KIND_HAS_DEVICE_ADDR
-            | CLAUSE_KIND_COPYIN
-            | CLAUSE_KIND_COPYPRIVATE
-            | CLAUSE_KIND_NONTEMPORAL
-            | CLAUSE_KIND_UNIFORM
-            | CLAUSE_KIND_SIZES
-            | CLAUSE_KIND_TO
-            | CLAUSE_KIND_FROM
-            | CLAUSE_KIND_LINK
-            | CLAUSE_KIND_INCLUSIVE
-            | CLAUSE_KIND_EXCLUSIVE
-            | CLAUSE_KIND_ENTER
-            | CLAUSE_KIND_LOCAL
-            | CLAUSE_KIND_INTEROP
+        OmpClauseKind::Private
+            | OmpClauseKind::Firstprivate
+            | OmpClauseKind::Shared
+            | OmpClauseKind::UseDevicePtr
+            | OmpClauseKind::UseDeviceAddr
+            | OmpClauseKind::IsDevicePtr
+            | OmpClauseKind::HasDeviceAddr
+            | OmpClauseKind::CopyIn
+            | OmpClauseKind::Copyprivate
+            | OmpClauseKind::Nontemporal
+            | OmpClauseKind::Uniform
+            | OmpClauseKind::Sizes
+            | OmpClauseKind::To
+            | OmpClauseKind::From
+            | OmpClauseKind::Link
+            | OmpClauseKind::Inclusive
+            | OmpClauseKind::Exclusive
+            | OmpClauseKind::Enter
+            | OmpClauseKind::Local
+            | OmpClauseKind::Interop
     )
 }
 
-fn is_map_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_MAP
+fn is_map_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::Map
 }
 
-fn is_linear_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_LINEAR
+fn is_linear_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::Linear
 }
 
-fn is_depend_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_DEPEND
+fn is_depend_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::Depend
 }
 
-fn is_allocate_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_ALLOCATE
+fn is_allocate_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::Allocate
 }
 
-fn is_affinity_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_AFFINITY
+fn is_affinity_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::Affinity
 }
 
-fn is_order_clause_kind(kind: i32) -> bool {
-    kind == CLAUSE_KIND_ORDER
+fn is_order_clause_kind(kind: OmpClauseKind) -> bool {
+    kind == OmpClauseKind::Order
 }
 
 unsafe fn get_requires_data(clause: &OmpClause) -> Option<&RequiresData> {
@@ -4109,7 +4110,7 @@ unsafe fn get_affinity_data(clause: &OmpClause) -> Option<&AffinityData> {
 }
 
 unsafe fn get_aligned_data(clause: &OmpClause) -> Option<&AlignedData> {
-    if clause.kind == CLAUSE_KIND_ALIGNED {
+    if clause.kind == OmpClauseKind::Aligned {
         let ptr = clause.data.aligned;
         if ptr.is_null() {
             None
@@ -4163,12 +4164,13 @@ fn build_c_api_directive_from_ast(
             .map(|clause| convert_clause_from_ast(clause.kind, &clause.payload, clause.separator))
             .collect();
 
-        if let Some(clause_name) = extra_clause {
-            clauses.insert(0, convert_atomic_suffix_clause(clause_name));
+        if let Some(clause_kind) = extra_clause {
+            clauses.insert(0, convert_atomic_suffix_clause(clause_kind));
         }
 
         OmpDirective {
             name: allocate_c_string(&name),
+            kind: directive.kind,
             parameter: parameter_text
                 .as_ref()
                 .and_then(|p| {
@@ -4195,42 +4197,32 @@ fn build_c_api_directive_from_ast(
 fn atomic_directive_info(
     kind: DirectiveName,
     compare_capture_hint: bool,
-) -> (String, Option<ClauseName>) {
+) -> (String, Option<OmpClauseKind>) {
     match kind {
-        DirectiveName::AtomicRead => ("atomic".to_string(), Some(ClauseName::Read)),
-        DirectiveName::AtomicWrite => ("atomic".to_string(), Some(ClauseName::Write)),
-        DirectiveName::AtomicUpdate => ("atomic".to_string(), Some(ClauseName::Update)),
-        DirectiveName::AtomicCapture => ("atomic".to_string(), Some(ClauseName::Capture)),
+        DirectiveName::AtomicRead => ("atomic".to_string(), Some(OmpClauseKind::Read)),
+        DirectiveName::AtomicWrite => ("atomic".to_string(), Some(OmpClauseKind::Write)),
+        DirectiveName::AtomicUpdate => ("atomic".to_string(), Some(OmpClauseKind::Update)),
+        DirectiveName::AtomicCapture => ("atomic".to_string(), Some(OmpClauseKind::Capture)),
         DirectiveName::AtomicCompareCapture => {
             if compare_capture_hint {
                 (
                     "atomic compare capture".to_string(),
-                    Some(ClauseName::CompareCapture),
+                    Some(OmpClauseKind::CompareCapture),
                 )
             } else {
-                ("atomic compare".to_string(), Some(ClauseName::Compare))
+                ("atomic compare".to_string(), Some(OmpClauseKind::Compare))
             }
         }
         _ => (kind.as_ref().to_string(), None),
     }
 }
 
-fn convert_atomic_suffix_clause(name: ClauseName) -> OmpClause {
-    let kind = match name {
-        ClauseName::Read => CLAUSE_KIND_ATOMIC_READ,
-        ClauseName::Write => CLAUSE_KIND_ATOMIC_WRITE,
-        ClauseName::Update => CLAUSE_KIND_ATOMIC_UPDATE,
-        ClauseName::Capture => CLAUSE_KIND_ATOMIC_CAPTURE,
-        ClauseName::Compare => CLAUSE_KIND_COMPARE,
-        ClauseName::CompareCapture => CLAUSE_KIND_COMPARE_CAPTURE,
-        other => panic!("unexpected atomic suffix clause: {other:?}"),
-    };
-
+fn convert_atomic_suffix_clause(kind: OmpClauseKind) -> OmpClause {
     OmpClause {
         kind,
         arguments: ptr::null(),
         data: ClauseData { default: 0 },
-        separator: 0,
+        separator: crate::parser::ClauseSeparator::Space,
     }
 }
 
@@ -4462,35 +4454,35 @@ fn convert_clause_from_ast(
         CopyIn => expect_clause(convert_copyin_clause_from_ast(payload), "copyin"),
         Nowait => expect_clause(convert_nowait_clause_from_ast(payload), "nowait"),
         Nogroup => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOGROUP),
+            convert_bare_clause_from_ast(payload, OmpClauseKind::Nogroup),
             "nogroup",
         ),
         Untied => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_UNTIED),
+            convert_bare_clause_from_ast(payload, OmpClauseKind::Untied),
             "untied",
         ),
         Mergeable => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_MERGEABLE),
+            convert_bare_clause_from_ast(payload, OmpClauseKind::Mergeable),
             "mergeable",
         ),
         SeqCst => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_SEQ_CST),
+            convert_bare_clause_from_ast(payload, OmpClauseKind::SeqCst),
             "seq_cst",
         ),
         Relaxed => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_RELAXED),
+            convert_bare_clause_from_ast(payload, OmpClauseKind::Relaxed),
             "relaxed",
         ),
         Release => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_RELEASE),
+            convert_bare_clause_from_ast(payload, OmpClauseKind::Release),
             "release",
         ),
         Acquire => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_ACQUIRE),
+            convert_bare_clause_from_ast(payload, OmpClauseKind::Acquire),
             "acquire",
         ),
         AcqRel => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_ACQ_REL),
+            convert_bare_clause_from_ast(payload, OmpClauseKind::AcqRel),
             "acq_rel",
         ),
         ProcBind => expect_clause(convert_proc_bind_clause_from_ast(payload), "proc_bind"),
@@ -4507,15 +4499,15 @@ fn convert_clause_from_ast(
         Aligned => expect_clause(convert_aligned_clause_from_ast(payload), "aligned"),
         Bind => expect_clause(convert_bind_clause_from_ast(payload), "bind"),
         Reduction => expect_clause(
-            convert_reduction_clause_from_ast(CLAUSE_KIND_REDUCTION, payload),
+            convert_reduction_clause_from_ast(OmpClauseKind::Reduction, payload),
             "reduction",
         ),
         InReduction => expect_clause(
-            convert_reduction_clause_from_ast(CLAUSE_KIND_IN_REDUCTION, payload),
+            convert_reduction_clause_from_ast(OmpClauseKind::InReduction, payload),
             "in_reduction",
         ),
         TaskReduction => expect_clause(
-            convert_reduction_clause_from_ast(CLAUSE_KIND_TASK_REDUCTION, payload),
+            convert_reduction_clause_from_ast(OmpClauseKind::TaskReduction, payload),
             "task_reduction",
         ),
         Requires => expect_clause(convert_requires_clause_from_ast(payload), "requires"),
@@ -4542,7 +4534,7 @@ fn convert_clause_from_ast(
             "has_device_addr",
         ),
         Sizes => expect_clause(
-            Some(convert_generic_clause_from_ast(clause_name, payload)),
+            Some(convert_generic_clause_from_ast(kind, payload)),
             "sizes",
         ),
         UsesAllocators => expect_clause(
@@ -4553,11 +4545,11 @@ fn convert_clause_from_ast(
         Device => expect_clause(convert_device_clause_from_ast(payload), "device"),
         DeviceType => expect_clause(convert_device_type_clause_from_ast(payload), "device_type"),
         Absent => expect_clause(
-            convert_directive_name_list_clause_from_ast(CLAUSE_KIND_ABSENT, payload),
+            convert_directive_name_list_clause_from_ast(OmpClauseKind::Absent, payload),
             "absent",
         ),
         Contains => expect_clause(
-            convert_directive_name_list_clause_from_ast(CLAUSE_KIND_CONTAINS, payload),
+            convert_directive_name_list_clause_from_ast(OmpClauseKind::Contains, payload),
             "contains",
         ),
         DepobjUpdate => expect_clause(
@@ -4578,45 +4570,45 @@ fn convert_clause_from_ast(
             "atomic_default_mem_order",
         ),
         Read => expect_clause(
-            convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_READ, payload),
+            convert_atomic_operation_clause_from_ast(OmpClauseKind::Read, payload),
             "read",
         ),
         Write => expect_clause(
-            convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_WRITE, payload),
+            convert_atomic_operation_clause_from_ast(OmpClauseKind::Write, payload),
             "write",
         ),
         Update => expect_clause(convert_update_clause_from_ast(payload), "update"),
         Capture => expect_clause(
-            convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_CAPTURE, payload),
+            convert_atomic_operation_clause_from_ast(OmpClauseKind::Capture, payload),
             "capture",
         ),
         Nontemporal => expect_clause(
-            convert_item_list_clause_from_ast(CLAUSE_KIND_NONTEMPORAL, payload),
+            convert_item_list_clause_from_ast(OmpClauseKind::Nontemporal, payload),
             "nontemporal",
         ),
         Uniform => expect_clause(
-            convert_item_list_clause_from_ast(CLAUSE_KIND_UNIFORM, payload),
+            convert_item_list_clause_from_ast(OmpClauseKind::Uniform, payload),
             "uniform",
         ),
         Inbranch => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_INBRANCH),
+            convert_bare_clause_from_ast(payload, OmpClauseKind::Inbranch),
             "inbranch",
         ),
         Notinbranch => expect_clause(
-            convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOTINBRANCH),
+            convert_bare_clause_from_ast(payload, OmpClauseKind::Notinbranch),
             "notinbranch",
         ),
         Inclusive => expect_clause(
-            convert_scan_clause_from_ast(CLAUSE_KIND_INCLUSIVE, payload),
+            convert_scan_clause_from_ast(OmpClauseKind::Inclusive, payload),
             "inclusive",
         ),
         Exclusive => expect_clause(
-            convert_scan_clause_from_ast(CLAUSE_KIND_EXCLUSIVE, payload),
+            convert_scan_clause_from_ast(OmpClauseKind::Exclusive, payload),
             "exclusive",
         ),
-        When => build_metadirective_clause(CLAUSE_KIND_WHEN, payload),
-        Match => build_metadirective_clause(CLAUSE_KIND_MATCH, payload),
-        Otherwise => build_metadirective_clause(CLAUSE_KIND_OTHERWISE, payload),
+        When => build_metadirective_clause(OmpClauseKind::When, payload),
+        Match => build_metadirective_clause(OmpClauseKind::Match, payload),
+        Otherwise => build_metadirective_clause(OmpClauseKind::Otherwise, payload),
         ReverseOffload => {
             expect_clause(convert_requires_clause_from_ast(payload), "reverse_offload")
         }
@@ -4636,11 +4628,11 @@ fn convert_clause_from_ast(
             "ext_implementation_defined_requirement",
         ),
         AdjustArgs => expect_clause(
-            convert_adjust_args_clause_from_ast(CLAUSE_KIND_ADJUST_ARGS, payload),
+            convert_adjust_args_clause_from_ast(OmpClauseKind::AdjustArgs, payload),
             "adjust_args",
         ),
         AppendArgs => expect_clause(
-            convert_adjust_args_clause_from_ast(CLAUSE_KIND_APPEND_ARGS, payload),
+            convert_adjust_args_clause_from_ast(OmpClauseKind::AppendArgs, payload),
             "append_args",
         ),
         Apply => expect_clause(convert_apply_clause_from_ast(payload), "apply"),
@@ -4650,13 +4642,10 @@ fn convert_clause_from_ast(
         Severity => expect_clause(convert_severity_clause_from_ast(payload), "severity"),
         Fail => expect_clause(convert_fail_clause_from_ast(payload), "fail"),
         Init => expect_clause(convert_init_clause_from_ast(payload), "init"),
-        _ => convert_generic_clause_from_ast(clause_name, payload),
+        _ => convert_generic_clause_from_ast(kind, payload),
     };
 
-    clause.separator = match separator {
-        crate::parser::ClauseSeparator::Space => 0,
-        crate::parser::ClauseSeparator::Comma => 1,
-    };
+    clause.separator = separator;
 
     clause
 }
@@ -4665,18 +4654,21 @@ fn convert_nowait_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Nowait { modifier } = payload {
         let modifier_code = modifier.map(|m| m as i32).unwrap_or(-1);
         return Some(OmpClause {
-            kind: CLAUSE_KIND_NOWAIT,
+            kind: OmpClauseKind::Nowait,
             arguments: ptr::null(),
             data: ClauseData {
                 default: modifier_code,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
-    convert_bare_clause_from_ast(payload, CLAUSE_KIND_NOWAIT)
+    convert_bare_clause_from_ast(payload, OmpClauseKind::Nowait)
 }
 
-fn convert_adjust_args_clause_from_ast(kind: i32, payload: &IrClauseData) -> Option<OmpClause> {
+fn convert_adjust_args_clause_from_ast(
+    kind: OmpClauseKind,
+    payload: &IrClauseData,
+) -> Option<OmpClause> {
     if let IrClauseData::AdjustArgs {
         modifier,
         custom_modifier,
@@ -4707,7 +4699,7 @@ fn convert_adjust_args_clause_from_ast(kind: i32, payload: &IrClauseData) -> Opt
             data: ClauseData {
                 adjust_args: data_ptr,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -4745,10 +4737,10 @@ fn convert_apply_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
             comma_separated: if *comma_separated { 1 } else { 0 },
         }));
         return Some(OmpClause {
-            kind: CLAUSE_KIND_APPLY,
+            kind: OmpClauseKind::Apply,
             arguments: args_text,
             data: ClauseData { apply: data_ptr },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -4787,12 +4779,12 @@ fn convert_induction_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
             .unwrap_or(ptr::null());
         let data_ptr = Box::into_raw(Box::new(InductionData { items: out_items }));
         return Some(OmpClause {
-            kind: CLAUSE_KIND_INDUCTION,
+            kind: OmpClauseKind::Induction,
             arguments: args_text,
             data: ClauseData {
                 induction: data_ptr,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -4809,10 +4801,10 @@ fn convert_doacross_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
             variables: vars,
         }));
         return Some(OmpClause {
-            kind: CLAUSE_KIND_DOACROSS,
+            kind: OmpClauseKind::Doacross,
             arguments: args_text,
             data: ClauseData { doacross: data_ptr },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -4821,12 +4813,12 @@ fn convert_doacross_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
 fn convert_at_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::At(kind) = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_AT,
+            kind: OmpClauseKind::At,
             arguments: allocate_c_string(&kind.to_string()),
             data: ClauseData {
                 default: *kind as i32,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -4835,12 +4827,12 @@ fn convert_at_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 fn convert_severity_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Severity(kind) = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_SEVERITY,
+            kind: OmpClauseKind::Severity,
             arguments: allocate_c_string(&kind.to_string()),
             data: ClauseData {
                 default: *kind as i32,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -4849,12 +4841,12 @@ fn convert_severity_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
 fn convert_fail_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Fail { order } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_FAIL,
+            kind: OmpClauseKind::Fail,
             arguments: allocate_c_string(&order.to_string()),
             data: ClauseData {
                 default: *order as i32,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -4884,22 +4876,22 @@ fn convert_init_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
             operand: operand_ptr,
         }));
         return Some(OmpClause {
-            kind: CLAUSE_KIND_INIT,
+            kind: OmpClauseKind::Init,
             arguments: args_text,
             data: ClauseData { init: data_ptr },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
 }
 
 fn convert_directive_name_list_clause_from_ast(
-    kind: i32,
+    kind: OmpClauseKind,
     payload: &IrClauseData,
 ) -> Option<OmpClause> {
-    let directives = match payload {
-        IrClauseData::Absent { directives } if kind == CLAUSE_KIND_ABSENT => directives,
-        IrClauseData::Contains { directives } if kind == CLAUSE_KIND_CONTAINS => directives,
+    let directives = match (kind, payload) {
+        (OmpClauseKind::Absent, IrClauseData::Absent { directives }) => directives,
+        (OmpClauseKind::Contains, IrClauseData::Contains { directives }) => directives,
         _ => return None,
     };
 
@@ -4931,12 +4923,11 @@ fn convert_directive_name_list_clause_from_ast(
         data: ClauseData {
             directive_kinds: data_ptr,
         },
-        separator: 0,
+        separator: crate::parser::ClauseSeparator::Space,
     })
 }
 
-fn convert_generic_clause_from_ast(clause_name: ClauseName, payload: &IrClauseData) -> OmpClause {
-    let kind = clause_name_enum_to_kind(clause_name);
+fn convert_generic_clause_from_ast(kind: OmpClauseKind, payload: &IrClauseData) -> OmpClause {
     let (arguments, data) = match payload {
         IrClauseData::ItemList(items) => {
             let args_ptr = format_clause_items(items)
@@ -4957,11 +4948,11 @@ fn convert_generic_clause_from_ast(clause_name: ClauseName, payload: &IrClauseDa
         kind,
         arguments,
         data,
-        separator: 0,
+        separator: crate::parser::ClauseSeparator::Space,
     }
 }
 
-fn build_metadirective_clause(kind: i32, payload: &IrClauseData) -> OmpClause {
+fn build_metadirective_clause(kind: OmpClauseKind, payload: &IrClauseData) -> OmpClause {
     let (selector_ptr, text) = match payload {
         IrClauseData::MetadirectiveSelector { selector } => {
             let args = selector.raw.clone().or_else(|| {
@@ -4990,7 +4981,7 @@ fn build_metadirective_clause(kind: i32, payload: &IrClauseData) -> OmpClause {
         data: ClauseData {
             selector: selector_ptr,
         },
-        separator: 0,
+        separator: crate::parser::ClauseSeparator::Space,
     }
 }
 
@@ -5267,7 +5258,7 @@ fn render_arguments_from_payload(payload: &IrClauseData) -> Option<String> {
             }
         }
         IrClauseData::Filter { thread_num } => Some(thread_num.to_string()),
-        IrClauseData::Allocator { allocator } => Some(allocator.to_string()),
+        IrClauseData::Allocator { allocator } => Some(allocator.canonical_name().to_string()),
         IrClauseData::UsesAllocators { allocators } => {
             Some(format_uses_allocators_arguments(allocators))
         }
@@ -5513,19 +5504,19 @@ fn build_selector_data(selector: &OmpSelector) -> *mut SelectorData {
     Box::into_raw(Box::new(data))
 }
 
-fn convert_bare_clause_from_ast(payload: &IrClauseData, kind: i32) -> Option<OmpClause> {
+fn convert_bare_clause_from_ast(payload: &IrClauseData, kind: OmpClauseKind) -> Option<OmpClause> {
     match payload {
         IrClauseData::Bare(_) => Some(OmpClause {
             kind,
             arguments: ptr::null(),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         }),
         IrClauseData::Expression(expr) => Some(OmpClause {
             kind,
             arguments: allocate_c_string(&expr.to_string()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         }),
         _ => None,
     }
@@ -5546,12 +5537,12 @@ fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
                 directive: ptr::null_mut(),
             }));
             Some(OmpClause {
-                kind: CLAUSE_KIND_DEFAULT,
+                kind: OmpClauseKind::Default,
                 arguments: allocate_c_string(&kind.to_string()),
                 data: ClauseData {
                     default_clause: data_ptr,
                 },
-                separator: 0,
+                separator: crate::parser::ClauseSeparator::Space,
             })
         }
         IrClauseData::Expression(expr) => {
@@ -5560,13 +5551,13 @@ fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
                 directive: ptr::null_mut(),
             }));
             Some(OmpClause {
-                kind: CLAUSE_KIND_DEFAULT,
+                kind: OmpClauseKind::Default,
                 arguments: allocate_c_string(&expr.to_string()),
                 // Treat expression form as variant; encode DEFAULT_KIND_VARIANT for compat.
                 data: ClauseData {
                     default_clause: data_ptr,
                 },
-                separator: 0,
+                separator: crate::parser::ClauseSeparator::Space,
             })
         }
         IrClauseData::MetadirectiveDefault { directive } => {
@@ -5576,12 +5567,12 @@ fn convert_default_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
                 directive: Box::into_raw(Box::new(nested)),
             }));
             Some(OmpClause {
-                kind: CLAUSE_KIND_DEFAULT,
+                kind: OmpClauseKind::Default,
                 arguments: ptr::null(),
                 data: ClauseData {
                     default_clause: data_ptr,
                 },
-                separator: 0,
+                separator: crate::parser::ClauseSeparator::Space,
             })
         }
         _ => None,
@@ -5596,7 +5587,7 @@ fn convert_defaultmap_clause_from_ast(payload: &IrClauseData) -> Option<OmpClaus
             .unwrap_or(defaultmap_category_code(DefaultmapCategory::Unspecified));
         let args = format_defaultmap_arguments(*behavior, *category);
         return Some(OmpClause {
-            kind: CLAUSE_KIND_DEFAULTMAP,
+            kind: OmpClauseKind::Defaultmap,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
@@ -5608,7 +5599,7 @@ fn convert_defaultmap_clause_from_ast(payload: &IrClauseData) -> Option<OmpClaus
                     category: category_code,
                 }),
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5617,10 +5608,10 @@ fn convert_defaultmap_clause_from_ast(payload: &IrClauseData) -> Option<OmpClaus
 fn convert_num_threads_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::NumThreads { num } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_NUM_THREADS,
+            kind: OmpClauseKind::NumThreads,
             arguments: allocate_c_string(&num.to_string()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5638,12 +5629,12 @@ fn convert_if_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
             .unwrap_or(ROUP_IF_MODIFIER_UNSPECIFIED);
         let args = condition.to_string();
         return Some(OmpClause {
-            kind: CLAUSE_KIND_IF,
+            kind: OmpClauseKind::If,
             arguments: allocate_c_string(&args),
             data: ClauseData {
                 default: modifier_code,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5651,21 +5642,21 @@ fn convert_if_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 
 fn convert_private_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Private { items } = payload {
-        return Some(build_variable_clause(CLAUSE_KIND_PRIVATE, items));
+        return Some(build_variable_clause(OmpClauseKind::Private, items));
     }
     None
 }
 
 fn convert_firstprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Firstprivate { items } = payload {
-        return Some(build_variable_clause(CLAUSE_KIND_FIRSTPRIVATE, items));
+        return Some(build_variable_clause(OmpClauseKind::Firstprivate, items));
     }
     None
 }
 
 fn convert_shared_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Shared { items } = payload {
-        return Some(build_variable_clause(CLAUSE_KIND_SHARED, items));
+        return Some(build_variable_clause(OmpClauseKind::Shared, items));
     }
     None
 }
@@ -5681,7 +5672,7 @@ fn convert_lastprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClau
             .unwrap_or_else(|| format_clause_items(items).unwrap_or_default());
 
         return Some(OmpClause {
-            kind: CLAUSE_KIND_LASTPRIVATE,
+            kind: OmpClauseKind::Lastprivate,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
@@ -5693,7 +5684,7 @@ fn convert_lastprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClau
                     variables: build_string_list_from_items(items),
                 }),
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5702,10 +5693,10 @@ fn convert_lastprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClau
 fn convert_collapse_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Collapse { n } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_COLLAPSE,
+            kind: OmpClauseKind::Collapse,
             arguments: allocate_c_string(&n.to_string()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5714,20 +5705,20 @@ fn convert_collapse_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
 fn convert_ordered_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Ordered { n } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_ORDERED,
+            kind: OmpClauseKind::Ordered,
             arguments: n
                 .as_ref()
                 .map(|expr| allocate_c_string(&expr.to_string()))
                 .unwrap_or(ptr::null()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
 }
 
 fn convert_reduction_clause_from_ast(
-    clause_kind: i32,
+    clause_kind: OmpClauseKind,
     payload: &IrClauseData,
 ) -> Option<OmpClause> {
     if let IrClauseData::Reduction {
@@ -5759,7 +5750,7 @@ fn convert_reduction_clause_from_ast(
             data: ClauseData {
                 reduction: ManuallyDrop::new(data),
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5785,10 +5776,10 @@ fn convert_schedule_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
             }),
         };
         return Some(OmpClause {
-            kind: CLAUSE_KIND_SCHEDULE,
+            kind: OmpClauseKind::Schedule,
             arguments: allocate_c_string(&args),
             data,
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5806,7 +5797,7 @@ fn convert_dist_schedule_clause_from_ast(payload: &IrClauseData) -> Option<OmpCl
             None => ptr::null(),
         };
         return Some(OmpClause {
-            kind: CLAUSE_KIND_DIST_SCHEDULE,
+            kind: OmpClauseKind::DistSchedule,
             arguments: allocate_c_string(&args),
             data: ClauseData {
                 dist_schedule: ManuallyDrop::new(DistScheduleData {
@@ -5814,7 +5805,7 @@ fn convert_dist_schedule_clause_from_ast(payload: &IrClauseData) -> Option<OmpCl
                     chunk: chunk_ptr,
                 }),
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5898,14 +5889,14 @@ fn convert_map_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
             iterators: iterator_data,
         }));
         return Some(OmpClause {
-            kind: CLAUSE_KIND_MAP,
+            kind: OmpClauseKind::Map,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
                 allocate_c_string(&args)
             },
             data: ClauseData { map: data_ptr },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5944,10 +5935,10 @@ fn convert_depend_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
             iterators: iterator_data,
         }));
         return Some(OmpClause {
-            kind: CLAUSE_KIND_DEPEND,
+            kind: OmpClauseKind::Depend,
             arguments: allocate_c_string(&parts.join(", ")),
             data: ClauseData { depend: data_ptr },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5956,12 +5947,12 @@ fn convert_depend_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 fn convert_depobj_update_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::DepobjUpdate { dependence } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_DEPOBJ_UPDATE,
+            kind: OmpClauseKind::DepobjUpdate,
             arguments: allocate_c_string(&dependence.to_string()),
             data: ClauseData {
                 default: depobj_update_dependence_code(*dependence),
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5971,12 +5962,12 @@ fn convert_update_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let Some(depobj) = convert_depobj_update_clause_from_ast(payload) {
         return Some(depobj);
     }
-    convert_atomic_operation_clause_from_ast(CLAUSE_KIND_ATOMIC_UPDATE, payload)
+    convert_atomic_operation_clause_from_ast(OmpClauseKind::Update, payload)
 }
 
 fn convert_copyin_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Copyin { items } = payload {
-        return Some(build_variable_clause(CLAUSE_KIND_COPYIN, items));
+        return Some(build_variable_clause(OmpClauseKind::CopyIn, items));
     }
     None
 }
@@ -5984,12 +5975,12 @@ fn convert_copyin_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 fn convert_proc_bind_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::ProcBind(policy) = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_PROC_BIND,
+            kind: OmpClauseKind::ProcBind,
             arguments: allocate_c_string(&policy.to_string()),
             data: ClauseData {
                 default: *policy as i32,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -5998,12 +5989,12 @@ fn convert_proc_bind_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
 fn convert_bind_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Bind(binding) = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_BIND,
+            kind: OmpClauseKind::Bind,
             arguments: allocate_c_string(&binding.to_string()),
             data: ClauseData {
                 default: *binding as i32,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6012,10 +6003,10 @@ fn convert_bind_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 fn convert_num_teams_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::NumTeams { num } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_NUM_TEAMS,
+            kind: OmpClauseKind::NumTeams,
             arguments: allocate_c_string(&num.to_string()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6024,10 +6015,10 @@ fn convert_num_teams_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
 fn convert_thread_limit_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::ThreadLimit { limit } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_THREAD_LIMIT,
+            kind: OmpClauseKind::ThreadLimit,
             arguments: allocate_c_string(&limit.to_string()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6085,14 +6076,14 @@ fn convert_linear_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
             variables,
         }));
         return Some(OmpClause {
-            kind: CLAUSE_KIND_LINEAR,
+            kind: OmpClauseKind::Linear,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
                 allocate_c_string(&args)
             },
             data: ClauseData { linear: data_ptr },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6119,14 +6110,14 @@ fn convert_aligned_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
             alignment: alignment_ptr,
         }));
         return Some(OmpClause {
-            kind: CLAUSE_KIND_ALIGNED,
+            kind: OmpClauseKind::Aligned,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
                 allocate_c_string(&args)
             },
             data: ClauseData { aligned: data_ptr },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6135,10 +6126,10 @@ fn convert_aligned_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
 fn convert_safelen_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Safelen { length } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_SAFELEN,
+            kind: OmpClauseKind::Safelen,
             arguments: allocate_c_string(&length.to_string()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6147,10 +6138,10 @@ fn convert_safelen_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
 fn convert_simdlen_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Simdlen { length } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_SIMDLEN,
+            kind: OmpClauseKind::Simdlen,
             arguments: allocate_c_string(&length.to_string()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6158,28 +6149,28 @@ fn convert_simdlen_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> 
 
 fn convert_use_device_ptr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::UseDevicePtr { items } = payload {
-        return Some(build_variable_clause(CLAUSE_KIND_USE_DEVICE_PTR, items));
+        return Some(build_variable_clause(OmpClauseKind::UseDevicePtr, items));
     }
     None
 }
 
 fn convert_use_device_addr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::UseDeviceAddr { items } = payload {
-        return Some(build_variable_clause(CLAUSE_KIND_USE_DEVICE_ADDR, items));
+        return Some(build_variable_clause(OmpClauseKind::UseDeviceAddr, items));
     }
     None
 }
 
 fn convert_is_device_ptr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::IsDevicePtr { items } = payload {
-        return Some(build_variable_clause(CLAUSE_KIND_IS_DEVICE_PTR, items));
+        return Some(build_variable_clause(OmpClauseKind::IsDevicePtr, items));
     }
     None
 }
 
 fn convert_has_device_addr_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::HasDeviceAddr { items } = payload {
-        return Some(build_variable_clause(CLAUSE_KIND_HAS_DEVICE_ADDR, items));
+        return Some(build_variable_clause(OmpClauseKind::HasDeviceAddr, items));
     }
     None
 }
@@ -6189,7 +6180,7 @@ fn convert_uses_allocators_clause_from_ast(payload: &IrClauseData) -> Option<Omp
         let args = format_uses_allocators_arguments(allocators);
         let data_ptr = build_uses_allocators_data_from_ast(allocators);
         return Some(OmpClause {
-            kind: CLAUSE_KIND_USES_ALLOCATORS,
+            kind: OmpClauseKind::UsesAllocators,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
@@ -6198,7 +6189,7 @@ fn convert_uses_allocators_clause_from_ast(payload: &IrClauseData) -> Option<Omp
             data: ClauseData {
                 uses_allocators: data_ptr,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6209,10 +6200,10 @@ fn convert_requires_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
         let args = format_requires_arguments(requirements);
         let data_ptr = build_requires_data_from_ast(requirements);
         return Some(OmpClause {
-            kind: CLAUSE_KIND_REQUIRES,
+            kind: OmpClauseKind::Requires,
             arguments: args.map_or(ptr::null(), |s| allocate_c_string(&s)),
             data: ClauseData { requires: data_ptr },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6222,7 +6213,7 @@ fn convert_allocate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
     if let IrClauseData::Allocate { allocator, items } = payload {
         let mut args = String::new();
         if let Some(alloc) = allocator {
-            args.push_str(&alloc.to_string());
+            args.push_str(alloc.canonical_name());
             if !items.is_empty() {
                 args.push_str(": ");
             }
@@ -6246,14 +6237,14 @@ fn convert_allocate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
         }));
 
         return Some(OmpClause {
-            kind: CLAUSE_KIND_ALLOCATE,
+            kind: OmpClauseKind::Allocate,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
                 allocate_c_string(&args)
             },
             data: ClauseData { allocate: data_ptr },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6263,10 +6254,10 @@ fn convert_allocator_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
     if let IrClauseData::Allocator { allocator } = payload {
         let (kind_code, _) = uses_allocator_kind_code(allocator);
         return Some(OmpClause {
-            kind: CLAUSE_KIND_ALLOCATOR,
-            arguments: allocate_c_string(&allocator.to_string()),
+            kind: OmpClauseKind::Allocator,
+            arguments: allocate_c_string(allocator.canonical_name()),
             data: ClauseData { default: kind_code },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6274,7 +6265,7 @@ fn convert_allocator_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
 
 fn convert_copyprivate_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Copyprivate { items } = payload {
-        return Some(build_variable_clause(CLAUSE_KIND_COPYPRIVATE, items));
+        return Some(build_variable_clause(OmpClauseKind::Copyprivate, items));
     }
     None
 }
@@ -6319,14 +6310,14 @@ fn convert_affinity_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
         }));
 
         return Some(OmpClause {
-            kind: CLAUSE_KIND_AFFINITY,
+            kind: OmpClauseKind::Affinity,
             arguments: if args.is_empty() {
                 ptr::null()
             } else {
                 allocate_c_string(&args)
             },
             data: ClauseData { affinity: data_ptr },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6335,10 +6326,10 @@ fn convert_affinity_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
 fn convert_priority_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Priority { priority } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_PRIORITY,
+            kind: OmpClauseKind::Priority,
             arguments: allocate_c_string(&priority.to_string()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6347,12 +6338,12 @@ fn convert_priority_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause>
 fn convert_grainsize_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Grainsize { modifier, grain } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_GRAINSIZE,
+            kind: OmpClauseKind::Grainsize,
             arguments: allocate_c_string(&grain.to_string()),
             data: ClauseData {
                 default: *modifier as i32,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6361,12 +6352,12 @@ fn convert_grainsize_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
 fn convert_num_tasks_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::NumTasks { modifier, num } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_NUM_TASKS,
+            kind: OmpClauseKind::NumTasks,
             arguments: allocate_c_string(&num.to_string()),
             data: ClauseData {
                 default: *modifier as i32,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6375,10 +6366,10 @@ fn convert_num_tasks_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause
 fn convert_filter_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Filter { thread_num } = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_FILTER,
+            kind: OmpClauseKind::Filter,
             arguments: allocate_c_string(&thread_num.to_string()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6397,12 +6388,12 @@ fn convert_device_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
         };
         let expr_ptr = allocate_c_string(&device_num.to_string());
         return Some(OmpClause {
-            kind: CLAUSE_KIND_DEVICE,
+            kind: OmpClauseKind::Device,
             arguments: expr_ptr,
             data: ClauseData {
                 default: modifier_code,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6411,12 +6402,12 @@ fn convert_device_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 fn convert_device_type_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::DeviceType(device_type) = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_DEVICE_TYPE,
+            kind: OmpClauseKind::DeviceType,
             arguments: allocate_c_string(&device_type.to_string()),
             data: ClauseData {
                 default: *device_type as i32,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6432,7 +6423,7 @@ fn convert_order_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
         text.push_str(&kind.to_string());
 
         return Some(OmpClause {
-            kind: CLAUSE_KIND_ORDER,
+            kind: OmpClauseKind::Order,
             arguments: allocate_c_string(&text),
             data: ClauseData {
                 order: ManuallyDrop::new(OrderData {
@@ -6440,7 +6431,7 @@ fn convert_order_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
                     kind: *kind as i32,
                 }),
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6449,27 +6440,27 @@ fn convert_order_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 fn convert_atomic_default_mem_order_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::AtomicDefaultMemOrder(order) = payload {
         return Some(OmpClause {
-            kind: CLAUSE_KIND_ATOMIC_DEFAULT_MEM_ORDER,
+            kind: OmpClauseKind::AtomicDefaultMemOrder,
             arguments: allocate_c_string(&order.to_string()),
             data: ClauseData {
                 default: *order as i32,
             },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
 }
 
 fn convert_atomic_operation_clause_from_ast(
-    clause_kind: i32,
+    clause_kind: OmpClauseKind,
     payload: &IrClauseData,
 ) -> Option<OmpClause> {
     if let IrClauseData::AtomicOperation { op, memory_order } = payload {
         let matches_kind = match clause_kind {
-            CLAUSE_KIND_ATOMIC_READ => *op == AtomicOp::Read,
-            CLAUSE_KIND_ATOMIC_WRITE => *op == AtomicOp::Write,
-            CLAUSE_KIND_ATOMIC_UPDATE => *op == AtomicOp::Update,
-            CLAUSE_KIND_ATOMIC_CAPTURE => *op == AtomicOp::Capture,
+            OmpClauseKind::Read => *op == AtomicOp::Read,
+            OmpClauseKind::Write => *op == AtomicOp::Write,
+            OmpClauseKind::Update => *op == AtomicOp::Update,
+            OmpClauseKind::Capture => *op == AtomicOp::Capture,
             _ => true,
         };
         if !matches_kind {
@@ -6482,7 +6473,7 @@ fn convert_atomic_operation_clause_from_ast(
                 .map(|order| allocate_c_string(&order.to_string()))
                 .unwrap_or(ptr::null()),
             data: ClauseData { default: 0 },
-            separator: 0,
+            separator: crate::parser::ClauseSeparator::Space,
         });
     }
     None
@@ -6645,37 +6636,40 @@ fn build_directive_list_from_ast(
     Box::into_raw(Box::new(OmpDirectiveList { items }))
 }
 
-fn convert_item_list_clause_from_ast(code: i32, payload: &IrClauseData) -> Option<OmpClause> {
+fn convert_item_list_clause_from_ast(
+    kind: OmpClauseKind,
+    payload: &IrClauseData,
+) -> Option<OmpClause> {
     if let IrClauseData::ItemList(items) = payload {
-        return Some(build_variable_clause(code, items));
+        return Some(build_variable_clause(kind, items));
     }
     None
 }
 
-fn convert_scan_clause_from_ast(code: i32, payload: &IrClauseData) -> Option<OmpClause> {
+fn convert_scan_clause_from_ast(kind: OmpClauseKind, payload: &IrClauseData) -> Option<OmpClause> {
     if let IrClauseData::Scan { mode: _, items } = payload {
         return Some(OmpClause {
-            kind: code,
+            kind,
             arguments: ptr::null(),
             data: ClauseData {
                 variables: build_string_list_from_items(items),
             },
-            separator: 1,
+            separator: crate::parser::ClauseSeparator::Comma,
         });
     }
     None
 }
 
-fn build_variable_clause(code: i32, items: &[ClauseItem]) -> OmpClause {
+fn build_variable_clause(kind: OmpClauseKind, items: &[ClauseItem]) -> OmpClause {
     OmpClause {
-        kind: code,
+        kind,
         arguments: format_clause_items(items)
             .map(|s| allocate_c_string(&s))
             .unwrap_or(ptr::null()),
         data: ClauseData {
             variables: build_string_list_from_items(items),
         },
-        separator: 0,
+        separator: crate::parser::ClauseSeparator::Space,
     }
 }
 
@@ -7647,7 +7641,7 @@ fn free_clause_data(clause: &OmpClause) {
                     }
                 }
             }
-        } else if clause.kind == CLAUSE_KIND_ALIGNED {
+        } else if clause.kind == OmpClauseKind::Aligned {
             let ptr = clause.data.aligned;
             if !ptr.is_null() {
                 let boxed = Box::from_raw(ptr);
@@ -7658,20 +7652,20 @@ fn free_clause_data(clause: &OmpClause) {
                     roup_string_list_free(boxed.variables);
                 }
             }
-        } else if clause.kind == CLAUSE_KIND_WHEN
-            || clause.kind == CLAUSE_KIND_MATCH
-            || clause.kind == CLAUSE_KIND_OTHERWISE
+        } else if clause.kind == OmpClauseKind::When
+            || clause.kind == OmpClauseKind::Match
+            || clause.kind == OmpClauseKind::Otherwise
         {
             let ptr = clause.data.selector;
             if !ptr.is_null() {
                 free_selector_data(ptr);
             }
-        } else if clause.kind == CLAUSE_KIND_SCHEDULE {
+        } else if clause.kind == OmpClauseKind::Schedule {
             let sched = &*clause.data.schedule;
             if !sched.chunk.is_null() {
                 drop(CString::from_raw(sched.chunk as *mut c_char));
             }
-        } else if clause.kind == CLAUSE_KIND_DIST_SCHEDULE {
+        } else if clause.kind == OmpClauseKind::DistSchedule {
             let dist = &*clause.data.dist_schedule;
             if !dist.chunk.is_null() {
                 drop(CString::from_raw(dist.chunk as *mut c_char));
@@ -7704,7 +7698,9 @@ fn free_clause_data(clause: &OmpClause) {
                     }
                 }
             }
-        } else if clause.kind == CLAUSE_KIND_ADJUST_ARGS || clause.kind == CLAUSE_KIND_APPEND_ARGS {
+        } else if clause.kind == OmpClauseKind::AdjustArgs
+            || clause.kind == OmpClauseKind::AppendArgs
+        {
             let ptr = clause.data.adjust_args;
             if !ptr.is_null() {
                 let boxed = Box::from_raw(ptr);
@@ -7715,7 +7711,7 @@ fn free_clause_data(clause: &OmpClause) {
                     roup_string_list_free(boxed.arguments);
                 }
             }
-        } else if clause.kind == CLAUSE_KIND_APPLY {
+        } else if clause.kind == OmpClauseKind::Apply {
             let ptr = clause.data.apply;
             if !ptr.is_null() {
                 let boxed = Box::from_raw(ptr);
@@ -7728,7 +7724,7 @@ fn free_clause_data(clause: &OmpClause) {
                     }
                 }
             }
-        } else if clause.kind == CLAUSE_KIND_INDUCTION {
+        } else if clause.kind == OmpClauseKind::Induction {
             let ptr = clause.data.induction;
             if !ptr.is_null() {
                 let boxed = Box::from_raw(ptr);
@@ -7741,7 +7737,7 @@ fn free_clause_data(clause: &OmpClause) {
                     }
                 }
             }
-        } else if clause.kind == CLAUSE_KIND_INIT {
+        } else if clause.kind == OmpClauseKind::Init {
             let ptr = clause.data.init;
             if !ptr.is_null() {
                 let boxed = Box::from_raw(ptr);
@@ -7752,7 +7748,7 @@ fn free_clause_data(clause: &OmpClause) {
                     drop(CString::from_raw(boxed.operand as *mut c_char));
                 }
             }
-        } else if clause.kind == CLAUSE_KIND_DOACROSS {
+        } else if clause.kind == OmpClauseKind::Doacross {
             let ptr = clause.data.doacross;
             if !ptr.is_null() {
                 let boxed = Box::from_raw(ptr);
@@ -7760,12 +7756,12 @@ fn free_clause_data(clause: &OmpClause) {
                     roup_string_list_free(boxed.variables);
                 }
             }
-        } else if clause.kind == CLAUSE_KIND_ABSENT || clause.kind == CLAUSE_KIND_CONTAINS {
+        } else if clause.kind == OmpClauseKind::Absent || clause.kind == OmpClauseKind::Contains {
             let ptr = clause.data.directive_kinds;
             if !ptr.is_null() {
                 drop(Box::from_raw(ptr));
             }
-        } else if clause.kind == CLAUSE_KIND_DEFAULT {
+        } else if clause.kind == OmpClauseKind::Default {
             let ptr = clause.data.default_clause;
             if !ptr.is_null() {
                 let boxed = Box::from_raw(ptr);
