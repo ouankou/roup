@@ -51,6 +51,12 @@ impl std::fmt::Display for AstBuildError {
 
 impl std::error::Error for AstBuildError {}
 
+impl From<crate::ir::ConversionError> for AstBuildError {
+    fn from(err: crate::ir::ConversionError) -> Self {
+        AstBuildError::ParseFailure(err.to_string())
+    }
+}
+
 /// Convert a parsed directive into the enum-based ROUP AST.
 pub fn build_roup_directive(
     directive: &Directive<'_>,
@@ -308,8 +314,7 @@ fn parse_identifier_list_parameter(
         ));
     }
     let content = &trimmed[1..trimmed.len() - 1];
-    let items = parse_identifier_list(content, parser_config)
-        .map_err(|err| AstBuildError::ParseFailure(err.to_string()))?;
+    let items = parse_identifier_list(content, parser_config)?;
     if items.is_empty() {
         return Err(AstBuildError::ParseFailure(
             "identifier list cannot be empty".to_string(),
