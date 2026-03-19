@@ -2801,19 +2801,39 @@ static size_t find_top_level_keyword(
     size_t start_pos,
     size_t* match_len) {
     int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
     for (size_t pos = start_pos; pos < text.size(); ++pos) {
         const char ch = text[pos];
-        if (ch == '(') {
-            ++paren_depth;
-            continue;
+        switch (ch) {
+            case '(':
+                ++paren_depth;
+                continue;
+            case ')':
+                if (paren_depth > 0) {
+                    --paren_depth;
+                }
+                continue;
+            case '[':
+                ++bracket_depth;
+                continue;
+            case ']':
+                if (bracket_depth > 0) {
+                    --bracket_depth;
+                }
+                continue;
+            case '{':
+                ++brace_depth;
+                continue;
+            case '}':
+                if (brace_depth > 0) {
+                    --brace_depth;
+                }
+                continue;
+            default:
+                break;
         }
-        if (ch == ')') {
-            if (paren_depth > 0) {
-                --paren_depth;
-            }
-            continue;
-        }
-        if (paren_depth != 0) {
+        if (paren_depth != 0 || bracket_depth != 0 || brace_depth != 0) {
             continue;
         }
         if (pos > 0 && !is_location_boundary_char(text[pos - 1])) {
