@@ -101,6 +101,67 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Normalize Fortran pragmas for comparison:
+# - treat top-level clause separators `,` and whitespace equivalently
+# - preserve commas inside clause argument lists
+# - merge missing spaces between adjacent clauses, e.g. `)copyout(` -> `) copyout(`
+# - normalize comma spacing inside clause argument lists
+# - collapse repeated whitespace and trim ends
+normalize_fortran_pragma() {
+    local pragma="$1"
+    echo "$pragma" | \
+        awk '
+            {
+                depth_paren = 0
+                depth_bracket = 0
+                depth_brace = 0
+                out = ""
+                pending_space = 0
+
+                for (i = 1; i <= length($0); ++i) {
+                    ch = substr($0, i, 1)
+
+                    if (ch ~ /[[:space:]]/) {
+                        pending_space = (length(out) > 0)
+                        continue
+                    }
+
+                    if (ch == "," && depth_paren == 0 && depth_bracket == 0 && depth_brace == 0) {
+                        pending_space = (length(out) > 0)
+                        continue
+                    }
+
+                    if (pending_space && length(out) > 0) {
+                        out = out " "
+                    }
+                    pending_space = 0
+
+                    out = out ch
+
+                    if (ch == "(") {
+                        ++depth_paren
+                    } else if (ch == ")" && depth_paren > 0) {
+                        --depth_paren
+                    } else if (ch == "[") {
+                        ++depth_bracket
+                    } else if (ch == "]" && depth_bracket > 0) {
+                        --depth_bracket
+                    } else if (ch == "{") {
+                        ++depth_brace
+                    } else if (ch == "}" && depth_brace > 0) {
+                        --depth_brace
+                    }
+                }
+
+                print out
+            }
+        ' | \
+        sed 's/)\([[:alpha:]_][[:alnum:]_]*\)/) \1/g' | \
+        sed 's/,[[:space:]]*/, /g' | \
+        sed 's/[[:space:]][[:space:]]*/ /g' | \
+        sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
 # Statistics
 total_files=0
 files_with_pragmas=0
@@ -240,9 +301,38 @@ process_file() {
             return
         fi
 
-        # Extract Fortran directives (!$acc, c$acc, *$acc - case insensitive)
-        # Normalize to lowercase for consistent processing
-        mapfile -t pragmas < <(echo "$preprocessed" | grep -iE '^[[:space:]]*[!cC*]\$acc' | tr '[:upper:]' '[:lower:]' || true)
+        # Extract Fortran directives and merge continued !$acc ... & lines.
+        raw_pragmas=()
+        IFS=$'\n' read -r -d '' -a raw_pragmas < <(echo "$preprocessed" | grep -iE '^[[:space:]]*[!cC*]\$acc' || true; printf '\0')
+
+        if [ ${#raw_pragmas[@]} -gt 0 ]; then
+            current=""
+            for line in "${raw_pragmas[@]}"; do
+                trimmed=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                lower=$(echo "$trimmed" | tr '[:upper:]' '[:lower:]')
+                prefix="${lower:0:6}"
+
+                if [ "$prefix" = '!$acc&' ] || [ "$prefix" = 'c$acc&' ] || [ "$prefix" = '*$acc&' ]; then
+                    remainder="${trimmed:6}"
+                    remainder=$(echo "$remainder" | sed 's/^[[:space:]]*//')
+                    current=$(echo "$current" | sed 's/[[:space:]]*&$//')
+                    current="${current}${remainder}"
+                else
+                    if [ -n "$current" ]; then
+                        pragmas+=("$current")
+                    fi
+                    current="$trimmed"
+                fi
+
+                if [[ "$current" == *"&" ]]; then
+                    current=$(echo "$current" | sed 's/[[:space:]]*&$//')
+                fi
+            done
+
+            if [ -n "$current" ]; then
+                pragmas+=("$current")
+            fi
+        fi
     else
         # C/C++ file - use C compiler
         preprocessed=$("$C_COMPILER" -E -P -CC -I"$(dirname "$file")" "$file" 2>/dev/null || true)
@@ -269,11 +359,7 @@ process_file() {
     # Process each pragma
     for pragma in "${pragmas[@]}"; do
         if [ $is_fortran -eq 1 ]; then
-            # Fortran: convert to lowercase, normalize formatting
-            # 1. Remove commas between clauses - match ), followed by clause keyword (word followed by paren or space)
-            # 2. Normalize comma spacing within clauses (e.g., ",x" -> ", x")
-            # 3. Collapse multiple spaces
-            local original_normalized=$(echo "$pragma" | tr '[:upper:]' '[:lower:]' | sed 's/),[[:space:]]*\([a-z][a-z_]*[[:space:]]*(\)/) \1/g' | sed 's/),[[:space:]]*\([a-z][a-z_]*[[:space:]]*$\)/) \1/g' | sed 's/,[[:space:]]*/, /g' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            local original_normalized=$(normalize_fortran_pragma "$pragma" | tr '[:upper:]' '[:lower:]')
 
             # Round-trip through ROUP (auto-detects Fortran from sentinel)
             if ! roundtrip=$(echo "$pragma" | "$ROUNDTRIP_BIN" --acc 2>/dev/null); then
@@ -284,7 +370,7 @@ process_file() {
             fi
 
             # Normalize round-tripped output
-            local roundtrip_normalized=$(echo "$roundtrip" | tr '[:upper:]' '[:lower:]' | sed 's/),[[:space:]]*\([a-z][a-z_]*[[:space:]]*(\)/) \1/g' | sed 's/),[[:space:]]*\([a-z][a-z_]*[[:space:]]*$\)/) \1/g' | sed 's/,[[:space:]]*/, /g' | sed 's/[[:space:]][[:space:]]*/ /g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            local roundtrip_normalized=$(normalize_fortran_pragma "$roundtrip" | tr '[:upper:]' '[:lower:]')
 
             # Compare
             if [ "$original_normalized" = "$roundtrip_normalized" ]; then
@@ -334,6 +420,7 @@ process_file() {
     echo "1 $file_pragmas $file_passed $file_failed $file_parse_errors" > "$result_file"
 }
 
+export -f normalize_fortran_pragma
 export -f process_file
 export ROUNDTRIP_BIN C_COMPILER FORTRAN_COMPILER CLANG_FORMAT
 
