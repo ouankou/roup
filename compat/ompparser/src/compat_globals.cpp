@@ -23,3 +23,15 @@ void setNormalizeClauses(bool normalize) {
     const char* value = normalize ? "parser_parity" : "disabled";
     setenv("ROUP_NORMALIZE_CLAUSES", value, /*overwrite=*/1);
 }
+
+// The compatibility build bypasses ompparser's lexer/parser, so there is no
+// live token stream to query. compat_impl.cpp assigns directive/clause source
+// locations explicitly after building the AST; these stubs only satisfy the
+// upstream API expected by SourceLocation's default constructor.
+int openmpGetCurrentTokenLine() {
+    return 0;
+}
+
+int openmpGetCurrentTokenColumn() {
+    return 0;
+}

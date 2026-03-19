@@ -16,6 +16,21 @@
 extern "C" {
 #endif
 
+/*
+ * Upstream ompparser now accepts an optional user-data pointer alongside the
+ * expression callback. Redeclare the signature here so local C++ callers that
+ * include roup_compat.h can continue omitting the third argument.
+ */
+#ifdef __cplusplus
+OpenMPDirective* parseOpenMP(const char* input,
+                             OpenMPExprParseCallback exprParse,
+                             void* exprParseUserData = nullptr);
+#else
+OpenMPDirective* parseOpenMP(const char* input,
+                             OpenMPExprParseCallback exprParse,
+                             void* exprParseUserData);
+#endif
+
 /* Set the base language for parsing (C, C++, Fortran) */
 void setLang(OpenMPBaseLang lang);
 

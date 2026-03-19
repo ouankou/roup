@@ -72,7 +72,7 @@ Your existing ompparser code works without changes:
 
 int main() {
     // Parse OpenMP directive
-    OpenMPDirective* dir = parseOpenMP("omp parallel num_threads(4)", nullptr);
+    OpenMPDirective* dir = parseOpenMP("omp parallel num_threads(4)", nullptr, nullptr);
     
     if (dir) {
         // Use ompparser methods (all work!)

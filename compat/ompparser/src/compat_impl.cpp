@@ -57,7 +57,7 @@ static std::string format_clause_args(const char* args, bool space_after_colon);
 static void warn_unsupported_clause(OpenMPClauseKind ck);
 static char* duplicate_c_string(const char* input);
 static std::vector<OpenMPMapClauseModifier> mapRoupMapModifiers(uint32_t mask, bool include_mapper);
-static void attach_variant_selector_from_roup(OpenMPVariantClause* clause, const OmpClause* roup_clause, void* exprParse(const char* expr));
+static void attach_variant_selector_from_roup(OpenMPVariantClause* clause, const OmpClause* roup_clause);
 static void convert_map_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void handle_dist_schedule_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void handle_schedule_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
@@ -66,9 +66,7 @@ static void convert_clause_with_payload(
     const OmpClause* roup_clause,
     OpenMPClauseKind clause_kind,
     std::vector<OpenMPUsesAllocatorsClause*>& uses_allocators_clauses,
-    void* exprParse(const char* expr),
     bool debug_logging);
-static void convert_depobj_clause(OpenMPDirective* dir, const OmpClause* roup_clause, void* exprParse(const char* expr));
 static void convert_depobj_update_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void convert_depend_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void convert_doacross_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
@@ -95,7 +93,7 @@ static void convert_proc_bind_clause(OpenMPDirective* dir, const OmpClause* roup
 static void convert_bind_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void convert_aligned_clause(OpenMPDirective* dir, const OmpClause* roup_clause, OpenMPClauseKind clause_kind);
 static void convert_ordered_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
-static void convert_default_clause(OpenMPDirective* dir, const OmpClause* roup_clause, void* exprParse(const char* expr), bool debug_logging);
+static void convert_default_clause(OpenMPDirective* dir, const OmpClause* roup_clause, bool debug_logging);
 static void convert_device_type_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void convert_atomic_ordered_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void convert_allocators_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
@@ -375,7 +373,6 @@ extern "C" {
 // Helpers to reuse ROUP-parsed directives without reparsing strings
 static OpenMPDirective* convert_roup_directive_to_ompparser(
     OmpDirective* roup_dir,
-    void* exprParse(const char* expr),
     bool free_input,
     bool debug_logging);
 
@@ -385,7 +382,6 @@ static void convert_clause_from_roup(
     const OmpClause* roup_clause,
     OpenMPClauseKind clause_kind,
     std::vector<OpenMPUsesAllocatorsClause*>& uses_allocators_clauses,
-    void* exprParse(const char* expr),
     bool debug_logging) {
     bool unsupported = false;
 
@@ -483,7 +479,7 @@ static void convert_clause_from_roup(
 
     switch (clause_kind) {
         case OMPC_default:
-            convert_default_clause(dir, roup_clause, exprParse, debug_logging);
+            convert_default_clause(dir, roup_clause, debug_logging);
             break;
         case OMPC_map:
             convert_map_clause(dir, roup_clause);
@@ -571,7 +567,7 @@ static void convert_clause_from_roup(
         case OMPC_in_reduction:
         case OMPC_detach:
         case OMPC_affinity:
-            convert_clause_with_payload(dir, roup_clause, clause_kind, uses_allocators_clauses, exprParse, debug_logging);
+            convert_clause_with_payload(dir, roup_clause, clause_kind, uses_allocators_clauses, debug_logging);
             break;
         case OMPC_adjust_args:
             convert_adjust_args_clause(dir, roup_clause);
@@ -1000,7 +996,6 @@ static std::pair<std::string, std::string> strip_end_directive_parameter(const s
 // Convert an already-parsed ROUP directive into an ompparser directive (no string parsing).
 static OpenMPDirective* convert_roup_directive_to_ompparser(
     OmpDirective* roup_dir,
-    void* exprParse(const char* expr),
     bool free_input,
     bool debug_logging) {
     if (debug_logging) {
@@ -1618,7 +1613,7 @@ static OpenMPDirective* convert_roup_directive_to_ompparser(
                     }
 
                     if (variant_clause != nullptr) {
-                        attach_variant_selector_from_roup(variant_clause, roup_clause, exprParse);
+                        attach_variant_selector_from_roup(variant_clause, roup_clause);
                         if (variant_clause->getClausePosition() == -1) {
                             dir->getClausesInOriginalOrder()->push_back(variant_clause);
                             variant_clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
@@ -1630,7 +1625,7 @@ static OpenMPDirective* convert_roup_directive_to_ompparser(
                 }
                 auto* order_vec = clause_target->getClausesInOriginalOrder();
                 size_t before = order_vec->size();
-                convert_clause_from_roup(clause_target, roup_clause, clause_kind, uses_allocators_clauses, exprParse, debug_logging);
+                convert_clause_from_roup(clause_target, roup_clause, clause_kind, uses_allocators_clauses, debug_logging);
                 OpenMPClauseSeparator sep_kind = (roup_separator == 1) ? OMPC_CLAUSE_SEP_comma : OMPC_CLAUSE_SEP_space;
                 if (clause_target->getKind() == OMPD_atomic) {
                     // Canonicalize atomic clause separation to spaces to match ompparser output.
@@ -1742,23 +1737,38 @@ static std::string format_clause_args(const char* args, bool space_after_colon =
 
     std::string result;
     int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
 
     for (size_t i = 0; i < input.length(); ++i) {
         char c = input[i];
+        const bool at_top_level = paren_depth == 0 && bracket_depth == 0 && brace_depth == 0;
 
         if (c == '(') {
             paren_depth++;
             result += c;
+        } else if (c == '[') {
+            bracket_depth++;
+            result += c;
+        } else if (c == '{') {
+            brace_depth++;
+            result += c;
         } else if (c == ')') {
             paren_depth--;
             result += c;
-        } else if (c == ',' && paren_depth == 0) {
+        } else if (c == ']') {
+            bracket_depth--;
+            result += c;
+        } else if (c == '}') {
+            brace_depth--;
+            result += c;
+        } else if (c == ',' && at_top_level) {
             result += ", ";  // Add space after comma
             // Skip any existing spaces
             while (i + 1 < input.length() && input[i + 1] == ' ') {
                 i++;
             }
-        } else if (c == ':' && space_after_colon && paren_depth == 0) {
+        } else if (c == ':' && space_after_colon && at_top_level) {
             result += ": ";  // Add space after colon
             // Skip any existing spaces
             while (i + 1 < input.length() && input[i + 1] == ' ') {
@@ -2095,9 +2105,6 @@ static std::string join_variables_from_list(OmpStringList* list) {
     return result;
 }
 
-// Forward declaration to allow recursive parsing for variant selectors
-extern "C" OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr));
-
 static OpenMPClauseContextKind map_context_kind(const std::string& value) {
     const std::string lowered = trim_copy(value);
     if (lowered == "host") return OMPC_CONTEXT_KIND_host;
@@ -2139,7 +2146,7 @@ static const char* get_score_entry(OmpStringList* scores, int32_t index) {
     return (score != nullptr && score[0] != '\0') ? score : "";
 }
 
-static void attach_variant_selector_from_roup(OpenMPVariantClause* clause, const OmpClause* roup_clause, void* exprParse(const char* expr)) {
+static void attach_variant_selector_from_roup(OpenMPVariantClause* clause, const OmpClause* roup_clause) {
     if (clause == nullptr || roup_clause == nullptr) {
         return;
     }
@@ -2274,7 +2281,7 @@ static void attach_variant_selector_from_roup(OpenMPVariantClause* clause, const
             OmpDirective* entry = roup_directive_list_get(construct_directives, i);
             if (entry != nullptr) {
                 OpenMPDirective* nested =
-                    convert_roup_directive_to_ompparser(entry, exprParse, false, debug_variant);
+                    convert_roup_directive_to_ompparser(entry, false, debug_variant);
                 if (nested != nullptr) {
                     clause->addConstructDirective(get_score_entry(construct_scores, i), nested);
                     has_construct_selector = true;
@@ -2293,7 +2300,7 @@ static void attach_variant_selector_from_roup(OpenMPVariantClause* clause, const
             fprintf(stderr, "[variant] nested selector directive present\n");
         }
         OpenMPDirective* nested_dir =
-            convert_roup_directive_to_ompparser(nested, exprParse, false, debug_variant);
+            convert_roup_directive_to_ompparser(nested, false, debug_variant);
         if (nested_dir != nullptr && clause->getKind() == OMPC_when) {
             static_cast<OpenMPWhenClause*>(clause)->setVariantDirective(nested_dir);
         } else if (nested_dir != nullptr && clause->getKind() == OMPC_otherwise) {
@@ -2721,6 +2728,348 @@ static size_t find_c_prefix_start(const std::string& text) {
         }
     }
     return matches ? start : std::string::npos;
+}
+
+struct ParsedSourceLocation {
+    int line;
+    int column;
+};
+
+static bool is_location_boundary_char(char ch) {
+    return std::isspace(static_cast<unsigned char>(ch)) || ch == '(' || ch == ')' || ch == ',' ||
+           ch == ':' || ch == '\0';
+}
+
+static ParsedSourceLocation offset_to_line_column(const std::string& text, size_t offset) {
+    ParsedSourceLocation location{1, 1};
+    const size_t capped = std::min(offset, text.size());
+    for (size_t i = 0; i < capped; ++i) {
+        if (text[i] == '\n') {
+            ++location.line;
+            location.column = 1;
+        } else {
+            ++location.column;
+        }
+    }
+    return location;
+}
+
+static bool match_keyword_sequence(
+    const std::string& text,
+    size_t pos,
+    const std::string& keyword,
+    size_t* match_len) {
+    size_t text_pos = pos;
+    size_t key_pos = 0;
+
+    while (key_pos < keyword.size()) {
+        if (keyword[key_pos] == ' ') {
+            if (text_pos >= text.size() || !std::isspace(static_cast<unsigned char>(text[text_pos]))) {
+                return false;
+            }
+            while (text_pos < text.size() && std::isspace(static_cast<unsigned char>(text[text_pos]))) {
+                ++text_pos;
+            }
+            while (key_pos < keyword.size() && keyword[key_pos] == ' ') {
+                ++key_pos;
+            }
+            continue;
+        }
+
+        if (text_pos >= text.size()) {
+            return false;
+        }
+
+        const char lhs = static_cast<char>(std::tolower(static_cast<unsigned char>(text[text_pos])));
+        const char rhs = static_cast<char>(std::tolower(static_cast<unsigned char>(keyword[key_pos])));
+        if (lhs != rhs) {
+            return false;
+        }
+        ++text_pos;
+        ++key_pos;
+    }
+
+    if (match_len != nullptr) {
+        *match_len = text_pos - pos;
+    }
+    return true;
+}
+
+static size_t find_top_level_keyword(
+    const std::string& text,
+    const std::string& keyword,
+    size_t start_pos,
+    size_t* match_len) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    for (size_t pos = start_pos; pos < text.size(); ++pos) {
+        const char ch = text[pos];
+        switch (ch) {
+            case '(':
+                ++paren_depth;
+                continue;
+            case ')':
+                if (paren_depth > 0) {
+                    --paren_depth;
+                }
+                continue;
+            case '[':
+                ++bracket_depth;
+                continue;
+            case ']':
+                if (bracket_depth > 0) {
+                    --bracket_depth;
+                }
+                continue;
+            case '{':
+                ++brace_depth;
+                continue;
+            case '}':
+                if (brace_depth > 0) {
+                    --brace_depth;
+                }
+                continue;
+            default:
+                break;
+        }
+        if (paren_depth != 0 || bracket_depth != 0 || brace_depth != 0) {
+            continue;
+        }
+        if (pos > 0 && !is_location_boundary_char(text[pos - 1])) {
+            continue;
+        }
+
+        size_t candidate_len = 0;
+        if (!match_keyword_sequence(text, pos, keyword, &candidate_len)) {
+            continue;
+        }
+        const size_t end_pos = pos + candidate_len;
+        if (end_pos < text.size() && !is_location_boundary_char(text[end_pos])) {
+            continue;
+        }
+        if (match_len != nullptr) {
+            *match_len = candidate_len;
+        }
+        return pos;
+    }
+    return std::string::npos;
+}
+
+static size_t find_directive_body_start(const std::string& text) {
+    size_t prefix_pos = find_c_prefix_start(text);
+    if (prefix_pos != std::string::npos) {
+        size_t pos = prefix_pos + C_PRAGMA_PREFIX_LEN;
+        while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos]))) {
+            ++pos;
+        }
+        if (pos + 2 >= text.size()) {
+            return std::string::npos;
+        }
+        const char o = static_cast<char>(std::tolower(static_cast<unsigned char>(text[pos])));
+        const char m = static_cast<char>(std::tolower(static_cast<unsigned char>(text[pos + 1])));
+        const char p = static_cast<char>(std::tolower(static_cast<unsigned char>(text[pos + 2])));
+        if (o != 'o' || m != 'm' || p != 'p') {
+            return std::string::npos;
+        }
+        pos += 3;
+        if (pos < text.size() &&
+            static_cast<char>(std::tolower(static_cast<unsigned char>(text[pos]))) == 'x') {
+            ++pos;
+        }
+        while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos]))) {
+            ++pos;
+        }
+        return pos;
+    }
+
+    prefix_pos = find_fortran_prefix_start(text);
+    if (prefix_pos == std::string::npos) {
+        return std::string::npos;
+    }
+
+    size_t pos = prefix_pos + FORTRAN_PREFIX_LEN;
+    if (pos < text.size() &&
+        static_cast<char>(std::tolower(static_cast<unsigned char>(text[pos]))) == 'x') {
+        ++pos;
+    }
+    while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos]))) {
+        ++pos;
+    }
+    return pos;
+}
+
+static bool has_fortran_ompx_prefix(const std::string& text) {
+    const size_t prefix_pos = find_fortran_prefix_start(text);
+    if (prefix_pos == std::string::npos) {
+        return false;
+    }
+    const size_t marker_pos = prefix_pos + FORTRAN_PREFIX_LEN;
+    return marker_pos < text.size() &&
+           static_cast<char>(std::tolower(static_cast<unsigned char>(text[marker_pos]))) == 'x';
+}
+
+static std::string extract_fortran_ompx_payload(const std::string& text) {
+    if (!has_fortran_ompx_prefix(text)) {
+        return {};
+    }
+
+    size_t pos = find_directive_body_start(text);
+    if (pos == std::string::npos || pos >= text.size()) {
+        return {};
+    }
+
+    const size_t start = text.find_first_not_of(" \t", pos);
+    if (start == std::string::npos) {
+        return {};
+    }
+    const size_t end = text.find_last_not_of(" \t");
+    if (end == std::string::npos || end < start) {
+        return {};
+    }
+    return text.substr(start, end - start + 1);
+}
+
+static const char* location_keyword_for_clause(OpenMPClauseKind kind) {
+    switch (kind) {
+        case OMPC_adjust_args: return "adjust_args";
+        case OMPC_affinity: return "affinity";
+        case OMPC_aligned: return "aligned";
+        case OMPC_allocate: return "allocate";
+        case OMPC_allocator: return "allocator";
+        case OMPC_append_args: return "append_args";
+        case OMPC_apply: return "apply";
+        case OMPC_at: return "at";
+        case OMPC_bind: return "bind";
+        case OMPC_capture: return "capture";
+        case OMPC_collapse: return "collapse";
+        case OMPC_compare: return "compare";
+        case OMPC_contains: return "contains";
+        case OMPC_copyin: return "copyin";
+        case OMPC_copyprivate: return "copyprivate";
+        case OMPC_default: return "default";
+        case OMPC_defaultmap: return "defaultmap";
+        case OMPC_depend: return "depend";
+        case OMPC_detach: return "detach";
+        case OMPC_device: return "device";
+        case OMPC_device_type: return "device_type";
+        case OMPC_dist_schedule: return "dist_schedule";
+        case OMPC_doacross: return "doacross";
+        case OMPC_exclusive: return "exclusive";
+        case OMPC_fail: return "fail";
+        case OMPC_filter: return "filter";
+        case OMPC_final: return "final";
+        case OMPC_firstprivate: return "firstprivate";
+        case OMPC_from: return "from";
+        case OMPC_grainsize: return "grainsize";
+        case OMPC_has_device_addr: return "has_device_addr";
+        case OMPC_if: return "if";
+        case OMPC_in_reduction: return "in_reduction";
+        case OMPC_inbranch: return "inbranch";
+        case OMPC_induction: return "induction";
+        case OMPC_init: return "init";
+        case OMPC_inclusive: return "inclusive";
+        case OMPC_is_device_ptr: return "is_device_ptr";
+        case OMPC_lastprivate: return "lastprivate";
+        case OMPC_linear: return "linear";
+        case OMPC_link: return "link";
+        case OMPC_map: return "map";
+        case OMPC_match: return "match";
+        case OMPC_mergeable: return "mergeable";
+        case OMPC_nogroup: return "nogroup";
+        case OMPC_nontemporal: return "nontemporal";
+        case OMPC_notinbranch: return "notinbranch";
+        case OMPC_nowait: return "nowait";
+        case OMPC_num_tasks: return "num_tasks";
+        case OMPC_num_teams: return "num_teams";
+        case OMPC_num_threads: return "num_threads";
+        case OMPC_order: return "order";
+        case OMPC_ordered: return "ordered";
+        case OMPC_otherwise: return "otherwise";
+        case OMPC_priority: return "priority";
+        case OMPC_private: return "private";
+        case OMPC_proc_bind: return "proc_bind";
+        case OMPC_read: return "read";
+        case OMPC_reduction: return "reduction";
+        case OMPC_safelen: return "safelen";
+        case OMPC_schedule: return "schedule";
+        case OMPC_seq_cst: return "seq_cst";
+        case OMPC_severity: return "severity";
+        case OMPC_shared: return "shared";
+        case OMPC_simdlen: return "simdlen";
+        case OMPC_task_reduction: return "task_reduction";
+        case OMPC_thread_limit: return "thread_limit";
+        case OMPC_to: return "to";
+        case OMPC_uniform: return "uniform";
+        case OMPC_update: return "update";
+        case OMPC_use_device_addr: return "use_device_addr";
+        case OMPC_use_device_ptr: return "use_device_ptr";
+        case OMPC_uses_allocators: return "uses_allocators";
+        case OMPC_when: return "when";
+        case OMPC_write: return "write";
+        default: return nullptr;
+    }
+}
+
+static void apply_source_locations(
+    OpenMPDirective* directive,
+    const std::string& input,
+    const char* directive_name) {
+    if (directive == nullptr || input.empty()) {
+        return;
+    }
+
+    const size_t body_start = find_directive_body_start(input);
+    size_t directive_match_len = 0;
+    size_t directive_pos = std::string::npos;
+    if (directive_name != nullptr && directive_name[0] != '\0' && body_start != std::string::npos) {
+        directive_pos =
+            find_top_level_keyword(input, directive_name, body_start, &directive_match_len);
+    }
+    if (directive_pos == std::string::npos) {
+        directive_pos = (body_start == std::string::npos) ? 0 : body_start;
+        directive_match_len = 0;
+    }
+
+    const ParsedSourceLocation directive_location = offset_to_line_column(input, directive_pos);
+    directive->setLine(directive_location.line);
+    directive->setColumn(directive_location.column);
+
+    std::vector<OpenMPClause*>* clauses = directive->getClausesInOriginalOrder();
+    if (clauses == nullptr) {
+        return;
+    }
+
+    size_t search_pos = directive_pos + directive_match_len;
+    for (OpenMPClause* clause : *clauses) {
+        if (clause == nullptr) {
+            continue;
+        }
+
+        const char* keyword = location_keyword_for_clause(clause->getKind());
+        if (keyword == nullptr || keyword[0] == '\0') {
+            continue;
+        }
+
+        size_t clause_match_len = 0;
+        size_t clause_pos =
+            find_top_level_keyword(input, keyword, search_pos, &clause_match_len);
+        if (clause_pos == std::string::npos) {
+            continue;
+        }
+
+        if (clause->getKind() == OMPC_default) {
+            const size_t paren_pos = input.find('(', clause_pos + clause_match_len);
+            if (paren_pos != std::string::npos) {
+                clause_pos = paren_pos;
+            }
+        }
+
+        const ParsedSourceLocation clause_location = offset_to_line_column(input, clause_pos);
+        clause->setLine(clause_location.line);
+        clause->setColumn(clause_location.column);
+        search_pos = clause_pos + std::max<size_t>(clause_match_len, 1);
+    }
 }
 
 // Map ROUP end directive constants to their paired directive kind
@@ -3328,7 +3677,9 @@ static OpenMPUsesAllocatorsClauseAllocator mapRoupUsesAllocator(int32_t code) {
 
 extern "C" {
 
-OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr)) {
+OpenMPDirective* parseOpenMP(const char* input,
+                             OpenMPExprParseCallback exprParse,
+                             void* exprParseUserData) {
     const bool debug_logging = std::getenv("ROUP_DEBUG_COMPAT") != nullptr;
     if (!input || input[0] == '\0') {
         return nullptr;
@@ -3378,6 +3729,9 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         fprintf(stderr, "[compat] normalized=\"%s\"\n", input_str.c_str());
     }
 
+    openmpSetExprParseCallback(exprParse, exprParseUserData);
+    openmpSetExprParseMode(OMP_EXPR_PARSE_none);
+
     // Call ROUP parser with correct language
     int32_t roup_lang = (current_lang == Lang_Fortran) ? ROUP_LANG_FORTRAN_FREE : ROUP_LANG_C;
     std::string parse_input = input_str;
@@ -3395,6 +3749,15 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
         }
     }
     if (!roup_dir) {
+        const std::string ompx_payload = extract_fortran_ompx_payload(input_str);
+        if (!ompx_payload.empty()) {
+            OpenMPDirective* ompx_directive = new OpenMPDirective(OMPD_ompx, Lang_Fortran, 0, 0);
+            ompx_directive->setBaseLang(Lang_Fortran);
+            ompx_directive->setFortranSentinel(OMPFS_ompx);
+            ompx_directive->setImplementationDefinedPayload(ompx_payload);
+            apply_source_locations(ompx_directive, input_str, ompx_payload.c_str());
+            return ompx_directive;
+        }
         if (std::getenv("ROUP_DEBUG_PARSE_FAIL") != nullptr) {
             fprintf(stderr, "ROUP parse failed (lang=%d): \"%s\"\n",
                     roup_lang,
@@ -3404,7 +3767,10 @@ OpenMPDirective* parseOpenMP(const char* input, void* exprParse(const char* expr
     }
 
     // Convert already-parsed ROUP directive to ompparser AST (no string parsing)
-    OpenMPDirective* converted = convert_roup_directive_to_ompparser(roup_dir, exprParse, true, debug_logging);
+    const char* directive_name_ptr = roup_directive_name(roup_dir);
+    const std::string directive_name = directive_name_ptr ? directive_name_ptr : "";
+    OpenMPDirective* converted = convert_roup_directive_to_ompparser(roup_dir, true, debug_logging);
+    apply_source_locations(converted, input_str, directive_name.c_str());
     if (converted && !end_critical_name.empty() && converted->getKind() == OMPD_end) {
         OpenMPEndDirective* end_dir = static_cast<OpenMPEndDirective*>(converted);
         OpenMPDirective* paired = end_dir->getPairedDirective();
@@ -3476,9 +3842,23 @@ static void convert_map_clause(OpenMPDirective* dir, const OmpClause* rc) {
         OpenMPMapClause::addMapClause(dir, m1, m2, m3, map_type,
                                       OMPC_MAP_REF_MODIFIER_unspecified,
                                       has_mapper ? mapper : "");
+    auto* map_clause = dynamic_cast<OpenMPMapClause*>(clause);
 
     OmpStringList* vars = roup_clause_variables(rc);
-    append_variables_to_clause(clause, vars);
+    if (map_clause != nullptr && vars != nullptr) {
+        const int length = roup_string_list_len(vars);
+        for (int i = 0; i < length; ++i) {
+            const char* item = roup_string_list_get(vars, i);
+            if (item == nullptr) {
+                continue;
+            }
+            std::string cleaned = trim_paren_padding(item);
+            cleaned = format_clause_args(cleaned.c_str(), true);
+            map_clause->addItem(cleaned, OMPC_CLAUSE_SEP_comma);
+        }
+    } else {
+        append_variables_to_clause(clause, vars);
+    }
     if (vars) {
         roup_string_list_free(vars);
     }
@@ -3488,8 +3868,7 @@ static void convert_map_clause(OpenMPDirective* dir, const OmpClause* rc) {
                 iter_count, mod_mask, has_mapper ? 1 : 0,
                 static_cast<int>(m1), static_cast<int>(m2), static_cast<int>(m3));
     }
-    if (clause && iter_count > 0) {
-        auto* map_clause = static_cast<OpenMPMapClause*>(clause);
+    if (map_clause != nullptr && iter_count > 0) {
         map_clause->clearIterators();
         for (int32_t i = 0; i < iter_count; ++i) {
             const char* qualifier = roup_clause_map_iterator_type(rc, i);
@@ -3577,7 +3956,6 @@ static void convert_clause_with_payload(
     const OmpClause* rc,
     OpenMPClauseKind ck,
     std::vector<OpenMPUsesAllocatorsClause*>& uses_allocators_clauses,
-    void* exprParse(const char*),
     bool debug_logging) {
     switch (ck) {
         case OMPC_reduction:
@@ -4317,7 +4695,7 @@ static void convert_allocator_like_clause(OpenMPDirective* dir, const OmpClause*
     }
 }
 
-static void convert_default_clause(OpenMPDirective* dir, const OmpClause* rc, void* exprParse(const char* expr), bool debug_logging) {
+static void convert_default_clause(OpenMPDirective* dir, const OmpClause* rc, bool debug_logging) {
     int32_t sharing = roup_clause_default_data_sharing(rc);
     OpenMPDefaultClauseKind kind = OMPC_DEFAULT_unknown;
     switch (sharing) {
@@ -4335,7 +4713,7 @@ static void convert_default_clause(OpenMPDirective* dir, const OmpClause* rc, vo
             return;
         }
         OpenMPDirective* nested_dir =
-            convert_roup_directive_to_ompparser(nested, exprParse, false, debug_logging);
+            convert_roup_directive_to_ompparser(nested, false, debug_logging);
         if (nested_dir == nullptr) {
             warn_unsupported_clause(OMPC_default);
             return;
