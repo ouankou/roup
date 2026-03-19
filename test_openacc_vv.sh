@@ -105,6 +105,8 @@ NC='\033[0m' # No Color
 # - treat top-level clause separators `,` and whitespace equivalently
 # - preserve commas inside clause argument lists
 # - merge missing spaces between adjacent clauses, e.g. `)copyout(` -> `) copyout(`
+# - ignore harmless spacing around delimiters introduced by preprocessing or
+#   continuation joins
 # - normalize comma spacing inside clause argument lists
 # - collapse repeated whitespace and trim ends
 normalize_fortran_pragma() {
@@ -157,6 +159,10 @@ normalize_fortran_pragma() {
             }
         ' | \
         sed 's/)\([[:alpha:]_][[:alnum:]_]*\)/) \1/g' | \
+        sed 's/\([[:alnum:]_]\)[[:space:]]*(/\1(/g' | \
+        sed 's/([[:space:]]*/(/g' | \
+        sed 's/[[:space:]]*)/)/g' | \
+        sed 's/[[:space:]]*,/,/g' | \
         sed 's/,[[:space:]]*/, /g' | \
         sed 's/[[:space:]][[:space:]]*/ /g' | \
         sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
@@ -316,7 +322,7 @@ process_file() {
                     remainder="${trimmed:6}"
                     remainder=$(echo "$remainder" | sed 's/^[[:space:]]*//')
                     current=$(echo "$current" | sed 's/[[:space:]]*&$//')
-                    current="${current}${remainder}"
+                    current="${current} ${remainder}"
                 else
                     if [ -n "$current" ]; then
                         pragmas+=("$current")
