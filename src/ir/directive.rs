@@ -384,9 +384,6 @@ pub enum DirectiveKind {
     TargetTeamsDistributeParallelDo = 145,
     /// `!$omp target teams distribute parallel do simd` (Fortran)
     TargetTeamsDistributeParallelDoSimd = 146,
-
-    /// Unknown or custom directive
-    Unknown = 255,
 }
 
 impl fmt::Display for DirectiveKind {
@@ -574,8 +571,6 @@ impl fmt::Display for DirectiveKind {
             DirectiveKind::TargetTeamsDistributeParallelDoSimd => {
                 write!(f, "target teams distribute parallel do simd")
             }
-
-            DirectiveKind::Unknown => write!(f, "unknown"),
         }
     }
 }
@@ -847,8 +842,6 @@ impl DirectiveKind {
             DirectiveKind::TargetTeamsDistributeParallelDoSimd => {
                 "target teams distribute parallel do simd"
             }
-
-            DirectiveKind::Unknown => "unknown",
         }
     }
 

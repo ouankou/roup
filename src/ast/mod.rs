@@ -4,6 +4,7 @@
 //! strongly typed payload structures that downstream consumers will rely on.
 //! The goal is to eliminate every post-parse string/number inspection so the
 //! parser becomes the single place that interprets tokens.
+#![forbid(unsafe_code)]
 
 use std::convert::TryFrom;
 
@@ -326,7 +327,7 @@ pub enum AccDeviceType {
     Any,
     Multicore,
     Default,
-    Unknown(String),
+    Named(Identifier),
 }
 
 /// Gang clause payload (single modifier + value list, accparser-compatible).
@@ -391,7 +392,7 @@ pub struct AccReductionClause {
     pub variables: Vec<Identifier>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AccReductionOperator {
     Unspecified,
     Readonly,
@@ -412,7 +413,7 @@ pub enum AccReductionOperator {
     FortIand,
     FortIor,
     FortIeor,
-    Unknown,
+    UserDefined(Identifier),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

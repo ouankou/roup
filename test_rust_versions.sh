@@ -16,7 +16,7 @@
 # How it works:
 #   - Parses .github/workflows/ci.yml to extract the version matrix
 #   - Tests each version by installing it via rustup
-#   - Runs critical checks: format, clippy, build, tests
+#   - Runs critical checks: format, enum/safety audit, clippy, build, tests
 #   - Restores your original Rust version when done
 #
 # Single source of truth: .github/workflows/ci.yml
@@ -131,8 +131,21 @@ for VERSION in "${VERSIONS[@]}"; do
         continue
     fi
 
-    # 2. Clippy
-    echo -n "  2. Clippy lints... "
+    # 2. Enum/safety audit
+    echo -n "  2. Enum/safety audit... "
+    if ./scripts/audit_enum_safety.sh &> /tmp/enum_safety_audit_$VERSION.log; then
+        echo -e "${GREEN}✓${NC}"
+    else
+        echo -e "${RED}✗ FAILED${NC}"
+        cat /tmp/enum_safety_audit_$VERSION.log
+        ((FAILED += 1))
+        FAILED_VERSIONS+=("$VERSION (enum/safety audit)")
+        rustup override unset > /dev/null
+        continue
+    fi
+
+    # 3. Clippy
+    echo -n "  3. Clippy lints... "
     if cargo clippy --all-targets -- -D warnings &> /tmp/clippy_$VERSION.log; then
         echo -e "${GREEN}✓${NC}"
     else
@@ -147,8 +160,8 @@ for VERSION in "${VERSIONS[@]}"; do
         continue
     fi
 
-    # 3. Build
-    echo -n "  3. Build... "
+    # 4. Build
+    echo -n "  4. Build... "
     if cargo build --all-targets &> /tmp/build_$VERSION.log; then
         echo -e "${GREEN}✓${NC}"
     else
@@ -160,8 +173,8 @@ for VERSION in "${VERSIONS[@]}"; do
         continue
     fi
 
-    # 4. Tests
-    echo -n "  4. Tests... "
+    # 5. Tests
+    echo -n "  5. Tests... "
     if cargo test --all-targets &> /tmp/test_$VERSION.log; then
         echo -e "${GREEN}✓${NC}"
     else

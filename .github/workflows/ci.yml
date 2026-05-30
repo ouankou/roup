@@ -77,7 +77,7 @@ jobs:
         run: cargo install mdbook
         shell: bash
 
-      - name: Run comprehensive test suite (Linux)
+      - name: Run comprehensive test suite incl. enum/safety audit (Linux)
         if: runner.os == 'Linux'
         run: ./test.sh
         shell: bash

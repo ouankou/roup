@@ -244,7 +244,7 @@ impl From<&AccDeviceType> for AccDeviceTypeCode {
             AccDeviceType::Any => Self::Any,
             AccDeviceType::Multicore => Self::Multicore,
             AccDeviceType::Default => Self::Default,
-            AccDeviceType::Unknown(_) => Self::Unknown,
+            AccDeviceType::Named(_) => Self::Unknown,
         }
     }
 }
@@ -275,8 +275,8 @@ enum AccReductionOperatorCode {
     Unknown = 19,
 }
 
-impl From<AccReductionOperator> for AccReductionOperatorCode {
-    fn from(value: AccReductionOperator) -> Self {
+impl From<&AccReductionOperator> for AccReductionOperatorCode {
+    fn from(value: &AccReductionOperator) -> Self {
         match value {
             AccReductionOperator::Unspecified => Self::Unspecified,
             AccReductionOperator::Readonly => Self::Readonly,
@@ -297,7 +297,7 @@ impl From<AccReductionOperator> for AccReductionOperatorCode {
             AccReductionOperator::FortIand => Self::FortIand,
             AccReductionOperator::FortIor => Self::FortIor,
             AccReductionOperator::FortIeor => Self::FortIeor,
-            AccReductionOperator::Unknown => Self::Unknown,
+            AccReductionOperator::UserDefined(_) => Self::Unknown,
         }
     }
 }
@@ -1129,7 +1129,7 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
         }
         Reduction(reduction) => {
             clause.expressions = identifiers_to_cstrings(&reduction.variables);
-            let op: AccReductionOperatorCode = reduction.operator.into();
+            let op: AccReductionOperatorCode = (&reduction.operator).into();
             clause.reduction_operator = Some(op);
             clause.legacy_modifier = op as i32;
         }
@@ -1145,7 +1145,7 @@ fn convert_acc_clause_from_ast(ast_clause: &AstAccClause) -> AccClause {
                     AccDeviceType::Any => make_c_string("any"),
                     AccDeviceType::Multicore => make_c_string("multicore"),
                     AccDeviceType::Default => make_c_string("default"),
-                    AccDeviceType::Unknown(raw) => make_c_string(raw),
+                    AccDeviceType::Named(name) => make_c_string(name.as_str()),
                 })
                 .collect();
         }

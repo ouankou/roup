@@ -1,4 +1,5 @@
 //! # OpenMP Intermediate Representation (IR)
+#![forbid(unsafe_code)]
 //!
 //! This module provides a **semantic** representation of OpenMP directives and clauses.
 //! Unlike the parser module which deals with syntax, the IR focuses on the **meaning**
@@ -55,7 +56,7 @@ pub use clause::{
     DependIterator, DependType, DepobjUpdateDependence, DeviceModifier, DeviceType, DoacrossType,
     GrainsizeModifier, IfModifier, InductionItem, InitKind, LastprivateModifier, LinearModifier,
     MapModifier, MapType, MemoryOrder, NowaitModifier, NumTasksModifier, OrderKind, OrderModifier,
-    ProcBind, ReductionModifier, ReductionOperator, RequireModifier, ScheduleKind,
+    ProcBind, ReductionModifier, ReductionOperator, RequireModifier, ScanClauseMode, ScheduleKind,
     ScheduleModifier, SeverityKind, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
 };
 pub use convert::convert_directive;
@@ -74,7 +75,7 @@ pub mod convert;
 mod directive;
 mod error;
 mod expression;
-mod lang;
+pub(crate) mod lang;
 pub mod translate;
 mod types;
 pub mod validate;

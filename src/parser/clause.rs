@@ -402,25 +402,25 @@ pub fn lookup_clause_name(name: &str) -> ClauseName {
 type ClauseParserFn = for<'a> fn(Cow<'a, str>, &'a str) -> IResult<&'a str, Clause<'a>>;
 
 /// OpenACC copyin clause modifier
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum CopyinModifier {
     Readonly,
 }
 
 /// OpenACC copyout clause modifier
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum CopyoutModifier {
     Zero,
 }
 
 /// OpenACC create clause modifier
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum CreateModifier {
     Zero,
 }
 
 /// Reduction clause operator
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ReductionOperator {
     Add,    // +
     Sub,    // -
@@ -445,7 +445,7 @@ pub enum ReductionOperator {
 }
 
 /// Reduction clause modifiers (OpenMP 5.x).
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ReductionModifier {
     Task,
     Inscan,
@@ -453,19 +453,19 @@ pub enum ReductionModifier {
     Original,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum GangModifier {
     Num,    // num
     Static, // static
     Dim,    // dim
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum WorkerModifier {
     Num, // num
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum VectorModifier {
     Length, // length
 }

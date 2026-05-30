@@ -6,11 +6,37 @@ use std::{
 
 use nom::{error::ErrorKind, IResult};
 
-use super::clause::{lookup_clause_name, Clause, ClauseName, ClauseRegistry};
+use super::clause::{
+    lookup_clause_name, Clause, ClauseName, ClauseRegistry, CopyinModifier, CopyoutModifier,
+    CreateModifier, GangModifier, ReductionModifier, ReductionOperator, VectorModifier,
+    WorkerModifier,
+};
 use crate::parser::directive_kind::DirectiveName;
 
 type DirectiveParserFn =
     for<'a> fn(Cow<'a, str>, &'a str, &ClauseRegistry) -> IResult<&'a str, Directive<'a>>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum ClauseMergeShape<'a> {
+    Bare,
+    ParenthesizedList,
+    ParenthesizedContent(Cow<'a, str>),
+    DependPrefix(Cow<'a, str>),
+    UniqueOccurrence(usize),
+    VariableList,
+    Gang(Option<GangModifier>),
+    Worker(Option<WorkerModifier>),
+    Vector(Option<VectorModifier>),
+    Reduction {
+        operator: ReductionOperator,
+        modifiers: Vec<ReductionModifier>,
+        user_defined_identifier: Option<Cow<'a, str>>,
+        space_after_colon: bool,
+    },
+    Copyin(Option<CopyinModifier>),
+    Copyout(Option<CopyoutModifier>),
+    Create(Option<CreateModifier>),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WaitDirectiveData<'a> {
@@ -63,19 +89,17 @@ impl<'a> Directive<'a> {
     ///
     /// Example: `gang(a,b) gang(b,c)` becomes `gang(a,b,c)`
     pub fn merge_clauses(&mut self) {
-        use super::clause::{
-            lookup_clause_name, parse_variable_list, Clause, ClauseKind, ClauseName,
-        };
+        use super::clause::{parse_variable_list, Clause, ClauseKind, ClauseName};
         use std::collections::{HashMap, HashSet};
         // Group clauses by name AND modifier/kind for merging
-        // Key: (canonical_name, optional_spelling, kind_discriminant, modifier_value)
+        // Key: (canonical_name, optional_spelling, typed clause shape)
         //
         // The spelling is needed for OpenACC data-clause variants where multiple
         // keywords map to the same canonical ClauseName but have different
         // semantics (e.g. `copy`, `pcopy`, `present_or_copy`). We must not merge
         // these across spellings; otherwise variables inherit the wrong data
         // movement semantics after normalization.
-        type MergeKey<'b> = (ClauseName, Option<Cow<'b, str>>, u8, u32);
+        type MergeKey<'b> = (ClauseName, Option<Cow<'b, str>>, ClauseMergeShape<'b>);
         let mut merged: HashMap<MergeKey<'a>, Vec<Clause<'a>>> = HashMap::new();
         let mut order: Vec<MergeKey<'a>> = Vec::new();
 
@@ -88,10 +112,9 @@ impl<'a> Directive<'a> {
                 | ClauseName::Create => Some(clause.name.clone()),
                 _ => None,
             };
-            // Create key based on clause name, kind, and modifier/content
-            // For Parenthesized clauses, we hash the content to distinguish collapse(1) from collapse(2)
-            let kind_disc = match &clause.kind {
-                ClauseKind::Bare => 0,
+            // Create key based on typed clause shape and modifier/content.
+            let merge_shape = match &clause.kind {
+                ClauseKind::Bare => ClauseMergeShape::Bare,
                 ClauseKind::Parenthesized(content) => {
                     // Merge common list-based clauses regardless of exact list
                     match &clause_name_kind {
@@ -102,15 +125,13 @@ impl<'a> Directive<'a> {
                         | ClauseName::CopyIn
                         | ClauseName::CopyOut
                         | ClauseName::Aligned
-                        | ClauseName::Nontemporal => 0,
+                        | ClauseName::Nontemporal => ClauseMergeShape::ParenthesizedList,
                         ClauseName::UsesAllocators => {
                             // Preserve multiple occurrences; give each a unique key.
-                            2_000_000 + order.len() as u32
+                            ClauseMergeShape::UniqueOccurrence(order.len())
                         }
                         ClauseName::Depend => {
                             // Merge depend clauses that share the same modifier/iterator prefix.
-                            use std::collections::hash_map::DefaultHasher;
-                            use std::hash::{Hash, Hasher};
                             let mut depth = 0i32;
                             let mut split_at = content.len();
                             for (idx, ch) in content.char_indices() {
@@ -129,30 +150,21 @@ impl<'a> Directive<'a> {
                                 }
                             }
                             let prefix = content[..split_at].trim().to_ascii_lowercase();
-                            let mut hasher = DefaultHasher::new();
-                            prefix.hash(&mut hasher);
-                            2 + (hasher.finish() % 1_000_000) as u32
+                            ClauseMergeShape::DependPrefix(Cow::Owned(prefix))
                         }
-                        _ => {
-                            // Use hash of content to distinguish different parameter values
-                            use std::collections::hash_map::DefaultHasher;
-                            use std::hash::{Hash, Hasher};
-                            let mut hasher = DefaultHasher::new();
-                            content.as_ref().hash(&mut hasher);
-                            1_000_000 + (hasher.finish() % 1_000_000) as u32
-                        }
+                        _ => ClauseMergeShape::ParenthesizedContent(content.clone()),
                     }
                 }
-                ClauseKind::VariableList(_) => 2,
+                ClauseKind::VariableList(_) => ClauseMergeShape::VariableList,
                 ClauseKind::GangClause {
                     modifier,
                     variables,
                     ..
                 } => {
                     if variables.is_empty() {
-                        0 // Bare gang - same as Bare
+                        ClauseMergeShape::Bare
                     } else {
-                        3 + modifier.map_or(0, |m| m as u32)
+                        ClauseMergeShape::Gang(*modifier)
                     }
                 }
                 ClauseKind::WorkerClause {
@@ -160,9 +172,9 @@ impl<'a> Directive<'a> {
                     variables,
                 } => {
                     if variables.is_empty() {
-                        0 // Bare worker
+                        ClauseMergeShape::Bare
                     } else {
-                        10 + modifier.map_or(0, |m| m as u32)
+                        ClauseMergeShape::Worker(*modifier)
                     }
                 }
                 ClauseKind::VectorClause {
@@ -170,9 +182,9 @@ impl<'a> Directive<'a> {
                     variables,
                 } => {
                     if variables.is_empty() {
-                        0 // Bare vector
+                        ClauseMergeShape::Bare
                     } else {
-                        20 + modifier.map_or(0, |m| m as u32)
+                        ClauseMergeShape::Vector(*modifier)
                     }
                 }
                 ClauseKind::ReductionClause {
@@ -181,30 +193,21 @@ impl<'a> Directive<'a> {
                     user_defined_identifier,
                     space_after_colon,
                     ..
-                } => {
-                    use std::collections::hash_map::DefaultHasher;
-                    use std::hash::{Hash, Hasher};
-                    let mut hasher = DefaultHasher::new();
-                    (*space_after_colon as u8).hash(&mut hasher);
-                    (*operator as u8).hash(&mut hasher);
-                    for modifier in modifiers {
-                        (*modifier as u8).hash(&mut hasher);
-                    }
-                    if let Some(id) = user_defined_identifier {
-                        id.as_ref().hash(&mut hasher);
-                    }
-                    30 + (hasher.finish() % 1_000_000) as u32
-                }
-                ClauseKind::CopyinClause { modifier, .. } => 40 + modifier.map_or(0, |m| m as u32),
-                ClauseKind::CopyoutClause { modifier, .. } => 50 + modifier.map_or(0, |m| m as u32),
-                ClauseKind::CreateClause { modifier, .. } => 60 + modifier.map_or(0, |m| m as u32),
+                } => ClauseMergeShape::Reduction {
+                    operator: *operator,
+                    modifiers: modifiers.clone(),
+                    user_defined_identifier: user_defined_identifier.clone(),
+                    space_after_colon: *space_after_colon,
+                },
+                ClauseKind::CopyinClause { modifier, .. } => ClauseMergeShape::Copyin(*modifier),
+                ClauseKind::CopyoutClause { modifier, .. } => ClauseMergeShape::Copyout(*modifier),
+                ClauseKind::CreateClause { modifier, .. } => ClauseMergeShape::Create(*modifier),
             };
 
             let key = (
                 clause_name_kind.clone(),
                 clause_name_spelling.clone(),
-                kind_disc as u8,
-                kind_disc,
+                merge_shape,
             );
             let entry = merged.entry(key.clone()).or_default();
             if entry.is_empty() {

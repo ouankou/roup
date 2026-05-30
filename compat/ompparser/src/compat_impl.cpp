@@ -598,6 +598,11 @@ static void convert_clause_from_roup(
                         case 4: ompkind = OMPC_APPLY_TRANSFORM_interchange; break;
                         case 5: ompkind = OMPC_APPLY_TRANSFORM_nothing; break;
                         case 6: ompkind = OMPC_APPLY_TRANSFORM_tile_sizes; break;
+                        case 7:
+                            transforms.emplace_back(
+                                OMPC_APPLY_TRANSFORM_unknown,
+                                std::string("apply(") + (targ ? targ : "") + ")");
+                            continue;
                         default: ompkind = OMPC_APPLY_TRANSFORM_unknown; break;
                     }
                     transforms.emplace_back(ompkind, targ ? targ : "");

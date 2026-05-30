@@ -618,7 +618,6 @@ struct InductionData {
 #[repr(C)]
 struct InitData {
     kind: i32,
-    raw_kind: *const c_char,
     operand: *const c_char,
 }
 
@@ -2903,20 +2902,8 @@ pub extern "C" fn roup_clause_init_kind(clause: *const OmpClause) -> i32 {
 
 #[no_mangle]
 pub extern "C" fn roup_clause_init_raw_kind(clause: *const OmpClause) -> *const c_char {
-    if clause.is_null() {
-        return ptr::null();
-    }
-    unsafe {
-        let c = &*clause;
-        if c.kind != OmpClauseKind::Init {
-            return ptr::null();
-        }
-        let ptr = c.data.init;
-        if ptr.is_null() {
-            return ptr::null();
-        }
-        (*ptr).raw_kind
-    }
+    let _ = clause;
+    ptr::null()
 }
 
 #[no_mangle]
@@ -3962,7 +3949,6 @@ fn depobj_update_dependence_code(dep: DepobjUpdateDependence) -> i32 {
         DepobjUpdateDependence::Depobj => 5,
         DepobjUpdateDependence::Sink => 6,
         DepobjUpdateDependence::Source => 7,
-        DepobjUpdateDependence::Unknown => 8,
     }
 }
 
@@ -4855,16 +4841,7 @@ fn convert_fail_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 }
 
 fn convert_init_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
-    if let IrClauseData::Init {
-        kind,
-        raw_kind,
-        operand,
-    } = payload
-    {
-        let raw_ptr = raw_kind
-            .as_ref()
-            .map(|id| allocate_c_string(id.as_str()))
-            .unwrap_or(ptr::null());
+    if let IrClauseData::Init { kind, operand } = payload {
         let operand_ptr = operand
             .as_ref()
             .map(|e| allocate_c_string(&e.to_string()))
@@ -4874,7 +4851,6 @@ fn convert_init_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
             .unwrap_or(ptr::null());
         let data_ptr = Box::into_raw(Box::new(InitData {
             kind: *kind as i32,
-            raw_kind: raw_ptr,
             operand: operand_ptr,
         }));
         return Some(OmpClause {
@@ -4966,7 +4942,6 @@ fn build_metadirective_clause(kind: OmpClauseKind, payload: &IrClauseData) -> Om
             (build_selector_data(selector), args)
         }
         IrClauseData::Expression(expr) => (ptr::null_mut(), Some(expr.to_string())),
-        IrClauseData::Generic { data, .. } => (ptr::null_mut(), data.clone()),
         _ => (ptr::null_mut(), render_arguments_from_payload(payload)),
     };
     debug_assert!(
@@ -5266,7 +5241,6 @@ fn render_arguments_from_payload(payload: &IrClauseData) -> Option<String> {
         }
         IrClauseData::Collector { expression } => Some(expression.to_string()),
         IrClauseData::Requires { requirements } => format_requires_arguments(requirements),
-        IrClauseData::Generic { data, .. } => data.clone(),
         IrClauseData::DepobjUpdate { dependence } => Some(dependence.to_string()),
         _ => None,
     }
@@ -7745,9 +7719,6 @@ fn free_clause_data(clause: &OmpClause) {
             let ptr = clause.data.init;
             if !ptr.is_null() {
                 let boxed = Box::from_raw(ptr);
-                if !boxed.raw_kind.is_null() {
-                    drop(CString::from_raw(boxed.raw_kind as *mut c_char));
-                }
                 if !boxed.operand.is_null() {
                     drop(CString::from_raw(boxed.operand as *mut c_char));
                 }

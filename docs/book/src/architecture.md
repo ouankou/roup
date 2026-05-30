@@ -13,26 +13,27 @@ lexer (`src/lexer.rs`)
    │  ─ token stream with language specific helpers
    ▼
 parser (`src/parser/`)
-   │  ─ builds an intermediate representation (IR)
+   │  ─ parses directives/clauses and owns post-parse semantic normalization
    ▼
-IR (`src/ir/`)
-   │  ├─ used directly by Rust callers
+Enum AST / IR (`src/ast/`, `src/ir/`)
+   │  ├─ typed directive and clause payloads for Rust callers
    │  └─ converted into the C API data structures
    ▼
-C bindings (`src/c_api.rs`)
+C bindings (`src/c_api.rs`, `src/c_api/openacc.rs`)
 ```
 
 The lexer normalises whitespace, line continuations, sentinel comments, and
 language specific keywords before the parser consumes the token stream.  The
-parser modules mirror the OpenMP structure: directives, clauses, helper
-enumerations, and validation passes.  Rust callers typically work with the IR
-structures directly, while C and C++ consumers receive stable C structs exposed
-through the FFI layer.
+parser modules mirror the OpenMP/OpenACC structure: directives, clauses, helper
+enumerations, semantic conversion, and validation passes.  Rust callers can work
+with the typed enum AST/IR structures, while C and C++ consumers receive stable
+C structs exposed through the FFI layer.
 
 ## Unsafe code boundaries
 
-The vast majority of the project uses safe Rust.  The only `unsafe` blocks live
-inside `src/c_api.rs` where pointers cross the FFI boundary.  Each function
+The parser, AST, IR, lexer, and debugger modules forbid unsafe Rust.  The only
+`unsafe` blocks live in the FFI modules (`src/c_api.rs` and
+`src/c_api/openacc.rs`) where pointers cross the C boundary.  Each function
 performs explicit null checks and documents its expectations.  When modifying or
 adding FFI functions, keep the following rules in mind:
 
@@ -45,9 +46,10 @@ adding FFI functions, keep the following rules in mind:
 
 ## Generated constants and headers
 
-The build script (`build.rs`) parses portions of `src/c_api.rs` using `syn` to
-produce `src/roup_constants.h` (also emitted to `OUT_DIR`). This keeps the OpenMP
-and OpenACC directive/clause tables in sync with the Rust implementation.
+The build script (`build.rs`) parses portions of `src/c_api.rs` and
+`src/c_api/openacc.rs` using `syn` to produce `src/roup_constants.h` (also
+emitted to `OUT_DIR`). This keeps the OpenMP and OpenACC directive/clause tables
+in sync with the Rust implementation.
 
 ## Compatibility layers
 
@@ -59,4 +61,5 @@ and OpenACC directive/clause tables in sync with the Rust implementation.
 Integration tests live under `tests/` and cover keyword registration, parser
 round-trips, language specific behaviour, and helper utilities.  Running
 `cargo test` executes the Rust suites, while `test.sh` orchestrates the full
-project matrix including compatibility and documentation builds.
+project matrix including compatibility tests, documentation builds, warning
+checks, and the enum/safety audit.

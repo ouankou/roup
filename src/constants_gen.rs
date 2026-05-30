@@ -1,7 +1,8 @@
 //! Shared code for generating and validating roup_constants.h
 //!
 //! This module contains the core logic for parsing directive/clause mappings
-//! from c_api.rs using syn-based AST parsing. It's used by both:
+//! from `src/c_api.rs` and `src/c_api/openacc.rs` using syn-based AST parsing.
+//! It's used by both:
 //! - build.rs (to generate the header during compilation)
 //! - Standalone mode (to verify header is up-to-date in CI)
 //!
@@ -231,7 +232,7 @@ pub fn calculate_combined_checksum_with_uses_alloc(
     directive_hash ^ clause_hash ^ acc_directive_hash ^ acc_clause_hash ^ uses_alloc_hash
 }
 
-/// Parse OpenACC directive mappings from c_api.rs acc_directive_name_to_kind() using AST
+/// Parse OpenACC directive mappings from src/c_api/openacc.rs using AST.
 pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     let c_api =
         fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read src/c_api/openacc.rs");
@@ -486,7 +487,7 @@ pub fn parse_acc_directive_mappings() -> Vec<(String, i32)> {
     final_mappings
 }
 
-/// Parse OpenACC clause mappings from c_api.rs clause_name_to_kind() using AST
+/// Parse OpenACC clause mappings from src/c_api/openacc.rs using AST.
 pub fn parse_acc_clause_mappings() -> Vec<(String, i32)> {
     let c_api = fs::read_to_string("src/c_api/openacc.rs").expect("Failed to read openacc c_api");
     let ast: File = syn::parse_file(&c_api).expect("Failed to parse src/c_api/openacc.rs");
@@ -703,7 +704,7 @@ pub fn calculate_checksum(directives: &[(String, i32)], clauses: &[(String, i32)
 
 /// Calculate combined FNV-1a hash checksum of OpenMP and OpenACC mappings.
 ///
-/// Used to verify the generated header matches c_api.rs for both APIs.
+/// Used to verify the generated header matches the C API mapping sources for both APIs.
 #[allow(dead_code)]
 pub fn calculate_combined_checksum(
     omp_directives: &[(String, i32)],

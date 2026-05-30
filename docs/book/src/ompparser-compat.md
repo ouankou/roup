@@ -127,7 +127,7 @@ The shim is validated via the ompparser ctest suite bundled in the submodule. It
 ```text
 Your Application (OpenMP directives to parse)
     ↓
-compat_impl.cpp (~190 lines) - Minimal wrapper
+ROUP ompparser compatibility adapter
     ↓
 ROUP C API (roup_parse, roup_directive_kind, etc.)
     ↓
@@ -139,7 +139,7 @@ Returns: OpenMPDirective with ompparser methods
 **Key Design**:
 - Reuses 90% of ompparser code (no duplication)
 - Git submodule approach - automatic ompparser upgrades
-- Minimal unsafe code (~60 lines, 0.9%), all at FFI boundary
+- Rust unsafe code remains confined to the ROUP FFI modules
 
 ## Known Limitations
 
@@ -162,7 +162,7 @@ For detailed ROUP API documentation, see [API Reference](./api-reference.md).
 
 ## CI/CD
 
-The compatibility layer is tested automatically via GitHub Actions (`.github/workflows/build.yml`):
+The compatibility layer is tested automatically via GitHub Actions (`.github/workflows/ci.yml`):
 
 ```yaml
 - Tests ROUP core (always)
@@ -187,7 +187,7 @@ A: `git submodule update --remote` pulls latest ompparser automatically.
 A: ROUP is expected to be faster than original ompparser due to Rust optimizations.
 
 **Q: Is it stable?**  
-A: ⚠️ Experimental stage - thoroughly tested (46 tests) but under active development.
+A: Experimental and under active development. The current compatibility ctest suite covers 1537 cases.
 
 ## Support
 

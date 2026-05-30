@@ -313,7 +313,6 @@ pub enum DepobjUpdateDependence {
     Depobj,
     Sink,
     Source,
-    Unknown,
 }
 
 impl fmt::Display for DependType {
@@ -342,7 +341,6 @@ impl fmt::Display for DepobjUpdateDependence {
             DepobjUpdateDependence::Depobj => write!(f, "depobj"),
             DepobjUpdateDependence::Sink => write!(f, "sink"),
             DepobjUpdateDependence::Source => write!(f, "source"),
-            DepobjUpdateDependence::Unknown => write!(f, "unknown"),
         }
     }
 }
@@ -967,7 +965,6 @@ impl fmt::Display for OrderKind {
 pub enum DoacrossType {
     Source = 0,
     Sink = 1,
-    Unknown = 2,
 }
 
 impl fmt::Display for DoacrossType {
@@ -975,7 +972,6 @@ impl fmt::Display for DoacrossType {
         match self {
             DoacrossType::Source => write!(f, "source"),
             DoacrossType::Sink => write!(f, "sink"),
-            DoacrossType::Unknown => write!(f, "unknown"),
         }
     }
 }
@@ -1156,7 +1152,6 @@ pub enum AdjustArgsModifier {
 pub enum SeverityKind {
     Fatal = 0,
     Warning = 1,
-    Unknown = 2,
 }
 
 impl fmt::Display for SeverityKind {
@@ -1164,7 +1159,6 @@ impl fmt::Display for SeverityKind {
         match self {
             SeverityKind::Fatal => write!(f, "fatal"),
             SeverityKind::Warning => write!(f, "warning"),
-            SeverityKind::Unknown => write!(f, "unknown"),
         }
     }
 }
@@ -1175,7 +1169,6 @@ impl fmt::Display for SeverityKind {
 pub enum AtKind {
     Compilation = 0,
     Execution = 1,
-    Unknown = 2,
 }
 
 impl fmt::Display for AtKind {
@@ -1183,7 +1176,6 @@ impl fmt::Display for AtKind {
         match self {
             AtKind::Compilation => write!(f, "compilation"),
             AtKind::Execution => write!(f, "execution"),
-            AtKind::Unknown => write!(f, "unknown"),
         }
     }
 }
@@ -1194,7 +1186,7 @@ impl fmt::Display for AtKind {
 pub enum InitKind {
     Target = 0,
     Targetsync = 1,
-    Unknown = 2,
+    Unspecified = 2,
 }
 
 impl fmt::Display for InitKind {
@@ -1202,7 +1194,7 @@ impl fmt::Display for InitKind {
         match self {
             InitKind::Target => write!(f, "target"),
             InitKind::Targetsync => write!(f, "targetsync"),
-            InitKind::Unknown => write!(f, "unknown"),
+            InitKind::Unspecified => Ok(()),
         }
     }
 }
@@ -1219,7 +1211,7 @@ pub enum ApplyTransformKind {
     Interchange = 4,
     Nothing = 5,
     TileSizes = 6,
-    Unknown = 100,
+    NestedApply = 7,
 }
 
 impl fmt::Display for ApplyTransformKind {
@@ -1232,9 +1224,8 @@ impl fmt::Display for ApplyTransformKind {
             ApplyTransformKind::Interchange => write!(f, "interchange"),
             ApplyTransformKind::Nothing => write!(f, "nothing"),
             ApplyTransformKind::TileSizes => write!(f, "tile sizes"),
-            ApplyTransformKind::Unknown | ApplyTransformKind::Unspecified => {
-                write!(f, "unknown")
-            }
+            ApplyTransformKind::NestedApply => write!(f, "apply"),
+            ApplyTransformKind::Unspecified => Ok(()),
         }
     }
 }
@@ -1539,7 +1530,6 @@ pub enum ClauseData {
     /// `init([kind[:operand]])` - Interop init clause
     Init {
         kind: InitKind,
-        raw_kind: Option<Identifier>,
         operand: Option<Expression>,
     },
 
@@ -1623,12 +1613,6 @@ pub enum ClauseData {
 
     /// `requires(...)` - Implementation requirements
     Requires { requirements: Vec<RequireModifier> },
-
-    /// Generic clause with unparsed data (fallback for unknown clauses)
-    Generic {
-        name: Identifier,
-        data: Option<String>,
-    },
 
     /// `depobj_update(dep)` - Depobj update dependence type
     DepobjUpdate { dependence: DepobjUpdateDependence },
@@ -1725,7 +1709,13 @@ impl fmt::Display for ClauseData {
                                 write!(f, "({arg})")?;
                             }
                         }
-                        ApplyTransformKind::Unknown | ApplyTransformKind::Unspecified => {
+                        ApplyTransformKind::NestedApply => {
+                            write!(f, "apply")?;
+                            if let Some(arg) = &t.argument {
+                                write!(f, "({arg})")?;
+                            }
+                        }
+                        ApplyTransformKind::Unspecified => {
                             if let Some(arg) = &t.argument {
                                 write!(f, "{arg}")?;
                             }
@@ -1978,11 +1968,7 @@ impl fmt::Display for ClauseData {
             ClauseData::DeviceType(dt) => write!(f, "device_type({dt})"),
             ClauseData::At(kind) => write!(f, "at({kind})"),
             ClauseData::Severity(kind) => write!(f, "severity({kind})"),
-            ClauseData::Init {
-                kind,
-                raw_kind,
-                operand,
-            } => {
+            ClauseData::Init { kind, operand } => {
                 write!(f, "init(")?;
                 let mut wrote = false;
                 match kind {
@@ -1990,12 +1976,7 @@ impl fmt::Display for ClauseData {
                         write!(f, "{kind}")?;
                         wrote = true;
                     }
-                    InitKind::Unknown => {
-                        if let Some(raw) = raw_kind {
-                            write!(f, "{raw}")?;
-                            wrote = true;
-                        }
-                    }
+                    InitKind::Unspecified => {}
                 }
                 if let Some(op) = operand {
                     if wrote {

@@ -424,7 +424,20 @@ else
 fi
 
 # ===================================================================
-# 18. Clippy Lints (MANDATORY)
+# 18. Enum/Safety Audit
+# ===================================================================
+SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Enum/Safety Audit ==="
+echo -n "Running enum/safety audit... "
+if ./scripts/audit_enum_safety.sh > /tmp/enum_safety_audit.log 2>&1; then
+    echo -e "${GREEN}✓ PASS${NC}"
+else
+    echo -e "${RED}✗ FAIL${NC}"
+    cat /tmp/enum_safety_audit.log
+    exit 1
+fi
+
+# ===================================================================
+# 19. Clippy Lints (MANDATORY)
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Clippy Lints ==="
 if command -v cargo-clippy > /dev/null 2>&1 || cargo clippy --version > /dev/null 2>&1; then
@@ -443,7 +456,7 @@ else
 fi
 
 # ===================================================================
-# 19. OpenMP_VV Round-Trip Validation (REQUIRED: 100% pass rate)
+# 20. OpenMP_VV Round-Trip Validation (REQUIRED: 100% pass rate)
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. OpenMP_VV Round-Trip Validation ==="
 openmp_vv_status="skipped"
@@ -488,7 +501,7 @@ else
 fi
 
 # ===================================================================
-# 20. OpenACCV-V Round-Trip Validation (REQUIRED: 100% pass rate)
+# 21. OpenACCV-V Round-Trip Validation (REQUIRED: 100% pass rate)
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. OpenACCV-V Round-Trip Validation ==="
 openacc_vv_status="skipped"
@@ -521,7 +534,7 @@ else
 fi
 
 # ===================================================================
-# 21. All Features Test
+# 22. All Features Test
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. All Features Test ==="
 echo -n "Running tests with --all-features... "
@@ -534,7 +547,7 @@ else
 fi
 
 # ===================================================================
-# 22. Benchmark Tests
+# 23. Benchmark Tests
 # ===================================================================
 SECTION_NUM=$((SECTION_NUM + 1)); echo "=== $SECTION_NUM. Benchmark Tests ==="
 if [ ! -d "benches" ]; then
@@ -557,7 +570,7 @@ fi
 # ===================================================================
 echo ""
 echo "========================================"
-total_categories=23
+total_categories=24
 passed_categories=$total_categories
 if [ "$openmp_vv_status" != "passed" ]; then
     passed_categories=$((passed_categories - 1))
@@ -582,6 +595,7 @@ echo "  ✓ Documentation (rustdoc + mdBook with --all-features)"
 echo "  ✓ Compatibility layers (ompparser + accparser)"
 echo "  ✓ Header verification"
 echo "  ✓ Zero compiler warnings"
+echo "  ✓ Enum/safety audit passed"
 echo "  ✓ Clippy lints passed"
 if [ "$openmp_vv_status" = "passed" ]; then
     echo "  ✓ OpenMP_VV round-trip validation"
