@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use roup::lexer::collapse_line_continuations;
+use std::hint::black_box;
 
 fn bench_no_continuation(c: &mut Criterion) {
     let mut group = c.benchmark_group("no_continuation");

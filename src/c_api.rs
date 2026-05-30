@@ -3849,12 +3849,10 @@ fn split_once_top_level_colon(input: &str) -> Option<(&str, &str)> {
         match ch {
             '(' => depth += 1,
             ')' => depth -= 1,
-            ':' => {
-                if depth == 0 {
-                    let left = &input[..i];
-                    let right = &input[i + 1..];
-                    return Some((left, right));
-                }
+            ':' if depth == 0 => {
+                let left = &input[..i];
+                let right = &input[i + 1..];
+                return Some((left, right));
             }
             _ => {}
         }
@@ -7376,6 +7374,7 @@ fn directive_name_enum_to_kind(name: DirectiveName) -> i32 {
         EndParallelMasked => 201,
         EndParallelMaskedTaskloop => 202,
         EndParallelMaskedTaskloopSimd => 203,
+        EndTargetTeamsWorkdistribute => 205,
         Barrier => 59,   // OMPD_barrier
         Taskwait => 60,  // OMPD_taskwait
         Unroll => 61,    // OMPD_unroll
@@ -7455,6 +7454,7 @@ fn directive_name_enum_to_kind(name: DirectiveName) -> i32 {
         TeamsDistributeParallelLoopSimd => 128,     // OMPD_teams_distribute_parallel_loop_simd
         TargetTeamsDistributeParallelLoop => 129,   // OMPD_target_teams_distribute_parallel_loop
         TargetTeamsDistributeParallelLoopSimd => 130, // OMPD_target_teams_distribute_parallel_loop_simd
+        TargetTeamsWorkdistribute => 204, // ROUP extension for OMPD_target_teams_workdistribute
 
         // OpenACC-specific directives: these are not part of the OpenMP C API
         Data | EnterData | ExitData | HostData | Kernels | KernelsLoop | Update | Serial

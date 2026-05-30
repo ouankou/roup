@@ -49,9 +49,7 @@ fn parses_reduction_clause_with_modifiers_and_operators() {
         ),
     ];
 
-    for (clause, (modifiers, operator, user_id, vars)) in
-        directive.clauses.iter().zip(expected.into_iter())
-    {
+    for (clause, (modifiers, operator, user_id, vars)) in directive.clauses.iter().zip(expected) {
         assert_eq!(clause.name, "reduction");
         match &clause.kind {
             ClauseKind::ReductionClause {

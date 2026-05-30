@@ -192,6 +192,7 @@ pub fn parse_directive_kind(
         }
         DirectiveName::TargetTeamsLoop => Ok(DirectiveKind::TargetTeamsLoop),
         DirectiveName::TargetTeamsLoopSimd => Ok(DirectiveKind::TargetTeamsLoopSimd),
+        DirectiveName::TargetTeamsWorkdistribute => Ok(DirectiveKind::TargetTeamsWorkdistribute),
 
         // Teams constructs
         DirectiveName::Teams => Ok(DirectiveKind::Teams),

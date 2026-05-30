@@ -41,7 +41,7 @@ jobs:
         version: ["1.88", "stable"]
         # ubuntu-22.04-arm, ubuntu-24.04-arm and windows-11-arm are not supported yet for private repositories
         os: [ubuntu-24.04, windows-2025, macos-15]
-        llvm: ["20"]
+        llvm: ["22"]
 
     runs-on: ${{ matrix.os }}
     steps:

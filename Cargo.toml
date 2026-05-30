@@ -3,7 +3,7 @@ name = "roup"
 version = "0.7.0"
 authors = ["Anjia Wang <anjia@ouankou.com>"]
 edition = "2021"
-rust-version = "1.88.0"  # MSRV: Aligns with mdBook 0.5.x and current deps
+rust-version = "1.88.0"  # MSRV: Verified against current dependencies
 license = "BSD-3-Clause"
 description = "Rust-first parser for OpenMP and OpenACC directives with C/C++ bindings"
 repository = "https://github.com/ouankou/roup"
@@ -20,24 +20,24 @@ readme = "README.md"
 # nom = parser combinator library for building parsers
 # Version 8.0.0 uses semantic versioning
 nom = "8.0.0"
-bitflags = "2.4"
+bitflags = "2.11.1"
 
 # FFI layer dependencies (100% safe Rust)
-once_cell = "1"     # Lazy static initialization
-parking_lot = "0.12" # Faster Mutex than std
+once_cell = "1.21.4"    # Lazy static initialization
+parking_lot = "0.12.5" # Faster Mutex than std
 
 # Robust Rust AST parser (used by both build.rs and `gen` binary for header validation)
-syn = { version = "2", features = ["full", "parsing"] }
+syn = { version = "2.0.117", features = ["full", "parsing"] }
 
 [dev-dependencies]
 # Test-only dependencies
-serial_test = "3.0" # Serialize tests that share global state
-criterion = "0.5"   # Benchmarking framework
-regex = "1"
+serial_test = "3.4.0" # Serialize tests that share global state
+criterion = "0.8.2"   # Benchmarking framework
+regex = "1.12.3"
 
 [build-dependencies]
 # Build script dependencies (build.rs only) - syn also in main dependencies for `gen` binary
-syn = { version = "2", features = ["full", "parsing"] }  # Robust Rust AST parser
+syn = { version = "2.0.117", features = ["full", "parsing"] }  # Robust Rust AST parser
 
 [[bin]]
 name = "gen"
