@@ -41,3 +41,23 @@ fn normalization_merge_concatenates_shared_lists() {
         other => panic!("expected merged shared clause, got {other:?}"),
     }
 }
+
+#[test]
+fn normalization_merges_reductions_with_different_colon_spacing() {
+    let clauses = parse_with_mode(
+        "#pragma omp parallel reduction(+:a) reduction(+: b)",
+        ClauseNormalizationMode::MergeVariableLists,
+    );
+    assert_eq!(clauses.len(), 1);
+    match &clauses[0] {
+        ClauseData::Reduction {
+            operator, items, ..
+        } => {
+            assert_eq!(operator.to_string(), "+");
+            assert_eq!(items.len(), 2);
+            assert_eq!(items[0].to_string(), "a");
+            assert_eq!(items[1].to_string(), "b");
+        }
+        other => panic!("expected merged reduction clause, got {other:?}"),
+    }
+}

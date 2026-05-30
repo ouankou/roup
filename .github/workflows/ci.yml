@@ -65,7 +65,8 @@ jobs:
           sudo apt-get install -y \
             clang-${{ matrix.llvm }} \
             cmake \
-            pkg-config
+            pkg-config \
+            ripgrep
 
       - uses: dtolnay/rust-toolchain@stable
         with:

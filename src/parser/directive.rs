@@ -31,7 +31,6 @@ enum ClauseMergeShape<'a> {
         operator: ReductionOperator,
         modifiers: Vec<ReductionModifier>,
         user_defined_identifier: Option<Cow<'a, str>>,
-        space_after_colon: bool,
     },
     Copyin(Option<CopyinModifier>),
     Copyout(Option<CopyoutModifier>),
@@ -191,13 +190,11 @@ impl<'a> Directive<'a> {
                     operator,
                     modifiers,
                     user_defined_identifier,
-                    space_after_colon,
                     ..
                 } => ClauseMergeShape::Reduction {
                     operator: *operator,
                     modifiers: modifiers.clone(),
                     user_defined_identifier: user_defined_identifier.clone(),
-                    space_after_colon: *space_after_colon,
                 },
                 ClauseKind::CopyinClause { modifier, .. } => ClauseMergeShape::Copyin(*modifier),
                 ClauseKind::CopyoutClause { modifier, .. } => ClauseMergeShape::Copyout(*modifier),
