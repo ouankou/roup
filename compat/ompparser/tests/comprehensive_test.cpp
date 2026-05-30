@@ -184,6 +184,29 @@ TEST(firstprivate_clause) {
     ASSERT_NOT_NULL(clauses);
 }
 
+TEST(firstprivate_modifier_preserves_state_and_cpp_qualified_name) {
+    setLang(Lang_Cplusplus);
+    DirectivePtr dir(parseOpenMP(
+        "omp parallel firstprivate(target, saved: ns::value)", nullptr
+    ));
+    ASSERT_NOT_NULL(dir.get());
+
+    std::string str = dir->generatePragmaString();
+    ASSERT(str.find("firstprivate(target, saved: ns::value)") != std::string::npos);
+    setLang(Lang_C);
+}
+
+TEST(induction_preserves_adjacent_operator_spacing) {
+    DirectivePtr dir(parseOpenMP(
+        "omp parallel induction(step(i - -1), k: a + +b)", nullptr
+    ));
+    ASSERT_NOT_NULL(dir.get());
+
+    std::string str = dir->generatePragmaString();
+    ASSERT(str.find("step(i- -1)") != std::string::npos);
+    ASSERT(str.find("k: a+ +b") != std::string::npos);
+}
+
 TEST(multiple_clauses) {
     DirectivePtr dir(parseOpenMP(
         "omp parallel num_threads(4) private(x) shared(y)", nullptr
@@ -441,6 +464,8 @@ int main() {
     run_private_clause();
     run_shared_clause();
     run_firstprivate_clause();
+    run_firstprivate_modifier_preserves_state_and_cpp_qualified_name();
+    run_induction_preserves_adjacent_operator_spacing();
     run_multiple_clauses();
     run_reduction_clause();
     run_schedule_clause();

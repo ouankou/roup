@@ -1837,7 +1837,14 @@ static std::string normalize_expression(const char* expr) {
     return result;
 }
 
+static bool is_compact_induction_operator(char c) {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%';
+}
+
 static std::string normalize_induction_expression(const char* expr) {
+    if (expr == nullptr) {
+        return "";
+    }
     std::string normalized = normalize_expression(expr);
     std::string result;
     result.reserve(normalized.size());
@@ -1851,10 +1858,14 @@ static std::string normalize_induction_expression(const char* expr) {
                 ++next_pos;
             }
             const char next = next_pos < normalized.size() ? normalized[next_pos] : '\0';
-            const bool around_operator =
-                prev == '+' || prev == '-' || prev == '*' || prev == '/' || prev == '%' ||
-                next == '+' || next == '-' || next == '*' || next == '/' || next == '%';
+            const bool prev_operator = is_compact_induction_operator(prev);
+            const bool next_operator = is_compact_induction_operator(next);
+            const bool around_operator = prev_operator || next_operator;
             if (around_operator) {
+                if (prev_operator && next_operator && !result.empty() && result.back() != ' ') {
+                    result.push_back(' ');
+                }
+                i = next_pos - 1;
                 continue;
             }
         }
@@ -2527,6 +2538,10 @@ static size_t find_top_level_colon_cpp(const std::string& input) {
         } else if (c == '}') {
             if (brace_depth > 0) --brace_depth;
         } else if (c == ':' && paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+            if ((i + 1 < input.size() && input[i + 1] == ':') ||
+                (i > 0 && input[i - 1] == ':')) {
+                continue;
+            }
             return i;
         }
     }
@@ -2588,14 +2603,33 @@ static OpenMPDirectiveKind firstprivate_modifier_kind(const std::string& token) 
 
 static bool append_firstprivate_arguments(OpenMPClause* clause, const char* args) {
     auto* firstprivate = dynamic_cast<OpenMPFirstprivateClause*>(clause);
-    if (firstprivate == nullptr || args == nullptr || args[0] == '\0') {
+    if (firstprivate == nullptr) {
         return false;
     }
+    firstprivate->setSaved(false);
+    firstprivate->clearCurrentDirectiveNameModifier();
+    if (args == nullptr || args[0] == '\0') {
+        return false;
+    }
+
+    auto append_variables = [&](const std::vector<std::string>& variable_list) {
+        bool appended = false;
+        for (const std::string& variable : variable_list) {
+            std::string cleaned = trim_paren_padding(variable);
+            cleaned = normalize_expression(cleaned.c_str());
+            if (cleaned.empty()) {
+                continue;
+            }
+            firstprivate->addLangExpr(cleaned.c_str(), OMPC_CLAUSE_SEP_comma);
+            appended = true;
+        }
+        return appended;
+    };
 
     const std::string input(args);
     const size_t colon = find_top_level_colon_cpp(input);
     if (colon == std::string::npos) {
-        return false;
+        return append_variables(split_top_level_commas_cpp(input));
     }
 
     const std::string modifier_text = input.substr(0, colon);
@@ -2633,19 +2667,11 @@ static bool append_firstprivate_arguments(OpenMPClause* clause, const char* args
         firstprivate->clearCurrentDirectiveNameModifier();
     }
 
-    bool appended = false;
-    for (const std::string& variable : variables) {
-        std::string cleaned = trim_paren_padding(variable);
-        cleaned = normalize_expression(cleaned.c_str());
-        if (cleaned.empty()) {
-            continue;
-        }
-        firstprivate->addLangExpr(strdup(cleaned.c_str()), OMPC_CLAUSE_SEP_comma);
-        appended = true;
+    const bool appended = append_variables(variables);
+    if (!appended) {
+        firstprivate->setSaved(false);
+        firstprivate->clearCurrentDirectiveNameModifier();
     }
-
-    firstprivate->setSaved(false);
-    firstprivate->clearCurrentDirectiveNameModifier();
     return appended;
 }
 

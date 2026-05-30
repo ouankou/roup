@@ -3850,6 +3850,10 @@ fn split_once_top_level_colon(input: &str) -> Option<(&str, &str)> {
             '(' => depth += 1,
             ')' => depth -= 1,
             ':' if depth == 0 => {
+                let bytes = input.as_bytes();
+                if bytes.get(i + 1) == Some(&b':') || (i > 0 && bytes.get(i - 1) == Some(&b':')) {
+                    continue;
+                }
                 let left = &input[..i];
                 let right = &input[i + 1..];
                 return Some((left, right));
@@ -8074,6 +8078,19 @@ mod tests {
 
         roup_clause_iterator_free(iter);
         roup_directive_free(directive);
+    }
+
+    #[test]
+    fn split_once_top_level_colon_ignores_cpp_scope_resolution() {
+        assert_eq!(split_once_top_level_colon("ns::value"), None);
+        assert_eq!(
+            split_once_top_level_colon("target: ns::value"),
+            Some(("target", " ns::value"))
+        );
+        assert_eq!(
+            split_once_top_level_colon("ns::type: value"),
+            Some(("ns::type", " value"))
+        );
     }
 
     #[test]
