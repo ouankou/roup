@@ -616,30 +616,14 @@ pub(crate) fn parse_init_clause(
         if let Some((lhs, rhs)) = lang::split_once_top_level(text, ':') {
             let lhs_trim = lhs.trim();
             if !lhs_trim.is_empty() {
-                match lhs_trim.to_ascii_lowercase().as_str() {
-                    "target" => init_kind = InitKind::Target,
-                    "targetsync" => init_kind = InitKind::Targetsync,
-                    other => {
-                        return Err(ConversionError::InvalidClauseSyntax(format!(
-                            "Unknown init clause kind: {other}"
-                        )))
-                    }
-                }
+                init_kind = parse_init_modifier_list(lhs_trim)?;
             }
             let rhs_trim = rhs.trim();
             if !rhs_trim.is_empty() {
                 operand = Some(Expression::new(rhs_trim, config));
             }
         } else if !text.is_empty() {
-            match text.to_ascii_lowercase().as_str() {
-                "target" => init_kind = InitKind::Target,
-                "targetsync" => init_kind = InitKind::Targetsync,
-                other => {
-                    return Err(ConversionError::InvalidClauseSyntax(format!(
-                        "Unknown init clause kind: {other}"
-                    )))
-                }
-            }
+            init_kind = parse_init_modifier_list(text)?;
         }
         Ok(ClauseData::Init {
             kind: init_kind,
@@ -650,6 +634,67 @@ pub(crate) fn parse_init_clause(
             "init clause requires parenthesized content".to_string(),
         ))
     }
+}
+
+fn parse_init_modifier_list(modifiers: &str) -> Result<InitKind, ConversionError> {
+    let mut has_target = false;
+    let mut has_targetsync = false;
+    let mut saw_modifier = false;
+
+    for raw in split_top_level_items(modifiers) {
+        let modifier = raw.trim();
+        if modifier.is_empty() {
+            continue;
+        }
+        saw_modifier = true;
+
+        match modifier.to_ascii_lowercase().as_str() {
+            "target" => {
+                if has_target {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "duplicate target init modifier".to_string(),
+                    ));
+                }
+                has_target = true;
+            }
+            "targetsync" => {
+                if has_targetsync {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "duplicate targetsync init modifier".to_string(),
+                    ));
+                }
+                has_targetsync = true;
+            }
+            _ if is_prefer_type_init_modifier(modifier) => {}
+            _ => {
+                return Err(ConversionError::InvalidClauseSyntax(format!(
+                    "Unknown init clause modifier: {modifier}"
+                )))
+            }
+        }
+    }
+
+    match (has_target, has_targetsync, saw_modifier) {
+        (true, true, _) => Ok(InitKind::TargetAndTargetsync),
+        (true, false, _) => Ok(InitKind::Target),
+        (false, true, _) => Ok(InitKind::Targetsync),
+        (false, false, true) => Err(ConversionError::InvalidClauseSyntax(
+            "init modifier list requires target or targetsync".to_string(),
+        )),
+        (false, false, false) => Ok(InitKind::Unspecified),
+    }
+}
+
+fn is_prefer_type_init_modifier(modifier: &str) -> bool {
+    let trimmed = modifier.trim();
+    let Some(open_paren) = trimmed.find('(') else {
+        return false;
+    };
+
+    trimmed[..open_paren]
+        .trim()
+        .eq_ignore_ascii_case("prefer_type")
+        && extract_paren_arg(trimmed).is_some()
 }
 
 pub(crate) fn parse_induction_clause(

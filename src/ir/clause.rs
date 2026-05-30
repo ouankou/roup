@@ -1187,6 +1187,7 @@ pub enum InitKind {
     Target = 0,
     Targetsync = 1,
     Unspecified = 2,
+    TargetAndTargetsync = 3,
 }
 
 impl fmt::Display for InitKind {
@@ -1195,6 +1196,7 @@ impl fmt::Display for InitKind {
             InitKind::Target => write!(f, "target"),
             InitKind::Targetsync => write!(f, "targetsync"),
             InitKind::Unspecified => Ok(()),
+            InitKind::TargetAndTargetsync => write!(f, "target, targetsync"),
         }
     }
 }
@@ -1972,7 +1974,7 @@ impl fmt::Display for ClauseData {
                 write!(f, "init(")?;
                 let mut wrote = false;
                 match kind {
-                    InitKind::Target | InitKind::Targetsync => {
+                    InitKind::Target | InitKind::Targetsync | InitKind::TargetAndTargetsync => {
                         write!(f, "{kind}")?;
                         wrote = true;
                     }
