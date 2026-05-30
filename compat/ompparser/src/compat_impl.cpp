@@ -57,6 +57,7 @@ static std::string format_clause_args(const char* args, bool space_after_colon);
 static void warn_unsupported_clause(OpenMPClauseKind ck);
 static char* duplicate_c_string(const char* input);
 static std::vector<OpenMPMapClauseModifier> mapRoupMapModifiers(uint32_t mask, bool include_mapper);
+static std::string normalize_induction_expression(const char* expr);
 static void attach_variant_selector_from_roup(OpenMPVariantClause* clause, const OmpClause* roup_clause);
 static void convert_map_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void handle_dist_schedule_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
@@ -84,6 +85,7 @@ static void convert_adjust_args_clause(OpenMPDirective* dir, const OmpClause* ro
 static void convert_linear_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
 static void convert_simple_expr_clause(OpenMPDirective* dir, const OmpClause* roup_clause, OpenMPClauseKind clause_kind);
 static void convert_variables_clause(OpenMPDirective* dir, const OmpClause* roup_clause, OpenMPClauseKind clause_kind);
+static bool append_firstprivate_arguments(OpenMPClause* clause, const char* args);
 static void convert_directive_name_list_clause(OpenMPDirective* dir, const OmpClause* roup_clause, OpenMPClauseKind clause_kind);
 static void convert_atomic_clause(OpenMPDirective* dir, const OmpClause* roup_clause, OpenMPClauseKind clause_kind);
 static void convert_num_threads_clause(OpenMPDirective* dir, const OmpClause* roup_clause);
@@ -923,12 +925,14 @@ static void convert_clause_from_roup(
                     int32_t item_kind = roup_clause_induction_item_kind(roup_clause, i);
                     const char* label = roup_clause_induction_item_label(roup_clause, i);
                     const char* expr = roup_clause_induction_item_expression(roup_clause, i);
+                    std::string normalized_expr = normalize_induction_expression(expr);
+                    const char* normalized = normalized_expr.empty() ? expr : normalized_expr.c_str();
                     if (item_kind == 0) {
-                        ind_clause->addStepExpression(expr);
+                        ind_clause->addStepExpression(normalized);
                     } else if (item_kind == 1) {
-                        ind_clause->addBinding(label && label[0] ? label : nullptr, expr);
+                        ind_clause->addBinding(label && label[0] ? label : nullptr, normalized);
                     } else {
-                        ind_clause->addPassthroughItem(expr);
+                        ind_clause->addPassthroughItem(normalized);
                     }
                 }
             }
@@ -1833,6 +1837,43 @@ static std::string normalize_expression(const char* expr) {
     return result;
 }
 
+static bool is_compact_induction_operator(char c) {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%';
+}
+
+static std::string normalize_induction_expression(const char* expr) {
+    if (expr == nullptr) {
+        return "";
+    }
+    std::string normalized = normalize_expression(expr);
+    std::string result;
+    result.reserve(normalized.size());
+    for (size_t i = 0; i < normalized.size(); ++i) {
+        const char c = normalized[i];
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            const char prev = result.empty() ? '\0' : result.back();
+            size_t next_pos = i + 1;
+            while (next_pos < normalized.size() &&
+                   std::isspace(static_cast<unsigned char>(normalized[next_pos]))) {
+                ++next_pos;
+            }
+            const char next = next_pos < normalized.size() ? normalized[next_pos] : '\0';
+            const bool prev_operator = is_compact_induction_operator(prev);
+            const bool next_operator = is_compact_induction_operator(next);
+            const bool around_operator = prev_operator || next_operator;
+            if (around_operator) {
+                if (prev_operator && next_operator && !result.empty() && result.back() != ' ') {
+                    result.push_back(' ');
+                }
+                i = next_pos - 1;
+                continue;
+            }
+        }
+        result.push_back(c);
+    }
+    return result;
+}
+
 // Remove padding directly inside parentheses: "( x )" -> "(x)"
 static std::string trim_paren_padding(const std::string& expr) {
     if (expr.empty()) {
@@ -2476,6 +2517,162 @@ static void append_variables_to_clause(OpenMPClause* clause, OmpStringList* list
         }
         clause->addLangExpr(strdup(cleaned.c_str()), OMPC_CLAUSE_SEP_comma);
     }
+}
+
+static size_t find_top_level_colon_cpp(const std::string& input) {
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    for (size_t i = 0; i < input.size(); ++i) {
+        const char c = input[i];
+        if (c == '(') {
+            ++paren_depth;
+        } else if (c == '[') {
+            ++bracket_depth;
+        } else if (c == '{') {
+            ++brace_depth;
+        } else if (c == ')') {
+            if (paren_depth > 0) --paren_depth;
+        } else if (c == ']') {
+            if (bracket_depth > 0) --bracket_depth;
+        } else if (c == '}') {
+            if (brace_depth > 0) --brace_depth;
+        } else if (c == ':' && paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+            if ((i + 1 < input.size() && input[i + 1] == ':') ||
+                (i > 0 && input[i - 1] == ':')) {
+                continue;
+            }
+            return i;
+        }
+    }
+    return std::string::npos;
+}
+
+static std::vector<std::string> split_top_level_commas_cpp(const std::string& input) {
+    std::vector<std::string> parts;
+    int paren_depth = 0;
+    int bracket_depth = 0;
+    int brace_depth = 0;
+    size_t start = 0;
+    for (size_t i = 0; i < input.size(); ++i) {
+        const char c = input[i];
+        if (c == '(') {
+            ++paren_depth;
+        } else if (c == '[') {
+            ++bracket_depth;
+        } else if (c == '{') {
+            ++brace_depth;
+        } else if (c == ')') {
+            if (paren_depth > 0) --paren_depth;
+        } else if (c == ']') {
+            if (bracket_depth > 0) --bracket_depth;
+        } else if (c == '}') {
+            if (brace_depth > 0) --brace_depth;
+        } else if (c == ',' && paren_depth == 0 && bracket_depth == 0 && brace_depth == 0) {
+            parts.push_back(trim_copy(input.substr(start, i - start)));
+            start = i + 1;
+        }
+    }
+    parts.push_back(trim_copy(input.substr(start)));
+    return parts;
+}
+
+static std::string lowercase_copy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return value;
+}
+
+static OpenMPDirectiveKind firstprivate_modifier_kind(const std::string& token) {
+    const std::string value = lowercase_copy(trim_copy(token));
+    if (value == "parallel") return OMPD_parallel;
+    if (value == "for") return OMPD_for;
+    if (value == "do") return OMPD_do;
+    if (value == "distribute") return OMPD_distribute;
+    if (value == "sections") return OMPD_sections;
+    if (value == "single") return OMPD_single;
+    if (value == "scope") return OMPD_scope;
+    if (value == "target") return OMPD_target;
+    if (value == "target data") return OMPD_target_data;
+    if (value == "task") return OMPD_task;
+    if (value == "taskloop") return OMPD_taskloop;
+    if (value == "teams") return OMPD_teams;
+    return OMPD_unknown;
+}
+
+static bool append_firstprivate_arguments(OpenMPClause* clause, const char* args) {
+    auto* firstprivate = dynamic_cast<OpenMPFirstprivateClause*>(clause);
+    if (firstprivate == nullptr) {
+        return false;
+    }
+    firstprivate->setSaved(false);
+    firstprivate->clearCurrentDirectiveNameModifier();
+    if (args == nullptr || args[0] == '\0') {
+        return false;
+    }
+
+    auto append_variables = [&](const std::vector<std::string>& variable_list) {
+        bool appended = false;
+        for (const std::string& variable : variable_list) {
+            std::string cleaned = trim_paren_padding(variable);
+            cleaned = normalize_expression(cleaned.c_str());
+            if (cleaned.empty()) {
+                continue;
+            }
+            firstprivate->addLangExpr(cleaned.c_str(), OMPC_CLAUSE_SEP_comma);
+            appended = true;
+        }
+        return appended;
+    };
+
+    const std::string input(args);
+    const size_t colon = find_top_level_colon_cpp(input);
+    if (colon == std::string::npos) {
+        return append_variables(split_top_level_commas_cpp(input));
+    }
+
+    const std::string modifier_text = input.substr(0, colon);
+    const std::string variable_text = input.substr(colon + 1);
+    std::vector<std::string> modifier_tokens = split_top_level_commas_cpp(modifier_text);
+    std::vector<std::string> variables = split_top_level_commas_cpp(variable_text);
+    if (modifier_tokens.empty() || variables.empty()) {
+        return false;
+    }
+
+    bool saved = false;
+    bool has_directive_modifier = false;
+    OpenMPDirectiveKind directive_modifier = OMPD_unknown;
+    for (const std::string& token : modifier_tokens) {
+        const std::string normalized = lowercase_copy(trim_copy(token));
+        if (normalized.empty()) {
+            return false;
+        }
+        if (normalized == "saved") {
+            saved = true;
+            continue;
+        }
+        OpenMPDirectiveKind kind = firstprivate_modifier_kind(normalized);
+        if (kind == OMPD_unknown) {
+            return false;
+        }
+        has_directive_modifier = true;
+        directive_modifier = kind;
+    }
+
+    firstprivate->setSaved(saved);
+    if (has_directive_modifier) {
+        firstprivate->setCurrentDirectiveNameModifier(directive_modifier);
+    } else {
+        firstprivate->clearCurrentDirectiveNameModifier();
+    }
+
+    const bool appended = append_variables(variables);
+    if (!appended) {
+        firstprivate->setSaved(false);
+        firstprivate->clearCurrentDirectiveNameModifier();
+    }
+    return appended;
 }
 
 static void add_reduction_clause_from_data(
@@ -3122,6 +3319,7 @@ static OpenMPDirectiveKind getEndDirectivePairedKind(int32_t roup_end_kind) {
         case ROUP_OMPD_end_target_teams_distribute_parallel_for_simd: return OMPD_target_teams_distribute_parallel_for_simd;
         case ROUP_OMPD_end_target_teams_distribute_simd: return OMPD_target_teams_distribute_simd;
         case ROUP_OMPD_end_target_teams_loop: return OMPD_target_teams_loop;
+        case ROUP_OMPD_end_target_teams_workdistribute: return OMPD_target_teams_workdistribute;
         case ROUP_OMPD_end_teams_distribute: return OMPD_teams_distribute;
         case ROUP_OMPD_end_teams_distribute_parallel_do: return OMPD_teams_distribute_parallel_do;
         case ROUP_OMPD_end_teams_distribute_parallel_for: return OMPD_teams_distribute_parallel_for;
@@ -3281,6 +3479,7 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
         case ROUP_OMPD_dispatch:       return OMPD_dispatch;
         case ROUP_OMPD_groupprivate:   return OMPD_groupprivate;
         case ROUP_OMPD_workdistribute: return OMPD_workdistribute;
+        case ROUP_OMPD_target_teams_workdistribute: return OMPD_target_teams_workdistribute;
         case ROUP_OMPD_fuse:           return OMPD_fuse;
         case ROUP_OMPD_interchange:    return OMPD_interchange;
         case ROUP_OMPD_reverse:        return OMPD_reverse;
@@ -3375,6 +3574,7 @@ static OpenMPDirectiveKind mapRoupToOmpparserDirective(int32_t roup_kind) {
         case ROUP_OMPD_end_parallel_masked:
         case ROUP_OMPD_end_parallel_masked_taskloop:
         case ROUP_OMPD_end_parallel_masked_taskloop_simd:
+        case ROUP_OMPD_end_target_teams_workdistribute:
             return OMPD_end;
         default:                            return OMPD_unknown;
     }
@@ -4420,6 +4620,13 @@ static void convert_allocate_clause(OpenMPDirective* dir, const OmpClause* rc) {
 
 static void convert_variables_clause(OpenMPDirective* dir, const OmpClause* rc, OpenMPClauseKind ck) {
     OpenMPClause* clause = dir->addOpenMPClause(static_cast<int>(ck), "");
+    if (ck == OMPC_firstprivate && append_firstprivate_arguments(clause, roup_clause_arguments(rc))) {
+        if (clause && clause->getClausePosition() == -1) {
+            dir->getClausesInOriginalOrder()->push_back(clause);
+            clause->setClausePosition(dir->getClausesInOriginalOrder()->size() - 1);
+        }
+        return;
+    }
     OmpStringList* vars = roup_clause_variables(rc);
     append_variables_to_clause(clause, vars);
     if (vars) {

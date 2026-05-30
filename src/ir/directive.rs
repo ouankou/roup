@@ -354,6 +354,8 @@ pub enum DirectiveKind {
     Groupprivate = 133,
     /// `#pragma omp workdistribute` (Fortran, OpenMP 6.0)
     Workdistribute = 134,
+    /// `#pragma omp target teams workdistribute` (OpenMP 6.0)
+    TargetTeamsWorkdistribute = 204,
 
     // ========================================================================
     // Fortran "do" variants (Fortran equivalents of "for" directives)
@@ -461,6 +463,9 @@ impl fmt::Display for DirectiveKind {
             }
             DirectiveKind::TargetTeamsLoop => write!(f, "target teams loop"),
             DirectiveKind::TargetTeamsLoopSimd => write!(f, "target teams loop simd"),
+            DirectiveKind::TargetTeamsWorkdistribute => {
+                write!(f, "target teams workdistribute")
+            }
             DirectiveKind::EndTarget => write!(f, "end target"),
 
             // Teams constructs
@@ -747,6 +752,7 @@ impl DirectiveKind {
             }
             DirectiveKind::TargetTeamsLoop => "target teams loop",
             DirectiveKind::TargetTeamsLoopSimd => "target teams loop simd",
+            DirectiveKind::TargetTeamsWorkdistribute => "target teams workdistribute",
             DirectiveKind::EndTarget => "end target",
 
             // Teams constructs
@@ -886,6 +892,7 @@ impl DirectiveKind {
                 | DirectiveKind::Single
                 | DirectiveKind::Workshare
                 | DirectiveKind::Workdistribute
+                | DirectiveKind::TargetTeamsWorkdistribute
                 | DirectiveKind::Do
                 | DirectiveKind::DoSimd
         )
@@ -971,6 +978,7 @@ impl DirectiveKind {
                 | DirectiveKind::TargetTeamsDistributeParallelLoopSimd
                 | DirectiveKind::TargetTeamsLoop
                 | DirectiveKind::TargetTeamsLoopSimd
+                | DirectiveKind::TargetTeamsWorkdistribute
                 | DirectiveKind::TargetParallelDo
                 | DirectiveKind::TargetParallelDoSimd
                 | DirectiveKind::TargetTeamsDistributeParallelDo
@@ -1000,6 +1008,7 @@ impl DirectiveKind {
                 | DirectiveKind::TargetTeamsDistributeParallelLoopSimd
                 | DirectiveKind::TargetTeamsLoop
                 | DirectiveKind::TargetTeamsLoopSimd
+                | DirectiveKind::TargetTeamsWorkdistribute
                 | DirectiveKind::TeamsDistributeParallelDo
                 | DirectiveKind::TeamsDistributeParallelDoSimd
                 | DirectiveKind::TargetTeamsDistributeParallelDo

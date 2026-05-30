@@ -139,6 +139,7 @@ pub enum DirectiveName {
     EndTargetTeamsDistributeParallelForSimd,
     EndTargetTeamsDistributeSimd,
     EndTargetTeamsLoop,
+    EndTargetTeamsWorkdistribute,
     EndTeamsDistribute,
     EndTeamsDistributeParallelDo,
     EndTeamsDistributeParallelFor,
@@ -218,6 +219,7 @@ pub enum DirectiveName {
     TargetTeamsDistributeSimd,
     TargetTeamsLoop,
     TargetTeamsLoopSimd,
+    TargetTeamsWorkdistribute,
     TargetUpdate,
     Task,
     TaskIteration,
@@ -518,6 +520,10 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
         DirectiveName::EndTargetTeamsDistributeSimd
     );
     insert!("end target teams loop", DirectiveName::EndTargetTeamsLoop);
+    insert!(
+        "end target teams workdistribute",
+        DirectiveName::EndTargetTeamsWorkdistribute
+    );
     insert!("end teams distribute", DirectiveName::EndTeamsDistribute);
     insert!(
         "end teams distribute parallel do",
@@ -673,6 +679,10 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     );
     insert!("target teams loop", DirectiveName::TargetTeamsLoop);
     insert!("target teams loop simd", DirectiveName::TargetTeamsLoopSimd);
+    insert!(
+        "target teams workdistribute",
+        DirectiveName::TargetTeamsWorkdistribute
+    );
     insert!("target update", DirectiveName::TargetUpdate);
     insert!("task", DirectiveName::Task);
     insert!("task iteration", DirectiveName::TaskIteration);
@@ -923,6 +933,7 @@ impl DirectiveName {
             DirectiveName::TargetTeamsDistributeSimd => "target teams distribute simd",
             DirectiveName::TargetTeamsLoop => "target teams loop",
             DirectiveName::TargetTeamsLoopSimd => "target teams loop simd",
+            DirectiveName::TargetTeamsWorkdistribute => "target teams workdistribute",
             DirectiveName::TargetUpdate => "target update",
             DirectiveName::Kernels => "kernels",
             DirectiveName::KernelsLoop => "kernels loop",
@@ -989,6 +1000,7 @@ impl DirectiveName {
             }
             DirectiveName::EndTargetTeamsDistributeSimd => "end target teams distribute simd",
             DirectiveName::EndTargetTeamsLoop => "end target teams loop",
+            DirectiveName::EndTargetTeamsWorkdistribute => "end target teams workdistribute",
             DirectiveName::EndTeamsDistribute => "end teams distribute",
             DirectiveName::EndTeamsDistributeParallelDo => "end teams distribute parallel do",
             DirectiveName::EndTeamsDistributeParallelFor => "end teams distribute parallel for",

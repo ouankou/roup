@@ -102,7 +102,7 @@ for VERSION in "${VERSIONS[@]}"; do
     else
         echo -e "${RED}✗ FAILED${NC}"
         cat /tmp/rustup_install.log
-        ((FAILED++))
+        ((FAILED += 1))
         FAILED_VERSIONS+=("$VERSION (install failed)")
         continue
     fi
@@ -125,7 +125,7 @@ for VERSION in "${VERSIONS[@]}"; do
     else
         echo -e "${RED}✗ FAILED${NC}"
         cat /tmp/fmt_$VERSION.log
-        ((FAILED++))
+        ((FAILED += 1))
         FAILED_VERSIONS+=("$VERSION (format)")
         rustup override unset > /dev/null
         continue
@@ -141,7 +141,7 @@ for VERSION in "${VERSIONS[@]}"; do
         echo "Clippy errors for Rust $VERSION:"
         cat /tmp/clippy_$VERSION.log | grep -A 3 "error:" | head -50
         echo ""
-        ((FAILED++))
+        ((FAILED += 1))
         FAILED_VERSIONS+=("$VERSION (clippy)")
         rustup override unset > /dev/null
         continue
@@ -154,7 +154,7 @@ for VERSION in "${VERSIONS[@]}"; do
     else
         echo -e "${RED}✗ FAILED${NC}"
         cat /tmp/build_$VERSION.log
-        ((FAILED++))
+        ((FAILED += 1))
         FAILED_VERSIONS+=("$VERSION (build)")
         rustup override unset > /dev/null
         continue
@@ -167,14 +167,14 @@ for VERSION in "${VERSIONS[@]}"; do
     else
         echo -e "${RED}✗ FAILED${NC}"
         cat /tmp/test_$VERSION.log | tail -50
-        ((FAILED++))
+        ((FAILED += 1))
         FAILED_VERSIONS+=("$VERSION (tests)")
         rustup override unset > /dev/null
         continue
     fi
 
     echo -e "${GREEN}✓ Rust $VERSION: ALL CHECKS PASSED${NC}"
-    ((PASSED++))
+    ((PASSED += 1))
 
     # Reset to original
     rustup override unset > /dev/null

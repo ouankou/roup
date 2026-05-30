@@ -24,8 +24,12 @@ echo ""
 # Ensure git submodules are initialized so compat/accparser/accparser/src/OpenACCKinds.h
 # is available to the build script. This mirrors common CI setup where submodules
 # may not be initialized by default.
-echo "Initializing git submodules (if necessary)..."
-git submodule update --init --recursive || true
+echo "Initializing missing git submodules (if necessary)..."
+if git submodule status --recursive | grep -q '^-'; then
+    git submodule update --init --recursive || true
+else
+    echo "Submodules already initialized; preserving current worktree revisions."
+fi
 echo ""
 
 # Test section counter for auto-numbering
