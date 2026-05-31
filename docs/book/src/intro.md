@@ -438,7 +438,7 @@ ROUP uses a clean, modular architecture:
 **Key Design Principles:**
 - **Safe by default** - Rust's ownership system prevents memory errors
 - **Zero-copy parsing** - Uses string slices, not allocations
-- **Minimal unsafe** - FFI boundary only, well-documented
+- **Minimal unsafe** - confined to the ROUP FFI modules, well-documented
 - **Extensible** - Easy to add new directives and clauses
 
 ---
@@ -472,7 +472,7 @@ See the [OpenMP Support Matrix](https://github.com/ouankou/roup/blob/main/docs/O
 
 ## Safety Guarantees
 
-All `unsafe` code is isolated to the FFI boundary (`src/c_api.rs`), documented with safety requirements, and NULL-checked before dereferencing.
+All `unsafe` code is isolated to the FFI modules (`src/c_api.rs` and `src/c_api/openacc.rs`), documented with safety requirements, and NULL-checked before dereferencing. Parser, AST, IR, lexer, and debugger modules forbid unsafe Rust.
 
 ---
 

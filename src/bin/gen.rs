@@ -2,19 +2,19 @@
 //!
 //! **Usage:** `cargo run --bin gen`
 //!
-//! This binary verifies that the committed `src/roup_constants.h` matches
-//! the constants defined in `src/c_api.rs`. It's used in CI to catch cases
-//! where the header wasn't regenerated after modifying the source.
+//! This binary verifies that the committed `src/roup_constants.h` matches the
+//! constants defined in `src/c_api.rs` and `src/c_api/openacc.rs`. It's used in
+//! CI to catch cases where the header wasn't regenerated after modifying the
+//! source mappings.
 //!
 //! For design rationale and implementation details, see:
-//! [`docs/BUILD_SCRIPT_RATIONALE.md`](../../docs/BUILD_SCRIPT_RATIONALE.md)
+//! [`docs/CONSTANTS_ARCHITECTURE.md`](../../docs/CONSTANTS_ARCHITECTURE.md)
 
 use std::fs;
 use std::path::Path;
 use std::process;
 
 // Use #[path] to share code with build.rs
-// This pattern is documented in docs/BUILD_SCRIPT_RATIONALE.md
 #[path = "../constants_gen.rs"]
 mod constants_gen;
 
@@ -70,7 +70,9 @@ fn main() {
                 eprintln!("   Expected: {expected_checksum}");
                 eprintln!("   Found:    {checksum}");
                 eprintln!();
-                eprintln!("   The committed src/roup_constants.h doesn't match src/c_api.rs");
+                eprintln!(
+                    "   The committed src/roup_constants.h doesn't match src/c_api.rs or src/c_api/openacc.rs"
+                );
                 eprintln!("   To fix: Run 'cargo build' locally and commit the updated header");
                 process::exit(1);
             }

@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 /// Lexer module - tokenizes OpenMP pragma directives
 ///
 /// Learning Rust: Parser Combinators with nom

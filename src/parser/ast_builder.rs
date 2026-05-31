@@ -620,7 +620,7 @@ fn build_requires_from_clauses(
             ClauseName::Other(name) => {
                 requirements.push(RequireModifier::ExtImplementationDefinedRequirement(Some(
                     Identifier::new(name.as_ref()),
-                )))
+                )));
             }
             _ => {
                 return Err(AstBuildError::UnsupportedClause(
@@ -746,37 +746,6 @@ fn convert_clause_to_omp(
     })
 }
 
-#[allow(dead_code)]
-fn build_generic_clause_payload(clause: &Clause<'_>) -> ClauseData {
-    let args = extract_clause_arguments(clause);
-    ClauseData::Generic {
-        name: Identifier::new(clause.name.as_ref()),
-        data: args,
-    }
-}
-
-#[allow(dead_code)]
-fn extract_clause_arguments(clause: &Clause<'_>) -> Option<String> {
-    let full = clause.to_string();
-    let name = clause.name.as_ref();
-    let trimmed = full.trim();
-
-    if !trimmed.starts_with(name) {
-        return Some(trimmed.to_string());
-    }
-
-    let remainder = trimmed[name.len()..].trim_start();
-    if remainder.is_empty() {
-        return None;
-    }
-
-    if remainder.starts_with('(') && remainder.ends_with(')') && remainder.len() >= 2 {
-        return Some(remainder[1..remainder.len() - 1].to_string());
-    }
-
-    Some(remainder.to_string())
-}
-
 fn convert_clause_to_acc(
     clause: &Clause<'_>,
     parser_config: &ParserConfig,
@@ -814,7 +783,7 @@ fn build_acc_clause_payload(
         Host => build_acc_data_clause(clause, AccDataKind::Host),
         Device => build_acc_data_clause(clause, AccDataKind::Device),
         Delete => build_acc_data_clause(clause, AccDataKind::Delete),
-        DeviceType => Ok(build_acc_device_type_clause(clause)),
+        DeviceType => build_acc_device_type_clause(clause),
         Indirect => Ok(build_acc_indirect_clause(clause)),
         SelfClause => Ok(build_acc_self_clause(clause, parser_config)),
         Async | Bind | Collapse | NumGangs | NumWorkers | VectorLength | Seq | Independent
@@ -973,7 +942,7 @@ fn build_acc_reduction_clause(
 ) -> Result<AccClausePayload, AstBuildError> {
     if let ClauseKind::ReductionClause {
         operator,
-        user_defined_identifier: _,
+        user_defined_identifier,
         variables,
         ..
     } = &clause.kind
@@ -996,7 +965,14 @@ fn build_acc_reduction_clause(
             ParserReductionOperator::FortIand => AccReductionOperator::FortIand,
             ParserReductionOperator::FortIor => AccReductionOperator::FortIor,
             ParserReductionOperator::FortIeor => AccReductionOperator::FortIeor,
-            ParserReductionOperator::UserDefined => AccReductionOperator::Unknown,
+            ParserReductionOperator::UserDefined => {
+                let identifier = user_defined_identifier.as_ref().ok_or_else(|| {
+                    AstBuildError::ClauseConversion(
+                        "user-defined OpenACC reduction missing operator identifier".to_string(),
+                    )
+                })?;
+                AccReductionOperator::UserDefined(Identifier::new(identifier.as_ref()))
+            }
         };
 
         let variables = variables
@@ -1142,7 +1118,7 @@ fn build_acc_data_clause(
     }))
 }
 
-fn build_acc_device_type_clause(clause: &Clause<'_>) -> AccClausePayload {
+fn build_acc_device_type_clause(clause: &Clause<'_>) -> Result<AccClausePayload, AstBuildError> {
     let values = clause_variable_strings(&clause.kind)
         .into_iter()
         .map(|value| match value.trim().to_ascii_lowercase().as_str() {
@@ -1150,10 +1126,10 @@ fn build_acc_device_type_clause(clause: &Clause<'_>) -> AccClausePayload {
             "any" => AccDeviceType::Any,
             "multicore" => AccDeviceType::Multicore,
             "default" => AccDeviceType::Default,
-            _ => AccDeviceType::Unknown(value),
+            _ => AccDeviceType::Named(Identifier::new(value.trim())),
         })
         .collect();
-    AccClausePayload::DeviceType(values)
+    Ok(AccClausePayload::DeviceType(values))
 }
 
 fn build_acc_indirect_clause(clause: &Clause<'_>) -> AccClausePayload {
@@ -1638,6 +1614,32 @@ mod tests {
             &ParserConfig::default(),
         );
         assert!(result.is_ok(), "reduction parse failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn parses_named_openacc_device_type_as_identifier() {
+        let parser = crate::parser::openacc::parser();
+        let ast = parser
+            .parse_ast(
+                "#pragma acc parallel device_type(nvidia, host)",
+                ClauseNormalizationMode::Disabled,
+                &ParserConfig::default(),
+            )
+            .expect("OpenACC AST conversion should succeed");
+
+        let DirectiveBody::OpenAcc(acc) = ast.body else {
+            panic!("expected OpenACC directive");
+        };
+        let AccClausePayload::DeviceType(values) = &acc.clauses[0].payload else {
+            panic!("expected device_type payload");
+        };
+
+        assert_eq!(values.len(), 2);
+        assert!(matches!(
+            &values[0],
+            AccDeviceType::Named(name) if name.as_str() == "nvidia"
+        ));
+        assert_eq!(values[1], AccDeviceType::Host);
     }
 
     #[test]

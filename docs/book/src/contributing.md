@@ -113,7 +113,9 @@ cargo install mdbook
 
 #### 1. Use Safe Rust
 
-**Rule**: Unsafe code is permitted ONLY at the FFI boundary in `src/c_api.rs`.
+**Rule**: Unsafe code is permitted only in the ROUP FFI modules
+(`src/c_api.rs` and `src/c_api/openacc.rs`) unless a change is proven
+unavoidable and explicitly reviewed.
 
 ```rust
 // ✅ GOOD: Safe Rust in parser
@@ -123,7 +125,7 @@ pub fn parse(input: &str) -> Result<DirectiveIR, ParseError> {
 
 // ❌ BAD: Unsafe in parser
 pub fn parse(input: &str) -> Result<DirectiveIR, ParseError> {
-    unsafe {  // ← Not allowed outside c_api.rs!
+    unsafe {  // Not allowed outside reviewed FFI code.
         // ...
     }
 }
@@ -191,7 +193,7 @@ pub fn parse(input: &str) -> Result<DirectiveIR, ParseError> {
 
 ### C API Code
 
-If modifying `src/c_api.rs`:
+If modifying `src/c_api.rs` or `src/c_api/openacc.rs`:
 
 - **Minimize unsafe blocks**: Only what's absolutely necessary
 - **NULL checks**: Before every pointer dereference
@@ -410,9 +412,11 @@ Before opening a PR, ensure:
 - [ ] `cargo fmt -- --check` passes (no formatting issues)
 - [ ] `cargo build` passes (no compilation warnings)
 - [ ] `cargo clippy` passes (no linter warnings)
+- [ ] `./scripts/audit_enum_safety.sh` passes
 - [ ] `cargo test` passes (all tests green)
 - [ ] `cargo doc --no-deps` passes (no rustdoc warnings)
 - [ ] `mdbook build docs/book` passes (if docs changed)
+- [ ] `./test.sh` passes for changes that affect parsing, FFI, compatibility, or docs
 - [ ] README.md is in sync with changes
 - [ ] New features have tests
 - [ ] New features have documentation

@@ -27,9 +27,9 @@ Platform-specific notes live in the [building guide](https://roup.ouankou.com/bu
 
 - **OpenMP 3.0–6.0** and **OpenACC 3.4** coverage across directives, clauses, aliases, and combined forms.
 - **Debugger:** `roup_debug` provides interactive and non-interactive step tracing for OpenMP/OpenACC (C and Fortran sentinels).
-- **Rust, C, C++17, and Fortran** APIs with a narrow unsafe boundary confined to the FFI bindings.
+- **Rust, C, C++17, and Fortran** APIs with unsafe code confined to the FFI bindings.
 - **Compatibility layers:** drop-in replacements for ompparser and accparser (see `compat/`).
-- **Extensive tests:** hundreds of automated checks plus OpenMP_VV/OpenACCV-V validation and compat ctests.
+- **Extensive tests:** hundreds of automated checks, an enum/safety audit, OpenMP_VV/OpenACCV-V validation, and compat ctests.
 
 ## Documentation
 
@@ -61,6 +61,7 @@ More C/C++/Fortran samples live in [`examples/`](examples/). The C/OpenACC heade
 ```bash
 cargo build --release
 cargo test
+./test.sh
 ```
 
 Rebuild the docs with `cargo doc --no-deps` followed by `mdbook build docs/book`.

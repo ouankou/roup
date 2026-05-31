@@ -1,6 +1,6 @@
 # ROUP accparser compatibility layer
 
-Drop-in replacement for [accparser](https://github.com/ouankou/accparser), powered by ROUP. Passes all 914 accparser tests without ANTLR4.
+Drop-in replacement for [accparser](https://github.com/ouankou/accparser), powered by ROUP. Passes all 918 accparser compatibility tests without ANTLR4.
 
 ## Quick start
 
@@ -23,7 +23,7 @@ No ANTLR4 required.
 
 ## Build details
 
-CMake auto-builds ROUP and links all 914 accparser tests. Uses submodule headers directly without modification.
+CMake auto-builds ROUP and links all 918 accparser compatibility tests. Uses submodule headers directly without modification.
 
 ## Implementation
 

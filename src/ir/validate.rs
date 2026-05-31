@@ -350,9 +350,6 @@ impl ValidationContext {
             // if clause allowed on most constructs
             ClauseData::If { .. } => Ok(()),
 
-            // Generic clauses we don't validate yet
-            ClauseData::Generic { .. } => Ok(()),
-
             // depobj_update only on depobj directive with supported dependence kinds
             ClauseData::DepobjUpdate { dependence } => {
                 if self.directive != DirectiveKind::Depobj {
@@ -425,7 +422,6 @@ impl ValidationContext {
             ClauseData::Ordered { .. } => "ordered".to_string(),
             ClauseData::Depend { .. } => "depend".to_string(),
             ClauseData::MetadirectiveSelector { .. } => "metadirective_selector".to_string(),
-            ClauseData::Generic { name, .. } => name.to_string(),
             _ => "<unknown>".to_string(),
         }
     }
@@ -719,10 +715,10 @@ mod tests {
     }
 
     #[test]
-    fn test_depobj_update_rejects_unknown_dependence() {
+    fn test_depobj_update_rejects_disallowed_dependence() {
         let context = ValidationContext::new(DirectiveKind::Depobj);
         let clause = ClauseData::DepobjUpdate {
-            dependence: DepobjUpdateDependence::Unknown,
+            dependence: DepobjUpdateDependence::Depobj,
         };
         assert!(context.is_clause_allowed(&clause).is_err());
     }

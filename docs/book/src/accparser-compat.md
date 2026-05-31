@@ -25,7 +25,7 @@ The script will:
 2. Initialize accparser submodule
 3. Build ROUP core library
 4. Build `libaccparser.so`
-5. Run the full upstream accparser ctest suite (900+ cases)
+5. Run the full accparser compatibility ctest suite (918 cases)
 
 ### Manual Build
 
@@ -131,7 +131,7 @@ The bundled ctest run exercises the upstream accparser test matrix (directives, 
 ```text
 Your Application (OpenACC directives to parse)
     ↓
-compat_impl.cpp (~220 lines) - Minimal wrapper
+ROUP accparser compatibility adapter
     ↓
 ROUP C API (acc_parse, acc_directive_kind, etc.)
     ↓
@@ -144,7 +144,7 @@ Returns: OpenACCDirective with accparser methods
 - Reuses 90% of accparser code (no duplication)
 - Git submodule approach - automatic accparser upgrades
 - No ANTLR4 dependency - cleaner build process
-- Minimal unsafe code, all at FFI boundary
+- Rust unsafe code remains confined to the ROUP FFI modules
 
 ## Supported Features
 
@@ -216,7 +216,7 @@ A: `git submodule update --remote` pulls latest accparser automatically.
 A: ROUP's hand-written parser is 2-5x faster than ANTLR-generated parsers for typical OpenACC pragmas.
 
 **Q: Is it stable?**
-A: Thoroughly tested (38 tests) and ready for use. All tests passing.
+A: The compatibility layer is covered by the 918-case ctest suite and remains under active development.
 
 ## Support
 

@@ -1,4 +1,5 @@
 //! Step-by-step parser debugger for educational and debugging purposes
+#![forbid(unsafe_code)]
 //!
 //! This module provides an interactive debugging interface that allows users to step through
 //! the parsing process token by token, seeing exactly what the parser is doing at each step.

@@ -34,9 +34,10 @@ Runs the comprehensive local suite on the active toolchain:
 
 - Formatting, Clippy (`-D warnings`), debug and release builds
 - Unit, integration, and doctests
-- Example builds (Rust, C, C++)
+- Example builds (Rust, C, C++, Fortran)
 - mdBook build
 - ompparser and accparser compatibility ctests (submodules are initialised automatically)
+- Enum/safety audit (`scripts/audit_enum_safety.sh`)
 - OpenMP_VV and OpenACCV-V round-trip validation (skips when prerequisites are
   unavailable)
 
@@ -47,7 +48,7 @@ Validates critical checks across multiple toolchains:
 - Reads the toolchain list from `.github/workflows/ci.yml` so local testing stays
   aligned with CI
 - Installs the requested toolchains via `rustup`
-- Runs formatting, Clippy, `cargo build`, and `cargo test`
+- Runs formatting, enum/safety audit, Clippy, `cargo build`, and `cargo test`
 - Restores your original toolchain after finishing
 
 Use this script before a pull request or whenever CI reports a
@@ -55,9 +56,11 @@ version-specific failure.
 
 ## Continuous integration
 
-GitHub Actions runs multi-platform jobs on MSRV (1.88) and stable across Linux, Windows, and macOS.
-The main build job performs the same checks as `test.sh`; the docs job rebuilds the
-mdBook and API documentation with warnings denied.
+GitHub Actions runs multi-platform jobs on MSRV (1.88) and stable across Linux,
+Windows, and macOS. Linux runs the comprehensive `test.sh` suite, including the
+enum/safety audit and compatibility ctests. Windows and macOS run the Rust build,
+formatting, Clippy, tests, all-features tests, and benchmark compilation. The
+docs job rebuilds the mdBook and API documentation with warnings denied.
 
 ## Validation suites
 

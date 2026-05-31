@@ -1,6 +1,6 @@
 use roup::ir::{
     convert_directive, BindModifier, ClauseData, DepobjUpdateDependence, DeviceModifier,
-    DirectiveKind, GrainsizeModifier, Language, MemoryOrder, NumTasksModifier, OrderKind,
+    DirectiveKind, GrainsizeModifier, InitKind, Language, MemoryOrder, NumTasksModifier, OrderKind,
     OrderModifier, ParserConfig, SourceLocation, ValidationContext,
 };
 use roup::parser::{openmp, Parser};
@@ -123,5 +123,48 @@ fn order_and_atomic_default_mem_order_parse() {
         assert_eq!(mem, MemoryOrder::AcqRel);
     } else {
         panic!("expected atomic_default_mem_order clause");
+    }
+}
+
+#[test]
+fn interop_init_accepts_modifier_lists() {
+    let target_and_sync =
+        parse_first_clause("#pragma omp interop init(target, targetsync: interop_obj)");
+    if let ClauseData::Init {
+        kind,
+        prefer_type,
+        operand,
+    } = target_and_sync
+    {
+        assert_eq!(kind, InitKind::TargetAndTargetsync);
+        assert!(prefer_type.is_none());
+        assert_eq!(
+            operand.expect("expected operand").to_string(),
+            "interop_obj"
+        );
+    } else {
+        panic!("expected init clause");
+    }
+
+    let prefer_type_first =
+        parse_first_clause("#pragma omp interop init(prefer_type(\"cuda\"), target: obj)");
+    assert_eq!(
+        prefer_type_first.to_string(),
+        "init(prefer_type(\"cuda\"), target: obj)"
+    );
+    if let ClauseData::Init {
+        kind,
+        prefer_type,
+        operand,
+    } = prefer_type_first
+    {
+        assert_eq!(kind, InitKind::Target);
+        assert_eq!(
+            prefer_type.expect("expected prefer_type").to_string(),
+            "\"cuda\""
+        );
+        assert_eq!(operand.expect("expected operand").to_string(), "obj");
+    } else {
+        panic!("expected init clause");
     }
 }

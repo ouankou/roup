@@ -73,7 +73,7 @@ roup_clause_iterator_free(it);
 At minimum run `cargo test`. For thorough coverage run `./test.sh` and
 `./test_rust_versions.sh` (see `TESTING.md` for details). These scripts build
 examples, execute the ompparser and accparser compatibility tests, and verify the
-documentation.
+documentation and enum/safety audit.
 
 ### Where can I learn more?
 

@@ -1,9 +1,12 @@
+#![forbid(unsafe_code)]
+
 pub mod ast_builder;
 pub mod clause;
 mod directive;
 pub mod directive_kind;
 pub mod openacc;
 pub mod openmp;
+pub(crate) mod semantic;
 
 pub use ast_builder::AstBuildError;
 

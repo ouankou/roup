@@ -1,6 +1,6 @@
 use std::ffi::CString;
 
-use roup::acc_directive_name;
+use roup::parser::parse_acc_directive;
 use roup::{acc_directive_free, acc_directive_kind, acc_parse};
 
 fn directive_kind(input: &str) -> i32 {
@@ -32,17 +32,10 @@ fn main() {
             println!("{s} => parsed=NULL, kind={k}");
             continue;
         }
-        let cname = acc_directive_name(dir);
-        if cname.is_null() {
-            println!("{s} => parsed=name=NULL, kind={k}");
-        } else {
-            let parsed_name = unsafe {
-                std::ffi::CStr::from_ptr(cname)
-                    .to_string_lossy()
-                    .into_owned()
-            };
-            println!("{s} => parsed=\"{parsed_name}\", kind={k}");
-        }
+        let parsed_name = parse_acc_directive(s)
+            .map(|(_, directive)| directive.name.as_ref().to_string())
+            .unwrap_or_else(|_| "<parse-error>".to_string());
+        println!("{s} => parsed=\"{parsed_name}\", kind={k}");
         acc_directive_free(dir);
     }
 }
