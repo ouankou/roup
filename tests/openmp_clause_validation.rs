@@ -130,8 +130,14 @@ fn order_and_atomic_default_mem_order_parse() {
 fn interop_init_accepts_modifier_lists() {
     let target_and_sync =
         parse_first_clause("#pragma omp interop init(target, targetsync: interop_obj)");
-    if let ClauseData::Init { kind, operand } = target_and_sync {
+    if let ClauseData::Init {
+        kind,
+        prefer_type,
+        operand,
+    } = target_and_sync
+    {
         assert_eq!(kind, InitKind::TargetAndTargetsync);
+        assert!(prefer_type.is_none());
         assert_eq!(
             operand.expect("expected operand").to_string(),
             "interop_obj"
@@ -142,8 +148,21 @@ fn interop_init_accepts_modifier_lists() {
 
     let prefer_type_first =
         parse_first_clause("#pragma omp interop init(prefer_type(\"cuda\"), target: obj)");
-    if let ClauseData::Init { kind, operand } = prefer_type_first {
+    assert_eq!(
+        prefer_type_first.to_string(),
+        "init(prefer_type(\"cuda\"), target: obj)"
+    );
+    if let ClauseData::Init {
+        kind,
+        prefer_type,
+        operand,
+    } = prefer_type_first
+    {
         assert_eq!(kind, InitKind::Target);
+        assert_eq!(
+            prefer_type.expect("expected prefer_type").to_string(),
+            "\"cuda\""
+        );
         assert_eq!(operand.expect("expected operand").to_string(), "obj");
     } else {
         panic!("expected init clause");

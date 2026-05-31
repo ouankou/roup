@@ -618,6 +618,7 @@ struct InductionData {
 #[repr(C)]
 struct InitData {
     kind: i32,
+    prefer_type: *const c_char,
     operand: *const c_char,
 }
 
@@ -2907,6 +2908,24 @@ pub extern "C" fn roup_clause_init_raw_kind(clause: *const OmpClause) -> *const 
 }
 
 #[no_mangle]
+pub extern "C" fn roup_clause_init_prefer_type(clause: *const OmpClause) -> *const c_char {
+    if clause.is_null() {
+        return ptr::null();
+    }
+    unsafe {
+        let c = &*clause;
+        if c.kind != OmpClauseKind::Init {
+            return ptr::null();
+        }
+        let ptr = c.data.init;
+        if ptr.is_null() {
+            return ptr::null();
+        }
+        (*ptr).prefer_type
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn roup_clause_init_operand(clause: *const OmpClause) -> *const c_char {
     if clause.is_null() {
         return ptr::null();
@@ -4841,7 +4860,16 @@ fn convert_fail_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
 }
 
 fn convert_init_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
-    if let IrClauseData::Init { kind, operand } = payload {
+    if let IrClauseData::Init {
+        kind,
+        prefer_type,
+        operand,
+    } = payload
+    {
+        let prefer_type_ptr = prefer_type
+            .as_ref()
+            .map(|e| allocate_c_string(&e.to_string()))
+            .unwrap_or(ptr::null());
         let operand_ptr = operand
             .as_ref()
             .map(|e| allocate_c_string(&e.to_string()))
@@ -4851,6 +4879,7 @@ fn convert_init_clause_from_ast(payload: &IrClauseData) -> Option<OmpClause> {
             .unwrap_or(ptr::null());
         let data_ptr = Box::into_raw(Box::new(InitData {
             kind: *kind as i32,
+            prefer_type: prefer_type_ptr,
             operand: operand_ptr,
         }));
         return Some(OmpClause {
@@ -7719,6 +7748,9 @@ fn free_clause_data(clause: &OmpClause) {
             let ptr = clause.data.init;
             if !ptr.is_null() {
                 let boxed = Box::from_raw(ptr);
+                if !boxed.prefer_type.is_null() {
+                    drop(CString::from_raw(boxed.prefer_type as *mut c_char));
+                }
                 if !boxed.operand.is_null() {
                     drop(CString::from_raw(boxed.operand as *mut c_char));
                 }
@@ -7900,6 +7932,48 @@ mod tests {
         }
 
         assert!(found, "uniform clause should be present");
+
+        roup_clause_iterator_free(iter);
+        roup_directive_free(directive);
+    }
+
+    #[test]
+    fn init_clause_c_api_preserves_prefer_type() {
+        let input =
+            std::ffi::CString::new("#pragma omp interop init(prefer_type(\"cuda\"), target: obj)")
+                .expect("cstring");
+        let directive = roup_parse(input.as_ptr());
+        assert!(!directive.is_null());
+
+        let iter = roup_directive_clauses_iter(directive);
+        assert!(!iter.is_null(), "iterator should be created");
+
+        let mut clause_ptr: *const OmpClause = ptr::null();
+        let advanced = roup_clause_iterator_next(iter, &mut clause_ptr);
+        assert_eq!(advanced, 1, "iterator should yield first clause");
+        assert!(!clause_ptr.is_null(), "clause pointer should not be NULL");
+        assert_eq!(roup_clause_kind(clause_ptr), CLAUSE_KIND_INIT);
+        assert_eq!(
+            roup_clause_init_kind(clause_ptr),
+            crate::ir::InitKind::Target as i32
+        );
+
+        let prefer_type_ptr = roup_clause_init_prefer_type(clause_ptr);
+        assert!(
+            !prefer_type_ptr.is_null(),
+            "prefer_type payload should be preserved"
+        );
+        let prefer_type = unsafe { CStr::from_ptr(prefer_type_ptr) }
+            .to_str()
+            .expect("utf8");
+        assert_eq!(prefer_type, "\"cuda\"");
+
+        let operand_ptr = roup_clause_init_operand(clause_ptr);
+        assert!(!operand_ptr.is_null(), "operand should be preserved");
+        let operand = unsafe { CStr::from_ptr(operand_ptr) }
+            .to_str()
+            .expect("utf8");
+        assert_eq!(operand, "obj");
 
         roup_clause_iterator_free(iter);
         roup_directive_free(directive);

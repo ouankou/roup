@@ -1532,6 +1532,7 @@ pub enum ClauseData {
     /// `init([kind[:operand]])` - Interop init clause
     Init {
         kind: InitKind,
+        prefer_type: Option<Expression>,
         operand: Option<Expression>,
     },
 
@@ -1970,11 +1971,22 @@ impl fmt::Display for ClauseData {
             ClauseData::DeviceType(dt) => write!(f, "device_type({dt})"),
             ClauseData::At(kind) => write!(f, "at({kind})"),
             ClauseData::Severity(kind) => write!(f, "severity({kind})"),
-            ClauseData::Init { kind, operand } => {
+            ClauseData::Init {
+                kind,
+                prefer_type,
+                operand,
+            } => {
                 write!(f, "init(")?;
                 let mut wrote = false;
+                if let Some(prefer_type) = prefer_type {
+                    write!(f, "prefer_type({prefer_type})")?;
+                    wrote = true;
+                }
                 match kind {
                     InitKind::Target | InitKind::Targetsync | InitKind::TargetAndTargetsync => {
+                        if wrote {
+                            write!(f, ", ")?;
+                        }
                         write!(f, "{kind}")?;
                         wrote = true;
                     }

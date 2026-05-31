@@ -611,22 +611,28 @@ pub(crate) fn parse_init_clause(
 ) -> Result<ClauseData, ConversionError> {
     if let ClauseKind::Parenthesized(ref content) = kind {
         let mut init_kind = InitKind::Unspecified;
+        let mut prefer_type = None;
         let mut operand = None;
         let text = content.as_ref().trim();
         if let Some((lhs, rhs)) = lang::split_once_top_level(text, ':') {
             let lhs_trim = lhs.trim();
             if !lhs_trim.is_empty() {
-                init_kind = parse_init_modifier_list(lhs_trim)?;
+                let modifiers = parse_init_modifier_list(lhs_trim, config)?;
+                init_kind = modifiers.kind;
+                prefer_type = modifiers.prefer_type;
             }
             let rhs_trim = rhs.trim();
             if !rhs_trim.is_empty() {
                 operand = Some(Expression::new(rhs_trim, config));
             }
         } else if !text.is_empty() {
-            init_kind = parse_init_modifier_list(text)?;
+            let modifiers = parse_init_modifier_list(text, config)?;
+            init_kind = modifiers.kind;
+            prefer_type = modifiers.prefer_type;
         }
         Ok(ClauseData::Init {
             kind: init_kind,
+            prefer_type,
             operand,
         })
     } else {
@@ -636,10 +642,19 @@ pub(crate) fn parse_init_clause(
     }
 }
 
-fn parse_init_modifier_list(modifiers: &str) -> Result<InitKind, ConversionError> {
+struct InitModifiers {
+    kind: InitKind,
+    prefer_type: Option<Expression>,
+}
+
+fn parse_init_modifier_list(
+    modifiers: &str,
+    config: &ParserConfig,
+) -> Result<InitModifiers, ConversionError> {
     let mut has_target = false;
     let mut has_targetsync = false;
     let mut saw_modifier = false;
+    let mut prefer_type = None;
 
     for raw in split_top_level_items(modifiers) {
         let modifier = raw.trim();
@@ -665,7 +680,15 @@ fn parse_init_modifier_list(modifiers: &str) -> Result<InitKind, ConversionError
                 }
                 has_targetsync = true;
             }
-            _ if is_prefer_type_init_modifier(modifier) => {}
+            _ if is_prefer_type_init_modifier(modifier) => {
+                if prefer_type.is_some() {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "duplicate prefer_type init modifier".to_string(),
+                    ));
+                }
+                let spec = extract_prefer_type_init_modifier(modifier).expect("validated above");
+                prefer_type = Some(Expression::new(spec, config));
+            }
             _ => {
                 return Err(ConversionError::InvalidClauseSyntax(format!(
                     "Unknown init clause modifier: {modifier}"
@@ -674,27 +697,37 @@ fn parse_init_modifier_list(modifiers: &str) -> Result<InitKind, ConversionError
         }
     }
 
-    match (has_target, has_targetsync, saw_modifier) {
-        (true, true, _) => Ok(InitKind::TargetAndTargetsync),
-        (true, false, _) => Ok(InitKind::Target),
-        (false, true, _) => Ok(InitKind::Targetsync),
-        (false, false, true) => Err(ConversionError::InvalidClauseSyntax(
-            "init modifier list requires target or targetsync".to_string(),
-        )),
-        (false, false, false) => Ok(InitKind::Unspecified),
-    }
+    let kind = match (has_target, has_targetsync, saw_modifier) {
+        (true, true, _) => InitKind::TargetAndTargetsync,
+        (true, false, _) => InitKind::Target,
+        (false, true, _) => InitKind::Targetsync,
+        (false, false, true) => {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "init modifier list requires target or targetsync".to_string(),
+            ))
+        }
+        (false, false, false) => InitKind::Unspecified,
+    };
+
+    Ok(InitModifiers { kind, prefer_type })
 }
 
 fn is_prefer_type_init_modifier(modifier: &str) -> bool {
-    let trimmed = modifier.trim();
-    let Some(open_paren) = trimmed.find('(') else {
-        return false;
-    };
+    extract_prefer_type_init_modifier(modifier).is_some()
+}
 
-    trimmed[..open_paren]
+fn extract_prefer_type_init_modifier(modifier: &str) -> Option<&str> {
+    let trimmed = modifier.trim();
+    let open_paren = trimmed.find('(')?;
+
+    if trimmed[..open_paren]
         .trim()
         .eq_ignore_ascii_case("prefer_type")
-        && extract_paren_arg(trimmed).is_some()
+    {
+        extract_paren_arg(trimmed)
+    } else {
+        None
+    }
 }
 
 pub(crate) fn parse_induction_clause(

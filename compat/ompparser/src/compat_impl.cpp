@@ -320,6 +320,7 @@ extern "C" {
     int32_t roup_clause_at_kind(const OmpClause* clause);
     int32_t roup_clause_init_kind(const OmpClause* clause);
     const char* roup_clause_init_raw_kind(const OmpClause* clause);
+    const char* roup_clause_init_prefer_type(const OmpClause* clause);
     const char* roup_clause_init_operand(const OmpClause* clause);
     int32_t roup_clause_induction_item_count(const OmpClause* clause);
     int32_t roup_clause_induction_item_kind(const OmpClause* clause, int32_t index);
@@ -866,9 +867,16 @@ static void convert_clause_from_roup(
                 } else if (kind_code == 1) {
                     init_kind = OMPC_INIT_KIND_targetsync;
                 }
+                const char* prefer_type = roup_clause_init_prefer_type(roup_clause);
+                if (prefer_type && prefer_type[0] != '\0') {
+                    init_clause->setPreferType(prefer_type);
+                }
                 const char* raw_kind = roup_clause_init_raw_kind(roup_clause);
                 if (raw_kind && raw_kind[0] != '\0') {
                     init_clause->addInteropType(std::string(raw_kind));
+                } else if (kind_code == 3) {
+                    init_clause->addInteropType(OMPC_INIT_KIND_target);
+                    init_clause->addInteropType(OMPC_INIT_KIND_targetsync);
                 } else {
                     init_clause->addInteropType(init_kind);
                 }
