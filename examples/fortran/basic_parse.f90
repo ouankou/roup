@@ -1,30 +1,39 @@
-! Basic Fortran OpenMP directive parsing example
-! Demonstrates parsing OpenMP directives from Fortran source code
-!
-! Compile and link with ROUP library
-
-program basic_parse_example
-    use iso_c_binding
+program basic_parse
+    use, intrinsic :: iso_c_binding
+    use roup_capi
     implicit none
-    
-    ! Example OpenMP directives in Fortran free-form
-    character(len=100) :: directive1 = "!$OMP PARALLEL PRIVATE(X)"
-    character(len=100) :: directive2 = "!$OMP DO SCHEDULE(STATIC, 10)"
-    character(len=100) :: directive3 = "!$OMP PARALLEL DO REDUCTION(+:SUM)"
-    
-    print *, "ROUP Fortran OpenMP Parser - Basic Example"
-    print *, "==========================================="
-    print *, ""
-    
-    print *, "Parsing Fortran OpenMP directives..."
-    print *, ""
-    
-    print *, "Directive 1: ", trim(directive1)
-    print *, "Directive 2: ", trim(directive2)
-    print *, "Directive 3: ", trim(directive3)
-    print *, ""
-    
-    print *, "Note: Full C API integration requires interfacing with libroup.so"
-    print *, "See tutorial_basic.f90 for C interop example"
-    
-end program basic_parse_example
+
+    type(RoupParserOptions) :: options
+    type(RoupParserResult) :: parser
+    type(RoupDirectiveResult) :: directive
+    type(RoupSizeResult) :: clauses
+    type(RoupCallResult) :: released
+    character(kind=c_char), allocatable :: source(:)
+
+    options%abi_version = ROUP_ABI_VERSION
+    options%struct_size = int(c_sizeof(options), c_int32_t)
+    options%dialect = ROUP_DIALECT_OPENMP
+    options%version_policy = ROUP_VERSION_ANY
+    options%version = 0
+    options%host_language = ROUP_HOST_FORTRAN
+    options%host_standard = ROUP_FORTRAN_2023
+    options%source_form = ROUP_SOURCE_FORTRAN_FREE
+    options%flags = 0
+    options%reserved = 0
+
+    parser = roup_parser_create(options)
+    call require_ok(parser%result)
+
+    source = bytes("!$omp parallel private(value)")
+    directive = roup_parse(parser%value, source, size(source, kind=c_size_t))
+    call require_ok(directive%result)
+
+    clauses = roup_directive_clause_count(directive%value)
+    call require_ok(clauses%result)
+    if (clauses%value /= 1_c_size_t) error stop "unexpected clause count"
+
+    released = roup_directive_release(directive%value)
+    call require_ok(released)
+    released = roup_parser_release(parser%value)
+    call require_ok(released)
+end program

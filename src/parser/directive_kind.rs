@@ -11,11 +11,6 @@ pub enum DirectiveName {
     EndAssume,
     Assumes,
     Atomic,
-    AtomicCapture,
-    AtomicCompareCapture,
-    AtomicRead,
-    AtomicUpdate,
-    AtomicWrite,
     Barrier,
     BeginAssumes,
     BeginDeclareTarget,
@@ -45,9 +40,11 @@ pub enum DirectiveName {
     Do,
     DoSimd,
     EndAssumes,
+    EndAllocators,
     EndDeclareTarget,
     EndDeclareTargetUnderscore,
     EndDeclareVariant,
+    EndDispatch,
     Error,
     Flush,
     Fuse,
@@ -250,34 +247,6 @@ pub enum DirectiveName {
     Other(Cow<'static, str>),
 }
 
-/// Return the canonical OpenACCKinds.h token (UPPER_SNAKE) for a given
-/// enum variant name. This helps the generator decide which directive
-/// variants correspond to the same header token (for example, both
-/// `EnterData` should map to `ENTER_DATA`.
-pub fn canonical_header_token_for_variant(variant: &str) -> Option<&'static str> {
-    match variant {
-        "EnterData" => Some("ENTER_DATA"),
-        "ExitData" => Some("EXIT_DATA"),
-        "HostData" => Some("HOST_DATA"),
-        _ => None,
-    }
-}
-
-/// Typed representation for directive parameters when structured.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DirectiveParameter<'a> {
-    None,
-    Parenthesized(Cow<'a, str>),
-    ScanExclusive(Cow<'a, str>),
-    ScanInclusive(Cow<'a, str>),
-    CancelConstruct(Cow<'a, str>),
-    Depobj(Cow<'a, str>),
-    DeclareMapper(Cow<'a, str>),
-    DeclareVariant(Cow<'a, str>),
-    Threadprivate(Cow<'a, str>),
-    Unstructured(Cow<'a, str>),
-}
-
 // Build a static map of normalized directive names to DirectiveName variants
 static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| {
     let mut m = HashMap::new();
@@ -293,28 +262,27 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("end assume", DirectiveName::EndAssume);
     insert!("assumes", DirectiveName::Assumes);
     insert!("atomic", DirectiveName::Atomic);
-    insert!("atomic capture", DirectiveName::AtomicCapture);
-    insert!(
-        "atomic compare capture",
-        DirectiveName::AtomicCompareCapture
-    );
-    insert!("atomic read", DirectiveName::AtomicRead);
-    insert!("atomic update", DirectiveName::AtomicUpdate);
-    insert!("atomic write", DirectiveName::AtomicWrite);
     insert!("barrier", DirectiveName::Barrier);
     insert!("begin assumes", DirectiveName::BeginAssumes);
     insert!("begin declare target", DirectiveName::BeginDeclareTarget);
     insert!("begin declare variant", DirectiveName::BeginDeclareVariant);
+    insert!("begin declare_variant", DirectiveName::BeginDeclareVariant);
     insert!("cancel", DirectiveName::Cancel);
     insert!("cancellation point", DirectiveName::CancellationPoint);
+    insert!("cancellation_point", DirectiveName::CancellationPoint);
     insert!("critical", DirectiveName::Critical);
     insert!("declare induction", DirectiveName::DeclareInduction);
+    insert!("declare_induction", DirectiveName::DeclareInduction);
     insert!("declare mapper", DirectiveName::DeclareMapper);
+    insert!("declare_mapper", DirectiveName::DeclareMapper);
     insert!("declare reduction", DirectiveName::DeclareReduction);
+    insert!("declare_reduction", DirectiveName::DeclareReduction);
     insert!("declare simd", DirectiveName::DeclareSimd);
+    insert!("declare_simd", DirectiveName::DeclareSimd);
     insert!("declare target", DirectiveName::DeclareTarget);
     insert!("declare_target", DirectiveName::DeclareTargetUnderscore);
     insert!("declare variant", DirectiveName::DeclareVariant);
+    insert!("declare_variant", DirectiveName::DeclareVariant);
     insert!("depobj", DirectiveName::Depobj);
     insert!("dispatch", DirectiveName::Dispatch);
     insert!("distribute", DirectiveName::Distribute);
@@ -346,8 +314,13 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("do", DirectiveName::Do);
     insert!("do simd", DirectiveName::DoSimd);
     insert!("end assumes", DirectiveName::EndAssumes);
+    insert!("end allocators", DirectiveName::EndAllocators);
+    insert!("endallocators", DirectiveName::EndAllocators);
     insert!("end declare target", DirectiveName::EndDeclareTarget);
     insert!("end declare variant", DirectiveName::EndDeclareVariant);
+    insert!("end declare_variant", DirectiveName::EndDeclareVariant);
+    insert!("end dispatch", DirectiveName::EndDispatch);
+    insert!("enddispatch", DirectiveName::EndDispatch);
     insert!("error", DirectiveName::Error);
     insert!("flush", DirectiveName::Flush);
     insert!("fuse", DirectiveName::Fuse);
@@ -619,8 +592,11 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("target_data", DirectiveName::TargetDataUnderscore);
     insert!("target data composite", DirectiveName::TargetDataComposite);
     insert!("target enter data", DirectiveName::TargetEnterData);
+    insert!("target_enter_data", DirectiveName::TargetEnterData);
     insert!("target exit data", DirectiveName::TargetExitData);
+    insert!("target_exit_data", DirectiveName::TargetExitData);
     insert!("end target data", DirectiveName::EndTargetData);
+    insert!("end target_data", DirectiveName::EndTargetData);
     insert!("end target enter data", DirectiveName::EndTargetEnterData);
     insert!("end target exit data", DirectiveName::EndTargetExitData);
     insert!("end target update", DirectiveName::EndTargetUpdate);
@@ -684,6 +660,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
         DirectiveName::TargetTeamsWorkdistribute
     );
     insert!("target update", DirectiveName::TargetUpdate);
+    insert!("target_update", DirectiveName::TargetUpdate);
     insert!("task", DirectiveName::Task);
     insert!("task iteration", DirectiveName::TaskIteration);
     insert!("task_iteration", DirectiveName::TaskIteration);
@@ -731,20 +708,20 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     m
 });
 
-/// Normalize directive names by trimming, replacing underscores with spaces,
-/// and collapsing repeated whitespace.
+/// Normalize directive names by trimming and collapsing repeated whitespace.
+/// Underscore aliases are catalogued explicitly; globally translating `_` to
+/// spaces would turn nonstandard source spellings into typed directives before
+/// version and provenance checks can inspect them.
 fn normalize_directive_key(name: &str) -> String {
-    let replaced = name.trim().replace('_', " ");
-    replaced.split_whitespace().collect::<Vec<_>>().join(" ")
+    name.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Lookup a DirectiveName from a normalized name string. If not found, returns Other variant
 pub fn lookup_directive_name(name: &str) -> DirectiveName {
     let trimmed = name.trim();
-    // Some OpenACC directives intentionally require underscores rather than
-    // accepting space-separated aliases (e.g., `host_data`). Recognize the
-    // canonical underscore form before the general normalization that replaces
-    // underscores with spaces.
+    // OpenACC `host_data` has no space-separated alias. Recognize it before
+    // OpenMP 6.0 underscore names are canonicalized to the typed semantic kind
+    // shared with their historical spaced alternatives.
     if trimmed.eq_ignore_ascii_case("host_data") {
         return DirectiveName::HostData;
     }
@@ -767,19 +744,12 @@ pub fn lookup_directive_name(name: &str) -> DirectiveName {
             }
         }
     }
-    if trimmed.eq_ignore_ascii_case("begin_declare_target") {
-        return DirectiveName::BeginDeclareTargetUnderscore;
-    }
-    if trimmed.eq_ignore_ascii_case("end_declare_target") {
-        return DirectiveName::EndDeclareTargetUnderscore;
-    }
-
     let normalized = normalize_directive_key(name);
     let key = normalized.to_ascii_lowercase();
 
-    // Gracefully accept block-ending aliases even when the dedicated enum
-    // variant does not exist yet. Treat them as their opening directive so
-    // downstream conversion can proceed instead of aborting the parse.
+    // These standardized block-ending spellings have dedicated semantic
+    // variants even though they are not generated by every host-language
+    // frontend rule.
     if key == "end metadirective" {
         return DirectiveName::EndMetadirective;
     }
@@ -808,11 +778,6 @@ impl DirectiveName {
             DirectiveName::EndAssume => "end assume",
             DirectiveName::Assumes => "assumes",
             DirectiveName::Atomic => "atomic",
-            DirectiveName::AtomicCapture => "atomic capture",
-            DirectiveName::AtomicCompareCapture => "atomic compare capture",
-            DirectiveName::AtomicRead => "atomic read",
-            DirectiveName::AtomicUpdate => "atomic update",
-            DirectiveName::AtomicWrite => "atomic write",
             DirectiveName::Barrier => "barrier",
             DirectiveName::BeginAssumes => "begin assumes",
             DirectiveName::BeginDeclareTarget => "begin declare target",
@@ -841,9 +806,11 @@ impl DirectiveName {
             DirectiveName::Do => "do",
             DirectiveName::DoSimd => "do simd",
             DirectiveName::EndAssumes => "end assumes",
+            DirectiveName::EndAllocators => "end allocators",
             DirectiveName::EndDeclareTarget => "end declare target",
             DirectiveName::EndDeclareTargetUnderscore => "end declare_target",
             DirectiveName::EndDeclareVariant => "end declare variant",
+            DirectiveName::EndDispatch => "end dispatch",
             DirectiveName::Error => "error",
             DirectiveName::Flush => "flush",
             DirectiveName::Fuse => "fuse",

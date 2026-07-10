@@ -1,59 +1,80 @@
-#include <OpenACCIR.h>
-#include <iostream>
+#include <OpenACCParser.h>
+
+#include <cctype>
 #include <fstream>
+#include <iostream>
+#include <memory>
+#include <stdexcept>
 #include <string>
 
-extern "C" {
-    OpenACCDirective* parseOpenACC(const char* input, void* exprParse);
-    void setLang(OpenACCBaseLang lang);
+extern "C" void setLang(OpenACCBaseLang lang);
+
+namespace {
+
+bool starts_with_case_insensitive(const std::string &value,
+                                  const std::string &prefix) {
+  if (value.size() < prefix.size())
+    return false;
+  for (std::size_t index = 0; index < prefix.size(); ++index) {
+    if (std::tolower(static_cast<unsigned char>(value[index])) !=
+        std::tolower(static_cast<unsigned char>(prefix[index]))) {
+      return false;
+    }
+  }
+  return true;
 }
 
-int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <input_file>" << std::endl;
-        return 1;
-    }
+OpenACCBaseLang source_language(const std::string &line) {
+  const std::size_t first = line.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos)
+    throw std::runtime_error("fixture line must not be blank");
+  const std::string directive = line.substr(first);
+  if (starts_with_case_insensitive(directive, "!$acc") ||
+      starts_with_case_insensitive(directive, "c$acc") ||
+      starts_with_case_insensitive(directive, "*$acc")) {
+    return ACC_Lang_Fortran;
+  }
+  if (starts_with_case_insensitive(directive, "#pragma"))
+    return ACC_Lang_C;
+  throw std::runtime_error(
+      "fixture line has no explicit OpenACC pragma or Fortran sentinel");
+}
 
-    std::ifstream infile(argv[1]);
-    if (!infile.is_open()) {
-        std::cerr << "Could not open file: " << argv[1] << std::endl;
-        return 1;
-    }
+} // namespace
 
-    // Extract filename from path for output file
-    std::string filename_string = std::string(argv[1]);
-    size_t pos = filename_string.rfind("/");
-    if (pos != std::string::npos) {
-        filename_string = filename_string.substr(pos + 1);
-    }
+int main(int argc, char *argv[]) {
+  try {
+    if (argc != 2)
+      throw std::runtime_error("usage: acc_tester.out <input_file>");
 
-    // Open output file (filename.output)
-    std::string output_filename = filename_string + ".output";
-    std::ofstream output_file(output_filename.c_str(), std::ofstream::trunc);
-    if (!output_file.is_open()) {
-        std::cerr << "Could not create output file: " << output_filename << std::endl;
-        return 1;
-    }
+    std::ifstream input(argv[1]);
+    if (!input.is_open())
+      throw std::runtime_error(std::string("could not open fixture: ") +
+                               argv[1]);
+
+    std::string filename(argv[1]);
+    const std::size_t slash = filename.find_last_of('/');
+    if (slash != std::string::npos)
+      filename = filename.substr(slash + 1);
+    std::ofstream output(filename + ".output", std::ofstream::trunc);
+    if (!output.is_open())
+      throw std::runtime_error("could not create fixture output");
 
     std::string line;
-    while (std::getline(infile, line)) {
-        if (line.empty()) continue;
-
-        // Detect language from input
-        if (line.find("!$acc") == 0 || line.find("!$ACC") == 0) {
-            setLang(ACC_Lang_Fortran);
-        } else {
-            setLang(ACC_Lang_C);
-        }
-
-        OpenACCDirective* dir = parseOpenACC(line.c_str(), nullptr);
-        if (dir) {
-            std::string output = dir->generatePragmaString();
-            output_file << output << std::endl;
-            delete dir;
-        }
+    while (std::getline(input, line)) {
+      if (line.find_first_not_of(" \t\r\n") == std::string::npos)
+        continue;
+      setLang(source_language(line));
+      std::unique_ptr<OpenACCDirective> directive(parseOpenACC(line));
+      if (!directive)
+        throw std::runtime_error("strict parser returned null");
+      output << directive->generatePragmaString() << '\n';
     }
-
-    output_file.close();
+    if (!output)
+      throw std::runtime_error("failed to write fixture output");
     return 0;
+  } catch (const std::exception &error) {
+    std::cerr << error.what() << '\n';
+    return 1;
+  }
 }

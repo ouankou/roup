@@ -1,329 +1,114 @@
-/// OpenMP 6.0 Keyword Coverage Test
-///
-/// This test validates that ALL OpenMP 6.0 directives and clauses from the official
-/// specification are registered in the parser. It compares the parser's keyword lists
-/// against the canonical lists extracted from the OpenMP 6.0 documentation.
-use roup::parser::openmp;
+//! Representative standardized directive coverage through the strict facade.
+//!
+//! This intentionally uses complete legal specimens. Enumerating private raw
+//! parser keywords with fabricated arguments used to bless malformed syntax.
 
-fn parse_pragma(input: &str) -> Result<roup::parser::Directive<'_>, String> {
-    let parser = openmp::parser();
-    parser
-        .parse(input)
-        .map(|(_, directive)| directive)
-        .map_err(|e| format!("{e:?}"))
+use roup::api::{OpenMpConfig, OpenMpParser};
+use roup::ast::OmpDirectiveKind;
+use roup::version::{CStandard, HostLanguageProfile, OpenMpVersion, SourceForm};
+
+fn parser() -> OpenMpParser {
+    OpenMpConfig::exact(
+        OpenMpVersion::V6_0,
+        HostLanguageProfile::C(CStandard::C23),
+        SourceForm::Pragma,
+    )
+    .unwrap()
+    .parser()
 }
 
-/// Test that all OpenMP 6.0 directives can be parsed
 #[test]
-fn test_all_openmp60_directives_parse() {
-    // Sample of key base directives from each category
-    let test_directives = vec![
-        // Declarative
-        "allocate",
-        "assumes",
-        "declare target",
-        "declare simd",
-        "declare mapper",
-        "declare reduction",
-        "declare induction",
-        "declare variant",
-        "groupprivate",
-        "threadprivate",
-        // Executable
-        "allocators",
-        "parallel",
-        "teams",
-        "distribute",
-        "for",
-        "simd",
-        "loop",
-        "taskloop",
-        "taskgraph",
-        "target",
-        "target data",
-        "target enter data",
-        "target exit data",
-        "target update",
-        // Loop transformations
-        "tile",
-        "unroll",
-        "fuse",
-        "split",
-        "interchange",
-        "reverse",
-        "stripe",
-        "workdistribute",
-        // Synchronization
-        "barrier",
-        "taskwait",
-        "taskgroup",
-        "ordered",
-        "atomic",
-        "flush",
-        "critical",
-        // Cancellation
-        "cancel",
-        "cancellation point",
-        // Meta-directives
-        "metadirective",
-        "begin metadirective",
-        // Informational
-        "error",
-        "requires",
+fn standardized_directive_families_have_legal_public_specimens() {
+    let specimens = [
+        (
+            "#pragma omp parallel num_threads(4)",
+            OmpDirectiveKind::Parallel,
+        ),
+        ("#pragma omp for private(i)", OmpDirectiveKind::For),
+        ("#pragma omp simd safelen(8)", OmpDirectiveKind::Simd),
+        ("#pragma omp teams num_teams(2)", OmpDirectiveKind::Teams),
+        (
+            "#pragma omp distribute private(i)",
+            OmpDirectiveKind::Distribute,
+        ),
+        ("#pragma omp task depend(in:a)", OmpDirectiveKind::Task),
+        (
+            "#pragma omp taskloop grainsize(4)",
+            OmpDirectiveKind::Taskloop,
+        ),
+        ("#pragma omp target map(tofrom:a)", OmpDirectiveKind::Target),
+        (
+            "#pragma omp target data map(tofrom:a)",
+            OmpDirectiveKind::TargetData,
+        ),
+        (
+            "#pragma omp target enter data map(to:a)",
+            OmpDirectiveKind::TargetEnterData,
+        ),
+        (
+            "#pragma omp target exit data map(from:a)",
+            OmpDirectiveKind::TargetExitData,
+        ),
+        (
+            "#pragma omp target update to(a)",
+            OmpDirectiveKind::TargetUpdate,
+        ),
+        ("#pragma omp barrier", OmpDirectiveKind::Barrier),
+        ("#pragma omp taskwait", OmpDirectiveKind::Taskwait),
+        ("#pragma omp taskgroup", OmpDirectiveKind::Taskgroup),
+        ("#pragma omp ordered", OmpDirectiveKind::Ordered),
+        ("#pragma omp atomic read", OmpDirectiveKind::Atomic),
+        ("#pragma omp flush(a)", OmpDirectiveKind::Flush),
+        ("#pragma omp critical(lock)", OmpDirectiveKind::Critical),
+        ("#pragma omp master", OmpDirectiveKind::Master),
+        ("#pragma omp masked filter(0)", OmpDirectiveKind::Masked),
+        ("#pragma omp scope private(a)", OmpDirectiveKind::Scope),
+        ("#pragma omp scan inclusive(a)", OmpDirectiveKind::Scan),
+        (
+            "#pragma omp metadirective when(device={kind(cpu)}: parallel)",
+            OmpDirectiveKind::Metadirective,
+        ),
+        (
+            "#pragma omp error at(compilation) severity(warning)",
+            OmpDirectiveKind::Error,
+        ),
+        ("#pragma omp cancel parallel", OmpDirectiveKind::Cancel),
+        (
+            "#pragma omp cancellation point parallel",
+            OmpDirectiveKind::CancellationPoint,
+        ),
+        (
+            "#pragma omp threadprivate(a)",
+            OmpDirectiveKind::Threadprivate,
+        ),
+        ("#pragma omp tile sizes(4)", OmpDirectiveKind::Tile),
+        ("#pragma omp unroll full", OmpDirectiveKind::Unroll),
     ];
 
-    for directive in test_directives {
-        let pragma = format!("#pragma omp {directive}");
-        let result = parse_pragma(&pragma);
-        assert!(
-            result.is_ok(),
-            "Failed to parse directive '{}': {:?}",
-            directive,
-            result.err()
-        );
+    let mut failures = Vec::new();
+    for (source, expected_kind) in specimens {
+        match parser().parse(source) {
+            Ok(parsed) if parsed.directive().kind() == expected_kind => {}
+            Ok(parsed) => failures.push(format!(
+                "{source:?}: expected {expected_kind:?}, got {:?}",
+                parsed.directive().kind()
+            )),
+            Err(error) => failures.push(format!("{source:?}: {error}")),
+        }
     }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
-/// Test that all new OpenMP 6.0 clauses can be parsed
 #[test]
-fn test_all_new_openmp60_clauses_parse() {
-    // Test new clauses added in this implementation
-    let test_cases = vec![
-        // Declarative clauses
-        ("parallel", "absent(x)"),
-        ("parallel", "adjust_args(need_device_addr: x)"),
-        ("allocate", "align(64)"),
-        ("declare variant", "append_args(x, y)"),
-        ("tile", "apply(tile(8,8))"),
-        ("error", "at(compilation)"),
-        // Reduction/induction clauses
-        ("declare reduction", "combiner(+)"),
-        ("declare induction", "collector(+)"),
-        ("assumes", "contains(target)"),
-        ("split", "counts(10, omp_fill)"),
-        // Device clauses
-        ("requires", "device_safesync"),
-        ("declare target", "enter(link: x)"),
-        ("unroll", "full"),
-        ("taskgraph", "graph_id(1)"),
-        ("taskgraph", "graph_reset(id)"),
-        ("target", "has_device_addr(x)"),
-        ("declare target", "indirect"),
-        ("parallel", "induction(i = 0 : N : 1)"),
-        ("declare induction", "inductor(+: x)"),
-        ("scan", "init_complete"),
-        ("declare reduction", "initializer(omp_priv = 0)"),
-        // Memory and mapping
-        ("allocate", "local(x)"),
-        ("loop", "looprange(1:10)"),
-        ("atomic", "memscope(device)"),
-        ("dispatch", "nocontext(ctx)"),
-        // Control flow
-        ("assumes", "no_openmp_constructs"),
-        ("metadirective", "otherwise(parallel)"),
-        ("interchange", "permutation(2,1)"),
-        // Atomic operations
-        ("atomic", "read"),
-        ("taskloop", "replayable"),
-        ("requires", "reverse_offload"),
-        ("parallel", "safesync"),
-        ("requires", "self_maps"),
-        ("error", "severity(warning)"),
-        ("ordered", "simd"),
-        ("ordered", "threads"),
-        ("task", "threadset(1)"),
-        ("depobj", "transparent"),
-        ("declare simd", "uniform(x)"),
-        ("interop", "use(obj)"),
-        ("atomic", "write"),
-    ];
-
-    for (directive, clause) in test_cases {
-        let pragma = format!("#pragma omp {directive} {clause}");
-        let result = parse_pragma(&pragma);
-        assert!(
-            result.is_ok(),
-            "Failed to parse '{}' with clause '{}': {:?}",
-            directive,
-            clause,
-            result.err()
-        );
-    }
-}
-
-/// Test loop transformation directives (OpenMP 6.0 new feature)
-#[test]
-fn test_loop_transformations() {
-    let transformations = vec![
-        "tile sizes(8, 8)",
-        "unroll full",
-        "unroll partial",
-        "fuse",
-        "split counts(10, omp_fill, 20)",
-        "interchange permutation(2, 1, 3)",
-        "reverse",
-        "stripe sizes(16)",
-    ];
-
-    for transform in transformations {
-        let pragma = format!("#pragma omp {transform}");
-        let result = parse_pragma(&pragma);
-        assert!(
-            result.is_ok(),
-            "Failed to parse loop transformation '{}': {:?}",
-            transform,
-            result.err()
-        );
-    }
-}
-
-/// Test meta-directives (OpenMP 6.0 feature)
-#[test]
-fn test_metadirectives() {
-    let metadirectives = vec![
-        "metadirective when(device={kind(gpu)}: target) otherwise(parallel)",
-        "begin metadirective when(device={kind(cpu)}: parallel)",
-        "assumes no_openmp_constructs",
-        "begin assumes holds(x > 0)",
-    ];
-
-    for directive in metadirectives {
-        let pragma = format!("#pragma omp {directive}");
-        let result = parse_pragma(&pragma);
-        assert!(
-            result.is_ok(),
-            "Failed to parse meta-directive '{}': {:?}",
-            directive,
-            result.err()
-        );
-    }
-}
-
-/// Test that parser keyword counts match OpenMP 6.0 specification
-#[test]
-fn test_keyword_counts() {
-    // These counts are derived from the OpenMP 6.0 specification documentation
-    // and validated by scripts/extract_openmp_keywords.py
-
-    // Validate we can parse all base directive types
-    let base_directive_count = 66; // From OpenMP 6.0 spec (64 + end declare variant + 1 extra)
-    let test_base_directives: Vec<&str> = vec![
-        "parallel",
-        "for",
-        "do",
-        "simd",
-        "loop",
-        "teams",
-        "distribute",
-        "single",
-        "sections",
-        "section",
-        "workshare",
-        "workdistribute",
-        "task",
-        "taskloop",
-        "taskgroup",
-        "taskgraph",
-        "task iteration",
-        "target",
-        "target data",
-        "target enter data",
-        "target exit data",
-        "target update",
-        "declare simd",
-        "declare target",
-        "declare variant",
-        "declare mapper",
-        "declare reduction",
-        "declare induction",
-        "allocate",
-        "allocators",
-        "flush",
-        "barrier",
-        "taskwait",
-        "taskyield",
-        "ordered",
-        "atomic",
-        "critical",
-        "masked",
-        "master",
-        "scope",
-        "interop",
-        "dispatch",
-        "scan",
-        "metadirective",
-        "begin metadirective",
-        "assumes",
-        "begin assumes",
-        "requires",
-        "error",
-        "cancel",
-        "cancellation point",
-        "depobj",
-        "threadprivate",
-        "groupprivate",
-        "nothing",
-        "tile",
-        "unroll",
-        "fuse",
-        "split",
-        "interchange",
-        "reverse",
-        "stripe",
-        "begin declare target",
-        "end declare target",
-        "begin declare variant",
-        "end declare variant",
-    ];
-
-    assert!(
-        test_base_directives.len() == base_directive_count,
-        "Expected {} base directives, found {} in test list",
-        base_directive_count,
-        test_base_directives.len()
-    );
-
-    // Validate all base directives parse
-    for directive in &test_base_directives {
-        let pragma = format!("#pragma omp {directive}");
-        let result = parse_pragma(&pragma);
-        assert!(
-            result.is_ok(),
-            "Base directive '{}' failed to parse: {:?}",
-            directive,
-            result.err()
-        );
-    }
-
-    println!("✅ Successfully validated {base_directive_count} base OpenMP 6.0 directives");
-    println!("✅ Parser supports 128 total directive spellings (base + combined forms)");
-    println!("✅ Parser supports 132 clause keywords (125 from spec + 7 extras)");
-}
-
-/// Test Fortran variant directives
-#[test]
-fn test_fortran_directives() {
-    // Note: These are Fortran-style directive names, but the parser uses C pragma syntax
-    // The directive names themselves (do, workshare) are Fortran-specific
-    let fortran_directives = vec![
-        "do",
-        "do simd",
-        "parallel do",
-        "parallel do simd",
-        "distribute parallel do",
-        "distribute parallel do simd",
-        "workshare",
-        "workdistribute",
-    ];
-
-    for directive in fortran_directives {
-        let pragma = format!("#pragma omp {directive}"); // Parser expects C pragma syntax
-        let result = parse_pragma(&pragma);
-        assert!(
-            result.is_ok(),
-            "Failed to parse Fortran directive '{}': {:?}",
-            directive,
-            result.err()
-        );
+fn fabricated_keywords_and_incomplete_directives_are_rejected() {
+    for source in [
+        "#pragma omp declare reduction",
+        "#pragma omp declare mapper",
+        "#pragma omp cancellation point",
+        "#pragma omp target enter data",
+        "#pragma omp made_up_directive",
+        "#pragma omp parallel made_up_clause(value)",
+    ] {
+        assert!(parser().parse(source).is_err(), "{source} must be rejected");
     }
 }

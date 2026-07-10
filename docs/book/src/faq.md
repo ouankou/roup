@@ -1,83 +1,43 @@
-# Frequently Asked Questions
+# FAQ
 
-## General
+## Does the Rust parser require a C toolchain?
 
-### What is ROUP?
+No. `cargo build -p roup` builds the complete parser as safe Rust. The optional
+`roup-capi` package and C++ compatibility adapters are separate consumers.
 
-ROUP is a Rust library that parses OpenMP and OpenACC directives and exposes the result to
-Rust, C, C++, and Fortran consumers. It focuses on analysing and transforming
-existing pragma-based code rather than compiling it.
+## What does an exact specification version mean?
 
-### Is ROUP production ready?
+It is an introduction ceiling. Syntax first standardized after the selected
+version is rejected. Standardized older syntax remains accepted even if a
+newer specification deprecated or removed it, which keeps maintained legacy
+code parseable.
 
-Not yet.  The project is actively developed and APIs may change between
-releases.  Treat the current builds as experimental and review the release notes
-for the latest status updates.
+## Are spelling aliases preserved?
 
-### Which versions are supported?
+No. Standard aliases are accepted and canonicalized into one semantic AST
+shape. Version compatibility is computed from typed parser provenance. The
+checked name span can still select the exact spelling in the original source.
 
-- **OpenMP:** Up to 6.0. Integration tests exercise the keyword registry, loop-transform directives, metadirectives, and device constructs.
-- **OpenACC:** 3.4 with full directive/clause coverage and aliases.
-Unsupported constructs fail with descriptive parse errors instead of being silently accepted.
+## What happens to unsupported host-language expressions?
 
-## Installation
+Parsing fails with an `invalid-expression` diagnostic. A successful result
+always contains a classified host-expression tree.
 
-### How do I install ROUP for Rust?
+## Where is unsafe Rust used?
 
-Add the crate to your `Cargo.toml`:
+Only the optional C ABI's audited byte-copy boundary contains unsafe code. The
+root parser forbids unsafe Rust, and all other ABI modules deny it.
 
-```toml
-[dependencies]
-roup = "0.7"
-```
+## How are C ABI objects owned?
 
-### How do I use ROUP from C or C++?
+Parser, directive, child-node, and diagnostic objects share one server-owned
+generational arena. Each padding-free two-word handle identifies exactly one
+stored object, whose internal variant is checked before every access or
+release. Each successful handle is released exactly once with its matching
+release operation. Invalid, stale, fabricated, and wrong-kind handles are hard
+errors.
 
-Build the library with `cargo build --release` and link against the generated
-artefact (`libroup.so`, `libroup.dylib`, or `roup.dll`). The generated constants
-header lives at `src/roup_constants.h`. See the C/C++ tutorials for function prototypes and RAII helpers.
+## Why is there no clause payload string function?
 
-### What toolchains are required?
-
-- Rust 1.88 or newer (matches the MSRV in `Cargo.toml`).
-- A C/C++ compiler when using the FFI bindings.
-- Optional: Fortran compiler for the Fortran examples.
-
-## Usage
-
-### How do I parse a directive?
-
-```rust,ignore
-use roup::parser::openmp;
-
-let parser = openmp::parser();
-let (_, directive) = parser.parse("#pragma omp parallel for").expect("parse");
-println!("kind: {}", directive.name);
-```
-
-### How do I walk clauses from C?
-
-```c
-OmpClauseIterator* it = roup_directive_clauses_iter(dir);
-OmpClause* clause = NULL;
-while (roup_clause_iterator_next(it, &clause)) {
-    printf("clause kind: %d\n", roup_clause_kind(clause));
-}
-roup_clause_iterator_free(it);
-```
-
-## Testing and contributing
-
-### Which tests should I run before sending a change?
-
-At minimum run `cargo test`. For thorough coverage run `./test.sh` and
-`./test_rust_versions.sh` (see `TESTING.md` for details). These scripts build
-examples, execute the ompparser and accparser compatibility tests, and verify the
-documentation and enum/safety audit.
-
-### Where can I learn more?
-
-- [Getting started](./getting-started.md)
-- [Architecture](./architecture.md)
-- [OpenMP support overview](./openmp-support.md)
-- [OpenACC support overview](./openacc/openacc-3-4-directives-clauses.md)
+Clause payloads are structured data rather than one scalar value. Consumers
+query typed fields and must report an unsupported conversion directly.

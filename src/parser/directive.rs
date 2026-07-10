@@ -1,577 +1,68 @@
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
-    fmt,
+    ops::Deref,
 };
 
 use nom::{error::ErrorKind, IResult};
 
-use super::clause::{
-    lookup_clause_name, Clause, ClauseName, ClauseRegistry, CopyinModifier, CopyoutModifier,
-    CreateModifier, GangModifier, ReductionModifier, ReductionOperator, VectorModifier,
-    WorkerModifier,
-};
+use super::clause::{ClauseRegistry, LocatedClause};
 use crate::parser::directive_kind::DirectiveName;
 
 type DirectiveParserFn =
     for<'a> fn(Cow<'a, str>, &'a str, &ClauseRegistry) -> IResult<&'a str, Directive<'a>>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum ClauseMergeShape<'a> {
-    Bare,
-    ParenthesizedList,
-    ParenthesizedContent(Cow<'a, str>),
-    DependPrefix(Cow<'a, str>),
-    UniqueOccurrence(usize),
-    VariableList,
-    Gang(Option<GangModifier>),
-    Worker(Option<WorkerModifier>),
-    Vector(Option<VectorModifier>),
-    Reduction {
-        operator: ReductionOperator,
-        modifiers: Vec<ReductionModifier>,
-        user_defined_identifier: Option<Cow<'a, str>>,
-    },
-    Copyin(Option<CopyinModifier>),
-    Copyout(Option<CopyoutModifier>),
-    Create(Option<CreateModifier>),
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WaitDirectiveData<'a> {
-    pub devnum: Option<Cow<'a, str>>,
-    pub has_queues: bool,
-    pub queue_exprs: Vec<Cow<'a, str>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CacheDirectiveData<'a> {
-    pub readonly: bool,
-    pub variables: Vec<Cow<'a, str>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Directive<'a> {
-    pub name: DirectiveName,
-    pub parameter: Option<Cow<'a, str>>,
-    pub clauses: Vec<Clause<'a>>,
-    // Structured data for specific directive types
-    pub wait_data: Option<WaitDirectiveData<'a>>,
-    pub cache_data: Option<CacheDirectiveData<'a>>,
+pub(crate) struct Directive<'a> {
+    pub(crate) name: DirectiveName,
+    pub(crate) parameter: Option<Cow<'a, str>>,
+    pub(crate) clauses: Vec<LocatedClause<'a>>,
 }
 
 impl<'a> Directive<'a> {
-    pub fn new<N: Into<DirectiveName>>(
+    pub(crate) fn new<N: Into<DirectiveName>>(
         name: N,
         parameter: Option<Cow<'a, str>>,
-        clauses: Vec<Clause<'a>>,
+        clauses: Vec<LocatedClause<'a>>,
     ) -> Self {
         Self {
             name: name.into(),
             parameter,
             clauses,
-            wait_data: None,
-            cache_data: None,
-        }
-    }
-
-    /// Return the typed directive name (lookup in the canonical registry).
-    pub fn name_kind(&self) -> crate::parser::directive_kind::DirectiveName {
-        // Already stored as a DirectiveName
-        self.name.clone()
-    }
-
-    /// Merge duplicate clauses and deduplicate variables (accparser compatibility)
-    ///
-    /// For clauses that can appear multiple times (gang, worker, vector, reduction, etc.),
-    /// this merges them into a single clause with deduplicated variables/expressions.
-    ///
-    /// Example: `gang(a,b) gang(b,c)` becomes `gang(a,b,c)`
-    pub fn merge_clauses(&mut self) {
-        use super::clause::{parse_variable_list, Clause, ClauseKind, ClauseName};
-        use std::collections::{HashMap, HashSet};
-        // Group clauses by name AND modifier/kind for merging
-        // Key: (canonical_name, optional_spelling, typed clause shape)
-        //
-        // The spelling is needed for OpenACC data-clause variants where multiple
-        // keywords map to the same canonical ClauseName but have different
-        // semantics (e.g. `copy`, `pcopy`, `present_or_copy`). We must not merge
-        // these across spellings; otherwise variables inherit the wrong data
-        // movement semantics after normalization.
-        type MergeKey<'b> = (ClauseName, Option<Cow<'b, str>>, ClauseMergeShape<'b>);
-        let mut merged: HashMap<MergeKey<'a>, Vec<Clause<'a>>> = HashMap::new();
-        let mut order: Vec<MergeKey<'a>> = Vec::new();
-
-        for clause in self.clauses.drain(..) {
-            let clause_name_kind = lookup_clause_name(clause.name.as_ref());
-            let clause_name_spelling = match clause_name_kind {
-                ClauseName::Copy
-                | ClauseName::CopyIn
-                | ClauseName::CopyOut
-                | ClauseName::Create => Some(clause.name.clone()),
-                _ => None,
-            };
-            // Create key based on typed clause shape and modifier/content.
-            let merge_shape = match &clause.kind {
-                ClauseKind::Bare => ClauseMergeShape::Bare,
-                ClauseKind::Parenthesized(content) => {
-                    // Merge common list-based clauses regardless of exact list
-                    match &clause_name_kind {
-                        ClauseName::Shared
-                        | ClauseName::Private
-                        | ClauseName::Firstprivate
-                        | ClauseName::Copyprivate
-                        | ClauseName::CopyIn
-                        | ClauseName::CopyOut
-                        | ClauseName::Aligned
-                        | ClauseName::Nontemporal => ClauseMergeShape::ParenthesizedList,
-                        ClauseName::UsesAllocators => {
-                            // Preserve multiple occurrences; give each a unique key.
-                            ClauseMergeShape::UniqueOccurrence(order.len())
-                        }
-                        ClauseName::Depend => {
-                            // Merge depend clauses that share the same modifier/iterator prefix.
-                            let mut depth = 0i32;
-                            let mut split_at = content.len();
-                            for (idx, ch) in content.char_indices() {
-                                match ch {
-                                    '(' | '[' | '{' => depth += 1,
-                                    ')' | ']' | '}' => {
-                                        if depth > 0 {
-                                            depth -= 1;
-                                        }
-                                    }
-                                    ':' if depth == 0 => {
-                                        split_at = idx;
-                                        break;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            let prefix = content[..split_at].trim().to_ascii_lowercase();
-                            ClauseMergeShape::DependPrefix(Cow::Owned(prefix))
-                        }
-                        _ => ClauseMergeShape::ParenthesizedContent(content.clone()),
-                    }
-                }
-                ClauseKind::VariableList(_) => ClauseMergeShape::VariableList,
-                ClauseKind::GangClause {
-                    modifier,
-                    variables,
-                    ..
-                } => {
-                    if variables.is_empty() {
-                        ClauseMergeShape::Bare
-                    } else {
-                        ClauseMergeShape::Gang(*modifier)
-                    }
-                }
-                ClauseKind::WorkerClause {
-                    modifier,
-                    variables,
-                } => {
-                    if variables.is_empty() {
-                        ClauseMergeShape::Bare
-                    } else {
-                        ClauseMergeShape::Worker(*modifier)
-                    }
-                }
-                ClauseKind::VectorClause {
-                    modifier,
-                    variables,
-                } => {
-                    if variables.is_empty() {
-                        ClauseMergeShape::Bare
-                    } else {
-                        ClauseMergeShape::Vector(*modifier)
-                    }
-                }
-                ClauseKind::ReductionClause {
-                    operator,
-                    modifiers,
-                    user_defined_identifier,
-                    ..
-                } => ClauseMergeShape::Reduction {
-                    operator: *operator,
-                    modifiers: modifiers.clone(),
-                    user_defined_identifier: user_defined_identifier.clone(),
-                },
-                ClauseKind::CopyinClause { modifier, .. } => ClauseMergeShape::Copyin(*modifier),
-                ClauseKind::CopyoutClause { modifier, .. } => ClauseMergeShape::Copyout(*modifier),
-                ClauseKind::CreateClause { modifier, .. } => ClauseMergeShape::Create(*modifier),
-            };
-
-            let key = (
-                clause_name_kind.clone(),
-                clause_name_spelling.clone(),
-                merge_shape,
-            );
-            let entry = merged.entry(key.clone()).or_default();
-            if entry.is_empty() {
-                order.push(key.clone());
-            }
-            entry.push(clause);
-        }
-
-        // Rebuild clauses list with merging
-        let mut new_clauses = Vec::new();
-        for key in order {
-            let group = merged
-                .remove(&key)
-                .expect("merge bookkeeping should retain group");
-            if group.len() == 1 {
-                // Single occurrence - keep as is
-                new_clauses.push(group.into_iter().next().unwrap());
-            } else {
-                // Multiple occurrences - merge based on clause kind
-                let first = group[0].clone();
-                let clause_name_kind = &key.0;
-                match first.kind.clone() {
-                    ClauseKind::GangClause { .. }
-                    | ClauseKind::WorkerClause { .. }
-                    | ClauseKind::VectorClause { .. }
-                    | ClauseKind::VariableList(_) => {
-                        // Merge variable lists with deduplication
-                        let mut vars = Vec::new();
-                        let mut seen = HashSet::new();
-                        for clause in &group {
-                            let clause_vars = match &clause.kind {
-                                ClauseKind::VariableList(v) => v.as_slice(),
-                                ClauseKind::GangClause { variables, .. } => variables.as_slice(),
-                                ClauseKind::WorkerClause { variables, .. } => variables.as_slice(),
-                                ClauseKind::VectorClause { variables, .. } => variables.as_slice(),
-                                _ => &[],
-                            };
-                            for var in clause_vars {
-                                let var_str = var.as_ref();
-                                if seen.insert(var_str.to_string()) {
-                                    vars.push(Cow::Owned(var_str.to_string()));
-                                }
-                            }
-                        }
-                        // Create merged clause with same structure as first
-                        let kind = match first.kind.clone() {
-                            ClauseKind::VariableList(_) => ClauseKind::VariableList(vars),
-                            ClauseKind::GangClause {
-                                modifier,
-                                space_after_colon,
-                                ..
-                            } => ClauseKind::GangClause {
-                                modifier,
-                                space_after_colon,
-                                variables: vars,
-                            },
-                            ClauseKind::WorkerClause { modifier, .. } => ClauseKind::WorkerClause {
-                                modifier,
-                                variables: vars,
-                            },
-                            ClauseKind::VectorClause { modifier, .. } => ClauseKind::VectorClause {
-                                modifier,
-                                variables: vars,
-                            },
-                            _ => unreachable!(),
-                        };
-                        new_clauses.push(Clause {
-                            separator: crate::parser::ClauseSeparator::Space,
-                            name: first.name.clone(),
-                            kind,
-                        });
-                    }
-                    ClauseKind::Parenthesized(_) => {
-                        if matches!(clause_name_kind, ClauseName::Depend) {
-                            // Merge depend clauses by preserving the modifier prefix once and
-                            // concatenating the unique variable list.
-                            let mut merged_prefix = String::new();
-                            let mut vars = Vec::new();
-                            let mut seen = HashSet::new();
-                            for clause in &group {
-                                if let ClauseKind::Parenthesized(content) = &clause.kind {
-                                    let text = content.as_ref();
-                                    let mut depth = 0i32;
-                                    let mut split_at = text.len();
-                                    for (idx, ch) in text.char_indices() {
-                                        match ch {
-                                            '(' | '[' | '{' => depth += 1,
-                                            ')' | ']' | '}' => {
-                                                if depth > 0 {
-                                                    depth -= 1;
-                                                }
-                                            }
-                                            ':' if depth == 0 => {
-                                                split_at = idx;
-                                                break;
-                                            }
-                                            _ => {}
-                                        }
-                                    }
-                                    let prefix = text[..split_at].trim();
-                                    if merged_prefix.is_empty() {
-                                        merged_prefix = prefix.to_string();
-                                    }
-                                    let remainder = if split_at < text.len() {
-                                        text[split_at + 1..].trim()
-                                    } else {
-                                        ""
-                                    };
-                                    for var in parse_variable_list(remainder) {
-                                        let v = var.to_string();
-                                        if seen.insert(v.clone()) {
-                                            vars.push(Cow::Owned(v));
-                                        }
-                                    }
-                                }
-                            }
-                            let merged_content = if !merged_prefix.is_empty() {
-                                if vars.is_empty() {
-                                    merged_prefix
-                                } else {
-                                    format!("{merged_prefix}: {}", vars.join(", "))
-                                }
-                            } else {
-                                vars.join(", ")
-                            };
-                            new_clauses.push(Clause {
-                                separator: crate::parser::ClauseSeparator::Space,
-                                name: first.name.clone(),
-                                kind: ClauseKind::Parenthesized(Cow::Owned(merged_content)),
-                            });
-                        } else {
-                            // Merge list-based parenthesized clauses (e.g., shared/private) with deduplication.
-                            let mut vars = Vec::new();
-                            let mut seen = HashSet::new();
-                            for clause in &group {
-                                if let ClauseKind::Parenthesized(content) = &clause.kind {
-                                    for var in parse_variable_list(content.as_ref()) {
-                                        let v = var.to_string();
-                                        if seen.insert(v.clone()) {
-                                            vars.push(Cow::Owned(v));
-                                        }
-                                    }
-                                }
-                            }
-                            let merged_content = vars.join(", ");
-                            new_clauses.push(Clause {
-                                separator: crate::parser::ClauseSeparator::Space,
-                                name: first.name.clone(),
-                                kind: ClauseKind::Parenthesized(Cow::Owned(merged_content)),
-                            });
-                        }
-                    }
-                    ClauseKind::ReductionClause {
-                        modifiers,
-                        operator,
-                        user_defined_identifier,
-                        space_after_colon,
-                        ..
-                    } => {
-                        // Merge reduction clauses only when operator, modifiers, and user identifier match
-                        let mut vars = Vec::new();
-                        let mut seen = HashSet::new();
-                        for clause in &group {
-                            if let ClauseKind::ReductionClause { variables, .. } = &clause.kind {
-                                for var in variables {
-                                    let var_str = var.as_ref();
-                                    if seen.insert(var_str.to_string()) {
-                                        vars.push(Cow::Owned(var_str.to_string()));
-                                    }
-                                }
-                            }
-                        }
-                        new_clauses.push(Clause {
-                            separator: crate::parser::ClauseSeparator::Space,
-                            name: first.name.clone(),
-                            kind: ClauseKind::ReductionClause {
-                                modifiers,
-                                modifier_items: Vec::new(),
-                                operator,
-                                user_defined_identifier,
-                                variables: vars,
-                                space_after_colon,
-                            },
-                        });
-                    }
-                    ClauseKind::CopyinClause { .. }
-                    | ClauseKind::CopyoutClause { .. }
-                    | ClauseKind::CreateClause { .. } => {
-                        // Merge data clauses with same modifier
-                        let mut vars = Vec::new();
-                        let mut seen = HashSet::new();
-                        for clause in &group {
-                            let clause_vars = match &clause.kind {
-                                ClauseKind::CopyinClause { variables, .. } => variables.as_slice(),
-                                ClauseKind::CopyoutClause { variables, .. } => variables.as_slice(),
-                                ClauseKind::CreateClause { variables, .. } => variables.as_slice(),
-                                _ => &[],
-                            };
-                            for var in clause_vars {
-                                let var_str = var.as_ref();
-                                if seen.insert(var_str.to_string()) {
-                                    vars.push(Cow::Owned(var_str.to_string()));
-                                }
-                            }
-                        }
-                        let kind = match first.kind.clone() {
-                            ClauseKind::CopyinClause { modifier, .. } => ClauseKind::CopyinClause {
-                                modifier,
-                                variables: vars,
-                            },
-                            ClauseKind::CopyoutClause { modifier, .. } => {
-                                ClauseKind::CopyoutClause {
-                                    modifier,
-                                    variables: vars,
-                                }
-                            }
-                            ClauseKind::CreateClause { modifier, .. } => ClauseKind::CreateClause {
-                                modifier,
-                                variables: vars,
-                            },
-                            _ => unreachable!(),
-                        };
-                        new_clauses.push(Clause {
-                            separator: crate::parser::ClauseSeparator::Space,
-                            name: first.name.clone(),
-                            kind,
-                        });
-                    }
-                    _ => {
-                        // For other clause types, keep only the first occurrence
-                        new_clauses.push(first.clone());
-                    }
-                }
-            }
-        }
-
-        self.clauses = new_clauses;
-    }
-
-    pub fn to_pragma_string(&self) -> String {
-        self.to_string()
-    }
-
-    /// Convert directive to pragma string with custom prefix
-    ///
-    /// # Example
-    /// ```
-    /// # use roup::parser::{Directive, Clause, ClauseKind};
-    /// # use std::borrow::Cow;
-    /// let directive = Directive {
-    ///     name: "parallel".into(),
-    ///     parameter: None,
-    ///     clauses: vec![],
-    ///     cache_data: None,
-    ///     wait_data: None,
-    /// };
-    /// assert_eq!(directive.to_pragma_string_with_prefix("#pragma acc"), "#pragma acc parallel");
-    /// ```
-    pub fn to_pragma_string_with_prefix(&self, prefix: &str) -> String {
-        // Default to no commas for backward compatibility (OpenMP style)
-        self.to_pragma_string_with_prefix_and_separator(prefix, false)
-    }
-
-    /// Convert directive to pragma string with custom prefix and clause separator
-    ///
-    /// # Example
-    /// ```
-    /// # use roup::parser::{Clause, ClauseKind, ClauseSeparator, Directive};
-    /// # use std::borrow::Cow;
-    /// let directive = Directive {
-    ///     name: "parallel".into(),
-    ///     parameter: None,
-    ///     clauses: vec![
-    ///         Clause { separator: ClauseSeparator::Space, name: Cow::Borrowed("async"), kind: ClauseKind::Parenthesized(Cow::Borrowed("1")) },
-    ///         Clause { separator: ClauseSeparator::Space, name: Cow::Borrowed("wait"), kind: ClauseKind::Parenthesized(Cow::Borrowed("2")) },
-    ///     ],
-    ///     cache_data: None,
-    ///     wait_data: None,
-    /// };
-    /// assert_eq!(directive.to_pragma_string_with_prefix_and_separator("#pragma acc", true), "#pragma acc parallel async(1), wait(2)");
-    /// ```
-    pub fn to_pragma_string_with_prefix_and_separator(
-        &self,
-        prefix: &str,
-        use_commas: bool,
-    ) -> String {
-        let mut output = String::new();
-        output.push_str(prefix);
-        output.push(' ');
-        output.push_str(self.name.as_ref());
-        render_parameter_into(&mut output, self.parameter.as_deref());
-        if !self.clauses.is_empty() {
-            output.push(' ');
-            for (idx, clause) in self.clauses.iter().enumerate() {
-                if idx > 0 {
-                    if use_commas {
-                        output.push(',');
-                    }
-                    output.push(' ');
-                }
-                output.push_str(&self.format_clause_for_output(clause));
-            }
-        }
-        output
-    }
-
-    fn format_clause_for_output(&self, clause: &Clause<'_>) -> String {
-        if matches!(self.name, DirectiveName::Depobj)
-            && matches!(
-                lookup_clause_name(clause.name.as_ref()),
-                ClauseName::DepobjUpdate
-            )
-        {
-            Clause {
-                name: Cow::Borrowed("update"),
-                kind: clause.kind.clone(),
-                separator: clause.separator,
-            }
-            .to_string()
-        } else {
-            clause.to_string()
         }
     }
 }
 
-impl fmt::Display for Directive<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "#pragma omp {}", self.name.as_ref())?;
-        if let Some(param) = &self.parameter {
-            // Use the same rendering rules as the helper to avoid divergence
-            let mut tmp = String::new();
-            render_parameter_into(&mut tmp, Some(param.as_ref()));
-            write!(f, "{tmp}")?;
+/// Directive syntax paired with the exact source spelling of its name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LocatedDirective<'a> {
+    syntax: Directive<'a>,
+    name_source: &'a str,
+}
+
+impl<'a> LocatedDirective<'a> {
+    pub(crate) fn new(syntax: Directive<'a>, name_source: &'a str) -> Self {
+        Self {
+            syntax,
+            name_source,
         }
-        if !self.clauses.is_empty() {
-            write!(f, " ")?;
-            for (idx, clause) in self.clauses.iter().enumerate() {
-                if idx > 0 {
-                    write!(f, " ")?;
-                }
-                let clause_text = self.format_clause_for_output(clause);
-                write!(f, "{clause_text}")?;
-            }
-        }
-        Ok(())
+    }
+
+    pub(crate) const fn name_source(&self) -> &'a str {
+        self.name_source
     }
 }
 
-// Helper to render a parameter into the provided output buffer.
-// Inserts a separating space before the parameter unless it already
-// starts with '(' or a leading space. Centralizing the rule avoids
-// duplication between different render paths.
-fn render_parameter_into(output: &mut String, param: Option<&str>) {
-    if let Some(p) = param {
-        if !p.is_empty() {
-            if p.starts_with('(') || p.starts_with(' ') {
-                output.push_str(p);
-            } else {
-                output.push(' ');
-                output.push_str(p);
-            }
-        }
+impl<'a> Deref for LocatedDirective<'a> {
+    type Target = Directive<'a>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.syntax
     }
 }
 
 #[derive(Clone, Copy)]
-pub enum DirectiveRule {
+pub(crate) enum DirectiveRule {
     Generic,
     Custom(DirectiveParserFn),
 }
@@ -593,33 +84,100 @@ impl DirectiveRule {
     }
 }
 
-pub struct DirectiveRegistry {
+pub(crate) struct DirectiveRegistry {
     rules: HashMap<&'static str, DirectiveRule>,
     prefixes: HashSet<String>,
     default_rule: DirectiveRule,
     case_insensitive: bool,
+    optional_keyword_whitespace: bool,
 }
 
 impl DirectiveRegistry {
-    pub fn builder() -> DirectiveRegistryBuilder {
+    pub(crate) fn builder() -> DirectiveRegistryBuilder {
         DirectiveRegistryBuilder::new()
     }
 
-    pub fn with_case_insensitive(mut self, enabled: bool) -> Self {
+    pub(crate) fn with_case_insensitive(mut self, enabled: bool) -> Self {
         self.case_insensitive = enabled;
         self
     }
 
-    pub fn parse<'a>(
+    /// Apply the OpenMP Fortran rule that blanks between adjacent keywords in
+    /// a directive name may be omitted. [`LocatedDirective`] still retains the
+    /// exact source slice so typed lowering can record compact-spelling
+    /// provenance without storing a raw string in the AST.
+    pub(crate) fn with_optional_keyword_whitespace(mut self, enabled: bool) -> Self {
+        self.optional_keyword_whitespace = enabled;
+        self
+    }
+
+    fn skip_trivia<'a>(&self, input: &'a str) -> IResult<&'a str, &'a str> {
+        if self.case_insensitive {
+            crate::lexer::skip_fortran_space_and_comments(input)
+        } else {
+            crate::lexer::skip_space_and_comments(input)
+        }
+    }
+
+    fn matching_rule_name(&self, candidate: &str) -> Option<&'static str> {
+        let exact = if self.case_insensitive {
+            self.rules
+                .keys()
+                .copied()
+                .find(|name| name.eq_ignore_ascii_case(candidate))
+        } else {
+            self.rules.keys().copied().find(|name| *name == candidate)
+        };
+        if exact.is_some() || !self.optional_keyword_whitespace {
+            return exact;
+        }
+
+        // Reject ambiguous compact forms instead of allowing hash-map
+        // iteration order to select a directive.
+        let mut matches = self
+            .rules
+            .keys()
+            .copied()
+            .filter(|name| compact_name_eq(name, candidate));
+        let matched = matches.next()?;
+        matches.next().is_none().then_some(matched)
+    }
+
+    fn has_matching_prefix(&self, candidate: &str) -> bool {
+        let exact = if self.case_insensitive {
+            self.prefixes
+                .iter()
+                .any(|prefix| prefix.eq_ignore_ascii_case(candidate))
+                || self
+                    .rules
+                    .keys()
+                    .any(|name| name.eq_ignore_ascii_case(candidate))
+        } else {
+            self.prefixes.contains(candidate) || self.rules.contains_key(candidate)
+        };
+        exact
+            || (self.optional_keyword_whitespace
+                && (self
+                    .prefixes
+                    .iter()
+                    .any(|prefix| compact_name_eq(prefix, candidate))
+                    || self
+                        .rules
+                        .keys()
+                        .any(|name| compact_name_eq(name, candidate))))
+    }
+
+    pub(crate) fn parse<'a>(
         &self,
         input: &'a str,
         clause_registry: &ClauseRegistry,
-    ) -> IResult<&'a str, Directive<'a>> {
-        let (rest, name) = self.lex_name(input)?;
-        self.parse_with_name(name, rest, clause_registry)
+    ) -> IResult<&'a str, LocatedDirective<'a>> {
+        let (rest, (name, name_source)) = self.lex_name(input)?;
+        let (rest, syntax) = self.parse_with_name(name, rest, clause_registry)?;
+        Ok((rest, LocatedDirective::new(syntax, name_source)))
     }
 
-    pub fn parse_with_name<'a>(
+    pub(crate) fn parse_with_name<'a>(
         &self,
         name: Cow<'a, str>,
         input: &'a str,
@@ -649,134 +207,59 @@ impl DirectiveRegistry {
         rule.parse(name, input, clause_registry)
     }
 
-    fn lex_name<'a>(&self, input: &'a str) -> IResult<&'a str, Cow<'a, str>> {
+    pub(crate) fn lex_name<'a>(&self, input: &'a str) -> IResult<&'a str, (Cow<'a, str>, &'a str)> {
         use crate::lexer::is_identifier_char as is_ident_char;
 
-        let mut chars = input.char_indices();
-        // skip leading whitespace
-        let start = loop {
-            match chars.next() {
-                Some((_, ch)) if ch.is_whitespace() => continue,
-                Some((idx, _)) => break idx,
-                None => {
-                    return Err(nom::Err::Error(nom::error::Error::new(
-                        input,
-                        ErrorKind::Tag,
-                    )))
-                }
-            }
-        };
+        let (after_trivia, _) = self.skip_trivia(input)?;
+        let start = input.len() - after_trivia.len();
 
         let mut idx = start;
-        let mut last_match_end = None;
+        let mut last_match = None;
+        let mut candidate = String::new();
 
-        while let Some((pos, ch)) = input[idx..].char_indices().next() {
-            // advance over one identifier token
+        while let Some(ch) = input[idx..].chars().next() {
             if !is_ident_char(ch) {
                 break;
             }
-            // find end of identifier token starting at idx
-            let mut j = idx + pos;
-            while let Some((p, ch2)) = input[j..].char_indices().next() {
+
+            let token_start = idx;
+            while let Some(ch2) = input[idx..].chars().next() {
                 if !is_ident_char(ch2) {
                     break;
                 }
-                j = j + p + ch2.len_utf8();
+                idx += ch2.len_utf8();
             }
 
-            let candidate = &input[start..j];
-            let candidate = crate::lexer::collapse_line_continuations(candidate);
-            // Normalize candidate: replace any non-identifier characters with
-            // spaces, then collapse whitespace. This makes matching robust to
-            // stray separators (e.g., artifacts from continuation handling).
-            let mut tmp = String::with_capacity(candidate.len());
-            for ch in candidate.as_ref().chars() {
-                if is_ident_char(ch) || ch.is_whitespace() {
-                    tmp.push(ch);
-                } else {
-                    tmp.push(' ');
-                }
+            if !candidate.is_empty() {
+                candidate.push(' ');
             }
-            let candidate_ref = tmp.split_whitespace().collect::<Vec<_>>().join(" ");
-            // Check if this candidate matches any registered directive
-            let has_rule = if self.case_insensitive {
-                self.rules
-                    .keys()
-                    .any(|k| k.eq_ignore_ascii_case(&candidate_ref))
-            } else {
-                self.rules.contains_key(candidate_ref.as_str())
-            };
-
-            if has_rule {
-                last_match_end = Some(j);
+            candidate.push_str(&input[token_start..idx]);
+            if let Some(rule_name) = self.matching_rule_name(&candidate) {
+                last_match = Some((idx, rule_name));
             }
 
-            // advance idx past any whitespace following the identifier
-            idx = j;
-            if let Ok((remaining, _)) = crate::lexer::skip_space_and_comments(&input[idx..]) {
-                let consumed = input[idx..].len() - remaining.len();
-                idx += consumed;
-            }
+            let (remaining, _) = self.skip_trivia(&input[idx..])?;
+            let next = input.len() - remaining.len();
 
-            // if next character starts an identifier, loop to extend candidate
-            if let Some((_, next_ch)) = input[idx..].char_indices().next() {
-                if is_ident_char(next_ch) {
-                    // check if prefix is registered; if so, continue to extend
-                    let prefix_candidate = input[start..idx].trim_end();
-                    let prefix_candidate =
-                        crate::lexer::collapse_line_continuations(prefix_candidate);
-                    // Normalize prefix similarly
-                    let mut ptmp = String::with_capacity(prefix_candidate.len());
-                    for ch in prefix_candidate.as_ref().chars() {
-                        if is_ident_char(ch) || ch.is_whitespace() {
-                            ptmp.push(ch);
-                        } else {
-                            ptmp.push(' ');
-                        }
-                    }
-                    let prefix_candidate_ref =
-                        ptmp.split_whitespace().collect::<Vec<_>>().join(" ");
-                    // Check for prefixes
-                    let has_prefix = if self.case_insensitive {
-                        self.prefixes
-                            .iter()
-                            .any(|p| p.eq_ignore_ascii_case(&prefix_candidate_ref))
-                            || self
-                                .rules
-                                .keys()
-                                .any(|k| k.eq_ignore_ascii_case(prefix_candidate_ref.as_str()))
-                    } else {
-                        self.prefixes.contains(prefix_candidate_ref.as_str())
-                            || self.rules.contains_key(prefix_candidate_ref.as_str())
-                    };
-                    if has_prefix {
-                        continue;
-                    }
-                }
+            if remaining.chars().next().is_some_and(is_ident_char)
+                && self.has_matching_prefix(&candidate)
+            {
+                idx = next;
+                continue;
             }
 
             break;
         }
 
-        let name_end = last_match_end
+        let (name_end, rule_name) = last_match
             .ok_or_else(|| nom::Err::Error(nom::error::Error::new(input, ErrorKind::Tag)))?;
 
         let raw_name = &input[start..name_end];
-        let normalized = crate::lexer::collapse_line_continuations(raw_name);
-        let normalized = if self.case_insensitive {
-            let lowered = normalized.as_ref().to_ascii_lowercase();
-            if lowered == normalized.as_ref() {
-                normalized
-            } else {
-                Cow::Owned(lowered)
-            }
-        } else {
-            normalized
-        };
+        let normalized = Cow::Borrowed(rule_name);
 
         let rest = &input[name_end..];
 
-        Ok((rest, normalized))
+        Ok((rest, (normalized, raw_name)))
     }
 }
 
@@ -788,7 +271,7 @@ impl Default for DirectiveRegistry {
     }
 }
 
-pub struct DirectiveRegistryBuilder {
+pub(crate) struct DirectiveRegistryBuilder {
     rules: HashMap<&'static str, DirectiveRule>,
     prefixes: HashSet<String>,
     default_rule: DirectiveRule,
@@ -796,7 +279,7 @@ pub struct DirectiveRegistryBuilder {
 }
 
 impl DirectiveRegistryBuilder {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             rules: HashMap::new(),
             prefixes: HashSet::new(),
@@ -805,32 +288,23 @@ impl DirectiveRegistryBuilder {
         }
     }
 
-    pub fn register_generic(mut self, name: &'static str) -> Self {
+    pub(crate) fn register_generic(mut self, name: &'static str) -> Self {
         self.insert_rule(name, DirectiveRule::Generic);
         self
     }
 
-    pub fn register_custom(mut self, name: &'static str, parser: DirectiveParserFn) -> Self {
+    pub(crate) fn register_custom(mut self, name: &'static str, parser: DirectiveParserFn) -> Self {
         self.insert_rule(name, DirectiveRule::Custom(parser));
         self
     }
 
-    pub fn with_default_rule(mut self, rule: DirectiveRule) -> Self {
-        self.default_rule = rule;
-        self
-    }
-
-    pub fn with_case_insensitive(mut self, enabled: bool) -> Self {
-        self.case_insensitive = enabled;
-        self
-    }
-
-    pub fn build(self) -> DirectiveRegistry {
+    pub(crate) fn build(self) -> DirectiveRegistry {
         DirectiveRegistry {
             rules: self.rules,
             prefixes: self.prefixes,
             default_rule: self.default_rule,
             case_insensitive: self.case_insensitive,
+            optional_keyword_whitespace: false,
         }
     }
 
@@ -862,7 +336,15 @@ impl Default for DirectiveRegistryBuilder {
     }
 }
 
-// legacy byte-based identifier checker removed in favor of char-based helper
+fn compact_name_eq(left: &str, right: &str) -> bool {
+    left.bytes()
+        .filter(|byte| !byte.is_ascii_whitespace())
+        .map(|byte| byte.to_ascii_lowercase())
+        .eq(right
+            .bytes()
+            .filter(|byte| !byte.is_ascii_whitespace())
+            .map(|byte| byte.to_ascii_lowercase()))
+}
 
 #[cfg(test)]
 mod tests {
@@ -913,6 +395,30 @@ mod tests {
         assert_eq!(directive.clauses[0].name, "private");
     }
 
+    #[test]
+    fn comments_are_trivia_but_punctuation_is_not_repaired() {
+        let clause_registry = ClauseRegistry::default();
+        let registry = DirectiveRegistry::builder()
+            .register_generic("target")
+            .register_generic("target enter data")
+            .build();
+
+        let (rest, directive) = registry
+            .parse(
+                "target/* between keywords */enter data nowait",
+                &clause_registry,
+            )
+            .expect("a comment may separate directive-name tokens");
+        assert_eq!(rest, "");
+        assert_eq!(directive.name, "target enter data");
+
+        let (rest, directive) = registry
+            .parse("target,enter data", &clause_registry)
+            .expect("the valid prefix is still recognized");
+        assert_eq!(directive.name, "target");
+        assert_eq!(rest, ",enter data");
+    }
+
     fn parse_prefixed_directive<'a>(
         name: Cow<'a, str>,
         input: &'a str,
@@ -927,8 +433,6 @@ mod tests {
                 name: name.into(),
                 parameter: None,
                 clauses,
-                wait_data: None,
-                cache_data: None,
             },
         ))
     }
@@ -951,94 +455,6 @@ mod tests {
         assert_eq!(
             directive.clauses[0].kind,
             ClauseKind::Parenthesized("a".into())
-        );
-    }
-
-    #[test]
-    fn directive_display_includes_all_clauses() {
-        let directive = Directive {
-            name: "parallel".into(),
-            parameter: None,
-            clauses: vec![
-                Clause {
-                    separator: crate::parser::ClauseSeparator::Space,
-                    name: "private".into(),
-                    kind: ClauseKind::Parenthesized("a, b".into()),
-                },
-                Clause {
-                    separator: crate::parser::ClauseSeparator::Space,
-                    name: "nowait".into(),
-                    kind: ClauseKind::Bare,
-                },
-            ],
-            wait_data: None,
-            cache_data: None,
-        };
-
-        assert_eq!(
-            directive.to_string(),
-            "#pragma omp parallel private(a, b) nowait"
-        );
-        assert_eq!(
-            directive.to_pragma_string(),
-            "#pragma omp parallel private(a, b) nowait"
-        );
-    }
-
-    #[test]
-    fn directive_display_without_clauses() {
-        let directive = Directive {
-            name: "barrier".into(),
-            parameter: None,
-            clauses: vec![],
-            wait_data: None,
-            cache_data: None,
-        };
-
-        assert_eq!(directive.to_string(), "#pragma omp barrier");
-        assert_eq!(directive.to_pragma_string(), "#pragma omp barrier");
-    }
-
-    #[test]
-    fn merge_clauses_keeps_distinct_openacc_copy_variants() {
-        let mut directive = Directive {
-            name: "data".into(),
-            parameter: None,
-            clauses: vec![
-                Clause {
-                    separator: crate::parser::ClauseSeparator::Space,
-                    name: Cow::Borrowed("copy"),
-                    kind: ClauseKind::VariableList(vec![Cow::Borrowed("a")]),
-                },
-                Clause {
-                    separator: crate::parser::ClauseSeparator::Space,
-                    name: Cow::Borrowed("pcopy"),
-                    kind: ClauseKind::VariableList(vec![Cow::Borrowed("b")]),
-                },
-                Clause {
-                    separator: crate::parser::ClauseSeparator::Space,
-                    name: Cow::Borrowed("copy"),
-                    kind: ClauseKind::VariableList(vec![Cow::Borrowed("c")]),
-                },
-            ],
-            wait_data: None,
-            cache_data: None,
-        };
-
-        directive.merge_clauses();
-
-        assert_eq!(directive.clauses.len(), 2);
-
-        assert_eq!(directive.clauses[0].name, "copy");
-        assert_eq!(
-            directive.clauses[0].kind,
-            ClauseKind::VariableList(vec![Cow::Borrowed("a"), Cow::Borrowed("c")])
-        );
-
-        assert_eq!(directive.clauses[1].name, "pcopy");
-        assert_eq!(
-            directive.clauses[1].kind,
-            ClauseKind::VariableList(vec![Cow::Borrowed("b")])
         );
     }
 }

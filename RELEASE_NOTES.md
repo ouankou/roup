@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Replaced permissive/repair parsing with a strict typed Rust AST, including
+  typed host expressions, variables, literals, selectors, locators, directive
+  parameters, and clause-specific payloads. Malformed or unsupported input now
+  returns a structured hard error instead of a partial or fallback AST.
+- Retained syntax standardized by every earlier OpenMP specification in later
+  version modes while canonicalizing specification-defined aliases. Exact
+  modes reject only syntax introduced after the selected version.
+- Split the complete safe Rust parser from the optional `roup-capi` package.
+  The root crate is an `rlib` that forbids unsafe code; foreign pointer access
+  is isolated to one audited C-memory boundary.
+- Replaced the previous C ABI with opaque generational handles, typed field and
+  child-node queries, explicit errors, and adversarial stale/retagged-handle
+  tests. This is intentionally API- and ABI-breaking.
+- Updated the `ompparser` and `accparser` adapters to consume the typed ABI and
+  fail when an upstream IR cannot faithfully represent a parsed payload.
+- Replaced round-trip and permissive external-corpus gates with focused strict
+  syntax, semantic-fact, ABI, adapter, and cross-language regression tests.
+
 ## 0.7.0 (2025-11-25)
 
 - **Interactive debugger:** `roup_debug` now traces OpenMP and OpenACC parsing step-by-step (interactive and batch), including Fortran sentinels and EOF handling fixes.

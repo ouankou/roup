@@ -1,38 +1,27 @@
-//! # Rust-based OpenMP/OpenACC Unified Parser (ROUP)
+//! A safe, strict OpenMP and OpenACC directive parser.
 //!
-//! ROUP is a standalone, unified parser for OpenMP and OpenACC, designed as an
-//! extensible framework for directive-based programming interfaces.
+//! The configured parsers in [`api`] return fully typed directive and clause
+//! trees or one structured hard error. The default version policy accepts the
+//! union of standardized historical syntax; exact policies reject only syntax
+//! introduced after the selected specification version. Parsing never uses a
+//! render-and-reparse path or a string-only expression fallback.
 //!
-//! ## Learning from This Project
-//!
-//! This codebase is organized to teach Rust programming concepts step-by-step:
-//!
-//! 1. **Basics**: Structs, enums, lifetimes, pattern matching
-//! 2. **Intermediate**: Modules, traits, HashMap/Option, builder pattern
-//! 3. **Advanced**: Parser combinators using nom, function pointers, registries
-//! 4. **IR Layer**: Semantic representation, enums for polymorphism, FFI design
-//!
-//! Study the git history to see how the project evolved!
+//! The optional opaque-handle C ABI lives in the separate `roup-capi` workspace
+//! package. This crate contains no unsafe Rust and can be built and used on its
+//! own as the complete parser implementation.
 
-// ============================================================================
-// Module Organization
-// ============================================================================
-//
-// This library is organized into focused modules:
-//
-// - `lexer`: Tokenization using nom parser combinators
-// - `parser`: Directive and clause parsing infrastructure
-// - `ir`: Intermediate representation (semantic layer)
-// - `c_api`: C FFI with minimal unsafe code (production API)
-//
-// Each module teaches different Rust concepts while building a working parser.
+#![forbid(unsafe_code)]
 
+pub mod api;
 pub mod ast;
-pub mod c_api; // Minimal unsafe C FFI (production API)
-pub mod debugger; // Interactive step-by-step parser debugger
+pub mod availability;
+mod delimiter;
+pub mod diagnostic;
+pub mod feature_availability;
+pub mod host;
 pub mod ir;
-pub mod lexer;
-pub mod parser;
-
-// Re-export C API for convenience
-pub use c_api::*;
+mod lexer;
+mod parser;
+pub mod source;
+pub mod validation;
+pub mod version;

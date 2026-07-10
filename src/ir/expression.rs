@@ -1,717 +1,331 @@
-//! Expression representation and optional parsing
+//! Strict host-language expressions used by the semantic IR.
 //!
-//! This module provides flexible expression handling:
-//! - **Default**: Attempt to parse expressions into structured AST
-//! - **Fallback**: Keep expressions as raw strings when parsing fails
-//! - **Configurable**: Can disable parsing entirely via ParserConfig
-//!
-//! ## Learning Objectives
-//!
-//! - **Enums for alternatives**: Expression can be Parsed OR Unparsed
-//! - **Recursive structures**: ExpressionAst contains nested expressions
-//! - **Configuration patterns**: ParserConfig controls behavior
-//! - **Graceful degradation**: Complex expressions fall back to strings
-//! - **Box for indirection**: Breaking recursive type cycles
-//!
-//! ## Design Philosophy
-//!
-//! The parser supports C, C++, and Fortran - languages with very different
-//! expression syntax. Rather than trying to perfectly parse all expressions,
-//! we take a pragmatic approach:
-//!
-//! 1. Parse common simple patterns (literals, identifiers, binary ops)
-//! 2. Fall back to string representation for complex expressions
-//! 3. Always preserve the original source text
-//! 4. Let the consuming compiler handle language-specific parsing
-//!
-//! This makes the IR **useful immediately** while allowing incremental
-//! improvement of expression parsing over time.
+//! Every `Expression` owns a fully classified [`crate::host`] syntax tree.
+//! Unsupported or malformed input is an error: there is no string-only mode,
+//! opaque node, or best-effort fallback.  Source text is retained solely as
+//! backing storage for the byte spans carried by the tree; rendering always
+//! walks typed syntax.
 
 use std::fmt;
 
-use super::Language;
+use crate::host::{self, HostLanguage};
+use crate::source::{SourceError, Span};
+use crate::version::{
+    CStandard, CppStandard, FortranStandard, HostLanguageProfile, OpenMpVersion, VersionPolicy,
+};
 
-// ============================================================================
-// Parser Configuration
-// ============================================================================
+pub use crate::host::{
+    BinaryOp as BinaryOperator, Expr as ExpressionAst, ExprKind as ExpressionKind,
+    UnaryOp as UnaryOperator,
+};
 
-/// Configuration for IR generation and expression parsing
+/// Configuration shared by IR payload parsers.
 ///
-/// This controls how the parser converts syntax to IR, particularly
-/// how it handles expressions.
-///
-/// ## Learning: Configuration Pattern
-///
-/// Rather than using global state or command-line flags, we pass
-/// configuration explicitly. This makes the code:
-/// - **Testable**: Easy to test with different configs
-/// - **Composable**: Multiple parsers with different configs
-/// - **Thread-safe**: No global mutable state
-///
-/// ## Example
-///
-/// ```
-/// use roup::ir::{ParserConfig, Language};
-///
-/// // Default: parse expressions
-/// let default_config = ParserConfig::default();
-/// assert!(default_config.parse_expressions);
-///
-/// // Custom: disable expression parsing
-/// let string_only = ParserConfig::string_only(Language::C);
-/// ```
+/// The host language is a closed, known value shared with version policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParserConfig {
-    /// Whether to attempt parsing expressions into structured form
-    ///
-    /// - `true` (default): Parse expressions, fall back to string on failure
-    /// - `false`: Keep all expressions as raw strings
-    pub parse_expressions: bool,
-
-    /// Source language (affects expression parsing rules)
-    ///
-    /// Different languages have different expression syntax:
-    /// - C/C++: `arr[i]`, `*ptr`, `x->y`
-    /// - Fortran: `arr(i)`, different operators
-    language: Language,
-
-    /// Whether to enable language-aware semantic parsing for clause items.
-    language_semantics: bool,
+    profile: HostLanguageProfile,
+    openmp_version_policy: VersionPolicy<OpenMpVersion>,
+    structural_nesting_depth: u16,
 }
+
+/// Maximum recursion depth for recursively nested typed directive structures.
+///
+/// This bounds nested metadirective variants, nested applied directives, and
+/// recursive braced initializers. Inputs that would exceed the limit are hard
+/// errors; the parser never relies on a process stack overflow as validation.
+pub const MAX_STRUCTURAL_NESTING_DEPTH: u16 = 32;
 
 impl ParserConfig {
-    /// Create a new configuration
-    pub const fn new(parse_expressions: bool, language: Language) -> Self {
+    #[must_use]
+    pub const fn new(profile: HostLanguageProfile) -> Self {
         Self {
-            parse_expressions,
-            language,
-            language_semantics: true,
+            profile,
+            openmp_version_policy: VersionPolicy::Any,
+            structural_nesting_depth: 0,
         }
     }
 
-    /// Create config that keeps all expressions as strings
-    pub const fn string_only(language: Language) -> Self {
-        Self::new(false, language)
-    }
-
-    /// Create config that parses expressions
-    pub const fn with_parsing(language: Language) -> Self {
-        Self::new(true, language)
-    }
-
-    /// Override the language for this configuration.
-    pub const fn with_language(mut self, language: Language) -> Self {
-        self.language = language;
+    #[must_use]
+    pub(crate) const fn with_openmp_version_policy(
+        mut self,
+        policy: VersionPolicy<OpenMpVersion>,
+    ) -> Self {
+        self.openmp_version_policy = policy;
         self
     }
 
-    /// Enable or disable language semantics for clause parsing.
-    pub const fn with_language_semantics(mut self, enabled: bool) -> Self {
-        self.language_semantics = enabled;
-        self
+    #[must_use]
+    pub(crate) const fn openmp_version_policy(self) -> VersionPolicy<OpenMpVersion> {
+        self.openmp_version_policy
     }
 
-    /// Return a copy of this configuration using a specific language.
-    pub const fn for_language(&self, language: Language) -> Self {
-        Self {
-            parse_expressions: self.parse_expressions,
-            language,
-            language_semantics: self.language_semantics,
+    /// Enter one recursively nested typed structure.
+    pub(crate) const fn enter_nested_structure(mut self) -> Result<Self, &'static str> {
+        if self.structural_nesting_depth >= MAX_STRUCTURAL_NESTING_DEPTH {
+            return Err("typed directive structure nesting limit exceeded");
+        }
+        self.structural_nesting_depth += 1;
+        Ok(self)
+    }
+
+    #[must_use]
+    pub const fn c() -> Self {
+        Self::new(HostLanguageProfile::C(CStandard::C23))
+    }
+
+    #[must_use]
+    pub const fn cpp() -> Self {
+        Self::new(HostLanguageProfile::Cpp(CppStandard::Cpp23))
+    }
+
+    #[must_use]
+    pub const fn fortran() -> Self {
+        Self::new(HostLanguageProfile::Fortran(FortranStandard::Fortran2023))
+    }
+
+    #[must_use]
+    pub const fn from_language(language: HostLanguage) -> Self {
+        Self::new(HostLanguageProfile::latest(language))
+    }
+
+    #[must_use]
+    pub const fn profile(self) -> HostLanguageProfile {
+        self.profile
+    }
+
+    #[must_use]
+    pub const fn host_language(self) -> HostLanguage {
+        match self.profile {
+            HostLanguageProfile::C(_) => HostLanguage::C,
+            HostLanguageProfile::Cpp(_) => HostLanguage::Cpp,
+            HostLanguageProfile::Fortran(_) => HostLanguage::Fortran,
         }
     }
 
-    /// Get the configured language.
-    pub const fn language(&self) -> Language {
-        self.language
-    }
-
-    /// Whether language semantics are enabled.
-    pub const fn language_semantics_enabled(&self) -> bool {
-        self.language_semantics
-    }
-}
-
-impl Default for ParserConfig {
-    /// Default: parse expressions, unknown language
-    fn default() -> Self {
-        Self {
-            parse_expressions: true,
-            language: Language::Unknown,
-            language_semantics: true,
+    #[must_use]
+    pub const fn language(self) -> HostLanguage {
+        match self.profile {
+            HostLanguageProfile::C(_) => HostLanguage::C,
+            HostLanguageProfile::Cpp(_) => HostLanguage::Cpp,
+            HostLanguageProfile::Fortran(_) => HostLanguage::Fortran,
         }
     }
 }
 
-// ============================================================================
-// Expression Types
-// ============================================================================
+impl From<HostLanguage> for ParserConfig {
+    fn from(language: HostLanguage) -> Self {
+        Self::from_language(language)
+    }
+}
 
-/// An expression that may be parsed or unparsed
-///
-/// This is the core type for representing expressions in the IR.
-/// It gracefully handles both structured and unstructured forms.
-///
-/// ## Learning: Enums for Polymorphism
-///
-/// Instead of inheritance (like in C++), Rust uses enums to represent
-/// "one of several types". This is more explicit and type-safe.
-///
-/// ## Learning: Box for Recursion
-///
-/// The `Parsed` variant contains `Box<ExpressionAst>` instead of
-/// `ExpressionAst` directly. Why? Because `ExpressionAst` itself
-/// contains `Expression` values (recursion!).
-///
-/// Without `Box`, the type would have infinite size. `Box` provides
-/// indirection through a heap pointer, breaking the cycle.
-///
-/// ## Example
-///
-/// ```
-/// use roup::ir::{Expression, ParserConfig};
-///
-/// let config = ParserConfig::default();
-///
-/// // Simple expression gets parsed
-/// let simple = Expression::new("42", &config);
-/// assert!(simple.is_parsed());
-///
-/// // Complex expression falls back to string
-/// let complex = Expression::new("sizeof(struct foo)", &config);
-/// // May or may not be parsed depending on parser capability
-///
-/// // With parsing disabled, always unparsed
-/// let config_no_parse = ParserConfig::string_only(roup::ir::Language::C);
-/// let expr = Expression::new("N * 2", &config_no_parse);
-/// assert!(!expr.is_parsed());
-/// assert_eq!(expr.as_str(), "N * 2");
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub enum Expression {
-    /// Expression was successfully parsed into structured form
-    ///
-    /// The compiler can analyze the AST structure for optimization,
-    /// validation, or transformation.
-    Parsed(Box<ExpressionAst>),
-
-    /// Expression kept as raw string
-    ///
-    /// This happens when:
-    /// - Expression parsing is disabled
-    /// - Expression is too complex for the parser
-    /// - Parser doesn't support this language construct yet
-    ///
-    /// The compiler must parse this string according to the source language.
-    Unparsed(String),
+/// A fully parsed host-language expression.
+#[derive(Debug, Clone)]
+pub struct Expression {
+    source: Box<str>,
+    profile: HostLanguageProfile,
+    ast: host::Expr,
 }
 
 impl Expression {
-    /// Create a new expression, attempting to parse if enabled
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use roup::ir::{Expression, ParserConfig, Language};
-    ///
-    /// let config = ParserConfig::default();
-    /// let expr = Expression::new("100", &config);
-    /// assert_eq!(expr.as_str(), "100");
-    /// ```
-    pub fn new(raw: impl Into<String>, config: &ParserConfig) -> Self {
-        let raw = raw.into();
-        let trimmed = raw.trim().to_string();
-
-        // If parsing disabled, return unparsed
-        if !config.parse_expressions {
-            return Expression::Unparsed(trimmed);
-        }
-
-        // Try to parse based on language
-        match parse_expression(&trimmed, config.language()) {
-            Ok(ast) => Expression::Parsed(Box::new(ast)),
-            Err(_) => Expression::Unparsed(trimmed),
-        }
+    /// Parse an expression using the explicit language in `config`.
+    pub fn new(source: impl Into<String>, config: &ParserConfig) -> Result<Self, ExpressionError> {
+        Self::parse_with_profile(source, config.profile())
     }
 
-    /// Create an unparsed expression directly
-    ///
-    /// Useful when you know parsing will fail or you want to bypass it.
-    pub fn unparsed(raw: impl Into<String>) -> Self {
-        Expression::Unparsed(raw.into())
+    /// Parse an expression for a concrete C, C++, or Fortran host language.
+    pub fn parse(
+        source: impl Into<String>,
+        language: HostLanguage,
+    ) -> Result<Self, ExpressionError> {
+        Self::parse_with_profile(source, HostLanguageProfile::latest(language))
     }
 
-    /// Get the raw string representation
-    ///
-    /// This always works, whether the expression is parsed or not.
-    /// The original source is always preserved.
-    pub fn as_str(&self) -> &str {
-        match self {
-            Expression::Parsed(ast) => &ast.original_source,
-            Expression::Unparsed(s) => s,
+    /// Parse using an exact host-language standard profile.
+    pub fn parse_with_profile(
+        source: impl Into<String>,
+        profile: HostLanguageProfile,
+    ) -> Result<Self, ExpressionError> {
+        let source = source.into().into_boxed_str();
+        let ast = host::parse_expression_with_profile(&source, profile)?;
+        Ok(Self {
+            source,
+            profile,
+            ast,
+        })
+    }
+
+    /// The authoritative typed syntax tree.
+    #[must_use]
+    pub const fn ast(&self) -> &host::Expr {
+        &self.ast
+    }
+
+    /// The concrete language used to parse and render this expression.
+    #[must_use]
+    pub const fn language(&self) -> HostLanguage {
+        self.profile.language()
+    }
+
+    /// Exact host standard used to classify the expression.
+    #[must_use]
+    pub const fn profile(&self) -> HostLanguageProfile {
+        self.profile
+    }
+
+    /// Source backing for AST spans.  Semantic consumers should use [`Self::ast`]
+    /// and rendering should use [`fmt::Display`].
+    #[must_use]
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    /// Resolve a checked AST span against this expression's source backing.
+    pub fn span_text(&self, span: Span) -> Result<&str, SourceError> {
+        span.slice(&self.source)
+    }
+
+    /// Retain a typed subtree as its own expression without rendering or
+    /// reparsing it. The original source backing is shared by cloning so every
+    /// span in the subtree remains valid.
+    pub(crate) fn subtree(&self, ast: &host::Expr) -> Self {
+        Self {
+            source: self.source.clone(),
+            profile: self.profile,
+            ast: ast.clone(),
         }
     }
+}
 
-    /// Check if expression was successfully parsed
-    pub const fn is_parsed(&self) -> bool {
-        matches!(self, Expression::Parsed(_))
-    }
-
-    /// Get the parsed AST if available
-    pub fn as_ast(&self) -> Option<&ExpressionAst> {
-        match self {
-            Expression::Parsed(ast) => Some(ast),
-            Expression::Unparsed(_) => None,
-        }
+impl PartialEq for Expression {
+    fn eq(&self, other: &Self) -> bool {
+        self.profile == other.profile && self.ast == other.ast
     }
 }
 
 impl fmt::Display for Expression {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.ast.canonical(self.language()).fmt(formatter)
     }
 }
 
-// ============================================================================
-// Expression AST (Structured Representation)
-// ============================================================================
-
-/// Parsed expression abstract syntax tree
-///
-/// This represents common expression patterns found in OpenMP directives.
-/// It's **not** a complete C/C++/Fortran parser, just enough to handle
-/// typical OpenMP expressions.
-///
-/// ## Learning: Recursive Data Structures
-///
-/// Notice that `ExpressionKind` contains `Box<ExpressionAst>` in several
-/// variants. This allows representing nested expressions like:
-/// - `(a + b) * c` - BinaryOp containing another BinaryOp
-/// - `arr[i][j]` - ArrayAccess containing another ArrayAccess
-///
-/// ## Example
-///
-/// ```
-/// use roup::ir::{Expression, ParserConfig};
-///
-/// let config = ParserConfig::default();
-/// let expr = Expression::new("42", &config);
-///
-/// if let Some(ast) = expr.as_ast() {
-///     // Can inspect the AST structure
-///     println!("Original: {}", ast.original_source);
-/// }
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub struct ExpressionAst {
-    /// Original source text (always preserved)
-    pub original_source: String,
-
-    /// Parsed structure (best-effort)
-    pub kind: ExpressionKind,
-}
-
-/// Common expression patterns in OpenMP directives
-///
-/// ## Learning: Large Enums with Data
-///
-/// This enum demonstrates Rust's powerful enum system. Each variant
-/// can carry different data:
-/// - `IntLiteral(i64)` - carries an integer
-/// - `Identifier(String)` - carries an owned string
-/// - `BinaryOp { ... }` - carries multiple fields
-///
-/// This is much more powerful than C enums, which can only be simple tags.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ExpressionKind {
-    /// Integer literal: `42`, `0x10`, `0b1010`
-    IntLiteral(i64),
-
-    /// Identifier: `N`, `num_threads`, `my_var`
-    Identifier(String),
-
-    /// Binary operation: `a + b`, `N * 2`, `i < 10`
-    BinaryOp {
-        left: Box<ExpressionAst>,
-        op: BinaryOperator,
-        right: Box<ExpressionAst>,
-    },
-
-    /// Unary operation: `-x`, `!flag`, `*ptr`
-    UnaryOp {
-        op: UnaryOperator,
-        operand: Box<ExpressionAst>,
-    },
-
-    /// Function call: `foo(a, b)`, `omp_get_num_threads()`
-    Call {
-        function: String,
-        args: Vec<ExpressionAst>,
-    },
-
-    /// Array subscript: `arr[i]`, `matrix[i][j]`
-    ArrayAccess {
-        array: Box<ExpressionAst>,
-        indices: Vec<ExpressionAst>,
-    },
-
-    /// Ternary conditional: `cond ? a : b`
-    Conditional {
-        condition: Box<ExpressionAst>,
-        then_expr: Box<ExpressionAst>,
-        else_expr: Box<ExpressionAst>,
-    },
-
-    /// Parenthesized: `(expr)`
-    Parenthesized(Box<ExpressionAst>),
-
-    /// Too complex to parse, kept as string
-    ///
-    /// This is our escape hatch for expressions that are valid
-    /// but not yet supported by the parser.
-    Complex(String),
-}
-
-/// Binary operators
-///
-/// ## Learning: repr(C) for C Interop
-///
-/// We use `#[repr(C)]` so these enum values are compatible with C code.
-/// Each variant gets an explicit numeric value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(C)]
-pub enum BinaryOperator {
-    // Arithmetic
-    Add = 0,
-    Sub = 1,
-    Mul = 2,
-    Div = 3,
-    Mod = 4,
-
-    // Comparison
-    Eq = 10,
-    Ne = 11,
-    Lt = 12,
-    Le = 13,
-    Gt = 14,
-    Ge = 15,
-
-    // Logical
-    And = 20,
-    Or = 21,
-
-    // Bitwise
-    BitwiseAnd = 30,
-    BitwiseOr = 31,
-    BitwiseXor = 32,
-    ShiftLeft = 33,
-    ShiftRight = 34,
-}
-
-/// Unary operators
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(C)]
-pub enum UnaryOperator {
-    Negate = 0,     // -x
-    LogicalNot = 1, // !x
-    BitwiseNot = 2, // ~x
-    Deref = 3,      // *ptr (C/C++)
-    AddressOf = 4,  // &var (C/C++)
-}
-
-// ============================================================================
-// Expression Parser (Isolated, Configurable)
-// ============================================================================
-
-/// Error type for expression parsing
+/// Failure to select or parse an expression language.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseError {
-    pub message: String,
+pub enum ExpressionError {
+    Parse(host::ParseError),
 }
 
-/// Parse an expression string into an AST
-///
-/// This is **isolated** and can be disabled via config.
-/// Returns `Err` if expression is too complex or language-specific.
-///
-/// ## Learning: Error Handling with Result
-///
-/// Rust doesn't have exceptions. Instead, functions that can fail
-/// return `Result<T, E>`:
-/// - `Ok(value)` - success
-/// - `Err(error)` - failure
-///
-/// The caller must handle both cases (checked at compile time!).
-fn parse_expression(input: &str, language: Language) -> Result<ExpressionAst, ParseError> {
-    match language {
-        Language::C | Language::Cpp => parse_c_expression(input),
-        Language::Fortran => parse_fortran_expression(input),
-        Language::Unknown => parse_generic_expression(input),
-    }
-}
-
-/// Parse C/C++ expression
-///
-/// Currently falls back to generic parser. In the future, this could
-/// handle C/C++-specific constructs like `->`, `sizeof`, etc.
-fn parse_c_expression(input: &str) -> Result<ExpressionAst, ParseError> {
-    parse_generic_expression(input)
-}
-
-/// Parse Fortran expression
-///
-/// Currently falls back to generic parser. In the future, this could
-/// handle Fortran-specific constructs.
-fn parse_fortran_expression(input: &str) -> Result<ExpressionAst, ParseError> {
-    parse_generic_expression(input)
-}
-
-/// Parse simple, language-agnostic expressions
-///
-/// This handles the most common patterns:
-/// - Integer literals: `42`
-/// - Identifiers: `N`, `my_var`
-/// - Everything else: marked as `Complex`
-///
-/// This is intentionally simple. Complex parsing can be added later
-/// without changing the IR structure.
-fn parse_generic_expression(input: &str) -> Result<ExpressionAst, ParseError> {
-    let trimmed = input.trim();
-
-    // Try to parse as integer literal
-    if let Ok(value) = trimmed.parse::<i64>() {
-        return Ok(ExpressionAst {
-            original_source: input.to_string(),
-            kind: ExpressionKind::IntLiteral(value),
-        });
-    }
-
-    // Try to parse as identifier
-    if is_simple_identifier(trimmed) {
-        return Ok(ExpressionAst {
-            original_source: input.to_string(),
-            kind: ExpressionKind::Identifier(trimmed.to_string()),
-        });
-    }
-
-    // For everything else, mark as complex
-    // The consuming compiler will parse it
-    Ok(ExpressionAst {
-        original_source: input.to_string(),
-        kind: ExpressionKind::Complex(trimmed.to_string()),
-    })
-}
-
-/// Check if a string is a simple identifier
-///
-/// An identifier must:
-/// - Start with letter or underscore
-/// - Contain only letters, digits, or underscores
-fn is_simple_identifier(s: &str) -> bool {
-    if s.is_empty() {
-        return false;
-    }
-
-    let mut chars = s.chars();
-    let first = chars.next().unwrap();
-
-    // First character must be letter or underscore
-    if !first.is_alphabetic() && first != '_' {
-        return false;
-    }
-
-    // Remaining characters must be alphanumeric or underscore
-    chars.all(|c| c.is_alphanumeric() || c == '_')
-}
-
-// ============================================================================
-// Tests
-// ============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ------------------------------------------------------------------------
-    // ParserConfig tests
-    // ------------------------------------------------------------------------
-
-    #[test]
-    fn parser_config_default_enables_parsing() {
-        let config = ParserConfig::default();
-        assert!(config.parse_expressions);
-        assert_eq!(config.language(), Language::Unknown);
-    }
-
-    #[test]
-    fn parser_config_string_only_disables_parsing() {
-        let config = ParserConfig::string_only(Language::C);
-        assert!(!config.parse_expressions);
-        assert_eq!(config.language(), Language::C);
-    }
-
-    #[test]
-    fn parser_config_with_parsing_enables_parsing() {
-        let config = ParserConfig::with_parsing(Language::Fortran);
-        assert!(config.parse_expressions);
-        assert_eq!(config.language(), Language::Fortran);
-    }
-
-    // ------------------------------------------------------------------------
-    // Expression tests
-    // ------------------------------------------------------------------------
-
-    #[test]
-    fn expression_new_parses_integer_literal() {
-        let config = ParserConfig::default();
-        let expr = Expression::new("42", &config);
-
-        assert!(expr.is_parsed());
-        assert_eq!(expr.as_str(), "42");
-
-        if let Some(ast) = expr.as_ast() {
-            assert!(matches!(ast.kind, ExpressionKind::IntLiteral(42)));
-        } else {
-            panic!("Should be parsed");
-        }
-    }
-
-    #[test]
-    fn expression_new_parses_identifier() {
-        let config = ParserConfig::default();
-        let expr = Expression::new("my_var", &config);
-
-        assert!(expr.is_parsed());
-        assert_eq!(expr.as_str(), "my_var");
-
-        if let Some(ast) = expr.as_ast() {
-            if let ExpressionKind::Identifier(name) = &ast.kind {
-                assert_eq!(name, "my_var");
-            } else {
-                panic!("Should be identifier");
+impl fmt::Display for ExpressionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Parse(error) => {
+                write!(formatter, "invalid expression at {}: {error}", error.span)
             }
         }
     }
+}
+
+impl std::error::Error for ExpressionError {}
+
+impl From<host::ParseError> for ExpressionError {
+    fn from(error: host::ParseError) -> Self {
+        Self::Parse(error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::host::{BinaryOp, ExprKind, MemberAccess, Subscript};
+
+    use super::*;
 
     #[test]
-    fn expression_new_handles_complex_as_complex() {
-        let config = ParserConfig::default();
-        let expr = Expression::new("a + b * c", &config);
+    fn every_ir_language_maps_to_a_concrete_host_language() {
+        assert_eq!(
+            ParserConfig::from_language(HostLanguage::C),
+            ParserConfig::c()
+        );
+        assert_eq!(
+            ParserConfig::from_language(HostLanguage::Cpp),
+            ParserConfig::cpp()
+        );
+        assert_eq!(
+            ParserConfig::from_language(HostLanguage::Fortran),
+            ParserConfig::fortran()
+        );
+    }
 
-        // Should parse but as Complex kind
-        if let Some(ast) = expr.as_ast() {
-            assert!(matches!(ast.kind, ExpressionKind::Complex(_)));
+    #[test]
+    fn valid_nested_c_expression_is_fully_typed() {
+        let expression =
+            Expression::new("flag ? data[index + 1] : call(-x, y)", &ParserConfig::c()).unwrap();
+        assert!(matches!(
+            expression.ast().kind,
+            ExprKind::Conditional { .. }
+        ));
+        assert!(!format!("{expression}").is_empty());
+    }
+
+    #[test]
+    fn valid_nested_cpp_expression_is_fully_typed() {
+        let expression = Expression::new(
+            "::ns::factory(obj.member)->values[lower:length]",
+            &ParserConfig::cpp(),
+        )
+        .unwrap();
+        let ExprKind::Subscript { base, subscript } = &expression.ast().kind else {
+            panic!("expected subscript root")
+        };
+        assert!(matches!(subscript, Subscript::Section(_)));
+        assert!(matches!(
+            base.kind,
+            ExprKind::Member {
+                access: MemberAccess::Arrow,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn valid_nested_fortran_expression_is_fully_typed() {
+        let expression = Expression::new(
+            ".not. array(1:n:2, :)%ready .or. .false.",
+            &ParserConfig::fortran(),
+        )
+        .unwrap();
+        assert!(matches!(
+            expression.ast().kind,
+            ExprKind::Binary {
+                op: BinaryOp::LogicalOr,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn formerly_opaque_or_complex_inputs_are_hard_errors() {
+        for source in ["sizeof(struct item)", "a @ b", "call(", "a ? b"] {
+            assert!(Expression::new(source, &ParserConfig::c()).is_err());
         }
     }
 
     #[test]
-    fn expression_with_parsing_disabled_stays_unparsed() {
-        let config = ParserConfig::string_only(Language::C);
-        let expr = Expression::new("42", &config);
-
-        assert!(!expr.is_parsed());
-        assert_eq!(expr.as_str(), "42");
-        assert!(expr.as_ast().is_none());
+    fn display_is_canonical_not_the_source_buffer() {
+        let expression = Expression::new("  a+b * c  ", &ParserConfig::c()).unwrap();
+        assert_eq!(expression.source(), "  a+b * c  ");
+        assert_eq!(expression.to_string(), "a + b * c");
+        assert_eq!(
+            expression.span_text(expression.ast().span).unwrap(),
+            "a+b * c"
+        );
     }
 
     #[test]
-    fn expression_unparsed_creates_unparsed() {
-        let expr = Expression::unparsed("anything");
+    fn equality_compares_typed_grouping_not_rendered_source_text() {
+        let left_grouped = Expression::new("(a + b) * c", &ParserConfig::c()).unwrap();
+        let right_grouped = Expression::new("a + (b * c)", &ParserConfig::c()).unwrap();
 
-        assert!(!expr.is_parsed());
-        assert_eq!(expr.as_str(), "anything");
-    }
-
-    #[test]
-    fn expression_preserves_original_source() {
-        let config = ParserConfig::default();
-        let expr = Expression::new("  42  ", &config);
-
-        // Trimmed version is used
-        assert_eq!(expr.as_str(), "42");
-    }
-
-    #[test]
-    fn expression_display_shows_source() {
-        let expr = Expression::unparsed("N * 2");
-        assert_eq!(format!("{expr}"), "N * 2");
-    }
-
-    // ------------------------------------------------------------------------
-    // ExpressionAst tests
-    // ------------------------------------------------------------------------
-
-    #[test]
-    fn parse_generic_expression_handles_integers() {
-        let result = parse_generic_expression("123").unwrap();
-        assert_eq!(result.original_source, "123");
-        assert!(matches!(result.kind, ExpressionKind::IntLiteral(123)));
-    }
-
-    #[test]
-    fn parse_generic_expression_handles_negative_integers() {
-        let result = parse_generic_expression("-456").unwrap();
-        // Negative integers are actually parsed successfully by parse::<i64>()
-        assert!(matches!(result.kind, ExpressionKind::IntLiteral(-456)));
-    }
-
-    #[test]
-    fn parse_generic_expression_handles_identifiers() {
-        let result = parse_generic_expression("num_threads").unwrap();
-        if let ExpressionKind::Identifier(name) = result.kind {
-            assert_eq!(name, "num_threads");
-        } else {
-            panic!("Should be identifier");
-        }
-    }
-
-    #[test]
-    fn parse_generic_expression_handles_complex() {
-        let result = parse_generic_expression("a + b").unwrap();
-        if let ExpressionKind::Complex(s) = result.kind {
-            assert_eq!(s, "a + b");
-        } else {
-            panic!("Should be complex");
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // Helper function tests
-    // ------------------------------------------------------------------------
-
-    #[test]
-    fn is_simple_identifier_accepts_valid_identifiers() {
-        assert!(is_simple_identifier("x"));
-        assert!(is_simple_identifier("my_var"));
-        assert!(is_simple_identifier("_private"));
-        assert!(is_simple_identifier("var123"));
-        assert!(is_simple_identifier("CamelCase"));
-    }
-
-    #[test]
-    fn is_simple_identifier_rejects_invalid() {
-        assert!(!is_simple_identifier(""));
-        assert!(!is_simple_identifier("123var")); // starts with digit
-        assert!(!is_simple_identifier("my-var")); // contains hyphen
-        assert!(!is_simple_identifier("my var")); // contains space
-        assert!(!is_simple_identifier("my+var")); // contains operator
-    }
-
-    // ------------------------------------------------------------------------
-    // Binary and Unary Operator tests
-    // ------------------------------------------------------------------------
-
-    #[test]
-    fn binary_operator_has_correct_discriminants() {
-        assert_eq!(BinaryOperator::Add as u32, 0);
-        assert_eq!(BinaryOperator::Eq as u32, 10);
-        assert_eq!(BinaryOperator::And as u32, 20);
-        assert_eq!(BinaryOperator::BitwiseAnd as u32, 30);
-    }
-
-    #[test]
-    fn unary_operator_has_correct_discriminants() {
-        assert_eq!(UnaryOperator::Negate as u32, 0);
-        assert_eq!(UnaryOperator::LogicalNot as u32, 1);
-        assert_eq!(UnaryOperator::AddressOf as u32, 4);
+        assert_ne!(left_grouped.ast(), right_grouped.ast());
+        assert_ne!(left_grouped, right_grouped);
     }
 }

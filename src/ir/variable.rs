@@ -1,716 +1,386 @@
-//! Variable and identifier representation
+//! Validated host-language identifiers and variable designators.
 //!
-//! This module defines types for representing identifiers and variables
-//! in OpenMP clauses. The key distinction:
-//!
-//! - **Identifier**: Simple name (e.g., `my_var`, `omp_default_mem_alloc`)
-//! - **Variable**: Name with optional array sections (e.g., `arr[0:N]`, `mat[i][j:k]`)
-//!
-//! ## Learning Objectives
-//!
-//! - **Nested structures**: Variable contains Vec of ArraySection
-//! - **Composition**: ArraySection uses Expression type
-//! - **Semantic clarity**: Types document intent
-//! - **String slices**: Using `&'a str` for zero-copy references
-//!
-//! ## Design Philosophy
-//!
-//! OpenMP clauses often work with variables that may be:
-//! 1. Simple scalars: `private(x, y, z)`
-//! 2. Array sections: `map(to: arr[0:N])`
-//! 3. Struct members: `private(point.x)` (not yet supported)
-//!
-//! We model this with clear types that preserve the original syntax
-//! while providing semantic structure.
+//! A variable is represented by the same parsed expression tree used by every
+//! other clause payload.  ROUP therefore has one authoritative representation
+//! for names, member access, subscripts, and Fortran section triplets; it does
+//! not copy those nodes into a second array-section model or retain a raw name.
 
 use std::fmt;
 
-use super::Expression;
+use crate::host::{Expr, ExprKind, FortranArgument, HostLanguage, QualifiedName, UnaryOp};
 
-// ============================================================================
-// Identifier: Simple names
-// ============================================================================
+use super::{Expression, ExpressionError, ParserConfig};
 
-/// A simple identifier (not an expression, not a variable with sections)
+pub use crate::host::{Identifier, IdentifierError};
+
+/// A fully parsed expression whose root is a host-language variable
+/// designator.
 ///
-/// Used for names that appear in various contexts:
-/// - Variable names: `x`, `my_var`
-/// - Function names: `my_function`
-/// - Allocator names: `omp_default_mem_alloc`
-/// - Mapper names: `my_mapper`
-/// - User-defined reduction operators: `my_reduction_op`
-///
-/// ## Learning: Newtype Pattern
-///
-/// This is a "newtype" - a struct with a single field that wraps another type.
-/// Why not just use `&str` directly?
-///
-/// 1. **Type safety**: Can't accidentally pass an expression where identifier expected
-/// 2. **Semantic clarity**: Code documents intent
-/// 3. **Future extension**: Can add validation, normalization, etc.
-/// 4. **Zero cost**: Compiler optimizes away the wrapper
-///
-/// ## Example
-///
-/// ```
-/// use roup::ir::Identifier;
-///
-/// let id = Identifier::new("my_var");
-/// assert_eq!(id.name(), "my_var");
-/// assert_eq!(format!("{}", id), "my_var");
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Identifier {
-    name: String,
-}
-
-impl Identifier {
-    /// Create a new identifier
-    ///
-    /// The name is trimmed of whitespace.
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use roup::ir::Identifier;
-    ///
-    /// let id = Identifier::new("  my_var  ");
-    /// assert_eq!(id.name(), "my_var");
-    /// ```
-    pub fn new(name: impl Into<String>) -> Self {
-        let name = name.into();
-        Self {
-            name: name.trim().to_string(),
-        }
-    }
-
-    /// Get the identifier name
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Get the identifier as a string slice
-    pub fn as_str(&self) -> &str {
-        &self.name
-    }
-}
-
-impl From<&str> for Identifier {
-    fn from(s: &str) -> Self {
-        Identifier::new(s)
-    }
-}
-
-impl From<String> for Identifier {
-    fn from(s: String) -> Self {
-        Identifier::new(s)
-    }
-}
-
-impl fmt::Display for Identifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)
-    }
-}
-
-// ============================================================================
-// ArraySection: Array slicing specification
-// ============================================================================
-
-/// Array section specification: `[lower:length:stride]`
-///
-/// OpenMP allows specifying portions of arrays using array sections:
-/// - `arr[0:N]` - elements 0 through N-1
-/// - `arr[i:10:2]` - 10 elements starting at i, every 2nd element
-/// - `arr[:]` - all elements
-///
-/// ## Learning: Optional Fields
-///
-/// All three parts (lower, length, stride) are optional! This is
-/// modeled with `Option<Expression>`:
-/// - `Some(expr)` - part is present
-/// - `None` - part is omitted
-///
-/// ## Syntax Examples
-///
-/// | OpenMP Syntax | lower | length | stride |
-/// |---------------|-------|--------|--------|
-/// | `arr[0:N]` | Some(0) | Some(N) | None |
-/// | `arr[:]` | None | None | None |
-/// | `arr[i:10:2]` | Some(i) | Some(10) | Some(2) |
-/// | `arr[i]` | Some(i) | None | None |
-///
-/// ## Example
-///
-/// ```
-/// use roup::ir::{ArraySection, Expression, ParserConfig};
-///
-/// let config = ParserConfig::default();
-///
-/// // arr[0:N]
-/// let section = ArraySection::new(
-///     Some(Expression::new("0", &config)),
-///     Some(Expression::new("N", &config)),
-///     None,
-/// );
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub struct ArraySection {
-    /// Lower bound (starting index)
-    ///
-    /// If `None`, starts at beginning (equivalent to 0)
-    pub lower_bound: Option<Expression>,
-
-    /// Length (number of elements)
-    ///
-    /// If `None`, goes to end of dimension
-    pub length: Option<Expression>,
-
-    /// Stride (spacing between elements)
-    ///
-    /// If `None`, defaults to 1 (consecutive elements)
-    pub stride: Option<Expression>,
-
-    /// Whether a length field was explicitly present (controls colon rendering).
-    pub has_length: bool,
-
-    /// Whether a stride field was explicitly present (controls second colon rendering).
-    pub has_stride: bool,
-}
-
-impl ArraySection {
-    /// Create a new array section with all fields
-    pub fn new(
-        lower_bound: Option<Expression>,
-        length: Option<Expression>,
-        stride: Option<Expression>,
-    ) -> Self {
-        let has_length = length.is_some();
-        let has_stride = stride.is_some();
-        Self {
-            lower_bound,
-            length,
-            stride,
-            has_length,
-            has_stride,
-        }
-    }
-
-    /// Create an array section for a single index: `arr[i]`
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use roup::ir::{ArraySection, Expression, ParserConfig};
-    ///
-    /// let config = ParserConfig::default();
-    /// let section = ArraySection::single_index(Expression::new("i", &config));
-    /// // Represents arr[i]
-    /// ```
-    pub fn single_index(index: Expression) -> Self {
-        Self {
-            lower_bound: Some(index),
-            length: None,
-            stride: None,
-            has_length: false,
-            has_stride: false,
-        }
-    }
-
-    /// Create an array section for all elements: `arr[:]`
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use roup::ir::ArraySection;
-    ///
-    /// let section = ArraySection::all();
-    /// // Represents arr[:]
-    /// ```
-    pub const fn all() -> Self {
-        Self {
-            lower_bound: None,
-            length: None,
-            stride: None,
-            has_length: true,
-            has_stride: false,
-        }
-    }
-
-    /// Check if this represents a single index access
-    pub fn is_single_index(&self) -> bool {
-        self.lower_bound.is_some() && self.length.is_none() && self.stride.is_none()
-    }
-
-    /// Check if this represents all elements
-    pub fn is_all(&self) -> bool {
-        self.lower_bound.is_none() && self.length.is_none() && self.stride.is_none()
-    }
-}
-
-impl fmt::Display for ArraySection {
-    /// Format as OpenMP array section syntax
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use roup::ir::{ArraySection, Expression, ParserConfig};
-    ///
-    /// let config = ParserConfig::default();
-    /// let section = ArraySection::new(
-    ///     Some(Expression::new("0", &config)),
-    ///     Some(Expression::new("N", &config)),
-    ///     None,
-    /// );
-    /// assert_eq!(format!("{}", section), "0:N");
-    /// ```
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Format: [lower:length:stride]
-        // Preserve explicit colons even when length/stride are omitted.
-
-        if let Some(lower) = &self.lower_bound {
-            write!(f, "{lower}")?;
-        }
-
-        if self.has_length {
-            write!(f, ":")?;
-            if let Some(length) = &self.length {
-                write!(f, "{length}")?;
-            }
-        }
-
-        if self.has_stride {
-            write!(f, ":")?;
-            if let Some(stride) = &self.stride {
-                write!(f, "{stride}")?;
-            }
-        }
-
-        Ok(())
-    }
-}
-
-// ============================================================================
-// Variable: Name with optional array sections
-// ============================================================================
-
-/// A variable reference, possibly with array sections
-///
-/// Variables in OpenMP clauses can be:
-/// - Simple: `x`, `my_var`
-/// - Array elements: `arr[i]`
-/// - Array sections: `arr[0:N]`
-/// - Multidimensional: `matrix[i][0:N]`
-///
-/// ## Learning: Composition
-///
-/// Notice how `Variable` is built from other IR types:
-/// - Uses `&'a str` for the name (borrowed from source)
-/// - Uses `Vec<ArraySection>` for subscripts
-/// - `ArraySection` uses `Expression`
-///
-/// This shows how complex structures are built from simple parts.
-///
-/// ## Example
-///
-/// ```
-/// use roup::ir::{Variable, ArraySection, Expression, ParserConfig};
-///
-/// let config = ParserConfig::default();
-///
-/// // Simple variable: x
-/// let simple = Variable::new("x");
-/// assert_eq!(simple.name(), "x");
-/// assert!(simple.is_scalar());
-///
-/// // Array section: arr[0:N]
-/// let array = Variable::with_sections(
-///     "arr",
-///     vec![ArraySection::new(
-///         Some(Expression::new("0", &config)),
-///         Some(Expression::new("N", &config)),
-///         None,
-///     )]
-/// );
-/// assert!(!array.is_scalar());
-/// ```
+/// Construction is checked.  Literal, arithmetic, conditional, assignment,
+/// and C/C++ call expressions cannot be smuggled into a locator list through
+/// this type.  Fortran application syntax remains a designator because the
+/// language deliberately leaves `a(i)` ambiguous between an array reference
+/// and a function reference until name resolution.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Variable {
-    /// Variable name
-    name: String,
+    expression: Expression,
+}
 
-    /// Array sections (empty for scalar variables)
-    ///
-    /// Each element represents one dimension:
-    /// - `arr[i]` → 1 section
-    /// - `matrix[i][j]` → 2 sections
-    /// - `tensor[i][j][k]` → 3 sections
-    pub array_sections: Vec<ArraySection>,
+/// A fully parsed expression whose root is a host-language lvalue.
+///
+/// This is intentionally distinct from [`Variable`]. OpenMP locations such as
+/// a C/C++ `depobj` argument also admit dereference expressions (`*pointer`),
+/// while ordinary variable lists do not. Construction validates the typed host
+/// tree and never retains an unchecked source string.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LValue {
+    expression: Expression,
+}
 
-    /// Original source spelling (when available).
-    ///
-    /// The parser preserves the exact textual form for languages with
-    /// different array notation (e.g., Fortran). Consumers can use this
-    /// to render language-specific strings without reparsing.
-    original: Option<String>,
+impl LValue {
+    /// Parse and validate one lvalue expression.
+    pub fn parse(source: impl Into<String>, config: &ParserConfig) -> Result<Self, LValueError> {
+        Self::from_expression(Expression::new(source, config)?)
+    }
+
+    /// Validate an expression that has already been parsed.
+    pub fn from_expression(expression: Expression) -> Result<Self, LValueError> {
+        let valid = match expression.language() {
+            HostLanguage::C | HostLanguage::Cpp => is_c_or_cpp_lvalue(expression.ast()),
+            HostLanguage::Fortran => Variable::is_designator_expression(&expression),
+        };
+        if valid {
+            Ok(Self { expression })
+        } else {
+            Err(LValueError::NotLValue)
+        }
+    }
+
+    /// The authoritative parsed expression.
+    #[must_use]
+    pub const fn expression(&self) -> &Expression {
+        &self.expression
+    }
+
+    /// The authoritative host-language syntax tree.
+    #[must_use]
+    pub const fn ast(&self) -> &Expr {
+        self.expression.ast()
+    }
+}
+
+impl fmt::Display for LValue {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.expression.fmt(formatter)
+    }
+}
+
+/// Failure to construct a checked lvalue expression.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LValueError {
+    Expression(ExpressionError),
+    NotLValue,
+}
+
+impl fmt::Display for LValueError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Expression(error) => error.fmt(formatter),
+            Self::NotLValue => formatter.write_str("expression is not an lvalue"),
+        }
+    }
+}
+
+impl std::error::Error for LValueError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Expression(error) => Some(error),
+            Self::NotLValue => None,
+        }
+    }
+}
+
+impl From<ExpressionError> for LValueError {
+    fn from(error: ExpressionError) -> Self {
+        Self::Expression(error)
+    }
+}
+
+fn is_c_or_cpp_lvalue(expression: &Expr) -> bool {
+    match &expression.kind {
+        ExprKind::Name(_) | ExprKind::Member { .. } | ExprKind::Subscript { .. } => true,
+        ExprKind::Parenthesized(inner) => is_c_or_cpp_lvalue(inner),
+        ExprKind::Unary {
+            op: UnaryOp::Dereference,
+            ..
+        } => true,
+        ExprKind::Literal(_)
+        | ExprKind::Unary { .. }
+        | ExprKind::Binary { .. }
+        | ExprKind::Conditional { .. }
+        | ExprKind::Assignment { .. }
+        | ExprKind::Call { .. }
+        | ExprKind::Postfix { .. }
+        | ExprKind::FortranApply { .. } => false,
+    }
 }
 
 impl Variable {
-    /// Create a new variable without array sections (scalar)
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use roup::ir::Variable;
-    ///
-    /// let var = Variable::new("x");
-    /// assert_eq!(var.name(), "x");
-    /// assert!(var.is_scalar());
-    /// ```
-    pub fn new(name: impl Into<String>) -> Self {
-        let name = name.into();
-        Self {
-            name: name.trim().to_string(),
-            array_sections: Vec::new(),
-            original: None,
+    /// Parse and validate one variable designator.
+    pub fn parse(source: impl Into<String>, config: &ParserConfig) -> Result<Self, VariableError> {
+        Self::from_expression(Expression::new(source, config)?)
+    }
+
+    /// Validate an expression that has already been parsed.
+    pub fn from_expression(expression: Expression) -> Result<Self, VariableError> {
+        if Self::is_designator_expression(&expression) {
+            Ok(Self { expression })
+        } else {
+            Err(VariableError::NotDesignator)
         }
     }
 
-    /// Create a variable with array sections
+    #[must_use]
+    pub(crate) fn is_designator_expression(expression: &Expression) -> bool {
+        is_designator(expression.ast())
+    }
+
+    /// The authoritative parsed expression.
+    #[must_use]
+    pub const fn expression(&self) -> &Expression {
+        &self.expression
+    }
+
+    /// The authoritative host-language syntax tree.
+    #[must_use]
+    pub const fn ast(&self) -> &Expr {
+        self.expression.ast()
+    }
+
+    /// Return the identifier for an unqualified, unsubscripted name.
+    #[must_use]
+    pub fn simple_identifier(&self) -> Option<&Identifier> {
+        let ExprKind::Name(QualifiedName {
+            global: false,
+            segments,
+        }) = &self.ast().kind
+        else {
+            return None;
+        };
+        (segments.len() == 1).then(|| &segments[0])
+    }
+
+    /// The unqualified base identifier of this designator.
     ///
-    /// ## Example
-    ///
-    /// ```
-    /// use roup::ir::{Variable, ArraySection};
-    ///
-    /// let var = Variable::with_sections(
-    ///     "arr",
-    ///     vec![ArraySection::all()]
-    /// );
-    /// assert_eq!(var.name(), "arr");
-    /// assert!(!var.is_scalar());
-    /// ```
-    pub fn with_sections(name: impl Into<String>, sections: Vec<ArraySection>) -> Self {
-        let name = name.into();
-        Self {
-            name: name.trim().to_string(),
-            array_sections: sections,
-            original: None,
-        }
+    /// For example, this returns `a` for `a.member[lower:length]`.  A
+    /// qualified C++ name has no single local base identifier and returns
+    /// `None`.
+    #[must_use]
+    pub fn root_identifier(&self) -> Option<&Identifier> {
+        designator_root(self.ast())
     }
 
-    /// Attach the original source spelling for language-specific rendering.
-    pub fn with_original(mut self, original: impl Into<String>) -> Self {
-        self.original = Some(original.into());
-        self
-    }
-
-    /// Get the variable name
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Get the preserved source spelling if available.
-    pub fn original(&self) -> Option<&str> {
-        self.original.as_deref()
-    }
-
-    /// Check if this is a scalar (no array sections)
+    /// Whether this designator has no subscript or Fortran argument list.
+    #[must_use]
     pub fn is_scalar(&self) -> bool {
-        self.array_sections.is_empty()
+        designator_rank(self.ast()) == 0
     }
 
-    /// Check if this is an array (has sections)
-    pub fn is_array(&self) -> bool {
-        !self.array_sections.is_empty()
-    }
-
-    /// Get the number of dimensions
-    ///
-    /// Returns 0 for scalars, 1+ for arrays.
+    /// Number of explicitly represented subscript dimensions.
+    #[must_use]
     pub fn dimensions(&self) -> usize {
-        self.array_sections.len()
+        designator_rank(self.ast())
     }
-}
 
-impl From<&str> for Variable {
-    fn from(name: &str) -> Self {
-        Variable::new(name)
-    }
-}
-
-impl From<String> for Variable {
-    fn from(name: String) -> Self {
-        Variable::new(name)
-    }
-}
-
-impl From<Identifier> for Variable {
-    fn from(id: Identifier) -> Self {
-        Variable::new(id.name())
+    /// Whether any dimension is represented by an array section rather than
+    /// a single element subscript.
+    #[must_use]
+    pub fn has_array_section(&self) -> bool {
+        designator_has_array_section(self.ast())
     }
 }
 
 impl fmt::Display for Variable {
-    /// Format as OpenMP variable syntax
-    ///
-    /// ## Example
-    ///
-    /// ```
-    /// use roup::ir::{Variable, ArraySection, Expression, ParserConfig};
-    ///
-    /// let config = ParserConfig::default();
-    ///
-    /// // Scalar
-    /// let scalar = Variable::new("x");
-    /// assert_eq!(format!("{}", scalar), "x");
-    ///
-    /// // Array section
-    /// let array = Variable::with_sections(
-    ///     "arr",
-    ///     vec![ArraySection::new(
-    ///         Some(Expression::new("0", &config)),
-    ///         Some(Expression::new("N", &config)),
-    ///         None,
-    ///     )]
-    /// );
-    /// assert_eq!(format!("{}", array), "arr[0:N]");
-    /// ```
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)?;
-
-        for section in &self.array_sections {
-            write!(f, "[{section}]")?;
-        }
-
-        Ok(())
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.expression.fmt(formatter)
     }
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
+/// Failure to construct a checked variable designator.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VariableError {
+    Expression(ExpressionError),
+    NotDesignator,
+}
+
+impl fmt::Display for VariableError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Expression(error) => error.fmt(formatter),
+            Self::NotDesignator => formatter.write_str("expression is not a variable designator"),
+        }
+    }
+}
+
+impl std::error::Error for VariableError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Expression(error) => Some(error),
+            Self::NotDesignator => None,
+        }
+    }
+}
+
+impl From<ExpressionError> for VariableError {
+    fn from(error: ExpressionError) -> Self {
+        Self::Expression(error)
+    }
+}
+
+fn is_designator(expression: &Expr) -> bool {
+    match &expression.kind {
+        ExprKind::Name(_) => true,
+        ExprKind::Parenthesized(inner) => is_designator(inner),
+        ExprKind::Member { base, .. } | ExprKind::Subscript { base, .. } => is_designator(base),
+        ExprKind::FortranApply {
+            designator,
+            arguments,
+        } => {
+            is_designator(designator)
+                && arguments.iter().all(|argument| match argument {
+                    FortranArgument::Positional(value) | FortranArgument::Keyword { value, .. } => {
+                        !matches!(value.kind, ExprKind::Assignment { .. })
+                    }
+                    FortranArgument::Section(_) => true,
+                })
+        }
+        ExprKind::Literal(_)
+        | ExprKind::Unary { .. }
+        | ExprKind::Binary { .. }
+        | ExprKind::Conditional { .. }
+        | ExprKind::Assignment { .. }
+        | ExprKind::Call { .. }
+        | ExprKind::Postfix { .. } => false,
+    }
+}
+
+fn designator_rank(expression: &Expr) -> usize {
+    match &expression.kind {
+        ExprKind::Parenthesized(inner) | ExprKind::Member { base: inner, .. } => {
+            designator_rank(inner)
+        }
+        ExprKind::Subscript { base, .. } => designator_rank(base) + 1,
+        ExprKind::FortranApply {
+            designator,
+            arguments,
+        } => designator_rank(designator) + arguments.len(),
+        _ => 0,
+    }
+}
+
+fn designator_has_array_section(expression: &Expr) -> bool {
+    match &expression.kind {
+        ExprKind::Parenthesized(inner) | ExprKind::Member { base: inner, .. } => {
+            designator_has_array_section(inner)
+        }
+        ExprKind::Subscript { base, subscript } => {
+            matches!(subscript, crate::host::Subscript::Section(_))
+                || designator_has_array_section(base)
+        }
+        ExprKind::FortranApply {
+            designator,
+            arguments,
+        } => {
+            designator_has_array_section(designator)
+                || arguments
+                    .iter()
+                    .any(|argument| matches!(argument, FortranArgument::Section(_)))
+        }
+        ExprKind::Name(_) => false,
+        ExprKind::Literal(_)
+        | ExprKind::Unary { .. }
+        | ExprKind::Binary { .. }
+        | ExprKind::Conditional { .. }
+        | ExprKind::Assignment { .. }
+        | ExprKind::Call { .. }
+        | ExprKind::Postfix { .. } => false,
+    }
+}
+
+fn designator_root(expression: &Expr) -> Option<&Identifier> {
+    match &expression.kind {
+        ExprKind::Name(QualifiedName {
+            global: false,
+            segments,
+        }) if segments.len() == 1 => segments.first(),
+        ExprKind::Parenthesized(inner)
+        | ExprKind::Member { base: inner, .. }
+        | ExprKind::Subscript { base: inner, .. }
+        | ExprKind::FortranApply {
+            designator: inner, ..
+        } => designator_root(inner),
+        _ => None,
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    use crate::host::{ExprKind, FortranArgument, SectionSemantics, Subscript};
+
     use super::*;
-    use crate::ir::ParserConfig;
-
-    // ------------------------------------------------------------------------
-    // Identifier tests
-    // ------------------------------------------------------------------------
 
     #[test]
-    fn identifier_new_trims_whitespace() {
-        let id = Identifier::new("  my_var  ");
-        assert_eq!(id.name(), "my_var");
+    fn identifier_construction_is_strict() {
+        assert_eq!(Identifier::new("value").unwrap().as_str(), "value");
+        assert_eq!(Identifier::new(""), Err(IdentifierError::Empty));
+        assert!(Identifier::new(" two").is_err());
+        assert!(Identifier::new("a-b").is_err());
     }
 
     #[test]
-    fn identifier_from_str() {
-        let id: Identifier = "test".into();
-        assert_eq!(id.name(), "test");
-    }
-
-    #[test]
-    fn identifier_display() {
-        let id = Identifier::new("my_var");
-        assert_eq!(format!("{id}"), "my_var");
-    }
-
-    #[test]
-    fn identifier_equality() {
-        let id1 = Identifier::new("x");
-        let id2 = Identifier::new("x");
-        let id3 = Identifier::new("y");
-
-        assert_eq!(id1, id2);
-        assert_ne!(id1, id3);
-    }
-
-    // ------------------------------------------------------------------------
-    // ArraySection tests
-    // ------------------------------------------------------------------------
-
-    #[test]
-    fn array_section_single_index() {
-        let config = ParserConfig::default();
-        let section = ArraySection::single_index(Expression::new("i", &config));
-
-        assert!(section.is_single_index());
-        assert!(!section.is_all());
-        assert!(section.lower_bound.is_some());
-        assert!(section.length.is_none());
-        assert!(section.stride.is_none());
-    }
-
-    #[test]
-    fn array_section_all() {
-        let section = ArraySection::all();
-
-        assert!(!section.is_single_index());
-        assert!(section.is_all());
-        assert!(section.lower_bound.is_none());
-        assert!(section.length.is_none());
-        assert!(section.stride.is_none());
-    }
-
-    #[test]
-    fn array_section_display_single_index() {
-        let config = ParserConfig::default();
-        let section = ArraySection::single_index(Expression::new("i", &config));
-
-        assert_eq!(format!("{section}"), "i");
-    }
-
-    #[test]
-    fn array_section_display_range() {
-        let config = ParserConfig::default();
-        let section = ArraySection::new(
-            Some(Expression::new("0", &config)),
-            Some(Expression::new("N", &config)),
-            None,
+    fn c_designator_reuses_host_subscript_tree() {
+        let variable = Variable::parse("object.values[lower:length]", &ParserConfig::c()).unwrap();
+        assert_eq!(
+            variable.root_identifier().map(Identifier::as_str),
+            Some("object")
         );
-
-        assert_eq!(format!("{section}"), "0:N");
+        assert_eq!(variable.dimensions(), 1);
+        assert!(!variable.is_scalar());
+        let ExprKind::Subscript { subscript, .. } = &variable.ast().kind else {
+            panic!("expected subscript designator")
+        };
+        let Subscript::Section(section) = subscript else {
+            panic!("expected array section")
+        };
+        assert_eq!(section.semantics, SectionSemantics::CLength);
+        assert_eq!(variable.to_string(), "object.values[lower:length]");
     }
 
     #[test]
-    fn array_section_display_with_stride() {
-        let config = ParserConfig::default();
-        let section = ArraySection::new(
-            Some(Expression::new("0", &config)),
-            Some(Expression::new("N", &config)),
-            Some(Expression::new("2", &config)),
-        );
-
-        assert_eq!(format!("{section}"), "0:N:2");
+    fn fortran_designator_preserves_upper_bound_semantics() {
+        let variable =
+            Variable::parse("array(1:upper:2, :)%field", &ParserConfig::fortran()).unwrap();
+        assert_eq!(variable.dimensions(), 2);
+        let ExprKind::Member { base, .. } = &variable.ast().kind else {
+            panic!("expected component designator")
+        };
+        let ExprKind::FortranApply { arguments, .. } = &base.kind else {
+            panic!("expected Fortran application")
+        };
+        let FortranArgument::Section(section) = &arguments[0] else {
+            panic!("expected section triplet")
+        };
+        assert_eq!(section.semantics, SectionSemantics::FortranUpperBound);
+        assert_eq!(variable.to_string(), "array(1:upper:2, :)%field");
     }
 
     #[test]
-    fn array_section_display_all() {
-        let section = ArraySection::all();
-        assert_eq!(format!("{section}"), ":");
-    }
-
-    #[test]
-    fn array_section_display_omitted_lower() {
-        let config = ParserConfig::default();
-        let section = ArraySection::new(None, Some(Expression::new("N", &config)), None);
-
-        assert_eq!(format!("{section}"), ":N");
-    }
-
-    // ------------------------------------------------------------------------
-    // Variable tests
-    // ------------------------------------------------------------------------
-
-    #[test]
-    fn variable_new_creates_scalar() {
-        let var = Variable::new("x");
-
-        assert_eq!(var.name(), "x");
-        assert!(var.is_scalar());
-        assert!(!var.is_array());
-        assert_eq!(var.dimensions(), 0);
-    }
-
-    #[test]
-    fn variable_with_sections_creates_array() {
-        let config = ParserConfig::default();
-        let var = Variable::with_sections(
-            "arr",
-            vec![ArraySection::single_index(Expression::new("i", &config))],
-        );
-
-        assert_eq!(var.name(), "arr");
-        assert!(!var.is_scalar());
-        assert!(var.is_array());
-        assert_eq!(var.dimensions(), 1);
-    }
-
-    #[test]
-    fn variable_multidimensional() {
-        let config = ParserConfig::default();
-        let var = Variable::with_sections(
-            "matrix",
-            vec![
-                ArraySection::single_index(Expression::new("i", &config)),
-                ArraySection::single_index(Expression::new("j", &config)),
-            ],
-        );
-
-        assert_eq!(var.dimensions(), 2);
-    }
-
-    #[test]
-    fn variable_from_str() {
-        let var: Variable = "x".into();
-        assert_eq!(var.name(), "x");
-        assert!(var.is_scalar());
-    }
-
-    #[test]
-    fn variable_from_identifier() {
-        let id = Identifier::new("my_var");
-        let var: Variable = id.into();
-        assert_eq!(var.name(), "my_var");
-        assert!(var.is_scalar());
-    }
-
-    #[test]
-    fn variable_display_scalar() {
-        let var = Variable::new("x");
-        assert_eq!(format!("{var}"), "x");
-    }
-
-    #[test]
-    fn variable_display_single_index() {
-        let config = ParserConfig::default();
-        let var = Variable::with_sections(
-            "arr",
-            vec![ArraySection::single_index(Expression::new("i", &config))],
-        );
-
-        assert_eq!(format!("{var}"), "arr[i]");
-    }
-
-    #[test]
-    fn variable_display_array_section() {
-        let config = ParserConfig::default();
-        let var = Variable::with_sections(
-            "arr",
-            vec![ArraySection::new(
-                Some(Expression::new("0", &config)),
-                Some(Expression::new("N", &config)),
-                None,
-            )],
-        );
-
-        assert_eq!(format!("{var}"), "arr[0:N]");
-    }
-
-    #[test]
-    fn variable_display_multidimensional() {
-        let config = ParserConfig::default();
-        let var = Variable::with_sections(
-            "matrix",
-            vec![
-                ArraySection::single_index(Expression::new("i", &config)),
-                ArraySection::new(
-                    Some(Expression::new("0", &config)),
-                    Some(Expression::new("N", &config)),
-                    None,
-                ),
-            ],
-        );
-
-        assert_eq!(format!("{var}"), "matrix[i][0:N]");
-    }
-
-    #[test]
-    fn variable_trims_name() {
-        let var = Variable::new("  arr  ");
-        assert_eq!(var.name(), "arr");
+    fn non_designators_are_hard_errors() {
+        for source in ["1", "a + b", "flag ? a : b", "call(a)"] {
+            assert!(
+                Variable::parse(source, &ParserConfig::c()).is_err(),
+                "`{source}` must not become a variable"
+            );
+        }
     }
 }

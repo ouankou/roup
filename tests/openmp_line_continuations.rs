@@ -1,150 +1,129 @@
-use roup::lexer::Language;
-use roup::parser::{ClauseKind, Directive, Parser};
+use roup::api::{OpenMpConfig, OpenMpParser};
+use roup::ast::{OmpClauseKind, OmpDirectiveKind};
+use roup::ir::{ClauseData, ClauseItem, ScheduleKind};
+use roup::version::{CStandard, FortranStandard, HostLanguageProfile, SourceForm};
 
-fn parse_with_language(input: &str, language: Language) -> Directive<'_> {
-    let parser = Parser::default().with_language(language);
-    let (_, directive) = parser.parse(input).expect("directive should parse");
-    directive
+fn c_parser() -> OpenMpParser {
+    OpenMpConfig::new(HostLanguageProfile::C(CStandard::C23), SourceForm::Pragma)
+        .unwrap()
+        .parser()
+}
+
+fn fortran_parser(form: SourceForm) -> OpenMpParser {
+    OpenMpConfig::new(
+        HostLanguageProfile::Fortran(FortranStandard::Fortran2023),
+        form,
+    )
+    .unwrap()
+    .parser()
 }
 
 #[test]
-fn parses_c_multiline_with_backslash() {
-    let directive = parse_with_language(
-        concat!(
-            "#pragma omp parallel for \\\n",
-            "    schedule(dynamic, 4) \\\n",
-            "    private(i, \\\n",
-            "            j)"
-        ),
-        Language::C,
+fn c_backslash_newline_splices_without_losing_typed_clauses() {
+    let source = concat!(
+        "#pragma omp parallel for \\\n",
+        "    schedule(dynamic, 4) \\\n",
+        "    private(i, \\\n",
+        "            j)"
     );
+    let parsed = c_parser().parse(source).expect("valid C line splices");
+    let directive = parsed.directive();
 
-    assert_eq!(directive.name, "parallel for");
-    assert_eq!(directive.clauses.len(), 2);
-    assert_eq!(directive.clauses[0].name, "schedule");
-    assert_eq!(
-        directive.clauses[0].kind,
-        ClauseKind::Parenthesized("dynamic, 4".into())
-    );
-    assert_eq!(directive.clauses[1].name, "private");
-    assert_eq!(
-        directive.clauses[1].kind,
-        ClauseKind::Parenthesized("i, j".into())
-    );
+    assert_eq!(directive.kind(), OmpDirectiveKind::ParallelFor);
+    assert_eq!(directive.clauses()[0].kind(), OmpClauseKind::Schedule);
+    let ClauseData::Schedule {
+        kind, chunk_size, ..
+    } = directive.clauses()[0].payload()
+    else {
+        panic!("expected typed schedule");
+    };
+    assert_eq!(*kind, ScheduleKind::Dynamic);
+    assert_eq!(chunk_size.as_ref().map(|value| value.source()), Some("4"));
+
+    let ClauseData::Private { items } = directive.clauses()[1].payload() else {
+        panic!("expected typed private list");
+    };
+    assert!(matches!(
+        items.as_slice(),
+        [ClauseItem::Identifier(first), ClauseItem::Identifier(second)]
+            if first.as_str() == "i" && second.as_str() == "j"
+    ));
 }
 
 #[test]
-fn parses_c_multiline_with_comments() {
-    let directive = parse_with_language(
-        concat!(
-            "#pragma omp parallel for \\\n",
-            "    /* align workers */ schedule(static, 2) \\\n",
-            "    // items below\n",
-            "    private(a)"
-        ),
-        Language::C,
+fn c_splice_never_invents_a_token_separator() {
+    assert!(
+        c_parser()
+            .parse(concat!("#pragma omp parallel\\\n", "for"))
+            .is_err(),
+        "parallel\\newlinefor is the single invalid token parallelfor"
     );
 
-    assert_eq!(directive.name, "parallel for");
-    assert_eq!(directive.clauses.len(), 2);
-    assert_eq!(directive.clauses[0].name, "schedule");
-    assert_eq!(
-        directive.clauses[0].kind,
-        ClauseKind::Parenthesized("static, 2".into())
-    );
-    assert_eq!(directive.clauses[1].name, "private");
-    assert_eq!(
-        directive.clauses[1].kind,
-        ClauseKind::Parenthesized("a".into())
-    );
+    let parsed = c_parser()
+        .parse(concat!("#pragma omp parallel \\\n", " for"))
+        .expect("actual source whitespace separates the tokens");
+    assert_eq!(parsed.directive().kind(), OmpDirectiveKind::ParallelFor);
 }
 
 #[test]
-fn parses_fortran_free_with_ampersand() {
-    let directive = parse_with_language(
-        concat!("!$omp parallel do &\n", "!$omp private(i, &\n", "!$omp& j)"),
-        Language::FortranFree,
-    );
-
-    assert_eq!(directive.name, "parallel do");
-    assert_eq!(directive.clauses.len(), 1);
-    assert_eq!(directive.clauses[0].name, "private");
-    assert_eq!(
-        directive.clauses[0].kind,
-        ClauseKind::Parenthesized("i, j".into())
-    );
+fn malformed_c_continuations_are_hard_errors() {
+    for source in [
+        "#pragma omp parallel \\  \nfor",
+        "#pragma omp parallel \\ \nfor",
+        "#pragma omp parallel\nfor",
+        "#pragma omp parallel \\\rfor",
+    ] {
+        assert!(c_parser().parse(source).is_err(), "{source:?} must fail");
+    }
 }
 
 #[test]
-fn parses_fortran_free_with_comment_continuation() {
-    let directive = parse_with_language(
-        concat!(
-            "!$omp parallel do private(i, & ! trailing comment\n",
-            "!$omp& j, k)"
-        ),
-        Language::FortranFree,
+fn fortran_free_continuation_preserves_only_source_whitespace() {
+    let source = concat!(
+        "!$omp parallel do &\n",
+        "!$omp& private(i, &\n",
+        "!$omp& j)"
     );
+    let parsed = fortran_parser(SourceForm::FortranFree)
+        .parse(source)
+        .expect("valid free-form continuation");
 
-    assert_eq!(directive.name, "parallel do");
-    assert_eq!(directive.clauses.len(), 1);
-    assert_eq!(directive.clauses[0].name, "private");
-    assert_eq!(
-        directive.clauses[0].kind,
-        ClauseKind::Parenthesized("i, j, k".into())
-    );
+    assert_eq!(parsed.directive().kind(), OmpDirectiveKind::ParallelDo);
+    let ClauseData::Private { items } = parsed.directive().clauses()[0].payload() else {
+        panic!("expected private payload");
+    };
+    assert_eq!(items.len(), 2);
 }
 
 #[test]
-fn parses_fortran_fixed_with_mixed_sentinels() {
-    let directive = parse_with_language(
-        concat!(
-            "      !$OMP TEAMS DISTRIBUTE &\n",
-            "      C$OMP& PARALLEL DO &\n",
-            "      !$OMP PRIVATE(I) SHARED(A)"
-        ),
-        Language::FortranFixed,
+fn fortran_fixed_continuations_can_mix_standard_sentinels() {
+    let source = concat!(
+        "      !$OMP TEAMS DISTRIBUTE &\n",
+        "      C$OMP& PARALLEL DO &\n",
+        "      !$OMP& PRIVATE(I) SHARED(A)"
     );
+    let parsed = fortran_parser(SourceForm::FortranFixed)
+        .parse(source)
+        .expect("valid fixed-form continuation");
 
-    assert_eq!(directive.name, "teams distribute parallel do");
-    assert_eq!(directive.clauses.len(), 2);
-    assert_eq!(directive.clauses[0].name, "private");
     assert_eq!(
-        directive.clauses[0].kind,
-        ClauseKind::Parenthesized("I".into())
+        parsed.directive().kind(),
+        OmpDirectiveKind::TeamsDistributeParallelDo
     );
-    assert_eq!(directive.clauses[1].name, "shared");
-    assert_eq!(
-        directive.clauses[1].kind,
-        ClauseKind::Parenthesized("A".into())
-    );
+    assert_eq!(parsed.directive().clauses().len(), 2);
 }
 
 #[test]
-fn preserves_token_separation_in_c_continuations() {
-    // Test case for P1 comment: ensure "parallel\n    for" doesn't become "parallelfor"
-    let directive = parse_with_language(
-        concat!("#pragma omp parallel \\\n", "    for schedule(static)"),
-        Language::C,
-    );
-
-    assert_eq!(directive.name, "parallel for");
-    assert_eq!(directive.clauses.len(), 1);
-    assert_eq!(directive.clauses[0].name, "schedule");
-    assert_eq!(
-        directive.clauses[0].kind,
-        ClauseKind::Parenthesized("static".into())
-    );
-}
-
-#[test]
-fn preserves_token_separation_no_trailing_space() {
-    // Edge case: backslash immediately after token, all separation via next-line indent
-    let directive = parse_with_language(
-        concat!("#pragma omp parallel\\\n", "    for\\\n", "    private(i)"),
-        Language::C,
-    );
-
-    assert_eq!(directive.name, "parallel for");
-    assert_eq!(directive.clauses.len(), 1);
-    assert_eq!(directive.clauses[0].name, "private");
+fn malformed_fortran_continuations_are_hard_errors() {
+    for source in [
+        "!$omp parallel do & private(i)",
+        "!$omp parallel do\n!$omp private(i)",
+    ] {
+        assert!(
+            fortran_parser(SourceForm::FortranFree)
+                .parse(source)
+                .is_err(),
+            "{source:?} must fail"
+        );
+    }
 }

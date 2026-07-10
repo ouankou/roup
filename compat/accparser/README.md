@@ -1,33 +1,50 @@
 # ROUP accparser compatibility layer
 
-Drop-in replacement for [accparser](https://github.com/ouankou/accparser), powered by ROUP. Passes all 918 accparser compatibility tests without ANTLR4.
+This adapter builds the accparser C++ AST from ROUP's opaque, typed C ABI. It
+uses the pinned accparser IR sources without ANTLR.
 
-## Quick start
+The contract is strict:
+
+- input must contain an OpenACC pragma or Fortran sentinel;
+- callers must select C, C++, or Fortran explicitly with `setLang` before
+  parsing, and the selected profile must agree with the source form;
+- parse, schema, conversion, and representation failures throw exceptions;
+- the adapter never returns null for an error;
+- every typed C-ABI field must be consumed exactly once;
+- directive and clause kinds are classified only by exhaustive C-ABI ordinal
+  tables, and closed payload enums are consumed only as numeric tags;
+- no source prefix is fabricated and no rendered clause is reparsed;
+- clause occurrences and ordering are preserved rather than merged; and
+- source locations come directly from ROUP byte/line/column spans.
+
+## Build
+
+Build the optional C ABI explicitly before configuring CMake:
 
 ```bash
-mkdir build && cd build
-cmake ..
-make -j
-ctest
+cargo build --locked --release -p roup-capi
+cmake -S compat/accparser -B compat/accparser/build
+cmake --build compat/accparser/build -j
+ctest --test-dir compat/accparser/build --output-on-failure --no-tests=error
 ```
 
-Produces `libaccparser.so` compatible with existing accparser applications.
+`compat/accparser/build.sh` performs the same ordered build. CMake never invokes
+Cargo or mutates the Rust target tree.
 
-## Requirements
+Requirements are CMake 3.20 or newer, a C++17 compiler, and a Rust toolchain
+when building `roup-capi`. The pure `roup` Rust parser does not depend on this
+adapter or on the C ABI crate.
 
-- Rust toolchain
-- CMake 3.10+
-- C++ compiler
-
-No ANTLR4 required.
-
-## Build details
-
-CMake auto-builds ROUP and links all 918 accparser compatibility tests. Uses submodule headers directly without modification.
-
-## Implementation
-
-- Parsing: ROUP (Rust)
-- AST & unparsing: Original accparser classes
-- Headers: Direct from submodule (OpenACCParser.h)
-- No runtime generation, no ANTLR4 dependency
+The pinned fixture audit is recorded in [STRICT_AUDIT.md](STRICT_AUDIT.md).
+The registered gate consists of repository-owned `strict_contract`,
+`lang_flag_test`, and `compat_caller` executables, a source audit forbidding
+string-based enum classification, and the explicitly audited atomic C and
+Fortran fixture pair.
+Strict cache element/subarray, end-kind, and routine-parameter coverage
+lives in the repository-owned `strict_contract` test and strict C/Fortran
+cache fixture pairs because the upstream cache fixtures contain scalar names
+forbidden by the OpenACC specification.
+The remaining permissive builtin and OpenACC-VV corpora are retained as
+audit inputs but are never discovered or registered by glob. All registered
+tests are mandatory and hard-time-limited. Audited input/reference hashes make
+fixture drift a configure-time failure requiring explicit re-audit.

@@ -1,23 +1,12 @@
-# ROUP C Examples
+# C examples
 
-This directory contains a small tutorial (`tutorial_basic.c`) that exercises the C API. The tutorial walks through parsing a
-handful of directives, inspecting clauses, and handling memory management.
-
-## Building
+The examples include `crates/roup-capi/include/roup.h` and link the optional
+`roup-capi` shared library. They exercise opaque handle ownership, structured
+results, and recursive typed child nodes.
 
 ```bash
-cargo build --release
-cd examples/c
-gcc -std=c11 -Wall -Wextra \
-    -I../../target/release \
-    tutorial_basic.c \
-    -L../../target/release \
-    -lroup \
-    -o tutorial
+make -C examples/c clean all run-all BUILD_TYPE=release
 ```
 
-Use `clang` if preferred. Set `LD_LIBRARY_PATH=../../target/release` (or your platform equivalent) before running the binary so
-the dynamic loader can find `libroup`.
-
-The tutorial output shows each step of the API walkthrough. Refer to the documentation site for a detailed explanation of the
-functions involved.
+Every unexpected status terminates with failure; no example substitutes a
+default value or continues after a failed query.

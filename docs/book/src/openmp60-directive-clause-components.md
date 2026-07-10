@@ -1,182 +1,75 @@
-# OpenMP 6.0 Directive–Clause Components
+# OpenMP typed directive and clause components
 
-This reference summarises how the ROUP parser tokenises OpenMP 6.0 clause
-keywords.  Rather than attempting to restate the entire specification, the
-information below mirrors the parser's [`ClauseRule`](../../../src/parser/openmp.rs)
-data so you can quickly see which textual forms are accepted.  Combined
-constructs (for example `parallel for` or `target teams distribute parallel for
-simd`) are already part of the directive keyword registry listed in the
-[directive catalogue](./openmp60-directives-clauses.md).
+ROUP represents OpenMP semantics directly. Directive parameters and clause
+payloads are enums and checked record types, not strings that a consumer must
+split or parse again.
 
-> **Note:** The OpenMP specification defines which directives may use a given
-> clause and any semantic restrictions.  ROUP currently enforces keyword syntax
-> and delegates the normative rules to higher layers.  Consult the
-> [OpenMP 6.0 specification](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf)
-> for the full directive–clause compatibility matrix.
+## Directive parameters
 
-## Clause syntax summary
+Dedicated parameter variants cover constructs such as:
 
-| Clause | Parser rule | Accepted forms |
-| --- | --- | --- |
-| `absent` | Parenthesized | `absent(...)` |
-| `acq_rel` | Bare | `#pragma omp parallel acq_rel` |
-| `acquire` | Bare | `#pragma omp parallel acquire` |
-| `adjust_args` | Parenthesized | `adjust_args(...)` |
-| `affinity` | Parenthesized | `affinity(...)` |
-| `align` | Parenthesized | `align(...)` |
-| `aligned` | Parenthesized | `aligned(...)` |
-| `allocate` | Parenthesized | `allocate(...)` |
-| `allocator` | Parenthesized | `allocator(...)` |
-| `append_args` | Parenthesized | `append_args(...)` |
-| `apply` | Parenthesized | `apply(...)` |
-| `at` | Parenthesized | `at(...)` |
-| `atomic_default_mem_order` | Parenthesized | `atomic_default_mem_order(...)` |
-| `bind` | Parenthesized | `bind(...)` |
-| `capture` | Flexible | `capture` or `capture(...)` |
-| `collapse` | Parenthesized | `collapse(...)` |
-| `collector` | Parenthesized | `collector(...)` |
-| `combiner` | Parenthesized | `combiner(...)` |
-| `compare` | Flexible | `compare` or `compare(...)` |
-| `contains` | Parenthesized | `contains(...)` |
-| `copyin` | Parenthesized | `copyin(...)` |
-| `copyprivate` | Parenthesized | `copyprivate(...)` |
-| `counts` | Parenthesized | `counts(...)` |
-| `default` | Parenthesized | `default(...)` |
-| `defaultmap` | Parenthesized | `defaultmap(...)` |
-| `depend` | Parenthesized | `depend(...)` |
-| `destroy` | Flexible | `destroy` or `destroy(...)` |
-| `detach` | Parenthesized | `detach(...)` |
-| `device` | Parenthesized | `device(...)` |
-| `device_resident` | Parenthesized | `device_resident(...)` |
-| `device_safesync` | Flexible | `device_safesync` or `device_safesync(...)` |
-| `device_type` | Parenthesized | `device_type(...)` |
-| `dist_schedule` | Parenthesized | `dist_schedule(...)` |
-| `doacross` | Parenthesized | `doacross(...)` |
-| `dynamic_allocators` | Bare | `#pragma omp parallel dynamic_allocators` |
-| `enter` | Parenthesized | `enter(...)` |
-| `exclusive` | Bare | `#pragma omp parallel exclusive` |
-| `fail` | Flexible | `fail` or `fail(...)` |
-| `filter` | Parenthesized | `filter(...)` |
-| `final` | Parenthesized | `final(...)` |
-| `firstprivate` | Parenthesized | `firstprivate(...)` |
-| `from` | Parenthesized | `from(...)` |
-| `full` | Flexible | `full` or `full(...)` |
-| `grainsize` | Parenthesized | `grainsize(...)` |
-| `graph_id` | Parenthesized | `graph_id(...)` |
-| `graph_reset` | Parenthesized | `graph_reset(...)` |
-| `has_device_addr` | Parenthesized | `has_device_addr(...)` |
-| `hint` | Parenthesized | `hint(...)` |
-| `holds` | Parenthesized | `holds(...)` |
-| `if` | Parenthesized | `if(...)` |
-| `in_reduction` | Parenthesized | `in_reduction(...)` |
-| `inbranch` | Bare | `#pragma omp parallel inbranch` |
-| `inclusive` | Bare | `#pragma omp parallel inclusive` |
-| `indirect` | Flexible | `indirect` or `indirect(...)` |
-| `induction` | Parenthesized | `induction(...)` |
-| `inductor` | Parenthesized | `inductor(...)` |
-| `init` | Parenthesized | `init(...)` |
-| `init_complete` | Flexible | `init_complete` or `init_complete(...)` |
-| `initializer` | Parenthesized | `initializer(...)` |
-| `interop` | Parenthesized | `interop(...)` |
-| `is_device_ptr` | Parenthesized | `is_device_ptr(...)` |
-| `label` | Parenthesized | `label(...)` |
-| `lastprivate` | Parenthesized | `lastprivate(...)` |
-| `linear` | Parenthesized | `linear(...)` |
-| `link` | Parenthesized | `link(...)` |
-| `local` | Parenthesized | `local(...)` |
-| `looprange` | Parenthesized | `looprange(...)` |
-| `map` | Parenthesized | `map(...)` |
-| `match` | Parenthesized | `match(...)` |
-| `memscope` | Parenthesized | `memscope(...)` |
-| `mergeable` | Bare | `#pragma omp parallel mergeable` |
-| `message` | Parenthesized | `message(...)` |
-| `no_openmp` | Flexible | `no_openmp` or `no_openmp(...)` |
-| `no_openmp_constructs` | Flexible | `no_openmp_constructs` or `no_openmp_constructs(...)` |
-| `no_openmp_routines` | Flexible | `no_openmp_routines` or `no_openmp_routines(...)` |
-| `no_parallelism` | Flexible | `no_parallelism` or `no_parallelism(...)` |
-| `nocontext` | Parenthesized | `nocontext(...)` |
-| `nogroup` | Bare | `#pragma omp parallel nogroup` |
-| `nontemporal` | Parenthesized | `nontemporal(...)` |
-| `notinbranch` | Bare | `#pragma omp parallel notinbranch` |
-| `novariants` | Flexible | `novariants` or `novariants(...)` |
-| `nowait` | Bare | `#pragma omp parallel nowait` |
-| `num_tasks` | Parenthesized | `num_tasks(...)` |
-| `num_teams` | Parenthesized | `num_teams(...)` |
-| `num_threads` | Parenthesized | `num_threads(...)` |
-| `order` | Parenthesized | `order(...)` |
-| `ordered` | Flexible | `ordered` or `ordered(...)` |
-| `otherwise` | Parenthesized | `otherwise(...)` |
-| `partial` | Flexible | `partial` or `partial(...)` |
-| `permutation` | Parenthesized | `permutation(...)` |
-| `priority` | Parenthesized | `priority(...)` |
-| `private` | Parenthesized | `private(...)` |
-| `proc_bind` | Parenthesized | `proc_bind(...)` |
-| `public` | Flexible | `public` or `public(...)` |
-| `read` | Flexible | `read` or `read(...)` |
-| `reduction` | Parenthesized | `reduction(...)` |
-| `relaxed` | Bare | `#pragma omp parallel relaxed` |
-| `release` | Bare | `#pragma omp parallel release` |
-| `replayable` | Flexible | `replayable` or `replayable(...)` |
-| `reproducible` | Bare | `#pragma omp parallel reproducible` |
-| `reverse` | Flexible | `reverse` or `reverse(...)` |
-| `reverse_offload` | Bare | `#pragma omp parallel reverse_offload` |
-| `safelen` | Parenthesized | `safelen(...)` |
-| `safesync` | Bare | `#pragma omp parallel safesync` |
-| `schedule` | Parenthesized | `schedule(...)` |
-| `self_maps` | Bare | `#pragma omp parallel self_maps` |
-| `seq_cst` | Bare | `#pragma omp parallel seq_cst` |
-| `severity` | Parenthesized | `severity(...)` |
-| `shared` | Parenthesized | `shared(...)` |
-| `simd` | Bare | `#pragma omp parallel simd` |
-| `simdlen` | Parenthesized | `simdlen(...)` |
-| `sizes` | Parenthesized | `sizes(...)` |
-| `task_reduction` | Parenthesized | `task_reduction(...)` |
-| `thread_limit` | Parenthesized | `thread_limit(...)` |
-| `threads` | Bare | `#pragma omp parallel threads` |
-| `threadset` | Parenthesized | `threadset(...)` |
-| `tile` | Parenthesized | `tile(...)` |
-| `to` | Parenthesized | `to(...)` |
-| `transparent` | Flexible | `transparent` or `transparent(...)` |
-| `unified_address` | Flexible | `unified_address` or `unified_address(...)` |
-| `unified_shared_memory` | Flexible | `unified_shared_memory` or `unified_shared_memory(...)` |
-| `uniform` | Parenthesized | `uniform(...)` |
-| `unroll` | Flexible | `unroll` or `unroll(...)` |
-| `untied` | Bare | `#pragma omp parallel untied` |
-| `update` | Flexible | `update` or `update(...)` |
-| `use` | Parenthesized | `use(...)` |
-| `use_device_addr` | Parenthesized | `use_device_addr(...)` |
-| `use_device_ptr` | Parenthesized | `use_device_ptr(...)` |
-| `uses_allocators` | Parenthesized | `uses_allocators(...)` |
-| `weak` | Flexible | `weak` or `weak(...)` |
-| `when` | Parenthesized | `when(...)` |
-| `write` | Flexible | `write` or `write(...)` |
+- distinct `allocate`, `threadprivate`, `groupprivate`, and historical
+  `declare target` lists;
+- `critical`, `flush`, checked-lvalue `depobj`, and construct-name parameters;
+- `declare mapper`, `declare reduction`, `declare simd`, and `declare
+  induction` declarations; and
+- a `declare variant` target with separate optional base and required variant
+  function names.
 
-## Updating this index
+Storage and historical `declare target` lists admit only whole qualified
+variable or procedure names and Fortran named common blocks. Array elements,
+array sections, and object members are hard errors because the OpenMP
+restrictions do not permit parts of variables in these lists. A present
+Fortran `declare simd(proc-name)` parameter always contains a procedure name;
+an empty target is not representable.
 
-The table can be regenerated with the following helper if new clauses are added
-or the parser changes a clause rule:
+Historical C++ template-id variant names remain accepted cumulatively from
+OpenMP 5.0. A `base-name:` prefix is available for Fortran from OpenMP 5.0 and
+for C/C++ from OpenMP 5.2, matching the host-specific historical grammars.
 
-```bash
-python - <<'PY'
-import pathlib, re
-text = pathlib.Path('src/parser/openmp.rs').read_text()
-block = re.search(r"openmp_clauses!\s*{(.*?)}\s*\n\nmacro_rules!", text, re.S).group(1)
-clauses = []
-for entry in block.split('},'):
-    name_match = re.search(r'name: "([^"]+)"', entry)
-    rule_match = re.search(r'rule: ClauseRule::([A-Za-z_]+)', entry)
-    if name_match and rule_match:
-        clauses.append((name_match.group(1), rule_match.group(1)))
-for name, rule in sorted(clauses):
-    if rule == 'Bare':
-        forms = f"`#pragma omp parallel {name}`"
-    elif rule == 'Parenthesized':
-        forms = f"`{name}(...)`"
-    else:
-        forms = f"`{name}` or `{name}(...)`"
-    print(f"| `{name}` | {rule} | {forms} |")
-PY
-```
+`declare reduction` stores a typed reduction identifier, validated type names,
+combiner expression, and optional initializer. `declare induction` stores the
+induction identifier and its validated type-specifier list, including paired
+variable and step types. A malformed declaration cannot be represented by a
+partially populated record.
 
-Copy the generated rows into the table above to keep this document aligned with
-`OpenMpClause::ALL`.
+## Clause payloads
+
+Clause payload variants distinguish semantic families, including:
+
+- checked expressions, identifiers, type names, and locator lists;
+- scheduling, ordering, binding, mapping, dependence, and reduction kinds;
+- atomic operation and memory-order data;
+- mapper, iterator, induction, linear, and allocator records;
+- metadirective selectors with typed traits and nested directives;
+- transformation trees for `apply`; and
+- actual requirement clauses on `requires` rather than a synthesized summary
+  string.
+
+Lists are delimiter-aware and their elements are parsed once. A locator list
+accepts locator shapes only; it cannot silently retain a general expression.
+Nested directives retain spans into the outer physical source, including when
+a token crosses a line splice.
+
+## Standard aliases
+
+Historical and alternate standardized spellings map to the same typed kind and
+payload. Source-facing tools can recover the written spelling by slicing the
+checked name span against the original input. Semantic consumers should use the
+canonical kind and payload instead of comparing source text.
+
+Fortran `end allocators` and `end dispatch`, including compact spellings, have
+dedicated typed directive kinds introduced in OpenMP 5.2 and participate in
+strict opener/end pairing.
+
+## Optional C ABI representation
+
+The optional ABI exposes the same structure through field metadata and owned
+child-node handles. Scalar leaves, UTF-8 leaves, lists, and nested records have
+distinct value kinds. Directive-specific list tags remain distinct in the ABI,
+and `declare variant` exposes `base` and `function` as separate fields. There
+is deliberately no operation that returns a whole rendered payload.
+
+If a new Rust payload cannot be represented by these fields, the ABI and both
+adapters must be extended. Substituting a raw payload or default value is not a
+valid conversion.

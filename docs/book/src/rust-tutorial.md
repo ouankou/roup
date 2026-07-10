@@ -1,125 +1,80 @@
-# Rust Tutorial
+# Rust tutorial
 
-This tutorial shows the current Rust entry points for parsing and inspecting OpenMP and OpenACC directives.
+## Configure explicitly
 
----
-
-## Basic Parsing
-
-```rust,ignore
-use roup::parser::openmp;
-use roup::lexer::Language;
-
-fn main() {
-    let parser = openmp::parser().with_language(Language::C);
-    let (_, directive) = parser
-        .parse("#pragma omp parallel for num_threads(4)")
-        .expect("parse");
-
-    println!("name: {}", directive.name);
-    println!("clauses: {}", directive.clauses.len());
-}
-```
-
-OpenACC works the same way:
+Parser configuration fixes the directive dialect, specification policy, host
+language standard, and physical source form.
 
 ```rust,ignore
-use roup::parser::openacc;
-use roup::lexer::Language;
+use roup::api::OpenMpConfig;
+use roup::version::{CStandard, HostLanguageProfile, OpenMpVersion, SourceForm};
 
-let parser = openacc::parser().with_language(Language::FortranFree);
-let (_, directive) = parser.parse("!$acc parallel async(1)").unwrap();
-println!("name: {}", directive.name);
+let current = OpenMpConfig::exact(
+    OpenMpVersion::V6_0,
+    HostLanguageProfile::C(CStandard::C23),
+    SourceForm::Pragma,
+)?
+.parser();
+
+let source = "#pragma omp master";
+let historical = current.parse(source)?;
+assert!(historical
+    .compatible_versions()
+    .contains(OpenMpVersion::V6_0));
+assert_eq!(historical.directive().span().slice(source), Ok("master"));
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-`Language` controls sentinel parsing (`C`, `FortranFree`, `FortranFixed`). `openmp::parse_omp_directive` and `openacc::parse_acc_directive` provide convenience wrappers if you do not need to customise the parser.
+Exact mode is cumulative: it rejects syntax introduced after the selected
+version, but accepts older standardized syntax even if the selected
+specification no longer documents that spelling.
 
----
-
-## Error Handling
+## Inspect typed data
 
 ```rust,ignore
-use roup::parser::openmp;
+use roup::api::OpenAccConfig;
+use roup::ast::{AccClausePayload, AccDirectiveKind};
+use roup::version::{CStandard, HostLanguageProfile, SourceForm};
 
-fn parse_or_report(input: &str) {
-    let parser = openmp::parser();
-    match parser.parse(input) {
-        Ok((rest, dir)) if rest.trim().is_empty() => {
-            println!("parsed {}", dir.name);
-        }
-        Ok((rest, _)) => eprintln!("trailing tokens: {rest:?}"),
-        Err(e) => eprintln!("parse error: {e:?}"),
-    }
-}
+let parser = OpenAccConfig::new(
+    HostLanguageProfile::C(CStandard::C23),
+    SourceForm::Pragma,
+)?
+.parser();
+let parsed = parser.parse("#pragma acc parallel async(queue)")?;
+let directive = parsed.directive();
+
+assert_eq!(directive.kind(), AccDirectiveKind::Parallel);
+assert!(matches!(
+    directive.clauses()[0].payload(),
+    AccClausePayload::Expression(_)
+));
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
----
+Expressions expose a typed host-language tree through `Expression::ast()`.
+Canonical formatting walks that tree; source text is retained only as backing
+for checked locations. Directive and clause `span()` values always refer to the
+original physical directive, including across line continuations.
 
-## Working with Clauses
+## Context supplied by a compiler
+
+Plain `parse` performs syntax, version, and context-independent semantic
+validation. When a compiler can answer declaration, association, or
+constant-expression questions, use `parse_with_facts`. Applicable facts are
+mandatory in that mode; an omitted fact is a hard `MissingSemanticFact` or
+`MissingContext` diagnostic.
 
 ```rust,ignore
-use roup::parser::openmp;
+use roup::validation::{AssociationKind, SemanticFacts};
 
-let parser = openmp::parser();
-let (_, directive) = parser.parse("#pragma omp parallel private(x) reduction(+:sum)").unwrap();
-
-for clause in &directive.clauses {
-    match clause.name.as_ref() {
-        "private" => println!("private({:?})", clause.kind),
-        "reduction" => println!("reduction({:?})", clause.kind),
-        other => println!("clause: {other}"),
-    }
-}
+let facts = SemanticFacts::new()
+    .with_association(AssociationKind::SectionRegion, true);
+let parsed = current.parse_with_facts("#pragma omp section", &facts)?;
+assert_eq!(parsed.directive().kind().as_str(), "section");
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-`clause.kind` preserves the original clause text (`Parenthesized` or `Bare`).
-
----
-
-## Building AST/IR
-
-Use `Parser::parse_ast` to build the IR and normalise clauses:
-
-```rust,ignore
-use roup::ast::ClauseNormalizationMode;
-use roup::ir::ParserConfig;
-use roup::parser::openmp;
-
-let parser = openmp::parser();
-let ir = parser
-    .parse_ast(
-        "#pragma omp parallel for private(i,j)",
-        ClauseNormalizationMode::ParserParity,
-        &ParserConfig::default(),
-    )
-    .unwrap();
-println!("{}", ir.to_string());
-```
-
----
-
-## Translation API
-
-Translate between C/C++ and Fortran OpenMP pragmas:
-
-```rust,ignore
-use roup::ir::translate::{translate_c_to_fortran, translate_fortran_to_c};
-
-let f = translate_c_to_fortran("#pragma omp parallel for private(i)")?;
-assert_eq!(f, "!$omp parallel do private(i)");
-
-let c = translate_fortran_to_c("!$omp target teams distribute")?;
-assert_eq!(c, "#pragma omp target teams distribute");
-```
-
----
-
-## Debugger
-
-`roup_debug` (built with the crate) provides interactive and batch step tracing:
-
-```bash
-cargo run --release --bin roup_debug '#pragma omp parallel' -- --non-interactive
-```
-
-It supports OpenMP and OpenACC pragmas in C and Fortran forms.
+For a sequence of paired regions, use `ContextValidator` with each directive's
+checked source span. Mismatched or unclosed regions are errors and include the
+related opening location.

@@ -26,7 +26,7 @@ static void handle_signal(int sig) {
 void test_simple_parallel() {
     std::cout << "Testing: #pragma omp parallel" << std::endl;
     
-    OpenMPDirective* dir = parseOpenMP("omp parallel", nullptr);
+    OpenMPDirective* dir = parseOpenMP("#pragma omp parallel", nullptr);
     assert(dir != nullptr);
     assert(dir->getKind() == OMPD_parallel);
     
@@ -41,7 +41,7 @@ void test_simple_parallel() {
 void test_parallel_num_threads() {
     std::cout << "Testing: #pragma omp parallel num_threads(4)" << std::endl;
     
-    OpenMPDirective* dir = parseOpenMP("omp parallel num_threads(4)", nullptr);
+    OpenMPDirective* dir = parseOpenMP("#pragma omp parallel num_threads(4)", nullptr);
     assert(dir != nullptr);
     std::cout << "  Directive parsed" << std::endl;
     
@@ -63,7 +63,7 @@ void test_parallel_num_threads() {
 void test_for_directive() {
     std::cout << "Testing: #pragma omp for" << std::endl;
     
-    OpenMPDirective* dir = parseOpenMP("omp for", nullptr);
+    OpenMPDirective* dir = parseOpenMP("#pragma omp for", nullptr);
     assert(dir != nullptr);
     assert(dir->getKind() == OMPD_for);
     
@@ -77,7 +77,7 @@ void test_for_directive() {
 void test_parallel_for() {
     std::cout << "Testing: #pragma omp parallel for" << std::endl;
 
-    OpenMPDirective* dir = parseOpenMP("omp parallel for", nullptr);
+    OpenMPDirective* dir = parseOpenMP("#pragma omp parallel for", nullptr);
     assert(dir != nullptr);
 
     // ROUP correctly parses "parallel for" as OMPD_parallel_for
@@ -92,11 +92,17 @@ void test_parallel_for() {
 
 void test_invalid_input() {
     std::cout << "Testing: invalid input" << std::endl;
-    
-    OpenMPDirective* dir = parseOpenMP("not a pragma", nullptr);
-    assert(dir == nullptr);
-    
-    std::cout << "  ✓ PASS (correctly rejected)" << std::endl;
+
+    bool rejected = false;
+    try {
+        OpenMPDirective* dir = parseOpenMP("not a pragma", nullptr);
+        delete dir;
+    } catch (const std::exception&) {
+        rejected = true;
+    }
+    assert(rejected);
+
+    std::cout << "  ✓ PASS (hard error)" << std::endl;
 }
 
 int main() {

@@ -1,22 +1,14 @@
-# Line Continuations
+# Line continuations and physical spans
 
-⚠️ Experimental: ROUP now understands multi-line OpenMP directives across C, C++, and Fortran. This guide shows how to format
-continuations so the parser and ompparser compatibility layer recognize them reliably.
+ROUP accepts standard C/C++ line splices and Fortran directive continuations.
+It validates the complete logical directive before parsing and maps directive,
+clause, and nested-directive spans back to the original physical source.
 
-## When to use continuations
+## C and C++
 
-OpenMP pragmas often grow long once multiple clauses are attached. Rather than forcing everything onto a single line, you can
-split directives while keeping source files readable. ROUP stitches the continued lines together during lexing, so downstream
-APIs still observe canonical single-line directive strings.
-
-Continuations are supported in two situations:
-
-- **C / C++ pragmas** that end a line with a trailing backslash (`\`).
-- **Fortran sentinels** (`!$OMP`, `C$OMP`, `*$OMP`) that use the standard ampersand (`&`) continuation syntax.
-
-ROUP preserves clause order and trims whitespace that was introduced only to align indentation.
-
-## C / C++ example
+A C/C++ continuation is exactly a backslash immediately followed by LF or
+CRLF. No whitespace may occur between the backslash and the line ending.
+Translation removes exactly those characters and never invents a separator:
 
 ```c
 #pragma omp parallel for \
@@ -25,51 +17,39 @@ ROUP preserves clause order and trims whitespace that was introduced only to ali
             j)
 ```
 
-ROUP merges this directive into `#pragma omp parallel for schedule(dynamic, 4) private(i, j)`. Clause arguments keep their
-original spacing. Comments (`/* */` or `//`) may appear between continued lines and are ignored during merging.
+Source whitespace on either side of the splice remains significant. Therefore
+`parallel\` followed immediately by `for` forms the single token `parallelfor`
+and is rejected; at least one actual source-space character is required to form
+`parallel for`.
 
-### Tips for C / C++
+A backslash followed by spaces, a bare CR, or an uncontinued physical newline
+with more directive text is a hard error.
 
-- The backslash must be the final character on the line (aside from trailing spaces or tabs).
-- Windows line endings (`\r\n`) are handled automatically.
-- Keep at least one space between the directive name and the first clause on subsequent lines.
+## Fortran free and fixed forms
 
-## Fortran free-form example
+Fortran continuations use a trailing `&`. A continuation line may repeat an
+OpenMP or OpenACC sentinel and may place `&` immediately after that sentinel.
+Only continuation syntax is removed; any source whitespace needed to separate
+tokens must be present in the input.
 
 ```fortran
 !$omp target teams distribute &
-!$omp parallel do &
+!$omp& parallel do &
 !$omp& private(i, j)
 ```
 
-The parser removes the continuation markers and produces `!$omp target teams distribute parallel do private(i, j)`.
+Fixed-form input accepts the configured standard sentinels, including `!$OMP`,
+`C$OMP`, and `*$OMP`, subject to fixed-form placement rules. A comment may
+follow a valid trailing `&`. Missing markers, text after a purported marker, or
+another directive line reached through ordinary whitespace are errors.
 
-### Fortran fixed-form example
+## Spans
 
-```fortran
-      C$OMP   DO &
-      !$OMP& SCHEDULE(DYNAMIC) &
-      !$OMP PRIVATE(I) SHARED(A)
-```
+Logical parsing does not discard the physical location map. For a token that
+crosses a C splice, its `Span` covers the complete physical slice, including the
+backslash and newline. Clause-name spans identify the exact source alias even
+when the semantic kind is canonicalized. Nested metadirective and construct
+selector directives use the same outer-source coordinate system.
 
-Column prefixes (`!`, `C`, or `*`) are respected. ROUP normalizes the directive to `do schedule(DYNAMIC) private(I) shared(A)`.
-
-### Tips for Fortran continuations
-
-- Terminate every continued line with `&`. ROUP tolerates trailing comments (e.g., `& ! explanation`) and skips them automatically.
-- You may repeat the sentinel on continuation lines (`!$OMP&`), or start the next line with only `&`. Both forms are accepted.
-- Blank continuation lines are ignored as long as they contain only whitespace.
-- Clause bodies can span multiple lines; nested continuations inside parentheses are collapsed to a single line in the parsed
-  clause value.
-
-## Troubleshooting
-
-- **Missing continuation marker**: If a line break appears without `&` (Fortran) or `\` (C/C++), the parser treats the next line
-  as a separate statement and reports an error or unexpected directive name.
-- **Custom formatting macros**: Preprocessors that insert trailing spaces after `\` may break continuations. Ensure the backslash
-  is the final printable character.
-- **Compatibility layer**: The ompparser shim mirrors the same behavior. The comprehensive tests in
-  `compat/ompparser/tests/comprehensive_test.cpp` include multi-line inputs for both languages.
-
-For more examples, refer to the automated tests in `tests/openmp_line_continuations.rs` and the parser unit tests in
-`src/parser/mod.rs`.
+See `tests/openmp_line_continuations.rs` and
+`tests/source_span_regressions.rs` for executable examples.

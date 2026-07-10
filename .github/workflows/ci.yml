@@ -2,213 +2,126 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CARGO_TERM_COLOR: always
-
 permissions:
   contents: read
 
-jobs:
-  build:
-    name: Build & Tests
-    strategy:
-      # Don't cancel all jobs if one fails - we want to see which specific versions/OSes fail
-      fail-fast: false
-      matrix:
-        # MSRV + Stable Testing Approach (Rust ecosystem best practice)
-        #
-        # MSRV (Minimum Supported Rust Version): 1.88
-        # - Required for mdBook 0.5.x and current dependencies
-        # - Set in Cargo.toml as rust-version = "1.88.0"
-        #
-        # Stable: Latest stable Rust release
-        # - Ensures compatibility with current Rust ecosystem
-        # - Catches new lints and API changes early
-        #
-        # SINGLE SOURCE OF TRUTH: This version list is automatically read by test_rust_versions.sh
-        # When you update MSRV, also update Cargo.toml rust-version field.
-        #
-        # Version should be guarded with quotes (1.82 -> "1.82"). Otherwise, 1.82 may be recognized as 1.8.
-        # Note: Clippy lints can vary between versions. Test locally with ./test_rust_versions.sh before pushing.
-        version: ["1.88", "stable"]
-        # ubuntu-22.04-arm, ubuntu-24.04-arm and windows-11-arm are not supported yet for private repositories
-        os: [ubuntu-24.04, windows-2025, macos-15]
-        llvm: ["20"]
+env:
+  CARGO_TERM_COLOR: always
 
+jobs:
+  rust:
+    name: Rust ${{ matrix.rust }} on ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        rust: ["1.88", stable]
+        os: [ubuntu-24.04, windows-2025, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
-      # Check supported versions at: https://github.com/KyleMayes/install-llvm-action/blob/master/assets.json
-      - name: Set up LLVM on Windows and macOS
-        if: ${{ matrix.os != 'ubuntu-24.04' && matrix.os != 'ubuntu-24.04-arm'}}
-        uses: KyleMayes/install-llvm-action@v2
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          version: ${{ matrix.llvm }}
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
 
-      - name: Set up LLVM on Ubuntu
-        if: ${{ matrix.os == 'ubuntu-24.04' || matrix.os == 'ubuntu-24.04-arm'}}
-        run: |
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo add-apt-repository -y 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${{ matrix.llvm }} main'
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang-${{ matrix.llvm }} \
-            cmake \
-            pkg-config \
-            ripgrep
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Check the standalone safe Rust parser
+        run: cargo check --locked -p roup --all-targets
+
+      - name: Check the complete workspace
+        run: cargo check --locked --workspace --all-targets
+
+      - name: Deny Clippy warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Test the complete workspace
+        run: cargo test --locked --workspace --all-targets
+
+  integration:
+    name: C ABI, adapters, examples, and documentation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.version }}
+          toolchain: stable
           components: rustfmt, clippy
 
-      - name: Install mdBook (Linux)
-        if: runner.os == 'Linux'
-        run: cargo install mdbook
-        shell: bash
-
-      - name: Run comprehensive test suite incl. enum/safety audit (Linux)
-        if: runner.os == 'Linux'
-        run: ./test.sh
-        shell: bash
-
-      - name: Check Rust formatting (Windows/macOS)
-        if: runner.os != 'Linux'
-        run: cargo fmt -- --check
-
-      - name: Run Clippy lints (Windows/macOS)
-        if: runner.os != 'Linux'
-        run: cargo clippy --locked --all-targets -- -D warnings
-
-      - name: Build library debug (Windows/macOS)
-        if: runner.os != 'Linux'
-        run: cargo build --locked --verbose
-
-      - name: Build library release (Windows/macOS)
-        if: runner.os != 'Linux'
-        run: cargo build --locked --release --all-targets
-
-      - name: Run Rust tests (Windows/macOS)
-        if: runner.os != 'Linux'
-        run: cargo test --locked --verbose
-
-      - name: Run tests with all features (Windows/macOS)
-        if: runner.os != 'Linux'
-        run: cargo test --locked --all-features
-
-      - name: Validate benchmarks compile (Windows/macOS)
-        if: runner.os != 'Linux'
-        run: cargo bench --locked --no-run
-
-      - name: Test ompparser compatibility layer
-        if: runner.os == 'Linux'
+      - name: Install native build dependencies
         run: |
-          # Check if ompparser submodule exists
-          if [ -f "compat/ompparser/ompparser/src/OpenMPIR.h" ]; then
-            echo "✓ ompparser submodule found - testing compatibility layer"
-            cd compat/ompparser
-            
-            # Build compatibility layer
-            mkdir -p build && cd build
-            cmake ..
-            make -j$(nproc)
-            
-            # Ensure loader can locate libompparser.so in build directory
-            export LD_LIBRARY_PATH="$PWD:${LD_LIBRARY_PATH:-}"
+          sudo apt-get update
+          sudo apt-get install --yes cmake g++ gcc gfortran make ninja-build pkg-config ripgrep
 
-            # Run all tests
-            ctest --output-on-failure --verbose
-            
-            # Verify library size
-            # CONFIGURABLE: Set ROUP_LIBRARY_SIZE_THRESHOLD env var to override (default: 10MB).
-            # This allows CI flexibility as the library evolves without workflow changes.
-            # Default is 10MB (10485760 bytes), which accommodates static ROUP embedding (~5.5MB observed).
-            # Adjust as needed if the library grows. Typical sizes:
-            #   - Dynamic linking: ~522KB
-            #   - Static embedding: ~5.5MB
-            #   - Threshold: 10MB (safety margin for future growth)
-            LIBRARY_SIZE_THRESHOLD="${ROUP_LIBRARY_SIZE_THRESHOLD:-10485760}"
-            if [ -f "libompparser.so" ]; then
-              SIZE=$(stat -c%s libompparser.so)
-              echo "libompparser.so size: $SIZE bytes"
-              if [ "$SIZE" -gt "$LIBRARY_SIZE_THRESHOLD" ]; then
-                echo "❌ Library too large: $SIZE bytes (expected < $LIBRARY_SIZE_THRESHOLD bytes)"
-                exit 1
-              fi
-              echo "✓ Library size acceptable ($SIZE / $LIBRARY_SIZE_THRESHOLD bytes)"
-            fi
-            
-            # Test drop-in replacement (LD_LIBRARY_PATH already set above)
-            ./ompparser_example
-            echo "✓ Drop-in replacement verified"
-          else
-            echo "⚠️ ompparser submodule not found - skipping compatibility tests"
-            echo "Run: git submodule update --init --recursive"
-          fi
-        shell: bash
+      - name: Install pinned mdBook
+        run: cargo install mdbook --version 0.5.4 --locked
 
-  docs:
-    name: Build / Publish Docs
-    needs: build
-    runs-on: ubuntu-latest
-    
-    # Permissions needed for GitHub Pages deployment
-    # Note: These are only used when actually deploying (main branch push)
+      - name: Run the fail-fast repository test matrix
+        run: ./test.sh
+
+  documentation:
+    name: Build documentation artifact
+    needs: [rust, integration]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install pinned mdBook
+        run: cargo install mdbook --version 0.5.4 --locked
+
+      - name: Test and build the book
+        run: |
+          mdbook test docs/book
+          mdbook build docs/book
+
+      - name: Build Rust API documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked --workspace --no-deps
+
+      - name: Combine book and API documentation
+        run: |
+          mkdir -p docs/book/book/api
+          cp -R target/doc/. docs/book/book/api/
+
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/book/book
+
+  deploy:
+    name: Deploy documentation
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: documentation
+    runs-on: ubuntu-24.04
     permissions:
-      contents: write
       pages: write
       id-token: write
-
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: true
-          fetch-depth: 0
-
-      - name: Setup mdBook
-        uses: peaceiris/actions-mdbook@v2
-        with:
-          mdbook-version: 'latest'
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Test mdBook code examples
-        run: mdbook test docs/book
-
-      - name: Build mdBook
-        run: mdbook build docs/book
-
-      - name: Build rustdoc
-        run: cargo doc --locked --no-deps --all-features
-        env:
-          RUSTDOCFLAGS: "-D warnings"
-
-      - name: Verify examples compile
-        run: cargo build --locked --examples
-
-      - name: Combine documentation
-        run: |
-          mkdir -p ./docs/book/book/api
-          cp -r target/doc/* ./docs/book/book/api/
-
-      # Only publish on pushes to main; on PRs we just build/verify
-      - name: Deploy to GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/book/book
-          cname: roup.ouankou.com
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
