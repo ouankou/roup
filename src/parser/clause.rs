@@ -1,4 +1,5 @@
-use std::{borrow::Cow, collections::HashMap, fmt};
+use std::ops::{Deref, DerefMut};
+use std::{borrow::Cow, collections::HashMap};
 
 use nom::{IResult, Parser};
 
@@ -8,7 +9,7 @@ use once_cell::sync::Lazy;
 
 /// Typed representation of known clause names.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ClauseName {
+pub(crate) enum ClauseName {
     NumThreads,
     If,
     Private,
@@ -90,7 +91,6 @@ pub enum ClauseName {
     Destroy,
     DepobjUpdate,
     Compare,
-    CompareCapture,
     Partial,
     Full,
     Order,
@@ -284,7 +284,6 @@ static CLAUSE_MAP: Lazy<HashMap<&'static str, ClauseName>> = Lazy::new(|| {
     insert!("destroy", ClauseName::Destroy);
     insert!("depobj_update", ClauseName::DepobjUpdate);
     insert!("compare", ClauseName::Compare);
-    insert!("compare capture", ClauseName::CompareCapture);
     insert!("partial", ClauseName::Partial);
     insert!("full", ClauseName::Full);
     insert!("order", ClauseName::Order);
@@ -341,7 +340,7 @@ static CLAUSE_MAP: Lazy<HashMap<&'static str, ClauseName>> = Lazy::new(|| {
     insert!("device_resident", ClauseName::DeviceResident);
     insert!("host", ClauseName::Host);
 
-    // Additional OpenMP clauses for ompparser compatibility
+    // Additional standardized OpenMP clauses.
     insert!("threads", ClauseName::Threads);
     insert!("simd", ClauseName::Simd);
     insert!("filter", ClauseName::Filter);
@@ -391,7 +390,7 @@ static CLAUSE_MAP: Lazy<HashMap<&'static str, ClauseName>> = Lazy::new(|| {
 });
 
 /// Lookup a ClauseName from a normalized name string. If not found, returns Other variant
-pub fn lookup_clause_name(name: &str) -> ClauseName {
+pub(crate) fn lookup_clause_name(name: &str) -> ClauseName {
     let key = name.trim().to_ascii_lowercase();
     CLAUSE_MAP
         .get(key.as_str())
@@ -399,29 +398,11 @@ pub fn lookup_clause_name(name: &str) -> ClauseName {
         .unwrap_or(ClauseName::Other(Cow::Owned(name.to_string())))
 }
 
-type ClauseParserFn = for<'a> fn(Cow<'a, str>, &'a str) -> IResult<&'a str, Clause<'a>>;
-
-/// OpenACC copyin clause modifier
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum CopyinModifier {
-    Readonly,
-}
-
-/// OpenACC copyout clause modifier
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum CopyoutModifier {
-    Zero,
-}
-
-/// OpenACC create clause modifier
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum CreateModifier {
-    Zero,
-}
+type ClauseParserFn = for<'a> fn(Cow<'a, str>, &'a str, bool) -> IResult<&'a str, Clause<'a>>;
 
 /// Reduction clause operator
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum ReductionOperator {
+pub(crate) enum ReductionOperator {
     Add,    // +
     Sub,    // -
     Mul,    // *
@@ -446,300 +427,112 @@ pub enum ReductionOperator {
 
 /// Reduction clause modifiers (OpenMP 5.x).
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum ReductionModifier {
+pub(crate) enum ReductionModifier {
     Task,
     Inscan,
     Default,
     Original,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum GangModifier {
-    Num,    // num
-    Static, // static
-    Dim,    // dim
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum WorkerModifier {
-    Num, // num
-}
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum VectorModifier {
-    Length, // length
-}
-
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ClauseKind<'a> {
+pub(crate) enum ClauseKind<'a> {
     Bare,
     Parenthesized(Cow<'a, str>),
-    /// Simple variable list clause (e.g., wait(x, y), private(i, j))
-    VariableList(Vec<Cow<'a, str>>),
-    /// Structured gang clause with optional modifier and variables
-    GangClause {
-        modifier: Option<GangModifier>,
-        /// True if source used `modifier: <expr>` (space after `:`), false for `modifier:<expr>`.
-        space_after_colon: bool,
-        variables: Vec<Cow<'a, str>>,
-    },
-    /// Structured worker clause with optional modifier and variables
-    WorkerClause {
-        modifier: Option<WorkerModifier>,
-        variables: Vec<Cow<'a, str>>,
-    },
-    /// Structured vector clause with optional modifier and variables
-    VectorClause {
-        modifier: Option<VectorModifier>,
-        variables: Vec<Cow<'a, str>>,
-    },
-    /// Structured copyin clause with optional modifier
-    CopyinClause {
-        modifier: Option<CopyinModifier>,
-        variables: Vec<Cow<'a, str>>,
-    },
-    /// Structured copyout clause with optional modifier
-    CopyoutClause {
-        modifier: Option<CopyoutModifier>,
-        variables: Vec<Cow<'a, str>>,
-    },
-    /// Structured create clause with optional modifier
-    CreateClause {
-        modifier: Option<CreateModifier>,
-        variables: Vec<Cow<'a, str>>,
-    },
+    /// OpenMP 6.0 optional `use_semantics` argument on a flush memory-order
+    /// clause. Exact 5.2-and-earlier parsing rejects this token shape because
+    /// those versions forbid combining a memory order with a flush list.
+    FlushMemoryOrderArgument(Cow<'a, str>),
     /// Structured reduction clause with operator
     ReductionClause {
+        directive_name_modifier: Option<Cow<'a, str>>,
         modifiers: Vec<ReductionModifier>,
-        modifier_items: Vec<Vec<String>>,
+        modifier_items: Vec<Vec<Cow<'a, str>>>,
         operator: ReductionOperator,
         user_defined_identifier: Option<Cow<'a, str>>,
-        variables: Vec<Cow<'a, str>>,
-        space_after_colon: bool,
+        variables_source: Cow<'a, str>,
     },
-}
-
-/// Separator that appeared before a clause in source.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ClauseSeparator {
-    Space,
-    Comma,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Clause<'a> {
-    pub name: Cow<'a, str>,
-    pub kind: ClauseKind<'a>,
-    pub separator: ClauseSeparator,
+pub(crate) struct Clause<'a> {
+    pub(crate) name: Cow<'a, str>,
+    pub(crate) kind: ClauseKind<'a>,
 }
 
-impl Clause<'_> {
-    pub fn to_source_string(&self) -> String {
-        self.to_string()
-    }
+/// A clause syntax node paired with the exact source spelling of its name.
+/// The registry creates this wrapper at the point where both the original
+/// input slice and the parsed clause are available.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub(crate) struct LocatedClause<'a> {
+    syntax: Clause<'a>,
+    name_source: &'a str,
 }
 
-/// Parse a comma-separated list of identifiers/expressions, preserving nested parentheses.
-pub fn parse_variable_list(input: &str) -> Vec<Cow<'_, str>> {
-    let mut variables = Vec::new();
-    let mut current = String::new();
-    let mut depth = 0;
-
-    for ch in input.chars() {
-        match ch {
-            ',' if depth == 0 => {
-                let trimmed = current.trim();
-                if !trimmed.is_empty() {
-                    variables.push(Cow::Owned(trimmed.to_string()));
-                }
-                current.clear();
-            }
-            '(' | '[' => {
-                depth += 1;
-                current.push(ch);
-            }
-            ')' | ']' => {
-                if depth > 0 {
-                    depth -= 1;
-                }
-                current.push(ch);
-            }
-            _ => current.push(ch),
+impl<'a> LocatedClause<'a> {
+    fn with_source(syntax: Clause<'a>, name_source: &'a str) -> Self {
+        Self {
+            syntax,
+            name_source,
         }
     }
 
-    let trimmed = current.trim();
-    if !trimmed.is_empty() {
-        variables.push(Cow::Owned(trimmed.to_string()));
+    pub(crate) const fn name_source(&self) -> &'a str {
+        self.name_source
     }
-
-    variables
 }
 
-impl fmt::Display for Clause<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            ClauseKind::Bare => write!(f, "{}", self.name),
-            ClauseKind::Parenthesized(ref value) => write!(f, "{}({})", self.name, value),
-            ClauseKind::VariableList(variables) => {
-                write!(f, "{}({})", self.name, variables.join(", "))
-            }
-            ClauseKind::GangClause {
-                modifier,
-                space_after_colon,
-                variables,
-            } => {
-                if modifier.is_none() && variables.is_empty() {
-                    write!(f, "{}", self.name)
-                } else {
-                    write!(f, "{}(", self.name)?;
-                    if let Some(mod_val) = modifier {
-                        let mod_str = match mod_val {
-                            GangModifier::Num => "num",
-                            GangModifier::Static => "static",
-                            GangModifier::Dim => "dim",
-                        };
-                        write!(f, "{mod_str}:")?;
-                        if *space_after_colon {
-                            write!(f, " ")?;
-                        }
-                    }
-                    write!(f, "{})", variables.join(", "))
-                }
-            }
-            ClauseKind::WorkerClause {
-                modifier,
-                variables,
-            } => {
-                if modifier.is_none() && variables.is_empty() {
-                    write!(f, "{}", self.name)
-                } else {
-                    write!(f, "{}(", self.name)?;
-                    if let Some(WorkerModifier::Num) = modifier {
-                        write!(f, "num: ")?;
-                    }
-                    write!(f, "{})", variables.join(", "))
-                }
-            }
-            ClauseKind::VectorClause {
-                modifier,
-                variables,
-            } => {
-                if modifier.is_none() && variables.is_empty() {
-                    write!(f, "{}", self.name)
-                } else {
-                    write!(f, "{}(", self.name)?;
-                    if let Some(VectorModifier::Length) = modifier {
-                        write!(f, "length: ")?;
-                    }
-                    write!(f, "{})", variables.join(", "))
-                }
-            }
-            ClauseKind::CopyinClause {
-                modifier,
-                variables,
-            } => {
-                write!(f, "{}(", self.name)?;
-                if let Some(CopyinModifier::Readonly) = modifier {
-                    write!(f, "readonly: ")?;
-                }
-                write!(f, "{})", variables.join(", "))
-            }
-            ClauseKind::CopyoutClause {
-                modifier,
-                variables,
-            } => {
-                write!(f, "{}(", self.name)?;
-                if let Some(CopyoutModifier::Zero) = modifier {
-                    write!(f, "zero: ")?;
-                }
-                write!(f, "{})", variables.join(", "))
-            }
-            ClauseKind::CreateClause {
-                modifier,
-                variables,
-            } => {
-                write!(f, "{}(", self.name)?;
-                if let Some(CreateModifier::Zero) = modifier {
-                    write!(f, "zero: ")?;
-                }
-                write!(f, "{})", variables.join(", "))
-            }
-            ClauseKind::ReductionClause {
-                modifiers,
-                modifier_items,
-                operator,
-                user_defined_identifier,
-                variables,
-                space_after_colon,
-            } => {
-                write!(f, "{}(", self.name)?;
+impl<'a> Deref for LocatedClause<'a> {
+    type Target = Clause<'a>;
 
-                if !modifiers.is_empty() {
-                    for (idx, modifier) in modifiers.iter().enumerate() {
-                        if idx > 0 {
-                            write!(f, ",")?;
-                        }
-                        match modifier {
-                            ReductionModifier::Task => write!(f, "task")?,
-                            ReductionModifier::Inscan => write!(f, "inscan")?,
-                            ReductionModifier::Default => write!(f, "default")?,
-                            ReductionModifier::Original => {
-                                write!(f, "original")?;
-                                if let Some(items) = modifier_items.get(idx) {
-                                    write!(f, "(")?;
-                                    for (i, item) in items.iter().enumerate() {
-                                        if i > 0 {
-                                            write!(f, ",")?;
-                                        }
-                                        write!(f, "{item}")?;
-                                    }
-                                    write!(f, ")")?;
-                                }
-                            }
-                        }
-                    }
-                    write!(f, ",")?;
-                }
-
-                let op_str = match operator {
-                    ReductionOperator::Add => "+",
-                    ReductionOperator::Sub => "-",
-                    ReductionOperator::Mul => "*",
-                    ReductionOperator::Max => "max",
-                    ReductionOperator::Min => "min",
-                    ReductionOperator::BitAnd => "&",
-                    ReductionOperator::BitOr => "|",
-                    ReductionOperator::BitXor => "^",
-                    ReductionOperator::LogAnd => "&&",
-                    ReductionOperator::LogOr => "||",
-                    ReductionOperator::FortAnd => ".and.",
-                    ReductionOperator::FortOr => ".or.",
-                    ReductionOperator::FortEqv => ".eqv.",
-                    ReductionOperator::FortNeqv => ".neqv.",
-                    ReductionOperator::FortIand => "iand",
-                    ReductionOperator::FortIor => "ior",
-                    ReductionOperator::FortIeor => "ieor",
-                    ReductionOperator::UserDefined => {
-                        user_defined_identifier.as_deref().unwrap_or("user")
-                    }
-                };
-
-                write!(f, "{op_str}")?;
-                if *space_after_colon {
-                    write!(f, ": ")?;
-                } else {
-                    write!(f, ":")?;
-                }
-                write!(f, "{})", variables.join(", "))?;
-                Ok(())
-            }
-        }
+    fn deref(&self) -> &Self::Target {
+        &self.syntax
     }
+}
+
+impl DerefMut for LocatedClause<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.syntax
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum VariableListError {
+    EmptyItem,
+    MismatchedDelimiter,
+    UnclosedDelimiter,
+    UnclosedQuote,
+    UnclosedComment,
+}
+
+/// Split a comma-separated payload without normalizing or reconstructing it.
+/// Empty entries and malformed nesting are syntax errors, never dropped items.
+pub(crate) fn parse_variable_list(input: &str) -> Result<Vec<&str>, VariableListError> {
+    crate::delimiter::split_top_level(
+        input,
+        ',',
+        &[('(', ')'), ('[', ']'), ('{', '}')],
+        crate::delimiter::CommentStyle::Block,
+    )
+    .map_err(|error| match error {
+        crate::delimiter::DelimiterError::EmptyEntry { .. } => VariableListError::EmptyItem,
+        crate::delimiter::DelimiterError::UnterminatedQuote { .. } => {
+            VariableListError::UnclosedQuote
+        }
+        crate::delimiter::DelimiterError::UnterminatedBlockComment { .. } => {
+            VariableListError::UnclosedComment
+        }
+        crate::delimiter::DelimiterError::UnclosedDelimiter { .. } => {
+            VariableListError::UnclosedDelimiter
+        }
+        crate::delimiter::DelimiterError::UnmatchedClosing { .. }
+        | crate::delimiter::DelimiterError::MismatchedClosing { .. } => {
+            VariableListError::MismatchedDelimiter
+        }
+    })
 }
 
 #[derive(Clone, Copy)]
-pub enum ClauseRule {
+pub(crate) enum ClauseRule {
     Bare,
     Parenthesized,
     Flexible,
@@ -748,25 +541,30 @@ pub enum ClauseRule {
 }
 
 impl ClauseRule {
-    fn parse<'a>(self, name: Cow<'a, str>, input: &'a str) -> IResult<&'a str, Clause<'a>> {
+    fn parse<'a>(
+        self,
+        name: Cow<'a, str>,
+        input: &'a str,
+        case_insensitive: bool,
+    ) -> IResult<&'a str, Clause<'a>> {
         match self {
             ClauseRule::Bare => Ok((
                 input,
                 Clause {
-                    separator: crate::parser::ClauseSeparator::Space,
                     name,
                     kind: ClauseKind::Bare,
                 },
             )),
-            ClauseRule::Parenthesized => parse_parenthesized_clause(name, input),
+            ClauseRule::Parenthesized => parse_parenthesized_clause(name, input, case_insensitive),
             ClauseRule::Flexible => {
-                if starts_with_parenthesis(input) {
-                    parse_parenthesized_clause(name, input)
+                let (after_trivia, _) = skip_clause_trivia(input, case_insensitive)?;
+                if after_trivia.starts_with('(') {
+                    parse_parenthesized_clause(name, input, case_insensitive)
                 } else {
-                    ClauseRule::Bare.parse(name, input)
+                    ClauseRule::Bare.parse(name, input, case_insensitive)
                 }
             }
-            ClauseRule::Custom(parser) => parser(name, input),
+            ClauseRule::Custom(parser) => parser(name, input, case_insensitive),
             ClauseRule::Unsupported => Err(nom::Err::Failure(nom::error::Error::new(
                 input,
                 nom::error::ErrorKind::Fail,
@@ -775,32 +573,49 @@ impl ClauseRule {
     }
 }
 
-pub struct ClauseRegistry {
+pub(crate) struct ClauseRegistry {
     rules: HashMap<&'static str, ClauseRule>,
     default_rule: ClauseRule,
     case_insensitive: bool,
 }
 
 impl ClauseRegistry {
-    pub fn builder() -> ClauseRegistryBuilder {
+    pub(crate) fn builder() -> ClauseRegistryBuilder {
         ClauseRegistryBuilder::new()
     }
 
-    pub fn with_case_insensitive(mut self, enabled: bool) -> Self {
+    pub(crate) fn with_case_insensitive(mut self, enabled: bool) -> Self {
         self.case_insensitive = enabled;
         self
     }
 
-    pub fn parse_sequence<'a>(&self, input: &'a str) -> IResult<&'a str, Vec<Clause<'a>>> {
-        let (mut rest, _) = crate::lexer::skip_space_and_comments(input)?;
-        // Skip optional leading comma (for directives like "atomic read,seq_cst")
-        let (next, _) = nom::combinator::opt(nom::character::complete::char(',')).parse(rest)?;
-        rest = next;
-        let (next, _) = crate::lexer::skip_space_and_comments(rest)?;
-        rest = next;
+    pub(crate) fn keyword_eq(&self, source: &str, expected: &str) -> bool {
+        if self.case_insensitive {
+            source.eq_ignore_ascii_case(expected)
+        } else {
+            source == expected
+        }
+    }
+
+    pub(crate) const fn is_case_insensitive(&self) -> bool {
+        self.case_insensitive
+    }
+
+    pub(crate) fn skip_trivia<'a>(&self, input: &'a str) -> IResult<&'a str, &'a str> {
+        if self.case_insensitive {
+            crate::lexer::skip_fortran_space_and_comments(input)
+        } else {
+            crate::lexer::skip_space_and_comments(input)
+        }
+    }
+
+    pub(crate) fn parse_sequence<'a>(
+        &self,
+        input: &'a str,
+    ) -> IResult<&'a str, Vec<LocatedClause<'a>>> {
+        let (mut rest, _) = self.skip_trivia(input)?;
 
         let mut clauses = Vec::new();
-        let mut next_separator = crate::parser::ClauseSeparator::Space;
         loop {
             let before = rest;
             match self.parse_clause(rest) {
@@ -809,21 +624,19 @@ impl ClauseRegistry {
                     if after_clause.len() == before.len() {
                         break;
                     }
-                    clauses.push(Clause {
-                        separator: next_separator,
-                        ..clause
-                    });
+                    clauses.push(clause);
                     // Prepare for the next clause: optional whitespace/comma
-                    let (after_ws, _) = crate::lexer::skip_space_and_comments(after_clause)?;
+                    let (after_ws, _) = self.skip_trivia(after_clause)?;
                     let (after_sep, _) = nom::combinator::opt(nom::character::complete::char(','))
                         .parse(after_ws)?;
-                    let (after_ws2, _) = crate::lexer::skip_space_and_comments(after_sep)?;
+                    let (after_ws2, _) = self.skip_trivia(after_sep)?;
+                    if after_sep != after_ws && after_ws2.is_empty() {
+                        return Err(nom::Err::Error(nom::error::Error::new(
+                            after_ws,
+                            nom::error::ErrorKind::Fail,
+                        )));
+                    }
                     rest = after_ws2;
-                    next_separator = if after_sep != after_ws {
-                        crate::parser::ClauseSeparator::Comma
-                    } else {
-                        crate::parser::ClauseSeparator::Space
-                    };
                 }
                 Err(err) => {
                     if rest.is_empty() {
@@ -837,12 +650,12 @@ impl ClauseRegistry {
             }
         }
 
-        let (rest, _) = crate::lexer::skip_space_and_comments(rest)?;
+        let (rest, _) = self.skip_trivia(rest)?;
         Ok((rest, clauses))
     }
 
-    fn parse_clause<'a>(&self, input: &'a str) -> IResult<&'a str, Clause<'a>> {
-        let (input, raw_name) = lexer::lex_clause(input)?;
+    fn parse_clause<'a>(&self, input: &'a str) -> IResult<&'a str, LocatedClause<'a>> {
+        let (after_name, raw_name) = lexer::lex_clause(input)?;
 
         let collapsed = lexer::collapse_line_continuations(raw_name);
         let name = if self.case_insensitive {
@@ -877,7 +690,8 @@ impl ClauseRegistry {
                 .unwrap_or(self.default_rule)
         };
 
-        rule.parse(name, input)
+        let (rest, clause) = rule.parse(name, after_name, self.case_insensitive)?;
+        Ok((rest, LocatedClause::with_source(clause, raw_name)))
     }
 }
 
@@ -887,14 +701,14 @@ impl Default for ClauseRegistry {
     }
 }
 
-pub struct ClauseRegistryBuilder {
+pub(crate) struct ClauseRegistryBuilder {
     rules: HashMap<&'static str, ClauseRule>,
     default_rule: ClauseRule,
     case_insensitive: bool,
 }
 
 impl ClauseRegistryBuilder {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             rules: HashMap::new(),
             default_rule: ClauseRule::Flexible,
@@ -904,39 +718,37 @@ impl ClauseRegistryBuilder {
 
     // Allow construction via Default in addition to new()
 
-    pub fn register_with_rule(mut self, name: &'static str, rule: ClauseRule) -> Self {
+    #[cfg(test)]
+    pub(crate) fn register_with_rule(mut self, name: &'static str, rule: ClauseRule) -> Self {
         self.register_with_rule_mut(name, rule);
         self
     }
 
-    pub fn register_with_rule_mut(&mut self, name: &'static str, rule: ClauseRule) -> &mut Self {
+    pub(crate) fn register_with_rule_mut(
+        &mut self,
+        name: &'static str,
+        rule: ClauseRule,
+    ) -> &mut Self {
         self.rules.insert(name, rule);
         self
     }
 
-    pub fn register_bare(self, name: &'static str) -> Self {
+    #[cfg(test)]
+    pub(crate) fn register_bare(self, name: &'static str) -> Self {
         self.register_with_rule(name, ClauseRule::Bare)
     }
 
-    pub fn register_parenthesized(self, name: &'static str) -> Self {
-        self.register_with_rule(name, ClauseRule::Parenthesized)
-    }
-
-    pub fn register_custom(self, name: &'static str, parser: ClauseParserFn) -> Self {
+    #[cfg(test)]
+    pub(crate) fn register_custom(self, name: &'static str, parser: ClauseParserFn) -> Self {
         self.register_with_rule(name, ClauseRule::Custom(parser))
     }
 
-    pub fn with_default_rule(mut self, rule: ClauseRule) -> Self {
+    pub(crate) fn with_default_rule(mut self, rule: ClauseRule) -> Self {
         self.default_rule = rule;
         self
     }
 
-    pub fn with_case_insensitive(mut self, enabled: bool) -> Self {
-        self.case_insensitive = enabled;
-        self
-    }
-
-    pub fn build(self) -> ClauseRegistry {
+    pub(crate) fn build(self) -> ClauseRegistry {
         ClauseRegistry {
             rules: self.rules,
             default_rule: self.default_rule,
@@ -951,72 +763,49 @@ impl Default for ClauseRegistryBuilder {
     }
 }
 
-fn starts_with_parenthesis(input: &str) -> bool {
-    input.trim_start().starts_with('(')
+fn skip_clause_trivia(input: &str, case_insensitive: bool) -> IResult<&str, &str> {
+    if case_insensitive {
+        crate::lexer::skip_fortran_space_and_comments(input)
+    } else {
+        crate::lexer::skip_space_and_comments(input)
+    }
 }
 
 fn parse_parenthesized_clause<'a>(
     name: Cow<'a, str>,
     input: &'a str,
+    case_insensitive: bool,
 ) -> IResult<&'a str, Clause<'a>> {
-    let mut iter = input.char_indices();
-
-    while let Some((idx, ch)) = iter.next() {
-        if ch.is_whitespace() {
-            continue;
-        }
-
-        if ch != '(' {
-            return Err(nom::Err::Error(nom::error::Error::new(
-                &input[idx..],
-                nom::error::ErrorKind::Fail,
-            )));
-        }
-
-        let start = idx;
-        let mut depth = 1;
-        let mut end_index = None;
-        for (inner_idx, inner_ch) in iter.by_ref() {
-            match inner_ch {
-                '(' => depth += 1,
-                ')' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        end_index = Some(inner_idx);
-                        break;
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        let end_index = end_index.ok_or_else(|| {
+    let (parenthesized, _) = skip_clause_trivia(input, case_insensitive)?;
+    if !parenthesized.starts_with('(') {
+        return Err(nom::Err::Error(nom::error::Error::new(
+            parenthesized,
+            nom::error::ErrorKind::Fail,
+        )));
+    }
+    let start = input.len() - parenthesized.len();
+    let content_start = start + 1;
+    let end_index = lexer::find_matching_parenthesis(&input[content_start..], case_insensitive)
+        .map(|relative| content_start + relative)
+        .ok_or_else(|| {
             nom::Err::Error(nom::error::Error::new(
                 &input[start..],
                 nom::error::ErrorKind::Fail,
             ))
         })?;
 
-        let content_start = start + 1;
-        let raw_content = &input[content_start..end_index];
-        let trimmed = raw_content.trim();
-        let normalized = lexer::collapse_line_continuations(trimmed);
-        let rest = &input[end_index + 1..];
+    let raw_content = &input[content_start..end_index];
+    let trimmed = raw_content.trim();
+    let normalized = lexer::collapse_line_continuations(trimmed);
+    let rest = &input[end_index + 1..];
 
-        return Ok((
-            rest,
-            Clause {
-                separator: crate::parser::ClauseSeparator::Space,
-                name,
-                kind: ClauseKind::Parenthesized(normalized),
-            },
-        ));
-    }
-
-    Err(nom::Err::Error(nom::error::Error::new(
-        input,
-        nom::error::ErrorKind::Fail,
-    )))
+    Ok((
+        rest,
+        Clause {
+            name,
+            kind: ClauseKind::Parenthesized(normalized),
+        },
+    ))
 }
 
 #[cfg(test)]
@@ -1045,14 +834,10 @@ mod tests {
             .expect("parsing should succeed");
 
         assert_eq!(rest, "");
-        assert_eq!(
-            clauses,
-            vec![Clause {
-                separator: crate::parser::ClauseSeparator::Space,
-                name: "nowait".into(),
-                kind: ClauseKind::Bare,
-            }]
-        );
+        assert_eq!(clauses.len(), 1);
+        assert_eq!(clauses[0].name, "nowait");
+        assert_eq!(clauses[0].kind, ClauseKind::Bare);
+        assert_eq!(clauses[0].name_source(), "nowait");
     }
 
     #[test]
@@ -1070,30 +855,6 @@ mod tests {
     }
 
     #[test]
-    fn clause_display_roundtrips_bare_clause() {
-        let clause = Clause {
-            separator: crate::parser::ClauseSeparator::Space,
-            name: "nowait".into(),
-            kind: ClauseKind::Bare,
-        };
-
-        assert_eq!(clause.to_string(), "nowait");
-        assert_eq!(clause.to_source_string(), "nowait");
-    }
-
-    #[test]
-    fn clause_display_roundtrips_parenthesized_clause() {
-        let clause = Clause {
-            separator: crate::parser::ClauseSeparator::Space,
-            name: "private".into(),
-            kind: ClauseKind::Parenthesized("a, b".into()),
-        };
-
-        assert_eq!(clause.to_string(), "private(a, b)");
-        assert_eq!(clause.to_source_string(), "private(a, b)");
-    }
-
-    #[test]
     fn lookup_clause_name_canonical() {
         assert_eq!(lookup_clause_name("private"), ClauseName::Private);
         assert_eq!(lookup_clause_name("Private"), ClauseName::Private);
@@ -1107,9 +868,28 @@ mod tests {
         assert_eq!(lookup_clause_name("present_or_create"), ClauseName::Create);
     }
 
+    #[test]
+    fn variable_list_splitter_never_drops_or_repairs_items() {
+        assert_eq!(
+            parse_variable_list("array[f(a, b)], value").unwrap(),
+            ["array[f(a, b)]", "value"]
+        );
+        for (source, expected) in [
+            (",value", VariableListError::EmptyItem),
+            ("value,,other", VariableListError::EmptyItem),
+            ("value,", VariableListError::EmptyItem),
+            ("value]", VariableListError::MismatchedDelimiter),
+            ("value[", VariableListError::UnclosedDelimiter),
+            ("'value", VariableListError::UnclosedQuote),
+        ] {
+            assert_eq!(parse_variable_list(source), Err(expected), "{source:?}");
+        }
+    }
+
     fn parse_single_identifier<'a>(
         name: Cow<'a, str>,
         input: &'a str,
+        _case_insensitive: bool,
     ) -> IResult<&'a str, Clause<'a>> {
         let (input, _) = char('(')(input)?;
         let (input, identifier) = lexer::lex_clause(input)?;
@@ -1118,7 +898,6 @@ mod tests {
         Ok((
             input,
             Clause {
-                separator: crate::parser::ClauseSeparator::Space,
                 name,
                 kind: ClauseKind::Parenthesized(identifier.into()),
             },

@@ -1,86 +1,78 @@
-# ROUP: Rust-based OpenMP & OpenACC Parser
+# ROUP
 
-Rust-first parsing for OpenMP **and** OpenACC directives with C, C++, and Fortran bindings, plus compatibility shims.
+ROUP is a strict, safe Rust parser for OpenMP and OpenACC directives in C,
+C++, and Fortran source forms.
 
-[![Docs](https://img.shields.io/badge/docs-roup.ouankou.com-blue)](https://roup.ouankou.com)
-[![Status](https://img.shields.io/badge/status-experimental-orange)](https://github.com/ouankou/roup)
+[![Documentation](https://img.shields.io/badge/docs-roup.ouankou.com-blue)](https://roup.ouankou.com)
 
-> **Experimental:** APIs continue to evolve. Expect breaking changes between releases.
+## Design
 
-## Quick start
+- Successful parses contain canonical typed directive, clause, selector,
+  locator, and host-expression data.
+- Unknown syntax, malformed payloads, invalid combinations, and trailing input
+  are structured hard errors.
+- Exact specification modes reject features introduced later but continue to
+  accept standardized historical syntax, including syntax later deprecated or
+  removed.
+- Specification aliases are recognized at the grammar boundary and lowered to
+  one semantic AST shape.
+- The complete Rust parser forbids unsafe code and builds independently of the
+  optional C ABI.
+
+## Rust quick start
 
 ```toml
-# Cargo.toml
 [dependencies]
-roup = "0.7"
+roup = "0.8"
 ```
-
-```bash
-# C/C++/Fortran projects
-cargo build --release
-# Link against target/release/libroup.{a,so,dylib}
-```
-
-Platform-specific notes live in the [building guide](https://roup.ouankou.com/building.html).
-
-## Highlights
-
-- **OpenMP 3.0–6.0** and **OpenACC 3.4** coverage across directives, clauses, aliases, and combined forms.
-- **Debugger:** `roup_debug` provides interactive and non-interactive step tracing for OpenMP/OpenACC (C and Fortran sentinels).
-- **Rust, C, C++17, and Fortran** APIs with unsafe code confined to the FFI bindings.
-- **Compatibility layers:** drop-in replacements for ompparser and accparser (see `compat/`).
-- **Extensive tests:** hundreds of automated checks, an enum/safety audit, OpenMP_VV/OpenACCV-V validation, and compat ctests.
-
-## Documentation
-
-The mdBook at [roup.ouankou.com](https://roup.ouankou.com) provides tutorials, an architecture tour, and the API reference. Each chapter mirrors the sources under [`docs/book/src/`](docs/book/src/).
-
-## Minimal example (Rust)
 
 ```rust
-use roup::parser::openmp;
-use roup::lexer::Language;
+use roup::api::OpenMpConfig;
+use roup::version::{CStandard, HostLanguageProfile, SourceForm};
 
-fn main() {
-    let parser = openmp::parser().with_language(Language::C);
-    let (_, directive) = parser
-        .parse("#pragma omp parallel for num_threads(4)")
-        .expect("valid directive");
-    println!(
-        "parsed {:?} with {} clauses",
-        directive.name,
-        directive.clauses.len()
-    );
-}
+let parser = OpenMpConfig::new(
+    HostLanguageProfile::C(CStandard::C23),
+    SourceForm::Pragma,
+)?
+.parser();
+
+let parsed = parser.parse("#pragma omp parallel private(value)")?;
+assert_eq!(parsed.directive().kind().as_str(), "parallel");
+assert_eq!(parsed.directive().clauses().len(), 1);
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-More C/C++/Fortran samples live in [`examples/`](examples/). The C/OpenACC headers are generated at build time as `src/roup_constants.h`.
+Build only the safe Rust parser with `cargo build -p roup`.
 
-## Build and test
+## Optional C ABI and adapters
+
+`crates/roup-capi` provides a separate opaque-handle ABI with one audited
+foreign-memory boundary. Its checked-in header is
+[`crates/roup-capi/include/roup.h`](crates/roup-capi/include/roup.h). The ABI
+exposes typed fields and child nodes; it deliberately has no generic
+whole-payload string operation.
 
 ```bash
-cargo build --release
-cargo test
+cargo build --release -p roup-capi
+```
+
+[`compat/ompparser`](compat/ompparser) and
+[`compat/accparser`](compat/accparser) build drop-in C++ compatibility libraries
+against that ABI. Their upstream repositories are pinned git submodules.
+
+## Validation
+
+The repository gate is fail-fast and never skips a missing prerequisite:
+
+```bash
+git submodule update --init --recursive
 ./test.sh
 ```
 
-Rebuild the docs with `cargo doc --no-deps` followed by `mdbook build docs/book`.
-
-`roup_debug` is built alongside the library: `cargo run --release --bin roup_debug '#pragma omp parallel' -- --non-interactive`.
-
-## Compatibility layers
-
-- [`compat/ompparser/`](compat/ompparser/) — drop-in replacement for the original ompparser.
-- [`compat/accparser/`](compat/accparser/) — drop-in replacement for accparser with ROUP_ACC_* constants.
-
-Each directory includes a `build.sh` that builds ROUP, the shim, and runs the bundled ctest suites.
-
-## Contributing
-
-See the [contributing guide](https://roup.ouankou.com/contributing.html) for coding standards, test expectations, and the pull-request workflow.
+It checks formatting, safety invariants, the standalone publishable Rust
+package, Clippy, Rust tests and documentation, the C ABI/header,
+C/C++/Fortran examples, and both upstream compatibility test suites.
 
 ## License
 
-BSD-3-Clause License — see [LICENSE](LICENSE).
-
-© 2024–2025 Anjia Wang
+BSD-3-Clause. See [LICENSE](LICENSE).

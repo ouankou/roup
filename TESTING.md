@@ -1,86 +1,48 @@
 # Testing Guide
 
-ROUP ships two shell scripts that mirror the CI workflow. Run them before
-opening a pull request.
+The repository has two fail-fast validation entry points. Neither script skips
+missing tools, missing submodules, malformed configuration, or failing test
+families.
 
-## Essential commands
+## Complete repository gate
 
 ```bash
-# Full suite on your current toolchain
+git submodule update --init --recursive
 ./test.sh
+```
 
-# Minimum supported Rust version (MSRV) + stable
+`test.sh` validates:
+
+- formatting and the strict AST/unsafe-code audit;
+- standalone `roup`, its publishable pure-Rust package, and complete-workspace checks;
+- Clippy with warnings denied, Rust tests, benchmark compilation, and docs;
+- the checked C header with C11 and C++17 compilers;
+- release builds and ctests for the `ompparser` and `accparser` adapters;
+- C, C++, and Fortran examples.
+
+All native prerequisites and both parser submodules are required. A missing
+prerequisite is an error.
+
+## Rust toolchain gate
+
+```bash
 ./test_rust_versions.sh
+```
 
-# Optional: specify exact toolchains
+Without arguments, the script reads the exact `rust` matrix from
+`.github/workflows/ci.yml`. It errors if the matrix cannot be read. Explicit
+toolchains may be supplied when needed:
+
+```bash
 ./test_rust_versions.sh 1.88 stable
 ```
 
-## Rust toolchain policy
+For every requested toolchain, the script installs Rustfmt and Clippy and runs
+the standalone and workspace checks, the safety audit, Clippy, and all tests.
+The first failure terminates the run.
 
-- **MSRV:** 1.88.0 (aligned with mdBook 0.5.x and current dependencies). The
-  version is recorded in `Cargo.toml` and the CI workflow.
-- **Stable:** latest stable release. Clippy changes between toolchains, so we
-  test MSRV and stable to catch differences early.
-- Update the value only when a new language feature or dependency requires it.
-  When bumping MSRV, touch `Cargo.toml`, `.github/workflows/ci.yml`, and this
-  document.
+## Toolchain policy
 
-## Script reference
-
-### `test.sh`
-
-Runs the comprehensive local suite on the active toolchain:
-
-- Formatting, Clippy (`-D warnings`), debug and release builds
-- Unit, integration, and doctests
-- Example builds (Rust, C, C++, Fortran)
-- mdBook build
-- ompparser and accparser compatibility ctests (submodules are initialised automatically)
-- Enum/safety audit (`scripts/audit_enum_safety.sh`)
-- OpenMP_VV and OpenACCV-V round-trip validation (skips when prerequisites are
-  unavailable)
-
-### `test_rust_versions.sh`
-
-Validates critical checks across multiple toolchains:
-
-- Reads the toolchain list from `.github/workflows/ci.yml` so local testing stays
-  aligned with CI
-- Installs the requested toolchains via `rustup`
-- Runs formatting, enum/safety audit, Clippy, `cargo build`, and `cargo test`
-- Restores your original toolchain after finishing
-
-Use this script before a pull request or whenever CI reports a
-version-specific failure.
-
-## Continuous integration
-
-GitHub Actions runs multi-platform jobs on MSRV (1.88) and stable across Linux,
-Windows, and macOS. Linux runs the comprehensive `test.sh` suite, including the
-enum/safety audit and compatibility ctests. Windows and macOS run the Rust build,
-formatting, Clippy, tests, all-features tests, and benchmark compilation. The
-docs job rebuilds the mdBook and API documentation with warnings denied.
-
-## Validation suites
-
-The round-trip scripts live at the repository root:
-
-- `test_openmp_vv.sh` validates every pragma in the
-  [OpenMP Validation & Verification](https://github.com/OpenMP-Validation-and-Verification/OpenMP_VV)
-  repository.
-- `test_openacc_vv.sh` performs the equivalent pass for the
-  [OpenACCV-V](https://github.com/OpenACCUserGroup/OpenACCV-V) suite across both
-  C/C++ and Fortran input.
-
-Both scripts clone their upstream repositories into `target/` on first run and
-skip gracefully if required tools such as `clang` or `clang-format` are missing.
-
-## FAQ
-
-- **Why MSRV + stable?** It keeps maintenance manageable while covering the two
-  toolchains most likely to expose Clippy or compiler differences.
-- **Do I need rustup?** Yes. The scripts use `rustup` to install and select the
-  toolchains they need.
-- **Can I test other versions?** Pass additional toolchains to
-`test_rust_versions.sh`, for example `./test_rust_versions.sh 1.88 1.89 stable`.
+The minimum supported Rust version is 1.88. CI tests Rust 1.88 and the current
+stable release on Linux, Windows, and macOS. The Linux integration job also
+runs the complete native and documentation gate.

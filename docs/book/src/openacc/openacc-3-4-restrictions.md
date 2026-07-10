@@ -1,6 +1,11 @@
 # OpenACC 3.4 Directive and Clause Restrictions
 
-This digest enumerates every rule, restriction, and mandatory condition attached to OpenACC 3.4 directives and clauses. Entries are grouped by the section that defines the constraint. Page references match the official specification pagination so each item can be cross-checked word-for-word.
+This digest summarizes rules and mandatory conditions attached to OpenACC 3.4
+directives and clauses. Entries are grouped by the defining section and page
+references match the official specification pagination. ROUP rejects
+context-independent violations during `parse`; restrictions that depend on the
+surrounding program require `parse_with_facts`, and missing required facts are
+hard errors.
 
 ## Compute constructs (§2.5.4, p.36)
 - Programs must not branch into or out of a compute construct.
@@ -113,4 +118,3 @@ This digest enumerates every rule, restriction, and mandatory condition attached
 ## Clause argument rules (§2.16, p.98)
 - `async-argument` values are limited to nonnegative integers or the special constants `acc_async_default`, `acc_async_noval`, `acc_async_sync`.
 - `wait-argument` syntax `[devnum:int-expr:][queues:]async-argument-list` requires valid device numbers and async identifiers.
-

@@ -22,6 +22,36 @@ pub enum ConversionError {
     Unsupported(String),
 }
 
+impl From<super::ExpressionError> for ConversionError {
+    fn from(error: super::ExpressionError) -> Self {
+        Self::InvalidClauseSyntax(error.to_string())
+    }
+}
+
+impl From<super::IdentifierError> for ConversionError {
+    fn from(error: super::IdentifierError) -> Self {
+        Self::InvalidClauseSyntax(error.to_string())
+    }
+}
+
+impl From<super::VariableError> for ConversionError {
+    fn from(error: super::VariableError) -> Self {
+        Self::InvalidClauseSyntax(error.to_string())
+    }
+}
+
+impl From<super::LValueError> for ConversionError {
+    fn from(error: super::LValueError) -> Self {
+        Self::InvalidClauseSyntax(error.to_string())
+    }
+}
+
+impl From<crate::host::TypeNameError> for ConversionError {
+    fn from(error: crate::host::TypeNameError) -> Self {
+        Self::InvalidClauseSyntax(error.to_string())
+    }
+}
+
 impl std::fmt::Display for ConversionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

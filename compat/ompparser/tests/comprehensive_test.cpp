@@ -78,6 +78,16 @@ using DirectivePtr = std::unique_ptr<OpenMPDirective, DirectiveDeleter>;
         throw std::runtime_error(std::string("Assertion failed: ") + #a + " == " + #b); \
     }
 
+static void assert_parse_hard_error(const char* input) {
+    bool threw = false;
+    try {
+        DirectivePtr directive(parseOpenMP(input, nullptr));
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    ASSERT(threw);
+}
+
 #define ASSERT_NULL(ptr) ASSERT((ptr) == nullptr)
 #define ASSERT_NOT_NULL(ptr) ASSERT((ptr) != nullptr)
 
@@ -86,7 +96,7 @@ using DirectivePtr = std::unique_ptr<OpenMPDirective, DirectiveDeleter>;
 // ============================================================================
 
 TEST(parallel_directive) {
-    DirectivePtr dir(parseOpenMP("omp parallel", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getKind(), OMPD_parallel);
 }
@@ -98,49 +108,49 @@ TEST(parallel_with_pragma) {
 }
 
 TEST(for_directive) {
-    DirectivePtr dir(parseOpenMP("omp for", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp for", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getKind(), OMPD_for);
 }
 
 TEST(sections_directive) {
-    DirectivePtr dir(parseOpenMP("omp sections", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp sections", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getKind(), OMPD_sections);
 }
 
 TEST(single_directive) {
-    DirectivePtr dir(parseOpenMP("omp single", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp single", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getKind(), OMPD_single);
 }
 
 TEST(task_directive) {
-    DirectivePtr dir(parseOpenMP("omp task", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp task", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getKind(), OMPD_task);
 }
 
 TEST(barrier_directive) {
-    DirectivePtr dir(parseOpenMP("omp barrier", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp barrier", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getKind(), OMPD_barrier);
 }
 
 TEST(taskwait_directive) {
-    DirectivePtr dir(parseOpenMP("omp taskwait", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp taskwait", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getKind(), OMPD_taskwait);
 }
 
 TEST(critical_directive) {
-    DirectivePtr dir(parseOpenMP("omp critical", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp critical", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getKind(), OMPD_critical);
 }
 
 TEST(master_directive) {
-    DirectivePtr dir(parseOpenMP("omp master", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp master", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getKind(), OMPD_master);
 }
@@ -150,7 +160,7 @@ TEST(master_directive) {
 // ============================================================================
 
 TEST(num_threads_clause) {
-    DirectivePtr dir(parseOpenMP("omp parallel num_threads(4)", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel num_threads(4)", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getKind(), OMPD_parallel);
     
@@ -160,7 +170,7 @@ TEST(num_threads_clause) {
 }
 
 TEST(private_clause) {
-    DirectivePtr dir(parseOpenMP("omp parallel private(x)", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel private(x)", nullptr));
     ASSERT_NOT_NULL(dir.get());
     
     auto* clauses = dir->getAllClauses();
@@ -169,7 +179,7 @@ TEST(private_clause) {
 }
 
 TEST(shared_clause) {
-    DirectivePtr dir(parseOpenMP("omp parallel shared(y)", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel shared(y)", nullptr));
     ASSERT_NOT_NULL(dir.get());
     
     auto* clauses = dir->getAllClauses();
@@ -177,7 +187,7 @@ TEST(shared_clause) {
 }
 
 TEST(firstprivate_clause) {
-    DirectivePtr dir(parseOpenMP("omp parallel firstprivate(z)", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel firstprivate(z)", nullptr));
     ASSERT_NOT_NULL(dir.get());
     
     auto* clauses = dir->getAllClauses();
@@ -187,29 +197,193 @@ TEST(firstprivate_clause) {
 TEST(firstprivate_modifier_preserves_state_and_cpp_qualified_name) {
     setLang(Lang_Cplusplus);
     DirectivePtr dir(parseOpenMP(
-        "omp parallel firstprivate(target, saved: ns::value)", nullptr
+        "#pragma omp target firstprivate(target, saved: ns::value)", nullptr
     ));
     ASSERT_NOT_NULL(dir.get());
-
-    std::string str = dir->generatePragmaString();
-    ASSERT(str.find("firstprivate(target, saved: ns::value)") != std::string::npos);
+    auto *clauses = dir->getClauses(OMPC_firstprivate);
+    ASSERT(clauses != nullptr && clauses->size() == 1);
+    auto *firstprivate =
+        dynamic_cast<OpenMPFirstprivateClause *>(clauses->front());
+    ASSERT(firstprivate != nullptr);
+    ASSERT(firstprivate->hasDirectiveNameModifier());
+    ASSERT(firstprivate->getDirectiveNameModifier() == OMPD_target);
+    ASSERT(firstprivate->isSaved());
+    ASSERT(firstprivate->getExpressions()->size() == 1);
+    ASSERT(std::string(firstprivate->getExpressions()->front()) == "ns::value");
     setLang(Lang_C);
 }
 
-TEST(induction_preserves_adjacent_operator_spacing) {
+TEST(induction_requires_a_structured_upstream_api) {
+    assert_parse_hard_error(
+        "#pragma omp parallel for induction(step(i - -1), *: index)");
+}
+
+TEST(apply_requires_structured_applied_directives_upstream) {
+    assert_parse_hard_error(
+        "#pragma omp tile sizes(4) apply(grid: reverse)");
+}
+
+TEST(prefer_type_requires_structured_preferences_upstream) {
+    assert_parse_hard_error(
+        "#pragma omp interop init(prefer_type({fr(\"cuda\")}), target: object)");
+}
+
+TEST(declare_induction_requires_a_structured_upstream_api) {
+    assert_parse_hard_error(
+        "#pragma omp declare induction (+ : int, (long, short)) "
+        "collector(omp_out + omp_in) inductor(omp_priv + omp_step)");
+}
+
+TEST(declare_reduction_preserves_historical_and_current_semantics) {
+    DirectivePtr historical(parseOpenMP(
+        "#pragma omp declare reduction(sum : int : omp_out += omp_in) "
+        "initializer(omp_priv = 0)",
+        nullptr
+    ));
+    ASSERT_NOT_NULL(historical.get());
+    ASSERT_EQ(historical->getKind(), OMPD_declare_reduction);
+    auto* historical_reduction =
+        dynamic_cast<OpenMPDeclareReductionDirective*>(historical.get());
+    ASSERT_NOT_NULL(historical_reduction);
+    ASSERT_EQ(historical_reduction->getIdentifier(), std::string("sum"));
+    ASSERT_EQ(historical_reduction->getCombiner(),
+              std::string("omp_out += omp_in"));
+    auto* historical_types = historical_reduction->getTypenameList();
+    ASSERT_NOT_NULL(historical_types);
+    ASSERT_EQ(historical_types->size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(std::string(historical_types->at(0)), std::string("int"));
+    const std::string historical_text = historical->generatePragmaString();
+    ASSERT(historical_text.find(
+               "declare reduction(sum : int : omp_out += omp_in)") !=
+           std::string::npos);
+    ASSERT(historical_text.find("initializer(omp_priv = 0)") !=
+           std::string::npos);
+
+    setLang(Lang_Cplusplus);
+    DirectivePtr current(parseOpenMP(
+        "#pragma omp declare_reduction(ns::merge<int> : std::vector<int>) "
+        "combiner(omp_out += omp_in) initializer(omp_priv(omp_orig))",
+        nullptr
+    ));
+    setLang(Lang_C);
+    ASSERT_NOT_NULL(current.get());
+    ASSERT_EQ(current->getKind(), OMPD_declare_reduction);
+    auto* current_reduction =
+        dynamic_cast<OpenMPDeclareReductionDirective*>(current.get());
+    ASSERT_NOT_NULL(current_reduction);
+    ASSERT_EQ(current_reduction->getIdentifier(),
+              std::string("ns::merge<int>"));
+    ASSERT_EQ(current_reduction->getCombiner(),
+              std::string("omp_out += omp_in"));
+    auto* current_types = current_reduction->getTypenameList();
+    ASSERT_NOT_NULL(current_types);
+    ASSERT_EQ(current_types->size(), static_cast<std::size_t>(1));
+    ASSERT_EQ(std::string(current_types->at(0)),
+              std::string("std::vector < int >"));
+    const std::string current_text = current->generatePragmaString();
+    ASSERT(current_text.find("ns::merge<int>") != std::string::npos);
+    ASSERT(current_text.find("std::vector < int >") != std::string::npos);
+    ASSERT(current_text.find("initializer(omp_priv(omp_orig))") !=
+           std::string::npos);
+}
+
+TEST(declare_reduction_preserves_cpp_operator_function_id) {
+    setLang(Lang_Cplusplus);
     DirectivePtr dir(parseOpenMP(
-        "omp parallel induction(step(i - -1), k: a + +b)", nullptr
+        "#pragma omp declare_reduction(ns::operator+ : widget) "
+        "combiner(omp_out += omp_in) initializer(omp_priv = omp_orig)",
+        nullptr
+    ));
+    setLang(Lang_C);
+    ASSERT_NOT_NULL(dir.get());
+    auto* reduction = dynamic_cast<OpenMPDeclareReductionDirective*>(dir.get());
+    ASSERT_NOT_NULL(reduction);
+    ASSERT_EQ(reduction->getIdentifier(), std::string("ns::operator+"));
+    ASSERT_EQ(reduction->getCombiner(), std::string("omp_out += omp_in"));
+    const std::string str = dir->generatePragmaString();
+    ASSERT(str.find("ns::operator+") != std::string::npos);
+    ASSERT(str.find("initializer(omp_priv = omp_orig)") != std::string::npos);
+}
+
+TEST(declare_reduction_preserves_fortran_ids_and_assignments) {
+    setLang(Lang_Fortran);
+    DirectivePtr historical(parseOpenMP(
+        "!$omp declare reduction(IAND : integer : "
+        "omp_out = iand(omp_in, omp_out)) initializer(omp_priv = 0)",
+        nullptr
+    ));
+    setLang(Lang_C);
+    ASSERT_NOT_NULL(historical.get());
+    auto* intrinsic =
+        dynamic_cast<OpenMPDeclareReductionDirective*>(historical.get());
+    ASSERT_NOT_NULL(intrinsic);
+    ASSERT_EQ(intrinsic->getIdentifier(), std::string("iand"));
+    ASSERT_EQ(intrinsic->getCombiner(),
+              std::string("omp_out = iand(omp_in, omp_out)"));
+    const std::string historical_text = historical->generatePragmaString();
+    ASSERT(historical_text.find(
+               "declare reduction(iand : integer : "
+               "omp_out = iand(omp_in, omp_out))") != std::string::npos);
+    ASSERT(historical_text.find("initializer(omp_priv = 0)") !=
+           std::string::npos);
+
+    setLang(Lang_Fortran);
+    DirectivePtr current(parseOpenMP(
+        "!$omp declare_reduction(.COMBINE. : integer) "
+        "combiner(omp_out = combine_values(omp_out, omp_in)) "
+        "initializer(omp_priv = omp_orig)",
+        nullptr
+    ));
+    setLang(Lang_C);
+    ASSERT_NOT_NULL(current.get());
+    auto* defined = dynamic_cast<OpenMPDeclareReductionDirective*>(current.get());
+    ASSERT_NOT_NULL(defined);
+    ASSERT_EQ(defined->getIdentifier(), std::string(".combine."));
+    ASSERT_EQ(defined->getCombiner(),
+              std::string("omp_out = combine_values(omp_out, omp_in)"));
+    const std::string current_text = current->generatePragmaString();
+    ASSERT(current_text.find(".combine.") != std::string::npos);
+    ASSERT(current_text.find("omp_out = combine_values(omp_out, omp_in)") !=
+           std::string::npos);
+    ASSERT(current_text.find("initializer(omp_priv = omp_orig)") !=
+           std::string::npos);
+}
+
+TEST(declare_induction_cpp_ids_hard_error_without_passthrough) {
+    setLang(Lang_Cplusplus);
+    assert_parse_hard_error(
+        "#pragma omp declare_induction(ns::step<int> : (state_t, step_t)) "
+        "inductor(omp_var += omp_step) collector(omp_step * omp_idx)");
+
+    assert_parse_hard_error(
+        "#pragma omp declare_induction(ns::operator+ : (state_t, step_t)) "
+        "inductor(omp_var += omp_step) collector(omp_step * omp_idx)");
+    setLang(Lang_C);
+}
+
+TEST(expression_lists_preserve_order_and_nested_commas) {
+    DirectivePtr dir(parseOpenMP(
+        "#pragma omp tile sizes(f(1, 2), n + 1)", nullptr
     ));
     ASSERT_NOT_NULL(dir.get());
 
-    std::string str = dir->generatePragmaString();
-    ASSERT(str.find("step(i- -1)") != std::string::npos);
-    ASSERT(str.find("k: a+ +b") != std::string::npos);
+    const std::string str = dir->generatePragmaString();
+    ASSERT(str.find("sizes(f(1, 2), n + 1)") != std::string::npos);
+}
+
+TEST(detach_preserves_one_typed_event_locator) {
+    DirectivePtr dir(parseOpenMP(
+        "#pragma omp task detach(event_handle)", nullptr
+    ));
+    ASSERT_NOT_NULL(dir.get());
+
+    const std::string str = dir->generatePragmaString();
+    ASSERT(str.find("detach(event_handle)") != std::string::npos);
 }
 
 TEST(multiple_clauses) {
     DirectivePtr dir(parseOpenMP(
-        "omp parallel num_threads(4) private(x) shared(y)", nullptr
+        "#pragma omp parallel num_threads(4) private(x) shared(y)", nullptr
     ));
     ASSERT_NOT_NULL(dir.get());
     
@@ -219,7 +393,7 @@ TEST(multiple_clauses) {
 }
 
 TEST(reduction_clause) {
-    DirectivePtr dir(parseOpenMP("omp parallel reduction(+:sum)", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel reduction(+:sum)", nullptr));
     ASSERT_NOT_NULL(dir.get());
 
     auto* clauses = dir->getAllClauses();
@@ -250,16 +424,16 @@ TEST(multiline_fortran_directive) {
         "!$omp& private(i, j)";
 
     DirectivePtr dir(parseOpenMP(input, nullptr));
-    ASSERT_NOT_NULL(dir.get());
-    ASSERT_EQ(dir->getKind(), OMPD_target_teams_distribute_parallel_for);
-    auto* clauses = dir->getAllClauses();
-    ASSERT_NOT_NULL(clauses);
-    ASSERT_EQ(clauses->size(), 1);
+    const auto kind = dir->getKind();
+    const auto clause_count = dir->getAllClauses()->size();
     setLang(Lang_C);
+    ASSERT_NOT_NULL(dir.get());
+    ASSERT_EQ(kind, OMPD_target_teams_distribute_parallel_do);
+    ASSERT_EQ(clause_count, 1);
 }
 
 TEST(schedule_clause) {
-    DirectivePtr dir(parseOpenMP("omp for schedule(static, 64)", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp for schedule(static, 64)", nullptr));
     ASSERT_NOT_NULL(dir.get());
     
     auto* clauses = dir->getAllClauses();
@@ -267,7 +441,7 @@ TEST(schedule_clause) {
 }
 
 TEST(if_clause) {
-    DirectivePtr dir(parseOpenMP("omp parallel if(n > 1000)", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel if(n > 1000)", nullptr));
     ASSERT_NOT_NULL(dir.get());
     
     auto* clauses = dir->getAllClauses();
@@ -275,7 +449,7 @@ TEST(if_clause) {
 }
 
 TEST(nowait_clause) {
-    DirectivePtr dir(parseOpenMP("omp for nowait", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp for nowait", nullptr));
     ASSERT_NOT_NULL(dir.get());
     
     auto* clauses = dir->getAllClauses();
@@ -287,7 +461,7 @@ TEST(nowait_clause) {
 // ============================================================================
 
 TEST(toString_basic) {
-    DirectivePtr dir(parseOpenMP("omp parallel", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel", nullptr));
     ASSERT_NOT_NULL(dir.get());
     
     std::string str = dir->toString();
@@ -295,7 +469,7 @@ TEST(toString_basic) {
 }
 
 TEST(toString_with_clause) {
-    DirectivePtr dir(parseOpenMP("omp parallel num_threads(4)", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel num_threads(4)", nullptr));
     ASSERT_NOT_NULL(dir.get());
     
     std::string str = dir->toString();
@@ -303,7 +477,7 @@ TEST(toString_with_clause) {
 }
 
 TEST(generatePragmaString_default) {
-    DirectivePtr dir(parseOpenMP("omp parallel", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel", nullptr));
     ASSERT_NOT_NULL(dir.get());
     
     std::string str = dir->generatePragmaString();
@@ -312,7 +486,7 @@ TEST(generatePragmaString_default) {
 }
 
 TEST(generatePragmaString_custom_prefix) {
-    DirectivePtr dir(parseOpenMP("omp parallel", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel", nullptr));
     ASSERT_NOT_NULL(dir.get());
     
     std::string str = dir->generatePragmaString("!$omp ", "", "");
@@ -324,28 +498,23 @@ TEST(generatePragmaString_custom_prefix) {
 // ============================================================================
 
 TEST(null_input) {
-    DirectivePtr dir(parseOpenMP(nullptr, nullptr));
-    ASSERT_NULL(dir.get());
+    assert_parse_hard_error(nullptr);
 }
 
 TEST(empty_string) {
-    DirectivePtr dir(parseOpenMP("", nullptr));
-    ASSERT_NULL(dir.get());
+    assert_parse_hard_error("");
 }
 
 TEST(invalid_directive) {
-    DirectivePtr dir(parseOpenMP("omp invalidstuff", nullptr));
-    ASSERT_NULL(dir.get());
+    assert_parse_hard_error("#pragma omp invalidstuff");
 }
 
 TEST(malformed_pragma) {
-    DirectivePtr dir(parseOpenMP("pragma omp parallel", nullptr));
-    ASSERT_NULL(dir.get());
+    assert_parse_hard_error("pragma omp parallel");
 }
 
 TEST(garbage_input) {
-    DirectivePtr dir(parseOpenMP("asdfjkl;", nullptr));
-    ASSERT_NULL(dir.get());
+    assert_parse_hard_error("asdfjkl;");
 }
 
 // ============================================================================
@@ -354,7 +523,7 @@ TEST(garbage_input) {
 
 TEST(multiple_allocations) {
     for (int i = 0; i < 100; i++) {
-        DirectivePtr dir(parseOpenMP("omp parallel", nullptr));
+        DirectivePtr dir(parseOpenMP("#pragma omp parallel", nullptr));
         ASSERT_NOT_NULL(dir.get());
         // DirectivePtr automatically cleans up
     }
@@ -366,7 +535,7 @@ TEST(delete_null_safe) {
 }
 
 TEST(reuse_same_input) {
-    const char* input = "omp parallel num_threads(4)";
+    const char* input = "#pragma omp parallel num_threads(4)";
     
     DirectivePtr dir1(parseOpenMP(input, nullptr));
     ASSERT_NOT_NULL(dir1.get());
@@ -382,30 +551,27 @@ TEST(reuse_same_input) {
 
 TEST(lang_c) {
     setLang(Lang_C);
-    DirectivePtr dir(parseOpenMP("omp parallel", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getBaseLang(), Lang_C);
 }
 
 TEST(lang_cpp) {
     setLang(Lang_Cplusplus);
-    DirectivePtr dir(parseOpenMP("omp parallel", nullptr));
+    DirectivePtr dir(parseOpenMP("#pragma omp parallel", nullptr));
     ASSERT_NOT_NULL(dir.get());
     ASSERT_EQ(dir->getBaseLang(), Lang_Cplusplus);
 }
 
 TEST(lang_fortran) {
-    // TODO: Fortran parsing not yet supported - requires ROUP C API language parameter.
-    // For now, this test only verifies setLang() works; actual parsing is skipped.
     setLang(Lang_Fortran);
-    
-    // This will fail until ROUP's C API supports language parameter
-    // Skipping actual parse test for now
-    std::cout << "  ⚠ SKIP: Fortran parsing requires ROUP C API enhancement" << std::endl;
-    std::cout << "  ✓ PASS (setLang works, parsing TODO)" << std::endl;
-    
-    // Reset to C for subsequent tests
+    DirectivePtr dir(parseOpenMP("!$omp parallel private(i)", nullptr));
+    const auto language = dir->getBaseLang();
+    const auto kind = dir->getKind();
     setLang(Lang_C);
+    ASSERT_NOT_NULL(dir.get());
+    ASSERT_EQ(language, Lang_Fortran);
+    ASSERT_EQ(kind, OMPD_parallel);
 }
 
 // ============================================================================
@@ -414,7 +580,7 @@ TEST(lang_fortran) {
 
 TEST(complex_parallel_for) {
     DirectivePtr dir(parseOpenMP(
-        "omp parallel for num_threads(4) schedule(static, 64) private(i) reduction(+:sum)",
+        "#pragma omp parallel for num_threads(4) schedule(static, 64) private(i) reduction(+:sum)",
         nullptr
     ));
     ASSERT_NOT_NULL(dir.get());
@@ -429,7 +595,7 @@ TEST(complex_parallel_for) {
 
 TEST(nested_clause_parsing) {
     DirectivePtr dir(parseOpenMP(
-        "omp parallel if(parallel: n > 100) num_threads(omp_get_max_threads())",
+        "#pragma omp parallel if(parallel: n > 100) num_threads(omp_get_max_threads())",
         nullptr
     ));
     ASSERT_NOT_NULL(dir.get());
@@ -445,6 +611,9 @@ int main() {
     std::cout << "========================================" << std::endl;
     std::cout << std::endl;
     
+    assert_parse_hard_error("#pragma omp parallel");
+    setLang(Lang_C);
+
     // Run all tests
     std::cout << "--- Basic Directive Tests ---" << std::endl;
     run_parallel_directive();
@@ -465,9 +634,20 @@ int main() {
     run_shared_clause();
     run_firstprivate_clause();
     run_firstprivate_modifier_preserves_state_and_cpp_qualified_name();
-    run_induction_preserves_adjacent_operator_spacing();
+    run_induction_requires_a_structured_upstream_api();
+    run_apply_requires_structured_applied_directives_upstream();
+    run_prefer_type_requires_structured_preferences_upstream();
+    run_declare_induction_requires_a_structured_upstream_api();
+    run_declare_reduction_preserves_historical_and_current_semantics();
+    run_declare_reduction_preserves_cpp_operator_function_id();
+    run_declare_reduction_preserves_fortran_ids_and_assignments();
+    run_declare_induction_cpp_ids_hard_error_without_passthrough();
+    run_expression_lists_preserve_order_and_nested_commas();
+    run_detach_preserves_one_typed_event_locator();
     run_multiple_clauses();
     run_reduction_clause();
+    run_multiline_c_directive();
+    run_multiline_fortran_directive();
     run_schedule_clause();
     run_if_clause();
     run_nowait_clause();

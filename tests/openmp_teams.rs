@@ -1,83 +1,78 @@
-use roup::parser::{clause::ReductionOperator, ClauseKind, Parser};
-use std::borrow::Cow;
+use roup::api::{OpenMpConfig, OpenMpParser};
+use roup::ast::{OmpDirectiveKind, OmpReductionIdentifier};
+use roup::ir::{ClauseData, ClauseItem, OrderKind, ScheduleKind};
+use roup::version::{CStandard, HostLanguageProfile, SourceForm};
 
-fn parse(input: &str) -> roup::parser::Directive<'_> {
-    let parser = Parser::default();
-    let (_, directive) = parser.parse(input).expect("directive should parse");
-    directive
+fn parser() -> OpenMpParser {
+    OpenMpConfig::new(HostLanguageProfile::C(CStandard::C23), SourceForm::Pragma)
+        .unwrap()
+        .parser()
 }
 
-#[test]
-fn parses_teams_with_reductions() {
-    let directive = parse("#pragma omp teams num_teams(8) thread_limit(32) reduction(+:total)");
-
-    assert_eq!(directive.name, "teams");
-    assert_eq!(directive.clauses.len(), 3);
-    assert_eq!(directive.clauses[0].name, "num_teams");
-    assert_eq!(
-        directive.clauses[0].kind,
-        ClauseKind::Parenthesized("8".into())
-    );
-    assert_eq!(directive.clauses[1].name, "thread_limit");
-    assert_eq!(
-        directive.clauses[1].kind,
-        ClauseKind::Parenthesized("32".into())
-    );
-    assert_eq!(directive.clauses[2].name, "reduction");
-    match &directive.clauses[2].kind {
-        ClauseKind::ReductionClause {
-            operator,
-            user_defined_identifier,
-            variables,
-            ..
-        } => {
-            assert_eq!(*operator, ReductionOperator::Add);
-            assert!(user_defined_identifier.is_none());
-            assert_eq!(variables, &vec![Cow::from("total")]);
-        }
-        other => panic!("expected reduction clause, got {other:?}"),
+fn item_name(item: &ClauseItem) -> &str {
+    match item {
+        ClauseItem::Identifier(identifier) => identifier.as_str(),
+        ClauseItem::Variable(variable) => variable.expression().source(),
+        ClauseItem::FortranCommonBlock(name) => name.as_str(),
+        ClauseItem::Expression(expression) => expression.source(),
     }
 }
 
 #[test]
-fn parses_teams_distribute_parallel_loop() {
-    let directive = parse(
-        "#pragma omp teams distribute parallel loop collapse(3) allocate(pmem:buf) order(concurrent)",
-    );
+fn teams_limits_and_reduction_are_typed() {
+    let parsed = parser()
+        .parse("#pragma omp teams num_teams(8) thread_limit(32) reduction(+:total)")
+        .expect("valid teams directive");
+    let directive = parsed.directive();
 
-    assert_eq!(directive.name, "teams distribute parallel loop");
-    assert_eq!(directive.clauses.len(), 3);
-    assert_eq!(directive.clauses[0].name, "collapse");
-    assert_eq!(
-        directive.clauses[0].kind,
-        ClauseKind::Parenthesized("3".into())
-    );
-    assert_eq!(directive.clauses[1].name, "allocate");
-    assert_eq!(
-        directive.clauses[1].kind,
-        ClauseKind::Parenthesized("pmem:buf".into())
-    );
-    assert_eq!(directive.clauses[2].name, "order");
-    assert_eq!(
-        directive.clauses[2].kind,
-        ClauseKind::Parenthesized("concurrent".into())
-    );
+    assert_eq!(directive.kind(), OmpDirectiveKind::Teams);
+    let ClauseData::NumTeams { upper_bound, .. } = directive.clauses()[0].payload() else {
+        panic!("expected num_teams payload");
+    };
+    assert_eq!(upper_bound.source(), "8");
+    let ClauseData::ThreadLimit { limit } = directive.clauses()[1].payload() else {
+        panic!("expected thread_limit payload");
+    };
+    assert_eq!(limit.source(), "32");
+    let ClauseData::Reduction {
+        operator, items, ..
+    } = directive.clauses()[2].payload()
+    else {
+        panic!("expected reduction payload");
+    };
+    assert_eq!(operator, &OmpReductionIdentifier::Add);
+    assert_eq!(items.iter().map(item_name).collect::<Vec<_>>(), ["total"]);
 }
 
 #[test]
-fn parses_teams_distribute_with_dist_schedule() {
-    let directive = parse("#pragma omp teams distribute dist_schedule(static,4) collapse(2)");
+fn teams_loop_and_distribute_modifiers_are_structured() {
+    let loop_directive = parser()
+        .parse("#pragma omp teams distribute parallel loop collapse(3) order(concurrent)")
+        .expect("valid teams loop");
+    assert_eq!(
+        loop_directive.directive().kind(),
+        OmpDirectiveKind::TeamsDistributeParallelLoop
+    );
+    let ClauseData::Collapse { n } = loop_directive.directive().clauses()[0].payload() else {
+        panic!("expected collapse payload");
+    };
+    assert_eq!(n.source(), "3");
+    assert!(matches!(
+        loop_directive.directive().clauses()[1].payload(),
+        ClauseData::Order {
+            modifier: None,
+            kind: OrderKind::Concurrent
+        }
+    ));
 
-    assert_eq!(directive.name, "teams distribute");
-    assert_eq!(directive.clauses.len(), 2);
-    assert_eq!(directive.clauses[0].name, "dist_schedule");
-    assert_eq!(
-        directive.clauses[0].kind,
-        ClauseKind::Parenthesized("static,4".into()),
-    );
-    assert_eq!(directive.clauses[1].name, "collapse");
-    assert_eq!(
-        directive.clauses[1].kind,
-        ClauseKind::Parenthesized("2".into())
-    );
+    let distribute = parser()
+        .parse("#pragma omp teams distribute dist_schedule(static,4) collapse(2)")
+        .expect("valid teams distribute");
+    let ClauseData::DistSchedule { kind, chunk_size } =
+        distribute.directive().clauses()[0].payload()
+    else {
+        panic!("expected dist_schedule payload");
+    };
+    assert_eq!(*kind, ScheduleKind::Static);
+    assert_eq!(chunk_size.as_ref().map(|value| value.source()), Some("4"));
 }

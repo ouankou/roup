@@ -1,391 +1,117 @@
-//! Language-aware helpers for parsing clause items.
+//! Language-aware helpers for clause syntax.
 //!
-//! The core IR conversion logic treats clause payloads generically.  This
-//! module provides just enough C/C++/Fortran awareness to interpret
-//! OpenMP-specific constructs such as array sections while keeping the
-//! feature easy to disable via [`ParserConfig`].
+//! Clause items are parsed exactly once by the host-language expression
+//! parser. Classification into identifier, variable designator, or general
+//! expression is a structural inspection of that tree. No string rendering,
+//! synthetic expression generation, or second array-section representation is
+//! involved.
 
-use super::{
-    ArraySection, ClauseItem, ConversionError, Expression, Identifier, Language, ParserConfig,
-    Variable,
-};
+use super::{ClauseItem, ConversionError, Expression, Identifier, ParserConfig, Variable};
+use crate::delimiter::{self, CommentStyle};
+use crate::host::{ExprKind, HostLanguage, QualifiedName};
 
 /// Parse a comma separated list of clause items using language aware rules.
 pub fn parse_clause_item_list(
     content: &str,
     config: &ParserConfig,
 ) -> Result<Vec<ClauseItem>, ConversionError> {
-    if !config.language_semantics_enabled() {
-        return Ok(fallback_identifier_list(content));
-    }
-
-    let language = config.language();
-    let segments = split_top_level(content, ',', &[('[', ']'), ('(', ')')]);
-    let mut items = Vec::new();
+    let segments = split_top_level(content, ',', &[('[', ']'), ('(', ')')])?;
+    let mut items = Vec::with_capacity(segments.len());
 
     for raw in segments {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "clause item lists must not contain empty entries".to_string(),
+            ));
+        }
+
+        if let Some(common_block) = parse_fortran_common_block(trimmed, config)? {
+            items.push(ClauseItem::FortranCommonBlock(common_block));
             continue;
         }
 
-        // If it contains a top-level '[' then treat as C-like variable with array sections
-        // Detect C-like array sections by splitting on top-level '[' (pairs empty
-        // so '[' is recognized unless inside quotes/templates).
-        if split_top_level(trimmed, '[', &[] as &[(char, char)]).len() > 1 {
-            match parse_c_like_variable(trimmed, config) {
-                Ok(variable) => items.push(ClauseItem::Variable(variable)),
-                Err(_) => items.push(ClauseItem::Expression(Expression::new(trimmed, config))),
-            }
-            continue;
-        }
-
-        // Fortran form: name(...) with parentheses. Use a simple contains +
-        // ends_with check and let parse_fortran_variable handle nesting properly.
-        if matches!(language, Language::Fortran) && trimmed.contains('(') && trimmed.ends_with(')')
-        {
-            match parse_fortran_variable(trimmed, config) {
-                Ok(Some(variable)) => {
-                    items.push(ClauseItem::Variable(variable));
-                    continue;
-                }
-                Ok(None) => {}
-                Err(_) => {
-                    items.push(ClauseItem::Expression(Expression::new(trimmed, config)));
-                    continue;
-                }
-            }
-        }
-
-        if looks_like_identifier(trimmed) {
-            items.push(ClauseItem::Identifier(Identifier::new(trimmed)));
-            continue;
-        }
-
-        items.push(ClauseItem::Expression(Expression::new(trimmed, config)));
+        let expression = Expression::new(trimmed, config)?;
+        items.push(classify_clause_item(expression)?);
     }
 
     Ok(items)
 }
 
-fn fallback_identifier_list(content: &str) -> Vec<ClauseItem> {
-    content
-        .split(',')
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| ClauseItem::Identifier(Identifier::new(s)))
-        .collect()
-}
-
-fn parse_c_like_variable(value: &str, config: &ParserConfig) -> Result<Variable, ConversionError> {
-    let name_end = value.find('[').ok_or_else(|| {
-        ConversionError::InvalidClauseSyntax(format!("expected array designator in `{value}`"))
-    })?;
-
-    let name = value[..name_end].trim();
-    if name.is_empty() {
-        return Err(ConversionError::InvalidClauseSyntax(format!(
-            "missing variable name before array section in `{value}`"
-        )));
-    }
-
-    let mut sections = Vec::new();
-    let mut rest = &value[name_end..];
-    while rest.starts_with('[') {
-        let (content, remaining) = extract_bracket_content(rest, '[', ']')?;
-        let section = parse_array_section(content, config, false)?; // C uses lower:length
-        sections.push(section);
-        rest = remaining.trim_start();
-    }
-
-    if !rest.trim().is_empty() {
-        return Err(ConversionError::InvalidClauseSyntax(format!(
-            "unexpected trailing characters `{}` in `{}`",
-            rest.trim(),
-            value
-        )));
-    }
-
-    Ok(Variable::with_sections(name, sections))
-}
-
-fn parse_fortran_variable(
-    value: &str,
+fn parse_fortran_common_block(
+    source: &str,
     config: &ParserConfig,
-) -> Result<Option<Variable>, ConversionError> {
-    let trimmed = value.trim();
-    let Some(paren_pos) = trimmed.find('(') else {
+) -> Result<Option<Identifier>, ConversionError> {
+    if config.host_language() != HostLanguage::Fortran {
         return Ok(None);
+    }
+
+    if !source.starts_with('/') && !source.ends_with('/') {
+        return Ok(None);
+    }
+    let Some(name) = source
+        .strip_prefix('/')
+        .and_then(|inner| inner.strip_suffix('/'))
+        .map(str::trim)
+        .filter(|name| !name.is_empty() && !name.contains('/'))
+    else {
+        return Err(ConversionError::InvalidClauseSyntax(
+            "malformed Fortran named common block; expected `/name/`".to_string(),
+        ));
     };
 
-    let name = trimmed[..paren_pos].trim();
-    if name.is_empty() {
-        return Err(ConversionError::InvalidClauseSyntax(format!(
-            "missing variable name before parenthesis in `{value}`"
-        )));
-    }
-
-    let section_part = &trimmed[paren_pos..];
-    let (content, remainder) = extract_bracket_content(section_part, '(', ')')?;
-    if !remainder.trim().is_empty() {
-        return Err(ConversionError::InvalidClauseSyntax(format!(
-            "unexpected trailing characters `{}` in `{}`",
-            remainder.trim(),
-            value
-        )));
-    }
-
-    let mut sections = Vec::new();
-    if !content.trim().is_empty() {
-        for dimension in split_top_level(content, ',', &[('(', ')'), ('[', ']')]) {
-            let section = parse_array_section(dimension, config, true)?; // Fortran uses lower:upper
-            sections.push(section);
-        }
-    }
-
-    let variable = if sections.is_empty() {
-        Variable::new(name)
-    } else {
-        Variable::with_sections(name, sections)
-    };
-
-    Ok(Some(variable.with_original(trimmed)))
+    Identifier::new(name.to_ascii_lowercase())
+        .map(Some)
+        .map_err(ConversionError::from)
 }
 
-fn parse_array_section(
-    value: &str,
-    config: &ParserConfig,
-    is_fortran: bool,
-) -> Result<ArraySection, ConversionError> {
-    let trimmed = value.trim();
-
-    if trimmed.is_empty() {
-        return Ok(ArraySection::all());
+fn classify_clause_item(expression: Expression) -> Result<ClauseItem, ConversionError> {
+    if let ExprKind::Name(QualifiedName {
+        global: false,
+        segments,
+    }) = &expression.ast().kind
+    {
+        if segments.len() == 1 {
+            return Ok(ClauseItem::Identifier(segments[0].clone()));
+        }
     }
 
-    let parts = split_top_level(trimmed, ':', &[('(', ')'), ('[', ']')]);
-    match parts.len() {
-        1 => {
-            let expr = Expression::new(parts[0], config);
-            Ok(ArraySection::single_index(expr))
-        }
-        2 => {
-            let lower = if parts[0].is_empty() {
-                None
-            } else {
-                Some(Expression::new(parts[0], config))
-            };
-
-            // Fortran uses lower:upper, C uses lower:length
-            let length = if parts[1].is_empty() {
-                None
-            } else if is_fortran {
-                // Convert Fortran upper bound to length: length = upper - lower + 1
-                let upper = Expression::new(parts[1], config);
-                Some(fortran_upper_to_length(lower.as_ref(), upper, None, config))
-            } else {
-                Some(Expression::new(parts[1], config))
-            };
-            let mut section = ArraySection::new(lower, length, None);
-            section.has_length = true;
-            Ok(section)
-        }
-        3 => {
-            let lower = if parts[0].is_empty() {
-                None
-            } else {
-                Some(Expression::new(parts[0], config))
-            };
-
-            let stride = if parts[2].is_empty() {
-                None
-            } else {
-                Some(Expression::new(parts[2], config))
-            };
-
-            // Fortran uses lower:upper:stride, C uses lower:length:stride
-            let length = if parts[1].is_empty() {
-                None
-            } else if is_fortran {
-                // Convert Fortran upper bound to length with stride: ((upper - lower) / stride) + 1
-                let upper = Expression::new(parts[1], config);
-                Some(fortran_upper_to_length(
-                    lower.as_ref(),
-                    upper,
-                    stride.as_ref(),
-                    config,
-                ))
-            } else {
-                Some(Expression::new(parts[1], config))
-            };
-
-            let mut section = ArraySection::new(lower, length, stride);
-            section.has_length = true;
-            section.has_stride = true;
-            Ok(section)
-        }
-        _ => Err(ConversionError::InvalidClauseSyntax(format!(
-            "too many ':' separators in array section `{value}`"
-        ))),
+    if Variable::is_designator_expression(&expression) {
+        return Variable::from_expression(expression)
+            .map(ClauseItem::Variable)
+            .map_err(|error| ConversionError::InvalidClauseSyntax(error.to_string()));
     }
+
+    Ok(ClauseItem::Expression(expression))
 }
 
-/// Convert Fortran upper bound to length expression with optional stride
-///
-/// Fortran array sections use lower:upper[:stride] syntax where both bounds are inclusive.
-/// ArraySection stores length, so we convert:
-/// - Without stride: length = upper - lower + 1
-/// - With stride: length = ((upper - lower) / stride) + 1
-///
-/// # Examples
-///
-/// - `A(5:10)` → lower=5, upper=10 → length = (10 - 5 + 1) = 6 elements
-/// - `A(:10)` → lower=implicit 1, upper=10 → length = 10 elements
-/// - `A(1:N)` → lower=1, upper=N → length = N elements
-/// - `A(1:10:2)` → lower=1, upper=10, stride=2 → length = ((10 - 1) / 2) + 1 = 5 elements
-fn fortran_upper_to_length(
-    lower: Option<&Expression>,
-    upper: Expression,
-    stride: Option<&Expression>,
-    config: &ParserConfig,
-) -> Expression {
-    match (lower, stride) {
-        (Some(lower_expr), Some(stride_expr)) => {
-            // With explicit lower and stride: ((upper - lower) / stride) + 1
-            Expression::new(
-                format!(
-                    "((({}) - ({})) / ({}) + 1)",
-                    upper.as_str(),
-                    lower_expr.as_str(),
-                    stride_expr.as_str()
-                ),
-                config,
-            )
-        }
-        (Some(lower_expr), None) => {
-            // With explicit lower, no stride: (upper - lower + 1)
-            Expression::new(
-                format!("(({}) - ({}) + 1)", upper.as_str(), lower_expr.as_str()),
-                config,
-            )
-        }
-        (None, Some(stride_expr)) => {
-            // No lower (implicit 1), with stride: ((upper - 1) / stride) + 1
-            Expression::new(
-                format!(
-                    "((({}) - 1) / ({}) + 1)",
-                    upper.as_str(),
-                    stride_expr.as_str()
-                ),
-                config,
-            )
-        }
-        (None, None) => {
-            // No lower (implicit 1), no stride: upper - 1 + 1 = upper
-            upper
-        }
-    }
+pub(crate) fn split_top_level<'a>(
+    input: &'a str,
+    separator: char,
+    pairs: &[(char, char)],
+) -> Result<Vec<&'a str>, ConversionError> {
+    delimiter::split_top_level(input, separator, pairs, CommentStyle::Block)
+        .map_err(invalid_split_syntax)
 }
 
-fn split_top_level<'a>(input: &'a str, separator: char, pairs: &[(char, char)]) -> Vec<&'a str> {
-    let mut segments = Vec::new();
-    let mut start = 0;
-    let mut stack: Vec<char> = Vec::new();
-    let mut in_single_quote = false;
-    let mut in_double_quote = false;
-    let mut angle_depth = 0usize;
-
-    let chars: Vec<(usize, char)> = input.char_indices().collect();
-    let mut i = 0;
-
-    while i < chars.len() {
-        let (idx, ch) = chars[i];
-        let prev = if i > 0 { Some(chars[i - 1].1) } else { None };
-        let next = chars.get(i + 1).map(|(_, c)| *c);
-
-        // Track quote state
-        match ch {
-            '\'' if !in_double_quote => {
-                in_single_quote = !in_single_quote;
-            }
-            '"' if !in_single_quote => {
-                in_double_quote = !in_double_quote;
-            }
-            _ if in_single_quote || in_double_quote => {
-                // Inside quotes, skip delimiter checking
-            }
-            '<' if stack.is_empty() => {
-                // Detect C++ templates
-                if is_template_start(prev, next) {
-                    angle_depth += 1;
-                }
-            }
-            '>' if angle_depth > 0 && stack.is_empty() => {
-                // Close template - handle >> as two closings for nested templates
-                // Skip only if this is part of >>= or >= (comparison operators)
-                if matches!(next, Some('=')) && !matches!(prev, Some('>')) {
-                    // This is >= comparison, skip it
-                } else {
-                    // This is either a single > or part of >> (nested template closing)
-                    // Both should decrement angle_depth
-                    angle_depth = angle_depth.saturating_sub(1);
-                }
-            }
-            _ if !in_single_quote && !in_double_quote => {
-                // Track paired delimiters
-                if let Some(&(_, close)) = pairs.iter().find(|(open, _)| *open == ch) {
-                    stack.push(close);
-                } else if stack.last().copied() == Some(ch) {
-                    stack.pop();
-                }
-            }
-            _ => {}
-        }
-
-        // Split at separator only if not inside any structure
-        if ch == separator
-            && stack.is_empty()
-            && angle_depth == 0
-            && !in_single_quote
-            && !in_double_quote
-        {
-            segments.push(input[start..idx].trim());
-            start = idx + ch.len_utf8();
-        }
-
-        i += 1;
-    }
-
-    segments.push(input[start..].trim());
-    segments
-}
-
-/// Check if '<' is likely a template start rather than comparison operator.
-fn is_template_start(prev: Option<char>, next: Option<char>) -> bool {
-    let is_prev_valid =
-        matches!(prev, Some(c) if c.is_alphanumeric() || c == '_' || c == ':' || c == '>');
-    let is_next_disqualifier = matches!(next, Some('=') | Some('<') | Some('>'));
-    is_prev_valid && !is_next_disqualifier
+fn invalid_split_syntax(error: impl std::fmt::Display) -> ConversionError {
+    ConversionError::InvalidClauseSyntax(error.to_string())
 }
 
 /// Split the input once at the first top-level occurrence of `delimiter`.
 ///
-/// Returns None if the delimiter is not found at the top level.
-pub fn split_once_top_level(input: &str, delimiter: char) -> Option<(&str, &str)> {
-    find_top_level_delimiter(input, delimiter, false).map(|idx| {
-        let next = idx + delimiter.len_utf8();
-        (&input[..idx], &input[next..])
-    })
-}
-
-/// Split the input once at the last top-level occurrence of `delimiter`.
-///
-/// Returns None if the delimiter is not found at the top level.
-pub fn rsplit_once_top_level(input: &str, delimiter: char) -> Option<(&str, &str)> {
-    find_top_level_delimiter(input, delimiter, true).map(|idx| {
-        let next = idx + delimiter.len_utf8();
-        (&input[..idx], &input[next..])
-    })
+/// Returns `Ok(None)` if the delimiter is not found at the top level and an
+/// error if the input contains malformed nesting or an unclosed quote.
+pub fn split_once_top_level(
+    input: &str,
+    delimiter: char,
+) -> Result<Option<(&str, &str)>, ConversionError> {
+    Ok(
+        find_top_level_delimiter(input, delimiter, false)?.map(|idx| {
+            let next = idx + delimiter.len_utf8();
+            (&input[..idx], &input[next..])
+        }),
+    )
 }
 
 /// Find the first (or last) top-level occurrence of a delimiter.
@@ -393,80 +119,13 @@ pub fn rsplit_once_top_level(input: &str, delimiter: char) -> Option<(&str, &str
 /// Respects nesting of parentheses, brackets, braces, and quotes.
 /// For colon delimiter, also handles ternary operator (? :) disambiguation
 /// and C++ scope operator (::) to avoid false matches.
-fn find_top_level_delimiter(input: &str, delimiter: char, from_end: bool) -> Option<usize> {
-    let mut depth_paren = 0i32;
-    let mut depth_bracket = 0i32;
-    let mut depth_brace = 0i32;
-    let mut ternary_depth = 0i32;
-    let mut in_single_quote = false;
-    let mut in_double_quote = false;
-    let mut result: Option<usize> = None;
-
-    let chars: Vec<(usize, char)> = input.char_indices().collect();
-
-    for i in 0..chars.len() {
-        let (idx, ch) = chars[i];
-        let next_ch = chars.get(i + 1).map(|(_, c)| *c);
-        let prev_ch = if i > 0 { Some(chars[i - 1].1) } else { None };
-
-        // Track quote state
-        match ch {
-            '\'' if !in_double_quote => {
-                in_single_quote = !in_single_quote;
-                continue;
-            }
-            '"' if !in_single_quote => {
-                in_double_quote = !in_double_quote;
-                continue;
-            }
-            _ if in_single_quote || in_double_quote => {
-                continue;
-            }
-            _ => {}
-        }
-
-        // Track delimiter depth
-        match ch {
-            '(' => depth_paren += 1,
-            ')' => {
-                if depth_paren > 0 {
-                    depth_paren -= 1;
-                }
-            }
-            '[' => depth_bracket += 1,
-            ']' => {
-                if depth_bracket > 0 {
-                    depth_bracket -= 1;
-                }
-            }
-            '{' => depth_brace += 1,
-            '}' => {
-                if depth_brace > 0 {
-                    depth_brace -= 1;
-                }
-            }
-            '?' if delimiter == ':' => ternary_depth += 1,
-            ':' if delimiter == ':' && ternary_depth > 0 => {
-                ternary_depth -= 1;
-                continue;
-            }
-            _ => {}
-        }
-
-        if ch == delimiter && depth_paren == 0 && depth_bracket == 0 && depth_brace == 0 {
-            // Skip C++ scope operator :: when delimiter is :
-            if delimiter == ':' && (prev_ch == Some(':') || next_ch == Some(':')) {
-                continue;
-            }
-
-            result = Some(idx);
-            if !from_end {
-                break;
-            }
-        }
-    }
-
-    result
+fn find_top_level_delimiter(
+    input: &str,
+    delimiter: char,
+    from_end: bool,
+) -> Result<Option<usize>, ConversionError> {
+    delimiter::find_top_level_delimiter(input, delimiter, from_end, CommentStyle::Block)
+        .map_err(invalid_split_syntax)
 }
 
 /// Extract content from a bracketed section, handling nesting.
@@ -486,67 +145,68 @@ pub(crate) fn extract_bracket_content(
         )));
     }
 
-    let mut depth = 0;
-    let mut start_idx = None;
-    for (idx, ch) in input.char_indices() {
-        if ch == open {
-            depth += 1;
-            if depth == 1 {
-                start_idx = Some(idx + open.len_utf8());
-            }
-        } else if ch == close {
-            depth -= 1;
-            if depth == 0 {
-                let start = start_idx.expect("opening bracket must set start index");
-                let content = &input[start..idx];
-                let rest = &input[idx + close.len_utf8()..];
-                return Ok((content, rest));
-            }
-        }
-    }
-
-    Err(ConversionError::InvalidClauseSyntax(format!(
-        "unterminated `{open}` block in `{input}`"
-    )))
+    let closing = delimiter::find_matching_delimiter(input, 0, open, close, CommentStyle::Block)
+        .map_err(invalid_split_syntax)?
+        .ok_or_else(|| {
+            ConversionError::InvalidClauseSyntax(format!(
+                "unterminated `{open}` block in `{input}`"
+            ))
+        })?;
+    let content_start = open.len_utf8();
+    Ok((
+        &input[content_start..closing],
+        &input[closing + close.len_utf8()..],
+    ))
 }
 
-fn looks_like_identifier(value: &str) -> bool {
-    let mut chars = value.chars();
-    match chars.next() {
-        Some(ch) if is_identifier_start(ch) => chars.all(is_identifier_continue),
-        _ => false,
-    }
+pub(crate) fn find_matching_delimiter(
+    input: &str,
+    open_position: usize,
+    open: char,
+    close: char,
+) -> Result<Option<usize>, ConversionError> {
+    delimiter::find_matching_delimiter(input, open_position, open, close, CommentStyle::Block)
+        .map_err(invalid_split_syntax)
 }
 
-fn is_identifier_start(ch: char) -> bool {
-    ch.is_alphabetic() || ch == '_'
-}
-
-fn is_identifier_continue(ch: char) -> bool {
-    ch.is_alphanumeric() || ch == '_'
+pub(crate) fn find_matching_after_open(
+    input: &str,
+    open: char,
+    close: char,
+) -> Result<Option<usize>, ConversionError> {
+    delimiter::find_matching_after_open(input, open, close, CommentStyle::Block)
+        .map_err(invalid_split_syntax)
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::host::{FortranArgument, SectionSemantics, Subscript};
+    use crate::version::HostLanguage;
+
     use super::*;
 
-    fn config_for(language: Language) -> ParserConfig {
-        ParserConfig::with_parsing(language)
+    fn config_for(language: HostLanguage) -> ParserConfig {
+        ParserConfig::from_language(language)
     }
 
     #[test]
     fn parses_c_array_sections() {
-        let config = config_for(Language::C);
+        let config = config_for(HostLanguage::C);
         let items = parse_clause_item_list("arr[0:N], scalar", &config).unwrap();
 
         assert_eq!(items.len(), 2);
         match &items[0] {
             ClauseItem::Variable(var) => {
-                assert_eq!(var.name(), "arr");
-                assert_eq!(var.array_sections.len(), 1);
-                let section = &var.array_sections[0];
-                assert!(section.lower_bound.is_some());
-                assert!(section.length.is_some());
+                assert_eq!(var.dimensions(), 1);
+                let ExprKind::Subscript { subscript, .. } = &var.ast().kind else {
+                    panic!("expected typed subscript")
+                };
+                let Subscript::Section(section) = subscript else {
+                    panic!("expected typed section")
+                };
+                assert_eq!(section.semantics, SectionSemantics::CLength);
+                assert!(section.lower.is_some());
+                assert!(section.upper_or_length.is_some());
             }
             other => panic!("expected variable, got {other:?}"),
         }
@@ -554,86 +214,45 @@ mod tests {
 
     #[test]
     fn parses_fortran_parentheses_sections() {
-        let config = config_for(Language::Fortran);
+        let config = config_for(HostLanguage::Fortran);
         let items = parse_clause_item_list("A(1:N), B(:, :)", &config).unwrap();
         assert_eq!(items.len(), 2);
         assert!(matches!(items[1], ClauseItem::Variable(_)));
     }
 
     #[test]
-    fn falls_back_to_identifier_when_disabled() {
-        let mut config = ParserConfig::with_parsing(Language::C);
-        config = config.with_language_semantics(false);
-        let items = parse_clause_item_list("arr[0:N]", &config).unwrap();
-        assert!(matches!(items[0], ClauseItem::Identifier(_)));
+    fn malformed_item_does_not_fall_back_to_an_identifier() {
+        let config = ParserConfig::c();
+        assert!(parse_clause_item_list("arr[0:@]", &config).is_err());
     }
 
     #[test]
-    fn parses_cpp_templates_without_splitting() {
-        let config = config_for(Language::Cpp);
-        let items = parse_clause_item_list("std::map<int, float>[idx], data", &config).unwrap();
-        assert_eq!(items.len(), 2);
-        match &items[0] {
-            ClauseItem::Variable(var) => {
-                // The template part should be preserved in the variable name
-                assert!(var.name().contains("std::map"));
-                assert_eq!(var.array_sections.len(), 1);
-            }
-            other => panic!("expected variable with template, got {other:?}"),
-        }
+    fn non_designator_array_base_does_not_fall_back_to_an_expression() {
+        let config = ParserConfig::c();
+        let items = parse_clause_item_list("make_array()[0:N]", &config).unwrap();
+        assert!(matches!(items.as_slice(), [ClauseItem::Expression(_)]));
     }
 
     #[test]
-    fn parses_nested_cpp_templates() {
-        // Nested templates like std::vector<std::pair<int,int>> use >> closing
-        let config = config_for(Language::Cpp);
-        let items =
-            parse_clause_item_list("std::vector<std::pair<int,int>>, other", &config).unwrap();
-        assert_eq!(items.len(), 2);
-        match &items[0] {
-            ClauseItem::Expression(expr) => {
-                // Should preserve the entire nested template type
-                assert!(expr.as_str().contains("std::vector<std::pair<int,int>>"));
-            }
-            other => panic!("expected expression with nested template, got {other:?}"),
-        }
-        match &items[1] {
-            ClauseItem::Identifier(id) => {
-                assert_eq!(id.as_str(), "other");
-            }
-            other => panic!("expected identifier 'other', got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn parses_deeply_nested_templates() {
-        // Test even deeper nesting: map<string, vector<pair<int,int>>>
-        let config = config_for(Language::Cpp);
-        let items = parse_clause_item_list(
+    fn unsupported_cpp_template_designators_are_hard_errors() {
+        let config = config_for(HostLanguage::Cpp);
+        for source in [
+            "std::map<int, float>[idx], data",
+            "std::vector<std::pair<int,int>>, other",
             "std::map<std::string, std::vector<std::pair<int,int>>>, x",
-            &config,
-        )
-        .unwrap();
-        assert_eq!(items.len(), 2);
-        match &items[0] {
-            ClauseItem::Expression(expr) => {
-                assert!(expr.as_str().contains("std::map"));
-                assert!(expr.as_str().contains("std::vector"));
-                assert!(expr.as_str().contains("std::pair"));
-            }
-            other => panic!("expected expression with deeply nested template, got {other:?}"),
+        ] {
+            assert!(parse_clause_item_list(source, &config).is_err());
         }
     }
 
     #[test]
     fn parses_nested_array_sections() {
-        let config = config_for(Language::C);
+        let config = config_for(HostLanguage::C);
         let items = parse_clause_item_list("matrix[0:N][i:j]", &config).unwrap();
         assert_eq!(items.len(), 1);
         match &items[0] {
             ClauseItem::Variable(var) => {
-                assert_eq!(var.name(), "matrix");
-                assert_eq!(var.array_sections.len(), 2);
+                assert_eq!(var.dimensions(), 2);
             }
             other => panic!("expected nested array sections, got {other:?}"),
         }
@@ -641,223 +260,226 @@ mod tests {
 
     #[test]
     fn handles_fortran_multi_dimensional_arrays() {
-        let config = config_for(Language::Fortran);
+        let config = config_for(HostLanguage::Fortran);
         let items = parse_clause_item_list("field(1:n, :, 2:m:2)", &config).unwrap();
         assert_eq!(items.len(), 1);
         match &items[0] {
             ClauseItem::Variable(var) => {
-                assert_eq!(var.name(), "field");
-                assert_eq!(var.array_sections.len(), 3);
-                // Third dimension should have stride
-                assert!(var.array_sections[2].stride.is_some());
+                assert_eq!(var.dimensions(), 3);
+                let ExprKind::FortranApply { arguments, .. } = &var.ast().kind else {
+                    panic!("expected Fortran designator")
+                };
+                let FortranArgument::Section(section) = &arguments[2] else {
+                    panic!("expected section triplet")
+                };
+                assert!(section.stride.is_some());
             }
             other => panic!("expected Fortran multi-dimensional array, got {other:?}"),
         }
     }
 
     #[test]
-    fn preserves_fortran_variable_original_spelling() {
-        let config = config_for(Language::Fortran);
+    fn fortran_variable_contains_typed_dimensions() {
+        let config = config_for(HostLanguage::Fortran);
         let items = parse_clause_item_list("val(a,b,c)", &config).unwrap();
         match &items[0] {
-            ClauseItem::Variable(var) => assert_eq!(var.original(), Some("val(a,b,c)")),
-            other => panic!("expected variable with preserved spelling, got {other:?}"),
+            ClauseItem::Variable(var) => {
+                assert_eq!(var.dimensions(), 3);
+            }
+            other => panic!("expected typed Fortran variable, got {other:?}"),
         }
     }
 
     #[test]
     fn split_once_respects_parentheses() {
         // Colon is inside parentheses, should not be found at top level
-        let result = super::split_once_top_level("map(to: arr)", ':');
+        let result = super::split_once_top_level("map(to: arr)", ':').unwrap();
         assert_eq!(result, None);
 
         // Colon is outside parentheses
-        let result = super::split_once_top_level("type: value(with:colon)", ':');
+        let result = super::split_once_top_level("type: value(with:colon)", ':').unwrap();
         assert_eq!(result, Some(("type", " value(with:colon)")));
     }
 
     #[test]
-    fn rsplit_once_finds_last_top_level() {
-        let result = super::rsplit_once_top_level("i: j: k", ':');
-        assert_eq!(result, Some(("i: j", " k")));
-    }
-
-    #[test]
     fn split_ignores_colon_in_ternary() {
-        let result = super::split_once_top_level("x = a ? b : c, y", ',');
+        let result = super::split_once_top_level("x = a ? b : c, y", ',').unwrap();
         assert_eq!(result, Some(("x = a ? b : c", " y")));
     }
 
     #[test]
     fn split_respects_quotes() {
-        let config = config_for(Language::C);
+        let config = config_for(HostLanguage::C);
         let items = parse_clause_item_list(r#"str = "a,b,c", value"#, &config).unwrap();
         assert_eq!(items.len(), 2);
     }
 
     #[test]
+    fn comparisons_are_not_implicitly_treated_as_cpp_templates() {
+        let config = config_for(HostLanguage::Cpp);
+        let items = parse_clause_item_list("a<b,c>d", &config).unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].to_string(), "a < b");
+        assert_eq!(items[1].to_string(), "c > d");
+    }
+
+    #[test]
+    fn angle_tracking_is_enabled_only_when_requested() {
+        let items = split_top_level(
+            "std::pair<int,float>,long",
+            ',',
+            &[('(', ')'), ('[', ']'), ('<', '>')],
+        )
+        .unwrap();
+        assert_eq!(items, ["std::pair<int,float>", "long"]);
+    }
+
+    #[test]
+    fn malformed_top_level_lists_are_hard_errors() {
+        let pairs = &[('(', ')'), ('[', ']'), ('{', '}')];
+        for source in [
+            "",
+            "a,,b",
+            ",a",
+            "a,",
+            "f(a,b",
+            "a],b",
+            "f(a],b",
+            r#""unterminated,a"#,
+            r#"'unterminated,a"#,
+        ] {
+            assert!(
+                split_top_level(source, ',', pairs).is_err(),
+                "{source:?} must be rejected"
+            );
+        }
+        assert!(split_top_level("a>,b", ',', &[('<', '>')]).is_err());
+    }
+
+    #[test]
+    fn split_once_validates_the_entire_input() {
+        for source in ["kind:value(foo", "kind:value]", r#"kind:"value"#] {
+            assert!(
+                split_once_top_level(source, ':').is_err(),
+                "{source:?} must be rejected"
+            );
+        }
+    }
+
+    #[test]
     fn ignores_cpp_scope_operator() {
         // C++ scope operator :: should not be treated as colon delimiter
-        let result = super::split_once_top_level("std::vector<int>", ':');
+        let result = super::split_once_top_level("std::vector<int>", ':').unwrap();
         assert_eq!(result, None); // No top-level colon, only ::
 
         // Test that actual delimiter after :: still works
-        let result = super::split_once_top_level("std::type: value", ':');
+        let result = super::split_once_top_level("std::type: value", ':').unwrap();
         assert_eq!(result, Some(("std::type", " value")));
 
-        // Test parsing map clause with C++ scoped types
-        let config = config_for(Language::Cpp);
-        let items = parse_clause_item_list("std::vector<int>& buf", &config).unwrap();
+        // A supported qualified expression stays typed.
+        let config = config_for(HostLanguage::Cpp);
+        let items = parse_clause_item_list("std::value + offset", &config).unwrap();
         assert_eq!(items.len(), 1);
         match &items[0] {
             ClauseItem::Expression(expr) => {
-                // Should preserve the :: in the type name
-                assert!(expr.as_str().contains("std::vector"));
+                assert_eq!(expr.to_string(), "std::value + offset");
             }
-            other => panic!("expected expression with C++ scope operator, got {other:?}"),
+            other => panic!("expected qualified expression, got {other:?}"),
         }
     }
 
     #[test]
     fn handles_empty_array_sections() {
-        let config = config_for(Language::C);
+        let config = config_for(HostLanguage::C);
         let items = parse_clause_item_list("arr[:]", &config).unwrap();
         assert_eq!(items.len(), 1);
         match &items[0] {
-            ClauseItem::Variable(var) => {
-                let section = &var.array_sections[0];
-                assert!(section.lower_bound.is_none());
-                assert!(section.length.is_none());
-            }
+            ClauseItem::Variable(var) => assert_eq!(var.to_string(), "arr[:]"),
             other => panic!("expected variable with empty section, got {other:?}"),
         }
     }
 
     #[test]
-    fn fortran_converts_upper_bound_to_length() {
-        // Fortran: A(5:10) means elements 5,6,7,8,9,10 = 6 elements
-        let config = config_for(Language::Fortran);
+    fn fortran_preserves_upper_bound_without_synthetic_reparse() {
+        let config = config_for(HostLanguage::Fortran);
         let items = parse_clause_item_list("A(5:10)", &config).unwrap();
-        assert_eq!(items.len(), 1);
-
-        match &items[0] {
-            ClauseItem::Variable(var) => {
-                assert_eq!(var.name(), "A");
-                assert_eq!(var.array_sections.len(), 1);
-                let section = &var.array_sections[0];
-
-                // Lower bound should be 5
-                assert_eq!(section.lower_bound.as_ref().unwrap().as_str(), "5");
-
-                // Length should be computed as (10 - 5 + 1)
-                assert_eq!(
-                    section.length.as_ref().unwrap().as_str(),
-                    "((10) - (5) + 1)"
-                );
-            }
-            other => panic!("expected Fortran variable with array section, got {other:?}"),
-        }
+        let ClauseItem::Variable(var) = &items[0] else {
+            panic!("expected Fortran variable")
+        };
+        assert_eq!(var.to_string(), "a(5:10)");
+        let ExprKind::FortranApply { arguments, .. } = &var.ast().kind else {
+            panic!("expected Fortran application")
+        };
+        let FortranArgument::Section(section) = &arguments[0] else {
+            panic!("expected section")
+        };
+        assert_eq!(section.semantics, SectionSemantics::FortranUpperBound);
+        assert_eq!(
+            section
+                .lower
+                .as_ref()
+                .map(|expression| expression.canonical(HostLanguage::Fortran).to_string())
+                .as_deref(),
+            Some("5")
+        );
+        assert_eq!(
+            section
+                .upper_or_length
+                .as_ref()
+                .map(|expression| expression.canonical(HostLanguage::Fortran).to_string())
+                .as_deref(),
+            Some("10")
+        );
     }
 
     #[test]
-    fn fortran_implicit_lower_bound_is_1() {
-        // Fortran: A(:10) means elements 1-10 = 10 elements
-        let config = config_for(Language::Fortran);
+    fn fortran_implicit_lower_bound_remains_implicit() {
+        let config = config_for(HostLanguage::Fortran);
         let items = parse_clause_item_list("A(:10)", &config).unwrap();
         assert_eq!(items.len(), 1);
 
-        match &items[0] {
-            ClauseItem::Variable(var) => {
-                assert_eq!(var.name(), "A");
-                let section = &var.array_sections[0];
-
-                // No explicit lower bound
-                assert!(section.lower_bound.is_none());
-
-                // Length should be 10 (upper bound when lower is implicit 1)
-                assert_eq!(section.length.as_ref().unwrap().as_str(), "10");
-            }
-            other => panic!("expected Fortran variable, got {other:?}"),
-        }
+        let ClauseItem::Variable(var) = &items[0] else {
+            panic!("expected Fortran variable")
+        };
+        assert_eq!(var.to_string(), "a(:10)");
     }
 
     #[test]
     fn c_uses_length_not_upper_bound() {
         // C: arr[5:10] means 10 elements starting at index 5
-        let config = config_for(Language::C);
+        let config = config_for(HostLanguage::C);
         let items = parse_clause_item_list("arr[5:10]", &config).unwrap();
         assert_eq!(items.len(), 1);
 
-        match &items[0] {
-            ClauseItem::Variable(var) => {
-                assert_eq!(var.name(), "arr");
-                let section = &var.array_sections[0];
-
-                // Lower bound should be 5
-                assert_eq!(section.lower_bound.as_ref().unwrap().as_str(), "5");
-
-                // Length should be 10 (not converted)
-                assert_eq!(section.length.as_ref().unwrap().as_str(), "10");
-            }
-            other => panic!("expected C variable, got {other:?}"),
-        }
+        let ClauseItem::Variable(var) = &items[0] else {
+            panic!("expected C variable")
+        };
+        assert_eq!(var.to_string(), "arr[5:10]");
     }
 
     #[test]
     fn fortran_accounts_for_stride_in_length() {
         // Fortran: A(1:10:2) means elements 1,3,5,7,9 = 5 elements
-        let config = config_for(Language::Fortran);
+        let config = config_for(HostLanguage::Fortran);
         let items = parse_clause_item_list("A(1:10:2)", &config).unwrap();
         assert_eq!(items.len(), 1);
 
-        match &items[0] {
-            ClauseItem::Variable(var) => {
-                assert_eq!(var.name(), "A");
-                let section = &var.array_sections[0];
-
-                // Lower bound should be 1
-                assert_eq!(section.lower_bound.as_ref().unwrap().as_str(), "1");
-
-                // Stride should be 2
-                assert_eq!(section.stride.as_ref().unwrap().as_str(), "2");
-
-                // Length should be ((10 - 1) / 2) + 1 = 5
-                assert_eq!(
-                    section.length.as_ref().unwrap().as_str(),
-                    "(((10) - (1)) / (2) + 1)"
-                );
-            }
-            other => panic!("expected Fortran variable with stride, got {other:?}"),
-        }
+        let ClauseItem::Variable(var) = &items[0] else {
+            panic!("expected Fortran variable")
+        };
+        assert_eq!(var.to_string(), "a(1:10:2)");
     }
 
     #[test]
     fn fortran_stride_with_implicit_lower_bound() {
         // Fortran: A(:10:3) means elements 1,4,7,10 = 4 elements
-        let config = config_for(Language::Fortran);
+        let config = config_for(HostLanguage::Fortran);
         let items = parse_clause_item_list("A(:10:3)", &config).unwrap();
         assert_eq!(items.len(), 1);
 
-        match &items[0] {
-            ClauseItem::Variable(var) => {
-                assert_eq!(var.name(), "A");
-                let section = &var.array_sections[0];
-
-                // No explicit lower bound (implicit 1)
-                assert!(section.lower_bound.is_none());
-
-                // Stride should be 3
-                assert_eq!(section.stride.as_ref().unwrap().as_str(), "3");
-
-                // Length should be ((10 - 1) / 3) + 1 = 4
-                assert_eq!(
-                    section.length.as_ref().unwrap().as_str(),
-                    "(((10) - 1) / (3) + 1)"
-                );
-            }
-            other => {
-                panic!("expected Fortran variable with implicit lower and stride, got {other:?}")
-            }
-        }
+        let ClauseItem::Variable(var) = &items[0] else {
+            panic!("expected Fortran variable")
+        };
+        assert_eq!(var.to_string(), "a(:10:3)");
     }
 }

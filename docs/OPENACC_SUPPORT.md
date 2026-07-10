@@ -1,63 +1,54 @@
 # OpenACC coverage
 
-ROUP implements the complete OpenACC 3.4 directive and clause surface. The
-canonical keyword catalogue lives in the mdBook chapter
-[`docs/book/src/openacc/openacc-3-4-directives-clauses.md`](book/src/openacc/openacc-3-4-directives-clauses.md),
-which cross-references every entry against the [OpenACC Application Programming
-Interface Version 3.4](https://www.openacc.org/sites/default/files/inline-files/OpenACC-3.4.pdf)
-specification.
+ROUP parses the standardized OpenACC 1.0 through 3.4 syntax surface in C, C++,
+and Fortran source forms. The reference chapters cross-check the OpenACC 3.4
+vocabulary and restrictions against the
+[OpenACC 3.4 specification](https://www.openacc.org/sites/default/files/inline-images/Specification/OpenACC-3.4.pdf):
 
-## Directive support matrix
+- [Directive and clause catalogue](book/src/openacc/openacc-3-4-directives-clauses.md)
+- [Directive-clause matrix](book/src/openacc/openacc-3-4-directive-clause-matrix.md)
+- [Restriction digest](book/src/openacc/openacc-3-4-restrictions.md)
 
-| Category            | Directives                                                                 |
-| ------------------- | -------------------------------------------------------------------------- |
-| Compute             | `parallel`, `serial`, `kernels`                                            |
-| Loop                | `loop`, `parallel loop`, `serial loop`, `kernels loop`                     |
-| Data                | `data`, `enter data`, `exit data`, `host_data` (space and underscore forms) |
-| Synchronisation     | `atomic`, `cache`, `wait`                                                  |
-| Declaration         | `declare`, `routine`                                                       |
-| Runtime             | `init`, `shutdown`, `set`, `update`                                        |
-| Terminators & other | `end <directive>` with full multi-word names                               |
+## Public parsing contract
 
-All directive spellings (including synonyms such as `host data`, `host_data`,
-`enter data`, and `enter_data`) are registered in the parser and mirrored into
-the C API and the accparser compatibility shim. The new
-`tests/openacc_keyword_coverage.rs` integration suite exercises every directive
-string and validates round-tripping through `Directive::to_pragma_string`.【F:tests/openacc_keyword_coverage.rs†L6-L71】【F:tests/openacc_keyword_coverage.rs†L101-L164】
+Use `OpenAccConfig` with an explicit host profile, source form, and either the
+default union policy or an exact `OpenAccVersion`. Exact mode is an introduction
+ceiling: it rejects syntax standardized later than the selected version while
+continuing to accept all older standardized syntax.
 
-## Clause coverage
+Directives, directive parameters, clauses, data modifiers, locators, queue
+expressions, reduction operators, and host expressions are returned as typed
+AST data. The `cache`, `wait`, and `routine` directive parameters are parsed
+once into dedicated parameter types. Unknown and malformed forms never become
+raw payload strings.
 
-| Category                | Clauses and aliases                                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Parallelism & control   | `async`, `wait`, `num_gangs`, `num_workers`, `vector_length`, `gang`, `worker`, `vector`, `seq`, `independent`, `auto`    |
-| Conditionals            | `if`, `if_present`, `self`, `default`, `default_async`                                                                    |
-| Data movement           | `copy`, `copyin`, `copyout`, `create`, `delete`, `present`, `no_create`, `device`, `deviceptr`, `device_resident`, `host` |
-| Pointer management      | `attach`, `detach`, `link`, `use_device`                                                                                  |
-| Sharing & reductions    | `private`, `firstprivate`, `reduction`                                                                                    |
-| Loop transforms         | `collapse`, `tile`                                                                                                        |
-| Device specialisation   | `device_type`, alias `dtype`                                                                                              |
-| Atomic modifiers        | `read`, `write`, `capture`, `update`                                                                                      |
-| Synonym aliases         | `pcopy`, `present_or_copy`, `pcopyin`, `present_or_copyin`, `pcopyout`, `present_or_copyout`, `pcreate`, `present_or_create` |
+## Standard aliases
 
-Clause registration keeps the original surface spelling. Alias spellings share
-the same numeric identifiers in the C API so existing code can treat them as
-synonyms while retaining the original source text. The parser-level coverage
-suite validates every clause and alias (including atomic update as a bare
-clause), and the C API tests assert that aliases collapse to the same integer
-kind IDs as their canonical forms.【F:tests/openacc_keyword_coverage.rs†L101-L164】【F:tests/openacc_c_api.rs†L9-L76】
+OpenACC standard aliases are accepted and canonicalized. This includes
+`dtype` and the historical `pcopy*`, `pcreate`, and `present_or_*` data-clause
+spellings. On `update`, the historical `host(var-list)` spelling is
+canonicalized to the same `self` clause kind and item-list payload as
+`self(var-list)`; typed provenance retains its OpenACC 1.0 introduction floor.
+Multiword directives and the standardized `host_data` spelling are parsed
+exactly as specified; a fabricated space/underscore alternative is a hard
+error. Consumers see one semantic kind and one typed payload shape. The checked
+source span still identifies the exact spelling in the caller's source when
+source-level tooling needs it.
 
-## Compatibility layer parity
+Aliases are not assigned ad hoc integer identities. The optional C ABI returns
+an explicit `(dialect, ordinal)` kind value and exposes semantic data through
+typed field descriptors and child-node handles.
 
-The accparser bridge exercises the new coverage, ensuring the C++ drop-in
-replacement emits the same directive kinds and serialises aliases without
-normalisation. The upstream accparser ctest suite (run via `compat/accparser/build.sh`)
-now exercises mixed alias usage, host-data spacing variants, dtype shorthands,
-and atomic update round-tripping through `OpenACCIR::toString`.
+## Validation
 
-## Regression protection
+Public parsing rejects unknown keywords, malformed payloads, trailing input,
+unavailable-version syntax, illegal directive-clause combinations, and
+duplicate singleton clauses. Checks that require facts from an embedding
+compiler use `parse_with_facts`; a required but missing fact is itself an
+error.
 
-The end-to-end round-trip and C API tests sit alongside the existing OpenACC
-round-trip checks, so any future change to the keyword registry or numeric
-mappings will fail CI before shipping. These tests complement the existing
-round-trip scenarios in `tests/openacc_roundtrip.rs` and cover cache
-directives, alias preservation, dtype handling, and atomic update parsing.【F:tests/openacc_roundtrip.rs†L1-L123】
+Regression coverage is organized around the public typed API in
+`tests/openacc_public_api.rs`, `tests/openacc_directive_parameters.rs`,
+`tests/feature_availability.rs`, `tests/host_profile_gates.rs`, and the strict
+payload and error suites. The optional `roup-capi` crate and accparser adapter
+are tested separately from the safe Rust parser.

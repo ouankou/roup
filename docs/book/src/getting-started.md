@@ -1,144 +1,49 @@
-# Getting Started
+# Getting started
 
-This guide shows how to compile ROUP, add the crate to a Rust project, and link
-the C/C++ bindings.
+## Rust-only parser
 
-## Prerequisites
-
-- Rust 1.88 or newer (`rustup` is recommended).
-- A C/C++ toolchain (clang or GCC) when using the FFI bindings.
-- Optional: a Fortran compiler for the example programs in `examples/fortran/`.
-
-Clone and build the project:
+Build and test the safe parser without the C ABI:
 
 ```bash
-git clone https://github.com/ouankou/roup.git
-cd roup
-cargo build --release
+cargo build -p roup
+cargo test -p roup
 ```
 
-The build produces `libroup.so` on Linux, `libroup.dylib` on macOS, and
-`roup.dll` on Windows inside `target/release/`.
-
-## Rust quick start
-
-Add ROUP to your `Cargo.toml`:
-
-```toml
-[dependencies]
-roup = "0.7"
-```
-
-Example program:
+A parser configuration always names the host-language standard and source
+form. `VersionPolicy::Any` accepts the union of standardized historical syntax;
+an exact configuration enforces an introduction ceiling.
 
 ```rust,ignore
-use roup::parser::openmp;
-use roup::lexer::Language;
+use roup::api::OpenMpConfig;
+use roup::version::{CStandard, HostLanguageProfile, SourceForm};
 
-fn main() {
-    let input = "#pragma omp parallel for num_threads(4)";
-    let parser = openmp::parser().with_language(Language::C);
+let parser = OpenMpConfig::new(
+    HostLanguageProfile::C(CStandard::C23),
+    SourceForm::Pragma,
+)?
+.parser();
 
-    match parser.parse(input) {
-        Ok((_, directive)) => {
-            println!("directive: {}", directive.name);
-            println!("clauses: {}", directive.clauses.len());
-        }
-        Err(err) => eprintln!("parse error: {err:?}"),
-    }
-}
+let parsed = parser.parse("#pragma omp parallel private(value)")?;
+assert_eq!(parsed.directive().kind().as_str(), "parallel");
+assert_eq!(parsed.directive().clauses().len(), 1);
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-Run it with `cargo run`.
+## Optional C ABI
 
-## C quick start
-
-Write a small program that calls the C API:
-
-```c
-#include <stdint.h>
-#include <stdio.h>
-
-struct OmpDirective;
-
-struct OmpDirective* roup_parse(const char* input);
-int32_t roup_directive_clause_count(const struct OmpDirective* dir);
-void roup_directive_free(struct OmpDirective* dir);
-
-int main(void) {
-    struct OmpDirective* directive = roup_parse("#pragma omp parallel num_threads(4)");
-    if (!directive) {
-        fputs("parse failed\n", stderr);
-        return 1;
-    }
-
-    printf("clause count: %d\n", roup_directive_clause_count(directive));
-    roup_directive_free(directive);
-    return 0;
-}
-```
-
-Compile against the release build of ROUP:
+Build the ABI explicitly:
 
 ```bash
-cargo build --release
-clang example.c \
-  -L./target/release \
-  -lroup -lpthread -ldl -lm \
-  -Wl,-rpath,./target/release \
-  -o example
-./example
+cargo build -p roup-capi --release
 ```
 
-macOS users can replace the rpath with
-`-Wl,-rpath,@executable_path/../target/release`.
+Include `crates/roup-capi/include/roup.h` and link the generated
+`libroup_capi` shared or static library. The ABI copies UTF-8 input, returns
+opaque handles, and requires callers to release every successful parser,
+directive, and error handle.
 
-## C++ quick start
+## Complete repository validation
 
-The C API can be wrapped with RAII helpers:
-
-```cpp
-#include <cstdint>
-#include <iostream>
-
-extern "C" {
-struct OmpDirective;
-OmpDirective* roup_parse(const char* input);
-int32_t roup_directive_clause_count(const OmpDirective* dir);
-void roup_directive_free(OmpDirective* dir);
-}
-
-class Directive {
-public:
-    explicit Directive(const char* input) : ptr_(roup_parse(input)) {}
-    ~Directive() { if (ptr_) roup_directive_free(ptr_); }
-    Directive(const Directive&) = delete;
-    Directive& operator=(const Directive&) = delete;
-    Directive(Directive&& other) noexcept : ptr_(other.ptr_) { other.ptr_ = nullptr; }
-
-    bool valid() const { return ptr_ != nullptr; }
-    int32_t clause_count() const { return ptr_ ? roup_directive_clause_count(ptr_) : 0; }
-
-private:
-    OmpDirective* ptr_;
-};
-
-int main() {
-    Directive directive("#pragma omp parallel for num_threads(4)");
-    if (!directive.valid()) {
-        std::cerr << "parse failed\n";
-        return 1;
-    }
-
-    std::cout << "clauses: " << directive.clause_count() << "\n";
-}
-```
-
-Compile with clang++ or g++ in the same way as the C example.
-
-## Next steps
-
-- Explore the complete examples in `examples/` (C, C++, Fortran).
-- Read the [Rust tutorial](./rust-tutorial.md) for more detailed use cases.
-- Consult the [Testing guide](../../TESTING.md) before contributing changes.
-- Try the interactive debugger: `cargo run --release --bin roup_debug '#pragma omp parallel' -- --non-interactive`.
+`./test.sh` is fail-fast. It requires initialized pinned submodules and all
+native toolchains, then checks formatting, lints, Rust tests, documentation,
+the C ABI, both compatibility adapters, and all language examples.

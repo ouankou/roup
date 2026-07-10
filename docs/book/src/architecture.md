@@ -1,65 +1,53 @@
 # Architecture
 
-This chapter explains how ROUP is organised internally and where to look when
-modifying the parser or the public bindings.
+ROUP has one semantic parser implementation and two delivery layers.
 
-## High level view
+## Safe Rust parser
 
-```text
-source text
-   │
-   ▼
-lexer (`src/lexer.rs`)
-   │  ─ token stream with language specific helpers
-   ▼
-parser (`src/parser/`)
-   │  ─ parses directives/clauses and owns post-parse semantic normalization
-   ▼
-Enum AST / IR (`src/ast/`, `src/ir/`)
-   │  ├─ typed directive and clause payloads for Rust callers
-   │  └─ converted into the C API data structures
-   ▼
-C bindings (`src/c_api.rs`, `src/c_api/openacc.rs`)
-```
+The workspace root package is the complete parser. It accepts an explicit
+dialect version policy, host-language profile, and source form, and returns a
+typed OpenMP or OpenACC AST. Every expression and structured clause payload is
+parsed before the result is returned. Unknown syntax, invalid combinations,
+unsupported host syntax, and trailing input are hard errors.
 
-The lexer normalises whitespace, line continuations, sentinel comments, and
-language specific keywords before the parser consumes the token stream.  The
-parser modules mirror the OpenMP/OpenACC structure: directives, clauses, helper
-enumerations, semantic conversion, and validation passes.  Rust callers can work
-with the typed enum AST/IR structures, while C and C++ consumers receive stable
-C structs exposed through the FFI layer.
+The root crate builds only an `rlib` and has `#![forbid(unsafe_code)]`. Its
+semantic enums have Rust-native layouts and no ABI discriminants. Syntax that
+was standardized by an older specification remains accepted by later exact
+version modes. Standard aliases are recognized at the parser boundary and map
+to one canonical semantic node.
 
-## Unsafe code boundaries
+Parsing is organized into four boundaries:
 
-The parser, AST, IR, lexer, and debugger modules forbid unsafe Rust.  The only
-`unsafe` blocks live in the FFI modules (`src/c_api.rs` and
-`src/c_api/openacc.rs`) where pointers cross the C boundary.  Each function
-performs explicit null checks and documents its expectations.  When modifying or
-adding FFI functions, keep the following rules in mind:
+1. The source-form lexer validates the pragma or Fortran sentinel and line
+   continuation rules.
+2. The grammar recognizes directive and clause syntax without inventing
+   defaults for malformed input.
+3. Semantic construction creates the typed AST and host-expression trees.
+4. Availability and context validation intersect every used feature with the
+   configured specification and reject invalid clause, nesting, and association
+   combinations.
 
-- Convert raw pointers to Rust types as late as possible and convert back only
-  when returning values to the caller.
-- Maintain ownership invariants: the caller is responsible for freeing values
-  returned by constructors and must not free borrowed data.
-- Update the generated C constants header whenever the exported structs or
-  enums change.
+Diagnostics carry stable codes and checked UTF-8 byte, line, and column spans.
 
-## Generated constants and headers
+## Optional C ABI
 
-The build script (`build.rs`) parses portions of `src/c_api.rs` and
-`src/c_api/openacc.rs` using `syn` to produce `src/roup_constants.h` (also
-emitted to `OUT_DIR`). This keeps the OpenMP and OpenACC directive/clause tables
-in sync with the Rust implementation.
+`crates/roup-capi` is a separate workspace package. It depends on the safe Rust
+parser, but the parser never depends on it. The ABI uses opaque generational
+handles, by-value options, explicit byte buffers, and structured error handles.
+All foreign-pointer access is confined to one audited boundary module; every
+other ABI module denies unsafe code.
 
-## Compatibility layers
+Directive parameters and clause payloads are exposed as typed fields. A missing
+typed conversion is a hard error. The repository document
+`docs/C_ABI_ARCHITECTURE.md` defines the detailed ownership and layout rules.
 
-- `compat/ompparser/` mirrors the original ompparser API, forwarding calls through the ROUP C API and converting the resulting structures back into the expected C++ types. The CMake tests in the ompparser submodule validate parity.
-- `compat/accparser/` provides the same drop-in experience for accparser with ROUP_ACC_* constants and the upstream ctest suite.
+## Compatibility adapters
 
-## Testing
+`compat/ompparser` and `compat/accparser` build against the optional C ABI and
+construct the corresponding upstream C++ IR directly from typed queries. They
+do not link to Rust enum layouts and do not reinterpret canonical strings.
+Unsupported conversions are hard errors.
 
-Integration tests live under `tests/` and cover keyword registration, parser
-round-trips, language specific behaviour, and helper utilities.  Running
-`cargo test` executes the Rust suites, while `test.sh` orchestrates the full
-project matrix including compatibility tests, documentation builds, warning
-checks, and the enum/safety audit.
+The upstream projects are pinned git submodules. A repository test requires
+both worktrees to match their recorded gitlinks, builds each adapter from a
+clean CMake directory, and runs the upstream ctest suites.

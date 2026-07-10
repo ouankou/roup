@@ -1,82 +1,37 @@
-//! # OpenMP Intermediate Representation (IR)
+//! Typed directive data shared by the OpenMP and OpenACC parsers.
 #![forbid(unsafe_code)]
-//!
-//! This module provides a **semantic** representation of OpenMP directives and clauses.
-//! Unlike the parser module which deals with syntax, the IR focuses on the **meaning**
-//! of the parsed constructs.
-//!
-//! ## Design Philosophy
-//!
-//! The IR layer serves as a bridge between the parser (syntax) and compilers (semantics):
-//!
-//! ```text
-//! Input String → Parser → Directive (syntax) → IR → DirectiveIR (semantics) → Compiler
-//! ```
-//!
-//! ## Key Differences: Parser vs IR
-//!
-//! | Aspect | Parser | IR |
-//! |--------|--------|-----|
-//! | **Focus** | Syntax preservation | Semantic meaning |
-//! | **Clause data** | `"private(a, b)"` as string | List of identifiers `["a", "b"]` |
-//! | **Expressions** | Unparsed strings | Optionally parsed AST |
-//! | **Validation** | Minimal | Comprehensive |
-//! | **Use case** | Parsing | Compilation, analysis |
-//!
-//! ## Learning Path
-//!
-//! This module is designed to teach Rust concepts incrementally:
-//!
-//! 1. **Basic types**: Structs, enums, Copy trait
-//! 2. **Advanced enums**: Enums with data, pattern matching
-//! 3. **Lifetime management**: References, ownership
-//! 4. **Trait implementation**: Display, conversion traits
-//! 5. **Error handling**: Result types, custom errors
-//! 6. **FFI preparation**: repr(C), opaque types
-//!
-//! ## Module Organization
-//!
-//! - `types`: Basic types (SourceLocation, Language, etc.)
-//! - `expression`: Expression representation (parsed or unparsed)
-//! - `clause_data`: Semantic clause data structures
-//! - `directive_ir`: Complete directive representation
-//! - `conversion`: Convert parser types to IR
-//! - `display`: Pretty-printing IR back to pragmas
-//! - `translate`: C/C++ ↔ Fortran directive translation
 
 // Re-export main types
 pub use crate::ast::{
-    OmpSelector, OmpSelectorConstruct, OmpSelectorConstructs, OmpSelectorDevice, OmpSelectorImpl,
-    OmpSelectorScoredValue, OmpSelectorUser,
+    OmpSelector, OmpSelectorConstruct, OmpSelectorDeviceTrait, OmpSelectorEntry,
+    OmpSelectorExtensionProperty, OmpSelectorExtensionTrait, OmpSelectorImplementationTrait,
+    OmpSelectorImplementationTraitKind, OmpSelectorNameListKind, OmpSelectorNameListTrait,
+    OmpSelectorRequirement, OmpSelectorTraitValue,
 };
-pub use builder::DirectiveBuilder;
+pub(crate) use clause::UsesAllocatorSourceSyntax;
 pub use clause::{
-    AdjustArgsModifier, AffinityModifier, ApplyTransform, ApplyTransformKind, AtKind, AtomicOp,
-    BindModifier, ClauseData, ClauseItem, DefaultKind, DefaultmapBehavior, DefaultmapCategory,
-    DependIterator, DependType, DepobjUpdateDependence, DeviceModifier, DeviceType, DoacrossType,
-    GrainsizeModifier, IfModifier, InductionItem, InitKind, LastprivateModifier, LinearModifier,
-    MapModifier, MapType, MemoryOrder, NowaitModifier, NumTasksModifier, OrderKind, OrderModifier,
-    ProcBind, ReductionModifier, ReductionOperator, RequireModifier, ScanClauseMode, ScheduleKind,
-    ScheduleModifier, SeverityKind, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
+    AdjustArgsModifier, AllocateSourceSyntax, AtKind, AtomicOp, BindModifier, ClauseData,
+    ClauseItem, DefaultKind, DefaultmapBehavior, DefaultmapCategory, DependIterator, DependType,
+    DepobjUpdateDependence, DeviceModifier, DeviceType, DoacrossType, ExtendedAtomicKind,
+    FirstprivateModifier, GrainsizeModifier, LastprivateModifier, LinearModifier,
+    LinearSourceSyntax, MapModifier, MapRefKind, MapType, MapTypeSpelling, MemoryOrder,
+    MemscopeKind, NumTasksModifier, OmpAppendOperation, OmpApplyLoopKind, OmpApplyLoopModifier,
+    OmpCount, OmpDependence, OmpDoacrossIteration, OmpDoacrossOffset, OmpDoacrossVectorItem,
+    OmpForeignRuntimeIdentifier, OmpInductionModifier, OmpInteropInitModifiers, OmpInteropType,
+    OmpLocator, OmpMemorySpace, OmpParameterListItem, OmpParameterRange, OmpPreferenceSelector,
+    OmpPreferenceSpecification, OrderKind, OrderModifier, OriginalSharing, ProcBind,
+    ReductionModifier, RequireModifier, ScanClauseMode, ScheduleKind, ScheduleModifier,
+    SeverityKind, ThreadsetKind, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
 };
-pub use convert::convert_directive;
-pub use directive::{DirectiveIR, DirectiveKind};
 pub use error::ConversionError;
 pub use expression::{
-    BinaryOperator, Expression, ExpressionAst, ExpressionKind, ParserConfig, UnaryOperator,
+    BinaryOperator, Expression, ExpressionAst, ExpressionError, ExpressionKind, ParserConfig,
+    UnaryOperator, MAX_STRUCTURAL_NESTING_DEPTH,
 };
-pub use types::{Language, SourceLocation};
-pub use validate::{ValidationContext, ValidationError};
-pub use variable::{ArraySection, Identifier, Variable};
+pub use variable::{Identifier, IdentifierError, LValue, LValueError, Variable, VariableError};
 
-mod builder;
 mod clause;
-pub mod convert;
-mod directive;
 mod error;
 mod expression;
 pub(crate) mod lang;
-pub mod translate;
-mod types;
-pub mod validate;
 mod variable;

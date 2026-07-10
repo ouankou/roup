@@ -1,6 +1,11 @@
 # OpenACC 3.4 Directive–Clause Matrix
 
-This matrix cross-references every OpenACC 3.4 directive with its allowed clauses and enumerates the clause-level modifiers and arguments. Section numbers and page references point back to the canonical OpenACC 3.4 PDF so that every entry can be validated directly against the specification. Use this document together with the directive/clauses index and the restrictions digest to obtain a complete, single-source view of the standard.
+This matrix cross-references OpenACC 3.4 directives with their allowed clauses
+and enumerates clause-level modifiers and arguments. Section numbers and page
+references point back to the canonical OpenACC 3.4 PDF. ROUP applies these
+context-independent combinations as hard validation rules; rules requiring
+program facts are checked by `parse_with_facts` when the embedding compiler
+supplies those facts.
 
 ## Directive coverage
 
@@ -241,4 +246,3 @@ This matrix cross-references every OpenACC 3.4 directive with its allowed clause
 
 ### async-value semantics (§2.16, p.98)
 - Maps async arguments to queue identifiers; `acc_async_sync` enforces synchronous completion, `acc_async_noval` uses default queue (§2.16, p.98).
-

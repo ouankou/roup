@@ -1,0 +1,15 @@
+[package]
+name = "roup-capi"
+version = "0.8.0"
+edition = "2021"
+rust-version = "1.88.0"
+license = "BSD-3-Clause"
+description = "Optional C ABI for the ROUP parser"
+repository = "https://github.com/ouankou/roup"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+roup = { path = "../.." }

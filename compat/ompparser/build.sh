@@ -40,7 +40,7 @@ echo ""
 echo "Step 1/5: Checking prerequisites..."
 
 command -v git >/dev/null 2>&1 || error "git not found. Please install git."
-command -v cmake >/dev/null 2>&1 || error "cmake not found. Please install cmake (3.10+)."
+command -v cmake >/dev/null 2>&1 || error "cmake not found. Please install cmake (3.20+)."
 command -v cargo >/dev/null 2>&1 || error "cargo not found. Please install Rust toolchain."
 
 # Check for C++ compiler (g++ or clang++)
@@ -68,16 +68,12 @@ else
 fi
 echo ""
 
-# Step 3: Build ROUP core
-echo "Step 3/5: Building ROUP core library..."
+# Step 3: Build the optional ROUP C ABI
+echo "Step 3/5: Building ROUP C ABI archive..."
 
 cd "$ROUP_ROOT"
-if [ ! -f "target/release/libroup.a" ]; then
-    cargo build --release || error "Failed to build ROUP"
-    status "ROUP built successfully"
-else
-    warn "ROUP already built (skipping). Run 'cargo clean' to rebuild."
-fi
+cargo build --locked --release -p roup-capi || error "Failed to build roup-capi"
+status "ROUP C ABI built successfully"
 echo ""
 
 # Step 4: Build compatibility layer
@@ -95,12 +91,8 @@ echo ""
 # Step 5: Run tests
 echo "Step 5/5: Running tests..."
 
-if [ -f "./ompparser_example" ]; then
-    LD_LIBRARY_PATH=. ./ompparser_example
-    status "Tests completed"
-else
-    warn "Test binary not found"
-fi
+ctest --output-on-failure --no-tests=error || error "Compatibility tests failed"
+status "Tests completed"
 echo ""
 
 # Summary

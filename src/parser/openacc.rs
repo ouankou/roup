@@ -4,9 +4,8 @@ use super::{
     ClauseRegistry, ClauseRegistryBuilder, ClauseRule, DirectiveRegistry, DirectiveRegistryBuilder,
     Parser,
 };
-use crate::parser::clause::parse_variable_list;
 
-const OPENACC_DEFAULT_CLAUSE_RULE: ClauseRule = ClauseRule::Flexible;
+const OPENACC_DEFAULT_CLAUSE_RULE: ClauseRule = ClauseRule::Unsupported;
 
 macro_rules! openacc_clauses {
     ($( $variant:ident => { name: $name:literal, rule: $rule:expr } ),+ $(,)?) => {
@@ -133,79 +132,11 @@ openacc_directives! {
     Wait => "wait",
 }
 
-pub fn clause_registry() -> ClauseRegistry {
+pub(crate) fn clause_registry() -> ClauseRegistry {
     let mut builder = ClauseRegistryBuilder::new().with_default_rule(OPENACC_DEFAULT_CLAUSE_RULE);
 
     for clause in OpenAccClause::ALL {
-        // Skip clauses that will have custom parsers
-        let name = clause.name();
-        if matches!(
-            name,
-            "copyin" | "pcopyin" | "present_or_copyin" |
-            "copyout" | "pcopyout" | "present_or_copyout" |
-            "create" | "pcreate" | "present_or_create" |
-            "reduction" |
-            // Variable list clauses (need custom parsing to split comma-separated vars)
-            "gang" | "worker" | "vector" | "wait" | "private" | "firstprivate" |
-            "device_type" | "dtype" |
-            "copy" | "pcopy" | "present_or_copy" | "present" | "attach" | "detach" |
-            "use_device" | "link" | "device_resident" | "host" | "device" |
-            "deviceptr" | "delete"
-        ) {
-            continue;
-        }
-        builder.register_with_rule_mut(name, clause.rule());
-    }
-
-    // Register custom parsers for clauses with modifiers/operators
-    builder.register_with_rule_mut("copyin", ClauseRule::Custom(parse_copyin_clause));
-    builder.register_with_rule_mut("pcopyin", ClauseRule::Custom(parse_copyin_clause));
-    builder.register_with_rule_mut("present_or_copyin", ClauseRule::Custom(parse_copyin_clause));
-
-    builder.register_with_rule_mut("copyout", ClauseRule::Custom(parse_copyout_clause));
-    builder.register_with_rule_mut("pcopyout", ClauseRule::Custom(parse_copyout_clause));
-    builder.register_with_rule_mut(
-        "present_or_copyout",
-        ClauseRule::Custom(parse_copyout_clause),
-    );
-
-    builder.register_with_rule_mut("create", ClauseRule::Custom(parse_create_clause));
-    builder.register_with_rule_mut("pcreate", ClauseRule::Custom(parse_create_clause));
-    builder.register_with_rule_mut("present_or_create", ClauseRule::Custom(parse_create_clause));
-
-    builder.register_with_rule_mut("reduction", ClauseRule::Custom(parse_reduction_clause));
-
-    // Register specialized parsers for gang/worker/vector with modifier support
-    builder.register_with_rule_mut("gang", ClauseRule::Custom(parse_gang_clause));
-    builder.register_with_rule_mut("worker", ClauseRule::Custom(parse_worker_clause));
-    builder.register_with_rule_mut("vector", ClauseRule::Custom(parse_vector_clause));
-
-    // Register variable list parsers for clauses that take comma-separated variable lists
-    // These need custom parsing to split "a, b, c" into ["a", "b", "c"] for proper deduplication
-    // NOTE: tile, collapse, num_gangs, and async are NOT included here because they take
-    // parameter lists (literal values), not variable lists, and should not be merged
-    let var_list_clauses = [
-        "wait",
-        "private",
-        "firstprivate",
-        "device_type",
-        "dtype",
-        "copy",
-        "pcopy",
-        "present_or_copy",
-        "present",
-        "attach",
-        "detach",
-        "use_device",
-        "link",
-        "device_resident",
-        "host",
-        "device",
-        "deviceptr",
-        "delete",
-    ];
-    for clause_name in &var_list_clauses {
-        builder.register_with_rule_mut(clause_name, ClauseRule::Custom(parse_variable_list_clause));
+        builder.register_with_rule_mut(clause.name(), clause.rule());
     }
 
     builder.build()
@@ -216,82 +147,16 @@ fn parse_cache_directive<'a>(
     input: &'a str,
     clause_registry: &ClauseRegistry,
 ) -> nom::IResult<&'a str, super::Directive<'a>> {
-    use super::{CacheDirectiveData, Directive};
-    use crate::lexer;
-
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-    let (rest_after_paren, content) = parse_parenthesized_content_inner(input)?;
+    use super::Directive;
+    let (input, _) = clause_registry.skip_trivia(input)?;
+    let (rest_after_paren, parameter) =
+        parse_parenthesized_parameter(input, clause_registry.is_case_insensitive())?;
     let (rest, clauses) = clause_registry.parse_sequence(rest_after_paren)?;
-
-    // Parse cache directive: cache(readonly: x, y, z) or cache(x, y, z)
-    let content_trimmed = content.trim();
-    let (readonly, var_part) = if let Some(stripped) = content_trimmed.strip_prefix("readonly:") {
-        (true, stripped.trim())
-    } else if let Some(stripped) = content_trimmed.strip_prefix("readonly :") {
-        (true, stripped.trim())
-    } else {
-        (false, content_trimmed)
-    };
-
-    // Parse variable list (parse_variable_list returns owned Cow values)
-    let variables: Vec<Cow<'a, str>> = parse_variable_list(var_part)
-        .into_iter()
-        .map(|v| Cow::Owned(v.into_owned()))
-        .collect();
-
-    // For backward compat: keep normalized parameter
-    let normalized = normalize_directive_parameter(content.trim());
-    let parameter = format!("({normalized})");
 
     Ok((
         rest,
-        Directive {
-            name: crate::parser::directive_kind::lookup_directive_name(name.as_ref()),
-            parameter: Some(Cow::Owned(parameter)),
-            clauses,
-            wait_data: None,
-            cache_data: Some(CacheDirectiveData {
-                readonly,
-                variables,
-            }),
-        },
+        Directive::new(name, Some(Cow::Borrowed(parameter)), clauses),
     ))
-}
-
-/// Normalize whitespace in wait/cache directive parameters
-/// Format as "keyword: value": "devnum : 23 : queues: 1, 2" -> "devnum: 23: queues: 1, 2"
-fn normalize_directive_parameter(s: &str) -> String {
-    let mut result = String::with_capacity(s.len() + 4);
-    let mut prev_char = ' ';
-    let mut after_colon = false;
-
-    for ch in s.chars() {
-        if ch == ':' {
-            // Remove trailing spaces before colon
-            while result.ends_with(' ') {
-                result.pop();
-            }
-            result.push(':');
-            result.push(' '); // Always add one space after colon
-            after_colon = true;
-            prev_char = ':';
-        } else if ch == ' ' || ch == '\t' {
-            if after_colon {
-                // Skip leading spaces after colon (we already added one)
-                continue;
-            }
-            if prev_char != ' ' {
-                result.push(' ');
-                prev_char = ' ';
-            }
-        } else {
-            after_colon = false;
-            result.push(ch);
-            prev_char = ch;
-        }
-    }
-
-    result.trim().to_string()
 }
 
 fn parse_wait_directive<'a>(
@@ -299,95 +164,20 @@ fn parse_wait_directive<'a>(
     input: &'a str,
     clause_registry: &ClauseRegistry,
 ) -> nom::IResult<&'a str, super::Directive<'a>> {
-    use super::{Directive, WaitDirectiveData};
-    use crate::lexer;
-
-    let (input, _) = lexer::skip_space_and_comments(input)?;
+    use super::Directive;
+    let (input, _) = clause_registry.skip_trivia(input)?;
     if input.trim_start().starts_with('(') {
-        let (rest, content) = parse_parenthesized_content_inner(input)?;
+        let (rest, parameter) =
+            parse_parenthesized_parameter(input, clause_registry.is_case_insensitive())?;
         let (rest, clauses) = clause_registry.parse_sequence(rest)?;
-
-        // Parse wait directive: wait(devnum: 23: 1, 2, 3) or wait(devnum: 23: queues: 1, 2, 3) or wait(1, 2, 3)
-        let content_str = content.as_str().trim();
-        let mut devnum = None;
-        let mut has_queues = false;
-        let mut queue_exprs = Vec::new();
-
-        if let Some(stripped) = content_str
-            .strip_prefix("devnum:")
-            .or_else(|| content_str.strip_prefix("devnum :"))
-        {
-            // Parse: "devnum: 23" or "devnum: 23: queues: ..."
-            let after_devnum = stripped.trim();
-
-            if let Some(colon_pos) = after_devnum.find(':') {
-                // Has queue list or additional content after devnum
-                devnum = Some(Cow::Owned(after_devnum[..colon_pos].trim().to_string()));
-                let rest = after_devnum[colon_pos + 1..].trim();
-
-                if let Some(queues_stripped) = rest
-                    .strip_prefix("queues:")
-                    .or_else(|| rest.strip_prefix("queues :"))
-                {
-                    has_queues = true;
-                    queue_exprs = parse_variable_list(queues_stripped.trim());
-                } else {
-                    queue_exprs = parse_variable_list(rest);
-                }
-            } else {
-                // Only devnum, no queue list
-                devnum = Some(Cow::Owned(after_devnum.to_string()));
-            }
-        } else if let Some(stripped) = content_str.strip_prefix("queues:") {
-            // Parse: "queues: 1, 2, 3"
-            has_queues = true;
-            queue_exprs = parse_variable_list(stripped.trim());
-        } else if let Some(stripped) = content_str.strip_prefix("queues :") {
-            // Parse: "queues : 1, 2, 3"
-            has_queues = true;
-            queue_exprs = parse_variable_list(stripped.trim());
-        } else if !content_str.is_empty() {
-            // Parse: "1, 2, 3"
-            queue_exprs = parse_variable_list(content_str);
-        }
-
-        // Ensure all queue_exprs are owned (not borrowed from content)
-        let queue_exprs_owned: Vec<Cow<'a, str>> = queue_exprs
-            .into_iter()
-            .map(|v| Cow::Owned(v.into_owned()))
-            .collect();
-
-        // For backward compat: keep normalized parameter
-        let normalized = normalize_directive_parameter(content.trim());
-        let parameter = format!("({normalized})");
-
         return Ok((
             rest,
-            Directive {
-                name: crate::parser::directive_kind::lookup_directive_name(name.as_ref()),
-                parameter: Some(Cow::Owned(parameter)),
-                clauses,
-                wait_data: Some(WaitDirectiveData {
-                    devnum,
-                    has_queues,
-                    queue_exprs: queue_exprs_owned,
-                }),
-                cache_data: None,
-            },
+            Directive::new(name, Some(Cow::Borrowed(parameter)), clauses),
         ));
     }
 
     let (rest, clauses) = clause_registry.parse_sequence(input)?;
-    Ok((
-        rest,
-        Directive {
-            name: name.into(),
-            parameter: None,
-            clauses,
-            wait_data: None,
-            cache_data: None,
-        },
-    ))
+    Ok((rest, Directive::new(name, None, clauses)))
 }
 
 fn parse_end_directive<'a>(
@@ -398,37 +188,25 @@ fn parse_end_directive<'a>(
     use super::Directive;
     use crate::lexer;
 
-    let (mut rest, _) = lexer::skip_space_and_comments(input)?;
+    let (parameter_start, _) = clause_registry.skip_trivia(input)?;
+    let mut rest = parameter_start;
+    let mut parameter_len = 0;
 
-    // FIX: Read full multi-word directive name (e.g., "parallel loop") instead of just one token
-    // Keep reading identifiers until we hit a non-identifier
-    let mut directive_parts = Vec::new();
-    while let Ok((new_rest, token)) = lexer::lex_identifier_token(rest) {
-        let collapsed = lexer::collapse_line_continuations(token);
-        directive_parts.push(collapsed.as_ref().to_string());
+    while let Ok((new_rest, _)) = lexer::lex_identifier_token(rest) {
+        parameter_len = parameter_start.len() - new_rest.len();
         rest = new_rest;
 
-        // Skip whitespace and try again
-        if let Ok((new_rest, _)) = lexer::skip_space_and_comments(rest) {
+        if let Ok((new_rest, _)) = clause_registry.skip_trivia(rest) {
             rest = new_rest;
         }
     }
 
-    // Store the directive being ended as a parameter
-    let directive = directive_parts.join(" ");
     let (rest, clauses) = clause_registry.parse_sequence(rest)?;
-    // Store the directive token without presentation spacing; rendering should add spaces.
-    let parameter = directive.to_string();
+    let parameter = &parameter_start[..parameter_len];
 
     Ok((
         rest,
-        Directive {
-            name: crate::parser::directive_kind::lookup_directive_name(name.as_ref()),
-            parameter: Some(Cow::Owned(parameter)),
-            clauses,
-            wait_data: None,
-            cache_data: None,
-        },
+        Directive::new(name, Some(Cow::Borrowed(parameter)), clauses),
     ))
 }
 
@@ -438,40 +216,22 @@ fn parse_routine_directive<'a>(
     clause_registry: &ClauseRegistry,
 ) -> nom::IResult<&'a str, super::Directive<'a>> {
     use super::Directive;
-    use crate::lexer;
-
-    let (input, _) = lexer::skip_space_and_comments(input)?;
+    let (input, _) = clause_registry.skip_trivia(input)?;
     if input.trim_start().starts_with('(') {
-        let (rest_after_paren, content) = parse_parenthesized_content_inner(input)?;
+        let (rest_after_paren, parameter) =
+            parse_parenthesized_parameter(input, clause_registry.is_case_insensitive())?;
         let (rest, clauses) = clause_registry.parse_sequence(rest_after_paren)?;
-        // Store routine name with parentheses for round-trip compatibility
-        let parameter = format!("({})", content.trim());
         return Ok((
             rest,
-            Directive {
-                name: crate::parser::directive_kind::lookup_directive_name(name.as_ref()),
-                parameter: Some(Cow::Owned(parameter)),
-                clauses,
-                wait_data: None,
-                cache_data: None,
-            },
+            Directive::new(name, Some(Cow::Borrowed(parameter)), clauses),
         ));
     }
 
     let (rest, clauses) = clause_registry.parse_sequence(input)?;
-    Ok((
-        rest,
-        Directive {
-            name: name.into(),
-            parameter: None,
-            clauses,
-            wait_data: None,
-            cache_data: None,
-        },
-    ))
+    Ok((rest, Directive::new(name, None, clauses)))
 }
 
-pub fn directive_registry() -> DirectiveRegistry {
+pub(crate) fn directive_registry() -> DirectiveRegistry {
     let mut builder = DirectiveRegistryBuilder::new();
 
     builder = builder.register_custom("cache", parse_cache_directive);
@@ -496,653 +256,55 @@ pub fn directive_registry() -> DirectiveRegistry {
     builder.build()
 }
 
-pub fn parser() -> Parser {
-    Parser::new(directive_registry(), clause_registry()).with_dialect(super::Dialect::OpenAcc)
+pub(crate) fn parser() -> Parser {
+    Parser::new(
+        directive_registry(),
+        clause_registry(),
+        crate::lexer::Language::C,
+        super::Dialect::OpenAcc,
+    )
 }
 
-fn parse_parenthesized_content_inner(input: &str) -> nom::IResult<&str, String> {
+fn parse_parenthesized_parameter(input: &str, case_insensitive: bool) -> nom::IResult<&str, &str> {
     use crate::lexer;
     use nom::bytes::complete::tag;
     use nom::error::{Error, ErrorKind};
 
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-    let (input, _) = tag("(")(input)?;
+    let (parameter_start, _) = if case_insensitive {
+        lexer::skip_fortran_space_and_comments(input)?
+    } else {
+        lexer::skip_space_and_comments(input)?
+    };
+    let (content_start, _) = tag("(")(parameter_start)?;
 
-    let mut depth = 1;
-    let mut end_index = None;
-
-    for (idx, ch) in input.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => {
-                depth -= 1;
-                if depth == 0 {
-                    end_index = Some(idx);
-                    break;
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let Some(end_idx) = end_index else {
-        return Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)));
+    let Some(end_idx) = lexer::find_matching_parenthesis(content_start, case_insensitive) else {
+        return Err(nom::Err::Error(Error::new(content_start, ErrorKind::Tag)));
     };
 
-    let (content, rest) = input.split_at(end_idx);
-    let rest = &rest[1..];
+    let rest = &content_start[end_idx + 1..];
+    let parameter_len = parameter_start.len() - rest.len();
 
-    Ok((rest, content.to_string()))
+    Ok((rest, &parameter_start[..parameter_len]))
 }
 
-/// Parse copyin clause: copyin(readonly: m, n) or copyin(m, n)
-fn parse_copyin_clause<'a>(
-    name: Cow<'a, str>,
-    input: &'a str,
-) -> nom::IResult<&'a str, super::Clause<'a>> {
-    use crate::lexer;
-    use crate::parser::clause::{ClauseKind, CopyinModifier};
-    use nom::bytes::complete::tag;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-    let (input, _) = tag("(")(input)?;
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-
-    // Try to parse "readonly:" modifier (case-insensitive)
-    let input_lower = input.trim_start().to_lowercase();
-    let (input, modifier) =
-        if input_lower.starts_with("readonly:") || input_lower.starts_with("readonly :") {
-            // Find the colon
-            let colon_idx = input.find(':').unwrap();
-            let after_colon = &input[colon_idx + 1..];
-            (after_colon, Some(CopyinModifier::Readonly))
-        } else {
-            (input, None)
-        };
-
-    // Parse until closing paren
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-    let mut depth = 0;
-    let mut end_idx = None;
-
-    for (idx, ch) in input.char_indices() {
-        match ch {
-            '(' | '[' => depth += 1,
-            ')' if depth == 0 => {
-                end_idx = Some(idx);
-                break;
-            }
-            ')' | ']' => depth -= 1,
-            _ => {}
+    #[test]
+    fn cache_and_wait_keep_one_unnormalized_parameter() {
+        for (source, expected) in [
+            (
+                "#pragma acc cache( readonly : values[0:n], tile[index] )",
+                "( readonly : values[0:n], tile[index] )",
+            ),
+            (
+                "#pragma acc wait( devnum : device : queues : first, second )",
+                "( devnum : device : queues : first, second )",
+            ),
+        ] {
+            let parsed = parser().parse(source).expect("directive must parse").1;
+            assert_eq!(parsed.parameter.as_deref(), Some(expected));
         }
-    }
-
-    let end_idx = end_idx.ok_or_else(|| {
-        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
-    })?;
-
-    let var_list_str = &input[..end_idx];
-    let variables = parse_variable_list(var_list_str)
-        .into_iter()
-        .map(|v| Cow::Owned(v.into_owned()))
-        .collect();
-    let rest = &input[end_idx + 1..];
-
-    Ok((
-        rest,
-        super::Clause {
-            separator: crate::parser::ClauseSeparator::Space,
-            name,
-            kind: ClauseKind::CopyinClause {
-                modifier,
-                variables,
-            },
-        },
-    ))
-}
-
-/// Parse copyout clause: copyout(zero: x, y) or copyout(x, y)
-fn parse_copyout_clause<'a>(
-    name: Cow<'a, str>,
-    input: &'a str,
-) -> nom::IResult<&'a str, super::Clause<'a>> {
-    use crate::lexer;
-    use crate::parser::clause::{ClauseKind, CopyoutModifier};
-    use nom::bytes::complete::tag;
-
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-    let (input, _) = tag("(")(input)?;
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-
-    // Try to parse "zero:" modifier (case-insensitive)
-    let input_lower = input.trim_start().to_lowercase();
-    let (input, modifier) = if input_lower.starts_with("zero:") || input_lower.starts_with("zero :")
-    {
-        let colon_idx = input.find(':').unwrap();
-        let after_colon = &input[colon_idx + 1..];
-        (after_colon, Some(CopyoutModifier::Zero))
-    } else {
-        (input, None)
-    };
-
-    // Parse until closing paren
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-    let mut depth = 0;
-    let mut end_idx = None;
-
-    for (idx, ch) in input.char_indices() {
-        match ch {
-            '(' | '[' => depth += 1,
-            ')' if depth == 0 => {
-                end_idx = Some(idx);
-                break;
-            }
-            ')' | ']' => depth -= 1,
-            _ => {}
-        }
-    }
-
-    let end_idx = end_idx.ok_or_else(|| {
-        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
-    })?;
-
-    let var_list_str = &input[..end_idx];
-    let variables = parse_variable_list(var_list_str);
-    let rest = &input[end_idx + 1..];
-
-    Ok((
-        rest,
-        super::Clause {
-            separator: crate::parser::ClauseSeparator::Space,
-            name,
-            kind: ClauseKind::CopyoutClause {
-                modifier,
-                variables,
-            },
-        },
-    ))
-}
-
-/// Parse create clause: create(zero: a, b) or create(a, b)
-fn parse_create_clause<'a>(
-    name: Cow<'a, str>,
-    input: &'a str,
-) -> nom::IResult<&'a str, super::Clause<'a>> {
-    use crate::lexer;
-    use crate::parser::clause::{ClauseKind, CreateModifier};
-    use nom::bytes::complete::tag;
-
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-    let (input, _) = tag("(")(input)?;
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-
-    // Try to parse "zero:" modifier (case-insensitive)
-    let input_lower = input.trim_start().to_lowercase();
-    let (input, modifier) = if input_lower.starts_with("zero:") || input_lower.starts_with("zero :")
-    {
-        let colon_idx = input.find(':').unwrap();
-        let after_colon = &input[colon_idx + 1..];
-        (after_colon, Some(CreateModifier::Zero))
-    } else {
-        (input, None)
-    };
-
-    // Parse until closing paren
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-    let mut depth = 0;
-    let mut end_idx = None;
-
-    for (idx, ch) in input.char_indices() {
-        match ch {
-            '(' | '[' => depth += 1,
-            ')' if depth == 0 => {
-                end_idx = Some(idx);
-                break;
-            }
-            ')' | ']' => depth -= 1,
-            _ => {}
-        }
-    }
-
-    let end_idx = end_idx.ok_or_else(|| {
-        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
-    })?;
-
-    let var_list_str = &input[..end_idx];
-    let variables = parse_variable_list(var_list_str);
-    let rest = &input[end_idx + 1..];
-
-    Ok((
-        rest,
-        super::Clause {
-            separator: crate::parser::ClauseSeparator::Space,
-            name,
-            kind: ClauseKind::CreateClause {
-                modifier,
-                variables,
-            },
-        },
-    ))
-}
-
-/// Parse reduction clause: reduction(+: sum) or reduction(max: x, y, z)
-fn parse_reduction_clause<'a>(
-    name: Cow<'a, str>,
-    input: &'a str,
-) -> nom::IResult<&'a str, super::Clause<'a>> {
-    use crate::lexer;
-    use crate::parser::clause::{ClauseKind, ReductionOperator};
-    use nom::bytes::complete::tag;
-
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-    let (input, _) = tag("(")(input)?;
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-
-    // Parse operator (everything before the first colon)
-    let colon_idx = input.find(':').ok_or_else(|| {
-        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
-    })?;
-
-    // Normalize operator to lowercase for case-insensitive matching
-    let op_str = input[..colon_idx].trim().to_lowercase();
-    let operator = match op_str.as_str() {
-        "+" => ReductionOperator::Add,
-        "-" => ReductionOperator::Sub,
-        "*" => ReductionOperator::Mul,
-        "max" => ReductionOperator::Max,
-        "min" => ReductionOperator::Min,
-        "&" => ReductionOperator::BitAnd,
-        "|" => ReductionOperator::BitOr,
-        "^" => ReductionOperator::BitXor,
-        "&&" => ReductionOperator::LogAnd,
-        "||" => ReductionOperator::LogOr,
-        ".and." => ReductionOperator::FortAnd,
-        ".or." => ReductionOperator::FortOr,
-        ".eqv." => ReductionOperator::FortEqv,
-        ".neqv." => ReductionOperator::FortNeqv,
-        "iand" => ReductionOperator::FortIand,
-        "ior" => ReductionOperator::FortIor,
-        "ieor" => ReductionOperator::FortIeor,
-        _ => {
-            return Err(nom::Err::Error(nom::error::Error::new(
-                input,
-                nom::error::ErrorKind::Tag,
-            )))
-        }
-    };
-
-    let input = &input[colon_idx + 1..];
-
-    // Check if there's a space after the colon (for formatting preservation)
-    let space_after_colon = input.starts_with(|c: char| c.is_whitespace());
-
-    // Parse until closing paren
-    let (input, _) = lexer::skip_space_and_comments(input)?;
-    let mut depth = 0;
-    let mut end_idx = None;
-
-    for (idx, ch) in input.char_indices() {
-        match ch {
-            '(' | '[' => depth += 1,
-            ')' if depth == 0 => {
-                end_idx = Some(idx);
-                break;
-            }
-            ')' | ']' => depth -= 1,
-            _ => {}
-        }
-    }
-
-    let end_idx = end_idx.ok_or_else(|| {
-        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
-    })?;
-
-    let var_list_str = &input[..end_idx];
-    let variables = parse_variable_list(var_list_str);
-    let rest = &input[end_idx + 1..];
-
-    Ok((
-        rest,
-        super::Clause {
-            separator: crate::parser::ClauseSeparator::Space,
-            name,
-            kind: ClauseKind::ReductionClause {
-                modifiers: Vec::new(),
-                modifier_items: Vec::new(),
-                operator,
-                user_defined_identifier: None,
-                variables,
-                space_after_colon,
-            },
-        },
-    ))
-}
-
-/// Parse simple variable list clause: gang(a, b, c), wait(x, y), private(i, j), etc.
-/// Also handles bare form: gang, wait, private
-fn parse_variable_list_clause<'a>(
-    name: Cow<'a, str>,
-    input: &'a str,
-) -> nom::IResult<&'a str, super::Clause<'a>> {
-    use crate::lexer;
-    use crate::parser::clause::ClauseKind;
-    use nom::bytes::complete::tag;
-
-    // Check if there are parentheses (peek, don't consume whitespace yet)
-    let trimmed = input.trim_start();
-    if trimmed.starts_with('(') {
-        // Parenthesized form - now consume the whitespace properly
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-        // Parenthesized form - parse variable list
-        let (input, _) = tag("(")(input)?;
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-
-        // Parse until closing paren
-        let mut depth = 0;
-        let mut end_idx = None;
-
-        for (idx, ch) in input.char_indices() {
-            match ch {
-                '(' | '[' => depth += 1,
-                ')' if depth == 0 => {
-                    end_idx = Some(idx);
-                    break;
-                }
-                ')' | ']' => depth -= 1,
-                _ => {}
-            }
-        }
-
-        let end_idx = end_idx.ok_or_else(|| {
-            nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
-        })?;
-
-        let var_list_str = &input[..end_idx];
-        let variables = parse_variable_list(var_list_str);
-        let rest = &input[end_idx + 1..];
-
-        Ok((
-            rest,
-            super::Clause {
-                separator: crate::parser::ClauseSeparator::Space,
-                name,
-                kind: ClauseKind::VariableList(variables),
-            },
-        ))
-    } else {
-        // Bare form - no variables
-        Ok((
-            input,
-            super::Clause {
-                separator: crate::parser::ClauseSeparator::Space,
-                name,
-                kind: ClauseKind::Bare,
-            },
-        ))
-    }
-}
-
-/// Parse gang clause: gang or gang(a, b, c) or gang(num: a, static: *)
-/// Note: gang doesn't have formal modifiers in accparser, just variable list
-fn parse_gang_clause<'a>(
-    name: Cow<'a, str>,
-    input: &'a str,
-) -> nom::IResult<&'a str, super::Clause<'a>> {
-    use crate::lexer;
-    use crate::parser::clause::{ClauseKind, GangModifier};
-
-    // Check if there are parentheses (peek, don't consume whitespace yet)
-    let trimmed = input.trim_start();
-    if trimmed.starts_with('(') {
-        // Parenthesized form - now consume the whitespace properly
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-        let (input, _) = nom::bytes::complete::tag("(")(input)?;
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-
-        // Try to parse "num:" / "static:" / "dim:" modifier (case-insensitive)
-        // Preserve whether a space existed after the ':' for stable round-tripping
-        // across preprocessors (e.g., `dim:2` vs `dim: 2`).
-        let input_lower = input.trim_start().to_lowercase();
-        let (input, modifier, space_after_colon) =
-            if input_lower.starts_with("num:") || input_lower.starts_with("num :") {
-                let colon_idx = input.find(':').unwrap();
-                let after_colon = &input[colon_idx + 1..];
-                let space_after_colon = after_colon
-                    .chars()
-                    .next()
-                    .is_some_and(|ch| ch.is_whitespace());
-                (after_colon, Some(GangModifier::Num), space_after_colon)
-            } else if input_lower.starts_with("static:") || input_lower.starts_with("static :") {
-                let colon_idx = input.find(':').unwrap();
-                let after_colon = &input[colon_idx + 1..];
-                let space_after_colon = after_colon
-                    .chars()
-                    .next()
-                    .is_some_and(|ch| ch.is_whitespace());
-                (after_colon, Some(GangModifier::Static), space_after_colon)
-            } else if input_lower.starts_with("dim:") || input_lower.starts_with("dim :") {
-                let colon_idx = input.find(':').unwrap();
-                let after_colon = &input[colon_idx + 1..];
-                let space_after_colon = after_colon
-                    .chars()
-                    .next()
-                    .is_some_and(|ch| ch.is_whitespace());
-                (after_colon, Some(GangModifier::Dim), space_after_colon)
-            } else {
-                (input, None, false)
-            };
-
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-
-        // Parse until closing paren
-        let mut depth = 0;
-        let mut end_idx = None;
-
-        for (idx, ch) in input.char_indices() {
-            match ch {
-                '(' | '[' => depth += 1,
-                ')' if depth == 0 => {
-                    end_idx = Some(idx);
-                    break;
-                }
-                ')' | ']' => depth -= 1,
-                _ => {}
-            }
-        }
-
-        let end_idx = end_idx.ok_or_else(|| {
-            nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
-        })?;
-
-        let var_list_str = &input[..end_idx];
-        let variables = parse_variable_list(var_list_str);
-        let rest = &input[end_idx + 1..];
-
-        Ok((
-            rest,
-            super::Clause {
-                separator: crate::parser::ClauseSeparator::Space,
-                name,
-                kind: ClauseKind::GangClause {
-                    modifier,
-                    space_after_colon,
-                    variables,
-                },
-            },
-        ))
-    } else {
-        // Bare form - no variables
-        Ok((
-            input,
-            super::Clause {
-                separator: crate::parser::ClauseSeparator::Space,
-                name,
-                kind: ClauseKind::GangClause {
-                    modifier: None,
-                    space_after_colon: false,
-                    variables: vec![],
-                },
-            },
-        ))
-    }
-}
-
-/// Parse worker clause: worker or worker(a) or worker(num: a)
-fn parse_worker_clause<'a>(
-    name: Cow<'a, str>,
-    input: &'a str,
-) -> nom::IResult<&'a str, super::Clause<'a>> {
-    use crate::lexer;
-    use crate::parser::clause::{ClauseKind, WorkerModifier};
-
-    // Check if there are parentheses (peek, don't consume whitespace yet)
-    let trimmed = input.trim_start();
-    if trimmed.starts_with('(') {
-        // Parenthesized form - now consume the whitespace properly
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-        let (input, _) = nom::bytes::complete::tag("(")(input)?;
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-
-        // Try to parse "num:" modifier (case-insensitive)
-        let input_lower = input.trim_start().to_lowercase();
-        let (input, modifier) =
-            if input_lower.starts_with("num:") || input_lower.starts_with("num :") {
-                let colon_idx = input.find(':').unwrap();
-                let after_colon = &input[colon_idx + 1..];
-                (after_colon, Some(WorkerModifier::Num))
-            } else {
-                (input, None)
-            };
-
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-
-        // Parse until closing paren
-        let mut depth = 0;
-        let mut end_idx = None;
-
-        for (idx, ch) in input.char_indices() {
-            match ch {
-                '(' | '[' => depth += 1,
-                ')' if depth == 0 => {
-                    end_idx = Some(idx);
-                    break;
-                }
-                ')' | ']' => depth -= 1,
-                _ => {}
-            }
-        }
-
-        let end_idx = end_idx.ok_or_else(|| {
-            nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
-        })?;
-
-        let var_list_str = &input[..end_idx];
-        let variables = parse_variable_list(var_list_str);
-        let rest = &input[end_idx + 1..];
-
-        Ok((
-            rest,
-            super::Clause {
-                separator: crate::parser::ClauseSeparator::Space,
-                name,
-                kind: ClauseKind::WorkerClause {
-                    modifier,
-                    variables,
-                },
-            },
-        ))
-    } else {
-        // Bare form - no variables
-        Ok((
-            input,
-            super::Clause {
-                separator: crate::parser::ClauseSeparator::Space,
-                name,
-                kind: ClauseKind::WorkerClause {
-                    modifier: None,
-                    variables: vec![],
-                },
-            },
-        ))
-    }
-}
-
-/// Parse vector clause: vector or vector(a) or vector(length: a)
-fn parse_vector_clause<'a>(
-    name: Cow<'a, str>,
-    input: &'a str,
-) -> nom::IResult<&'a str, super::Clause<'a>> {
-    use crate::lexer;
-    use crate::parser::clause::{ClauseKind, VectorModifier};
-
-    // Check if there are parentheses (peek, don't consume whitespace yet)
-    let trimmed = input.trim_start();
-    if trimmed.starts_with('(') {
-        // Parenthesized form - now consume the whitespace properly
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-        let (input, _) = nom::bytes::complete::tag("(")(input)?;
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-
-        // Try to parse "length:" modifier (case-insensitive)
-        let input_lower = input.trim_start().to_lowercase();
-        let (input, modifier) =
-            if input_lower.starts_with("length:") || input_lower.starts_with("length :") {
-                let colon_idx = input.find(':').unwrap();
-                let after_colon = &input[colon_idx + 1..];
-                (after_colon, Some(VectorModifier::Length))
-            } else {
-                (input, None)
-            };
-
-        let (input, _) = lexer::skip_space_and_comments(input)?;
-
-        // Parse until closing paren
-        let mut depth = 0;
-        let mut end_idx = None;
-
-        for (idx, ch) in input.char_indices() {
-            match ch {
-                '(' | '[' => depth += 1,
-                ')' if depth == 0 => {
-                    end_idx = Some(idx);
-                    break;
-                }
-                ')' | ']' => depth -= 1,
-                _ => {}
-            }
-        }
-
-        let end_idx = end_idx.ok_or_else(|| {
-            nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag))
-        })?;
-
-        let var_list_str = &input[..end_idx];
-        let variables = parse_variable_list(var_list_str);
-        let rest = &input[end_idx + 1..];
-
-        Ok((
-            rest,
-            super::Clause {
-                separator: crate::parser::ClauseSeparator::Space,
-                name,
-                kind: ClauseKind::VectorClause {
-                    modifier,
-                    variables,
-                },
-            },
-        ))
-    } else {
-        // Bare form - no variables
-        Ok((
-            input,
-            super::Clause {
-                separator: crate::parser::ClauseSeparator::Space,
-                name,
-                kind: ClauseKind::VectorClause {
-                    modifier: None,
-                    variables: vec![],
-                },
-            },
-        ))
     }
 }

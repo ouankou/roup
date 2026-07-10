@@ -1,110 +1,100 @@
-use roup::parser::{ClauseKind, Parser};
+use roup::api::{OpenMpConfig, OpenMpParser};
+use roup::ast::{
+    OmpClauseKind, OmpDirectiveKind, OmpDirectiveParameter, OmpSelectorDeviceTrait,
+    OmpSelectorEntry, OmpSelectorNameListKind, OmpSelectorTraitValue,
+};
+use roup::ir::ClauseData;
+use roup::version::{CStandard, HostLanguageProfile, SourceForm};
 
-fn parser() -> Parser {
-    Parser::default()
+fn parser() -> OpenMpParser {
+    OpenMpConfig::new(HostLanguageProfile::C(CStandard::C23), SourceForm::Pragma)
+        .unwrap()
+        .parser()
 }
 
 #[test]
-fn parses_metadirective_with_all_context_selectors() {
-    let parser = parser();
-    let source = "#pragma omp metadirective \
-        when(device={kind(cpu), isa(avx512f), arch(gen)}, implementation={vendor(llvm), extension(match_extension), atomic_default_mem_order(seq_cst)}, user={condition(iterations>0)}, construct={parallel, for, simd}: parallel for schedule(static,1)) \
-        when(device={kind(gpu)}, construct={teams, distribute}, implementation={extension(distributed)}, user={condition(flag != 0)}: teams distribute parallel for) \
-        default(parallel for reduction(task,inscan,+:sum))";
+fn context_selectors_and_nested_directive_are_fully_typed() {
+    let parsed = parser()
+        .parse(
+            "#pragma omp metadirective when(device={kind(cpu), isa(avx2)}, implementation={vendor(llvm)}, user={condition(enabled)}, construct={parallel}: parallel num_threads(4)) otherwise(nothing)",
+        )
+        .expect("valid metadirective");
+    let directive = parsed.directive();
 
-    let (rest, directive) = parser
-        .parse(source)
-        .expect("metadirective with context selectors should parse");
+    assert_eq!(directive.kind(), OmpDirectiveKind::Metadirective);
+    assert_eq!(directive.clauses()[0].kind(), OmpClauseKind::When);
+    let ClauseData::MetadirectiveSelector { selector } = directive.clauses()[0].payload() else {
+        panic!("when must have a typed selector");
+    };
+    assert_eq!(selector.entries().len(), 4);
 
-    assert!(rest.trim().is_empty(), "expected full consumption of input");
-    assert_eq!(directive.name, "metadirective");
-    assert_eq!(directive.clauses.len(), 3);
+    let OmpSelectorEntry::Device { traits, .. } = &selector.entries()[0] else {
+        panic!("first selector set must be device");
+    };
+    assert!(matches!(
+        &traits[0],
+        OmpSelectorDeviceTrait::NameList(value)
+            if value.kind() == OmpSelectorNameListKind::Kind
+                && matches!(value.properties(), [OmpSelectorTraitValue::Identifier(name)] if name.as_str() == "cpu")
+    ));
+    assert!(matches!(
+        &traits[1],
+        OmpSelectorDeviceTrait::NameList(value)
+            if value.kind() == OmpSelectorNameListKind::Isa
+                && matches!(value.properties(), [OmpSelectorTraitValue::Identifier(name)] if name.as_str() == "avx2")
+    ));
+    assert!(matches!(
+        &selector.entries()[2],
+        OmpSelectorEntry::User { condition, .. } if condition.source() == "enabled"
+    ));
+    assert!(matches!(
+        selector.entries()[3],
+        OmpSelectorEntry::Construct { .. }
+    ));
 
-    let first_when = &directive.clauses[0];
-    assert_eq!(first_when.name, "when");
-    assert!(matches!(first_when.kind, ClauseKind::Parenthesized(_)));
-    if let ClauseKind::Parenthesized(body) = &first_when.kind {
-        assert_eq!(
-            body.as_ref(),
-            "device={kind(cpu), isa(avx512f), arch(gen)}, implementation={vendor(llvm), extension(match_extension), atomic_default_mem_order(seq_cst)}, user={condition(iterations>0)}, construct={parallel, for, simd}: parallel for schedule(static,1)"
-        );
-    }
+    let nested = selector
+        .nested_directive()
+        .expect("when selector must retain its nested directive");
+    assert_eq!(nested.kind(), OmpDirectiveKind::Parallel);
+    assert_eq!(nested.clauses()[0].kind(), OmpClauseKind::NumThreads);
 
-    let second_when = &directive.clauses[1];
-    assert_eq!(second_when.name, "when");
-    if let ClauseKind::Parenthesized(body) = &second_when.kind {
-        assert_eq!(
-            body.as_ref(),
-            "device={kind(gpu)}, construct={teams, distribute}, implementation={extension(distributed)}, user={condition(flag != 0)}: teams distribute parallel for"
-        );
-    } else {
-        panic!("expected parenthesized clause for second when");
-    }
-
-    let default_clause = &directive.clauses[2];
-    assert_eq!(default_clause.name, "default");
-    if let ClauseKind::Parenthesized(body) = &default_clause.kind {
-        assert_eq!(body.as_ref(), "parallel for reduction(task,inscan,+:sum)");
-    } else {
-        panic!("expected parenthesized clause for default");
-    }
-}
-
-#[test]
-fn parses_metadirective_with_nested_directives_and_qualifiers() {
-    let parser = parser();
-    let source = "#pragma omp metadirective \
-        when(construct={target, teams, distribute, parallel for}, device={kind(nohost), device_num(1)}, implementation={vendor(amd), extension(quirk_mode)}, user={condition((iterations & 1) == 0)}: target teams distribute parallel for collapse(2) reduction(default, &:acc) nowait) \
-        when(implementation={atomic_default_mem_order(seq_cst)}, device={isa(avx2), arch(x86_64)}, user={condition(flag)}, construct={parallel, simd}: parallel for simd schedule(dynamic,4) reduction(^:checksum)) \
-        default(nothing)";
-
-    let (rest, directive) = parser
-        .parse(source)
-        .expect("metadirective with nested directives should parse");
-
-    assert!(rest.trim().is_empty());
-    assert_eq!(directive.name, "metadirective");
-    assert_eq!(directive.clauses.len(), 3);
-
-    for clause in &directive.clauses {
-        assert!(
-            matches!(clause.kind, ClauseKind::Parenthesized(_)),
-            "all clauses should be parenthesized"
-        );
-    }
-
-    let bodies: Vec<&str> = directive
-        .clauses
-        .iter()
-        .map(|clause| match &clause.kind {
-            ClauseKind::Parenthesized(body) => body.as_ref(),
-            ClauseKind::Bare => panic!("expected parenthesized clause"),
-            _ => panic!("unexpected clause kind"),
-        })
-        .collect();
-
+    assert_eq!(directive.clauses()[1].kind(), OmpClauseKind::Otherwise);
+    let ClauseData::MetadirectiveSelector { selector } = directive.clauses()[1].payload() else {
+        panic!("otherwise must have a typed nested directive");
+    };
     assert_eq!(
-        bodies[0],
-        "construct={target, teams, distribute, parallel for}, device={kind(nohost), device_num(1)}, implementation={vendor(amd), extension(quirk_mode)}, user={condition((iterations & 1) == 0)}: target teams distribute parallel for collapse(2) reduction(default, &:acc) nowait"
+        selector.nested_directive().map(|nested| nested.kind()),
+        Some(OmpDirectiveKind::Nothing)
     );
-    assert_eq!(
-        bodies[1],
-        "implementation={atomic_default_mem_order(seq_cst)}, device={isa(avx2), arch(x86_64)}, user={condition(flag)}, construct={parallel, simd}: parallel for simd schedule(dynamic,4) reduction(^:checksum)"
-    );
-    assert_eq!(bodies[2], "nothing");
 }
 
 #[test]
-fn metadirective_when_selector_preserves_text() {
-    let parser = parser();
-    let source = "#pragma omp metadirective when(user={condition(a>4)}: ) default(parallel)";
-    let (_rest, directive) = parser.parse(source).expect("parse should succeed");
-    assert_eq!(directive.clauses.len(), 2);
-    let when = &directive.clauses[0];
-    match &when.kind {
-        ClauseKind::Parenthesized(body) => {
-            assert!(!body.as_ref().trim().is_empty());
-        }
-        _ => panic!("expected parenthesized when selector"),
+fn nested_directive_parameters_survive_without_render_and_reparse() {
+    let parsed = parser()
+        .parse("#pragma omp metadirective when(device={kind(cpu)}: critical(lock))")
+        .expect("valid nested critical directive");
+    let ClauseData::MetadirectiveSelector { selector } = parsed.directive().clauses()[0].payload()
+    else {
+        panic!("expected typed selector");
+    };
+    let nested = selector.nested_directive().unwrap();
+
+    assert_eq!(nested.kind(), OmpDirectiveKind::Critical);
+    assert!(matches!(
+        nested.parameter(),
+        Some(OmpDirectiveParameter::CriticalSection(name)) if name.as_str() == "lock"
+    ));
+}
+
+#[test]
+fn malformed_selector_or_nested_suffix_is_a_hard_error() {
+    for source in [
+        "#pragma omp metadirective when(device: parallel)",
+        "#pragma omp metadirective when(device={}: parallel)",
+        "#pragma omp metadirective when(device={kind(cpu)}, device={isa(avx2)}: parallel)",
+        "#pragma omp metadirective when(device={kind(cpu)}: critical(lock) @junk)",
+        "#pragma omp metadirective when(user={condition(flag)}:)",
+    ] {
+        assert!(parser().parse(source).is_err(), "{source} must be rejected");
     }
 }

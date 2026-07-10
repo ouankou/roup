@@ -8,7 +8,6 @@
  */
 
 #include "OpenMPIR.h"
-#include <cstdlib>
 
 // Define the global used by the ompparser sources
 bool normalize_clauses_global = true;
@@ -19,15 +18,12 @@ bool clause_separator_comma = false;
 // Provide the setter (matches signature declared in OpenMPIR.h)
 void setNormalizeClauses(bool normalize) {
     normalize_clauses_global = normalize;
-    // Propagate to the Rust parser via environment variable understood by the C API.
-    const char* value = normalize ? "parser_parity" : "disabled";
-    setenv("ROUP_NORMALIZE_CLAUSES", value, /*overwrite=*/1);
 }
 
 // The compatibility build bypasses ompparser's lexer/parser, so there is no
-// live token stream to query. compat_impl.cpp assigns directive/clause source
-// locations explicitly after building the AST; these stubs only satisfy the
-// upstream API expected by SourceLocation's default constructor.
+// live upstream token stream to query. The adapter never infers locations by
+// rescanning source text; these stubs only satisfy SourceLocation's default
+// constructor until an explicit typed source-range query is available.
 int openmpGetCurrentTokenLine() {
     return 0;
 }

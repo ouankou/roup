@@ -31,7 +31,7 @@ echo ""
 echo "Step 1/5: Checking prerequisites..."
 
 command -v git >/dev/null 2>&1 || error "git not found"
-command -v cmake >/dev/null 2>&1 || error "cmake not found (need 3.10+)"
+command -v cmake >/dev/null 2>&1 || error "cmake not found (need 3.20+)"
 command -v cargo >/dev/null 2>&1 || error "cargo not found (install Rust)"
 
 # Check C++ compiler
@@ -59,16 +59,12 @@ else
 fi
 echo ""
 
-# Step 3: Build ROUP core
-echo "Step 3/5: Building ROUP core library..."
+# Step 3: Build the optional ROUP C ABI
+echo "Step 3/5: Building the optional ROUP C ABI..."
 
 cd "$ROUP_ROOT"
-if [ ! -f "target/release/libroup.a" ]; then
-    cargo build --release || error "Failed to build ROUP"
-    status "ROUP built successfully"
-else
-    warn "ROUP already built (skipping)"
-fi
+cargo build --locked --release -p roup-capi || error "Failed to build roup-capi"
+status "ROUP C ABI built successfully"
 echo ""
 
 # Step 4: Build compatibility layer
@@ -86,14 +82,9 @@ echo ""
 # Step 5: Run tests
 echo "Step 5/5: Running tests..."
 
-if [ -f "./accparser_example" ]; then
-    LD_LIBRARY_PATH=. ./accparser_example
-    LD_LIBRARY_PATH=. ./comprehensive_test
-    LD_LIBRARY_PATH=. ctest --output-on-failure
-    status "Tests passed"
-else
-    warn "Test binary not found"
-fi
+ctest --output-on-failure --no-tests=error \
+    || error "Strict compatibility tests failed"
+status "Tests completed"
 echo ""
 
 # Summary
@@ -103,7 +94,6 @@ echo "======================================"
 echo ""
 echo "Built files:"
 echo "  $SCRIPT_DIR/build/libaccparser.so"
-echo "  $SCRIPT_DIR/build/libroup-accparser-compat.a"
 echo ""
 echo "Next steps:"
 echo ""

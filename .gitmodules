@@ -5,3 +5,4 @@
 [submodule "compat/accparser/accparser"]
 	path = compat/accparser/accparser
 	url = https://github.com/ouankou/accparser.git
+	branch = main

@@ -1,51 +1,59 @@
-# Language-aware clause parsing
+# Host-language parsing
 
-ROUP includes lightweight parsing helpers that understand the OpenMP-specific
-syntax emitted by C, C++, and Fortran front-ends without implementing full
-language grammars. The helpers recognise array sections, mapper prefixes, and
-other surface syntax so the IR receives structured data instead of raw strings.
-
-## Supported features
-
-- **C and C++**: bracketed array sections, nested dimensions, template
-  arguments, namespaces, and quoted strings remain intact when clauses are
-  split.
-- **Fortran**: parenthesised array sections, rank separators, all-elements (`:`)
-  markers, and case-insensitive identifiers are normalised for the IR.
-- **Shared helpers**: mapper prefixes, ternary expressions, and balanced
-  delimiter tracking avoid splitting tokens inside expressions.
-
-## Configuration
-
-Language awareness is on by default through `ParserConfig::with_parsing`. Disable
-it when you need the legacy string-only behaviour:
+Every public parse selects an exact host-language profile and a compatible
+source form. C and C++ profiles use `SourceForm::Pragma`; Fortran profiles use
+`SourceForm::FortranFree` or `SourceForm::FortranFixed`. An incompatible pair
+is a configuration error before directive parsing begins.
 
 ```rust
-use roup::ir::{Language, ParserConfig};
+use roup::api::OpenMpConfig;
+use roup::version::{CppStandard, HostLanguageProfile, SourceForm};
 
-let config = ParserConfig::with_parsing(Language::C)
-    .with_language_semantics(false);
+let parser = OpenMpConfig::new(
+    HostLanguageProfile::Cpp(CppStandard::Cpp23),
+    SourceForm::Pragma,
+)?
+.parser();
+
+let parsed = parser.parse("#pragma omp target map(to: object.values[0:n])")?;
+assert_eq!(parsed.directive().kind().as_str(), "target");
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-## Implementation notes
+## Typed host data
 
-Relevant modules live in `src/ir/lang` (token splitting utilities) and
-`src/ir/convert.rs` (clause conversion). Array sections map to
-`ir::variable::ArraySection`, while identifier lists become
-`ir::variable::Variable` instances with optional section data.
+Embedded host syntax is parsed before a directive is returned:
 
-## Testing
+- Expressions are represented by `roup::host::Expr` trees. Literals,
+  operators, calls, members, subscripts, C/C++ array sections, and Fortran
+  section triplets have distinct typed nodes.
+- Identifiers and qualified names use validated identifier types.
+- Variable locators reuse the same expression tree and accept only variable
+  designators. Arithmetic, conditionals, calls, and literals cannot be stored
+  as locators.
+- Type names are lexed into typed tokens and checked for empty input,
+  unsupported characters, invalid boundaries, and unbalanced delimiters.
+- Fortran section bounds retain upper-bound semantics; they are not rewritten
+  into synthetic C-style length expressions.
 
-`cargo test language_parsing` runs the unit tests for the helpers. Integration
-coverage lives in `tests/ir_roundtrip.rs` and friends, ensuring structured data
-survives parse → IR → display cycles.
+Source text may be retained as backing storage for checked spans, but semantic
+consumers inspect the typed tree. ROUP has no string-only expression, locator,
+or type-name alternative.
 
-## Limitations
+## Host-standard gates
 
-- Mapper modifiers (`mapper(name) modifier(list)`) are parsed conservatively and
-  expose raw strings for now.
-- The pretty-printer currently renders Fortran sections using C-style brackets.
-- Member access such as `array(i)%field` is treated as a single identifier.
+The profile is semantic, not descriptive metadata. Syntax unavailable in the
+selected C, C++, or Fortran standard is rejected. Choosing a newer profile can
+enable newer host-language syntax without changing the OpenMP or OpenACC
+version policy.
 
-Planned work includes full mapper modifier support, richer Fortran display, and
-additional performance profiling once the syntax surface stabilises.
+## Hard-error boundary
+
+Unknown tokens, unbalanced delimiters, empty list elements, malformed array
+sections, trailing input, and invalid host/source-form combinations are hard
+errors. ROUP does not guess a default language, retain an unclassified string,
+or retry with a more permissive parser.
+
+Focused coverage lives in the host parser unit tests and in
+`tests/host_profile_gates.rs`, `tests/strict_clause_payloads.rs`, and
+`tests/strict_error_regressions.rs`.

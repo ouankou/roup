@@ -1,6 +1,10 @@
 # OpenACC 3.4 Directives and Clauses
 
-This comprehensive reference catalogue documents **all** OpenACC 3.4 keywords from the [OpenACC Application Programming Interface Version 3.4](https://www.openacc.org/sites/default/files/inline-files/OpenACC_3.4.pdf) specification.
+This reference catalogue documents the OpenACC 3.4 vocabulary from the
+[OpenACC Application Programming Interface Version 3.4](https://www.openacc.org/sites/default/files/inline-images/Specification/OpenACC-3.4.pdf).
+ROUP also accepts syntax standardized by earlier OpenACC specifications. Exact
+version modes use introduction ceilings, so an older standardized form remains
+accepted by later modes even when a later document no longer lists it.
 
 ## Purpose
 
@@ -11,8 +15,8 @@ This document serves as a complete keyword inventory for development and referen
 
 ## Coverage
 
-- **24 Directives/Constructs** - All compute, data, loop, synchronization, declaration, and runtime directives (including space/underscore alias forms)
-- **50+ Clauses** - All clause keywords
+- **Directives/Constructs** - Compute, data, loop, synchronization, declaration, and runtime directives
+- **Clauses** - Standard clause keywords and their typed payload families
 - **Modifiers** - Data clause modifiers, gang/worker/vector modifiers, collapse modifiers
 - **Special Values** - Async values, device types, default values
 - **Reduction Operators** - All supported reduction operations
@@ -93,8 +97,9 @@ This document serves as a complete keyword inventory for development and referen
 
 > **Synonyms:** The specification preserves historical aliases such as
 > `pcopy`, `pcopyin`, `pcopyout`, `pcreate` and their `present_or_*`
-> counterparts. ROUP registers each alias alongside the canonical clause name
-> so original source spellings are retained during parsing.
+> counterparts. ROUP accepts these spellings and canonicalizes them to the
+> corresponding typed data-clause kind. The checked source span still selects
+> the exact spelling written by the caller.
 
 ### Host-Device Interaction Clauses
 

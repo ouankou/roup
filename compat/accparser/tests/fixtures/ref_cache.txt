@@ -1,0 +1,2 @@
+#pragma acc cache(values[index], tile[0:n]) 
+#pragma acc cache(readonly: values[index], tile[0:n]) 

@@ -2,3 +2,8 @@
 tests/gpubootcamp/** linguist-vendored
 tests/openacc-users-group/** linguist-vendored
 website/** linguist-documentation
+
+# accparser's canonical cache-directive renderer emits its separator before
+# the empty clause list. These byte-exact golden files intentionally retain it.
+compat/accparser/tests/fixtures/ref_cache.txt whitespace=-blank-at-eol
+compat/accparser/tests/fixtures/ref_cache_fortran.txt whitespace=-blank-at-eol

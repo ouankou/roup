@@ -1,54 +1,54 @@
-# OpenMP 6.0 Restrictions
+# OpenMP validation boundaries
 
-The OpenMP specification attaches normative "Restrictions" text to almost every
-directive and clause.  Rather than duplicating that material (which quickly
-falls out of sync), this guide explains how to locate and verify the
-restrictions relevant to any construct while working on ROUP.
+The OpenMP specification defines syntax restrictions as well as rules that
+depend on an enclosing program. ROUP separates those two categories without
+silently skipping either one.
 
-## Where to look in the specification
+For the normative rules, consult the relevant directive and clause sections in
+the [OpenMP 6.0 specification](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf)
+or the earlier specification that introduced historical syntax.
 
-- **Directive sections** – Each directive definition in Chapters 5–17 of the
-  [OpenMP 6.0 specification](https://www.openmp.org/wp-content/uploads/OpenMP-API-Specification-6-0.pdf)
-  ends with a *Restrictions* subsection.  The text typically begins with
-  "Restrictions to the `<name>` directive are as follows".
-- **Clause sections** – Clause descriptions follow the same pattern, usually
-  starting with "Restrictions to the `<name>` clause".
-- **Tables and modifiers** – Map-type modifiers, dependence types, and other
-  structured lists include restrictions inline with the tables that define the
-  allowed values.
-- **Language-specific notes** – When the requirements differ between C/C++ and
-  Fortran, the spec labels each bullet accordingly.  Keep both variants in mind
-  when adding parser validation or documentation.
+## Checked by every parse
 
-## Practical workflow for ROUP contributors
+`OpenMpParser::parse` checks everything that can be decided from one directive
+and its configured profiles, including:
 
-1. **Locate the canonical section** using the directive and clause catalogues in
-   this repository.  Both
-   [`openmp60-directives-clauses.md`](./openmp60-directives-clauses.md) and
-   [`openmp60-directive-clause-components.md`](./openmp60-directive-clause-components.md)
-   link directly to the parser keywords.
-2. **Read the specification subsection** for the construct you are working on
-   and note any "must", "shall", or "must not" statements.  These are the
-   normative requirements that need to be respected by higher-level tooling.
-3. **Capture parser limitations** in code comments or documentation if ROUP does
-   not yet enforce a particular rule.  This keeps behaviour transparent for
-   users of the library and the ompparser compatibility layer.
-4. **Add tests where feasible**.  Many restrictions can be unit- or
-   integration-tested (for example, rejecting a clause form that is not
-   permitted).  When runtime enforcement is out of scope, reference the relevant
-   specification section in the documentation so readers know where the gap is.
+- source-form, sentinel, continuation, UTF-8, and trailing-input validity;
+- complete directive, parameter, clause, and modifier syntax, plus the
+  explicitly supported typed host-expression grammar;
+- feature introduction for the selected OpenMP and host-language versions;
+- directive-clause compatibility and duplicate singleton clauses;
+- structurally invalid nested directives and selectors; and
+- other context-independent restrictions represented by the validator.
 
-## Keeping restriction notes accurate
+Failure returns one structured `Diagnostic`. A parse never returns a partial
+AST, recovery node, warning-only substitute, or guessed default.
+Host-language constructs outside the documented typed expression grammar are
+also hard errors; ROUP does not claim to replace a complete C, C++, or Fortran
+frontend.
 
-- **Do not duplicate specification prose** verbatim; link to the relevant
-  section instead.  This avoids stale text and respects the licence of the
-  official document.
-- **Record deviations** whenever ROUP intentionally accepts syntax that the
-  specification would forbid.  Document the reasoning in the relevant module or
-  test to make review easier.
-- **Use citations** (for example, `§7.5.4`) when summarising restrictions in
-  release notes, tutorials, or design documents.  It gives downstream users a
-  precise pointer back to the standard.
+## Facts supplied by an embedding compiler
 
-By following this workflow the repository remains aligned with the official
-standard while still clearly communicating the parser's current behaviour.
+Some specification rules require information outside the directive text, such
+as declaration placement, construct association, name resolution, or whether a
+host expression is constant. Use `OpenMpParser::parse_with_facts` when those
+checks apply.
+
+Facts required by the parsed construct are mandatory. A missing fact is a hard
+diagnostic rather than permission to bypass the check. The compiler remains
+responsible for producing truthful facts from its program representation.
+
+## Stateful region validation
+
+`ContextValidator` validates directive sequences whose correctness depends on
+previous input, including begin/end pairing and association state. Opening and
+closing locations use checked spans, so mismatches can report the related
+source location.
+
+## Contributor rule
+
+When adding standardized syntax, record its introduction version, construct a
+fully typed payload, implement all context-independent restrictions, identify
+every required external fact, and add both positive and negative public-API
+tests. Do not add a permissive grammar branch while deferring malformed states
+to a renderer or compatibility adapter.
