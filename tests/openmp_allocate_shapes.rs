@@ -35,8 +35,7 @@ fn allocate_cumulative_grammars_have_one_typed_semantic_shape() {
         } if items.len() == 2
     ));
 
-    let historical_source =
-        "#pragma omp parallel private(first, second) allocate(flag ? first_allocator : second_allocator: first, second)";
+    let historical_source = "#pragma omp parallel private(first, second) allocate(flag ? first_allocator : second_allocator: first, second)";
     for version in [OpenMpVersion::V5_0, OpenMpVersion::V6_0] {
         let historical = parse_c(version, historical_source)
             .unwrap_or_else(|error| panic!("historical allocate rejected in {version}: {error}"));
@@ -52,8 +51,7 @@ fn allocate_cumulative_grammars_have_one_typed_semantic_shape() {
         ));
     }
 
-    let modern_source =
-        "#pragma omp parallel private(first, second) allocate(align(64), allocator(make_allocator(device)): first, second)";
+    let modern_source = "#pragma omp parallel private(first, second) allocate(align(64), allocator(make_allocator(device)): first, second)";
     let error = parse_c(OpenMpVersion::V5_0, modern_source)
         .expect_err("complex allocate modifiers did not exist in OpenMP 5.0");
     assert_eq!(

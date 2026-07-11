@@ -1,5 +1,5 @@
 use super::clause::LocatedClause;
-use super::clause::{lookup_clause_name, Clause, ClauseKind, ClauseName};
+use super::clause::{Clause, ClauseKind, ClauseName, lookup_clause_name};
 use super::directive::Directive;
 use super::semantic::{
     parse_acc_identifier_list, parse_clause_data, parse_directive_name_modifier,
@@ -25,8 +25,8 @@ use crate::ast::{
 };
 use crate::host::{ExprKind, Literal, QualifiedName, TokenKind, TypeName};
 use crate::ir::{
-    lang, ClauseData, ClauseItem, Expression, FirstprivateModifier, Identifier, LValue,
-    ParserConfig, ProcBind, Variable,
+    ClauseData, ClauseItem, Expression, FirstprivateModifier, Identifier, LValue, ParserConfig,
+    ProcBind, Variable, lang,
 };
 use crate::lexer::{LogicalSource, LogicalSourceError};
 use crate::version::{HostLanguage, OpenMpVersion, VersionPolicy};
@@ -296,7 +296,7 @@ fn build_omp_directive_parameter(
                 _ => {
                     return Err(AstBuildError::ParseFailure(format!(
                         "unknown cancel construct: {raw_construct}"
-                    )))
+                    )));
                 }
             };
             return Ok(Some(OmpDirectiveParameter::Construct(construct)));
@@ -557,10 +557,10 @@ fn parse_omp_function_name(
     source: &str,
     parser_config: &ParserConfig,
 ) -> Result<OmpFunctionName, AstBuildError> {
-    if let Ok(expression) = Expression::new(source, parser_config) {
-        if let ExprKind::Name(name) = &expression.ast().kind {
-            return Ok(OmpFunctionName::Name(name.clone()));
-        }
+    if let Ok(expression) = Expression::new(source, parser_config)
+        && let ExprKind::Name(name) = &expression.ast().kind
+    {
+        return Ok(OmpFunctionName::Name(name.clone()));
     }
 
     if matches!(parser_config.host_language(), HostLanguage::Cpp) {
@@ -848,17 +848,17 @@ fn parse_openmp_id_expression(
     parser_config: &ParserConfig,
     context: &str,
 ) -> Result<OmpIdExpression, AstBuildError> {
-    if let Ok(expression) = Expression::new(source, parser_config) {
-        if let crate::host::ExprKind::Name(name) = &expression.ast().kind {
-            if parser_config.host_language() != HostLanguage::Cpp
-                && (name.global || name.segments.len() != 1)
-            {
-                return Err(AstBuildError::ParseFailure(format!(
-                    "{context} must be an unqualified base-language identifier"
-                )));
-            }
-            return Ok(OmpIdExpression::Name(name.clone()));
+    if let Ok(expression) = Expression::new(source, parser_config)
+        && let crate::host::ExprKind::Name(name) = &expression.ast().kind
+    {
+        if parser_config.host_language() != HostLanguage::Cpp
+            && (name.global || name.segments.len() != 1)
+        {
+            return Err(AstBuildError::ParseFailure(format!(
+                "{context} must be an unqualified base-language identifier"
+            )));
         }
+        return Ok(OmpIdExpression::Name(name.clone()));
     }
 
     if parser_config.host_language() == HostLanguage::Cpp {
@@ -939,12 +939,11 @@ fn parse_cpp_operator_qualifier(
     source: &str,
     parser_config: &ParserConfig,
 ) -> Result<OmpCppOperatorQualifier, AstBuildError> {
-    if let Ok(expression) = Expression::new(source, parser_config) {
-        if let ExprKind::Name(name) = &expression.ast().kind {
-            if !name.global {
-                return Ok(OmpCppOperatorQualifier::Name(name.clone()));
-            }
-        }
+    if let Ok(expression) = Expression::new(source, parser_config)
+        && let ExprKind::Name(name) = &expression.ast().kind
+        && !name.global
+    {
+        return Ok(OmpCppOperatorQualifier::Name(name.clone()));
     }
 
     let syntax = TypeName::parse_with_profile(source, parser_config.profile())?;
@@ -1138,7 +1137,7 @@ fn unique_reduction_clause_argument<'a>(
         _ => {
             return Err(AstBuildError::ParseFailure(
                 "internal declare-reduction clause classification failure".to_string(),
-            ))
+            ));
         }
     };
     let mut result = None;
@@ -1733,19 +1732,19 @@ fn build_acc_directive_parameter(
         )?)));
     }
 
-    if kind == AccDirectiveKind::Routine {
-        if let Some(param) = directive.parameter.as_ref() {
-            let inner = parse_parenthesized_directive_parameter(param, "OpenACC routine")?.trim();
-            if inner.is_empty() {
-                return Err(AstBuildError::ParseFailure(
-                    "OpenACC routine parentheses require a routine name".to_string(),
-                ));
-            }
-            let ident = Identifier::new(inner)?;
-            return Ok(Some(AccDirectiveParameter::Routine(
-                AccRoutineDirective::new(ident),
-            )));
+    if kind == AccDirectiveKind::Routine
+        && let Some(param) = directive.parameter.as_ref()
+    {
+        let inner = parse_parenthesized_directive_parameter(param, "OpenACC routine")?.trim();
+        if inner.is_empty() {
+            return Err(AstBuildError::ParseFailure(
+                "OpenACC routine parentheses require a routine name".to_string(),
+            ));
         }
+        let ident = Identifier::new(inner)?;
+        return Ok(Some(AccDirectiveParameter::Routine(
+            AccRoutineDirective::new(ident),
+        )));
     }
 
     if kind == AccDirectiveKind::End {
@@ -2019,12 +2018,10 @@ fn parse_omp_clause_semantics(
     }
     if omp_universal_modifier_syntax_is_enabled(clause_name, parser_config)
         && matches!(clause_name, ClauseName::Firstprivate)
-    {
-        if let Some((payload, modifier)) =
+        && let Some((payload, modifier)) =
             parse_firstprivate_with_universal_modifier(clause, directive_kind, parser_config)?
-        {
-            return Ok((payload, Some(modifier)));
-        }
+    {
+        return Ok((payload, Some(modifier)));
     }
 
     if omp_universal_modifier_syntax_is_enabled(clause_name, parser_config) {
@@ -2034,39 +2031,33 @@ fn parse_omp_clause_semantics(
             }
             _ => None,
         };
-        if let Some(content) = content {
-            if let Some((candidate, argument)) = lang::split_once_top_level(content, ':')? {
-                if let Ok(parsed) = parse_directive_name_modifier(candidate.trim(), parser_config) {
-                    if crate::validation::omp_modifier_names_directive_or_constituent(
-                        directive_kind,
-                        parsed,
-                    ) {
-                        let view = borrowed_clause_argument_view(clause, argument);
-                        let payload = match &view.kind {
-                            ClauseKind::FlushMemoryOrderArgument(content) => {
-                                let content = content.as_ref().trim();
-                                if content.is_empty() {
-                                    return Err(AstBuildError::ClauseConversion(
-                                        "use_semantics requires a non-empty expression".to_string(),
-                                    ));
-                                }
-                                ClauseData::MemoryOrder {
-                                    order: parse_memory_order(clause.name.as_ref(), parser_config)
-                                        .map_err(|error| {
-                                            AstBuildError::ClauseConversion(error.to_string())
-                                        })?,
-                                    use_semantics: Some(Expression::new(content, parser_config)?),
-                                }
-                            }
-                            _ => parse_clause_data(&view, directive_kind, parser_config, source)
-                                .map_err(|error| {
-                                    AstBuildError::ClauseConversion(error.to_string())
-                                })?,
-                        };
-                        return Ok((payload, Some(parsed)));
+        if let Some(content) = content
+            && let Some((candidate, argument)) = lang::split_once_top_level(content, ':')?
+            && let Ok(parsed) = parse_directive_name_modifier(candidate.trim(), parser_config)
+            && crate::validation::omp_modifier_names_directive_or_constituent(
+                directive_kind,
+                parsed,
+            )
+        {
+            let view = borrowed_clause_argument_view(clause, argument);
+            let payload = match &view.kind {
+                ClauseKind::FlushMemoryOrderArgument(content) => {
+                    let content = content.as_ref().trim();
+                    if content.is_empty() {
+                        return Err(AstBuildError::ClauseConversion(
+                            "use_semantics requires a non-empty expression".to_string(),
+                        ));
+                    }
+                    ClauseData::MemoryOrder {
+                        order: parse_memory_order(clause.name.as_ref(), parser_config)
+                            .map_err(|error| AstBuildError::ClauseConversion(error.to_string()))?,
+                        use_semantics: Some(Expression::new(content, parser_config)?),
                     }
                 }
-            }
+                _ => parse_clause_data(&view, directive_kind, parser_config, source)
+                    .map_err(|error| AstBuildError::ClauseConversion(error.to_string()))?,
+            };
+            return Ok((payload, Some(parsed)));
         }
     }
 
@@ -2139,7 +2130,7 @@ fn convert_clause_to_omp(
                     _ => {
                         return Err(AstBuildError::ClauseConversion(
                             "invalid historical doacross payload".to_string(),
-                        ))
+                        ));
                     }
                 },
             ),
@@ -2175,19 +2166,19 @@ fn convert_clause_to_omp(
     };
     let kind = OmpClauseKind::try_from(canonical_name)
         .map_err(|_| AstBuildError::UnsupportedClause(clause.name.as_ref().to_string()))?;
-    if let Some(modifier) = directive_name_modifier {
-        if !crate::validation::omp_clause_applies_to_named_constituent(
+    if let Some(modifier) = directive_name_modifier
+        && !crate::validation::omp_clause_applies_to_named_constituent(
             directive_kind,
             modifier,
             kind,
-        ) {
-            return Err(AstBuildError::ClauseConversion(format!(
-                "clause {} does not apply to named constituent {} of {}",
-                kind.as_str(),
-                modifier.as_str(),
-                directive_kind.as_str()
-            )));
-        }
+        )
+    {
+        return Err(AstBuildError::ClauseConversion(format!(
+            "clause {} does not apply to named constituent {} of {}",
+            kind.as_str(),
+            modifier.as_str(),
+            directive_kind.as_str()
+        )));
     }
 
     let span = source.span_of(clause.name_source())?;
@@ -2304,7 +2295,7 @@ fn build_acc_default_clause(
         _ => {
             return Err(AstBuildError::ClauseConversion(
                 "OpenACC default clause requires one parenthesized value".to_string(),
-            ))
+            ));
         }
     };
 
@@ -2317,12 +2308,12 @@ fn build_acc_default_clause(
             "" => {
                 return Err(AstBuildError::ClauseConversion(
                     "OpenACC default clause requires 'none' or 'present'".to_string(),
-                ))
+                ));
             }
             other => {
                 return Err(AstBuildError::ClauseConversion(format!(
                     "unknown OpenACC default value: {other}"
-                )))
+                )));
             }
         }
     };
@@ -2348,7 +2339,7 @@ fn build_acc_collapse_clause(
             return Err(AstBuildError::ClauseConversion(format!(
                 "unknown OpenACC collapse modifier: {}",
                 modifier.trim()
-            )))
+            )));
         }
         None => (false, text),
     };
@@ -2480,7 +2471,7 @@ fn build_acc_copy_clause(
         other => {
             return Err(AstBuildError::UnsupportedClause(format!(
                 "unknown OpenACC copy clause keyword: {other}"
-            )))
+            )));
         }
     };
 
@@ -2512,7 +2503,7 @@ fn build_acc_copy_clause(
         _ => {
             return Err(AstBuildError::UnsupportedClause(
                 "copy clause requires a variable list".to_string(),
-            ))
+            ));
         }
     };
 
@@ -2531,7 +2522,7 @@ fn build_acc_create_clause(
         other => {
             return Err(AstBuildError::UnsupportedClause(format!(
                 "unknown OpenACC create clause keyword: {other}"
-            )))
+            )));
         }
     };
 
@@ -2544,7 +2535,7 @@ fn build_acc_create_clause(
         _ => {
             return Err(AstBuildError::UnsupportedClause(
                 "create clause requires a variable list".to_string(),
-            ))
+            ));
         }
     };
 
@@ -2596,12 +2587,12 @@ fn parse_acc_data_clause_content(
                     "" => {
                         return Err(AstBuildError::ClauseConversion(
                             "OpenACC data modifier list contains an empty entry".to_string(),
-                        ))
+                        ));
                     }
                     other => {
                         return Err(AstBuildError::ClauseConversion(format!(
                             "unknown OpenACC data modifier: {other}"
-                        )))
+                        )));
                     }
                 }
             };
@@ -2726,12 +2717,12 @@ fn build_acc_wait_clause(
             return Ok(AccClausePayload::Wait(AccWaitClause::new(
                 None,
                 Vec::new(),
-            )?))
+            )?));
         }
         _ => {
             return Err(AstBuildError::ClauseConversion(
                 "OpenACC wait clause has an invalid payload shape".to_string(),
-            ))
+            ));
         }
     };
     if content.is_empty() {
@@ -2786,7 +2777,7 @@ fn build_acc_vector_clause(
         _ => {
             return Err(AstBuildError::ClauseConversion(
                 "OpenACC vector clause has an invalid payload shape".to_string(),
-            ))
+            ));
         }
     };
     Ok(AccClausePayload::Vector(vector))
@@ -2829,7 +2820,7 @@ fn build_acc_worker_clause(
         _ => {
             return Err(AstBuildError::ClauseConversion(
                 "OpenACC worker clause has an invalid payload shape".to_string(),
-            ))
+            ));
         }
     };
     Ok(AccClausePayload::Worker(worker))
@@ -2844,7 +2835,7 @@ fn build_acc_bind_clause(
         _ => {
             return Err(AstBuildError::ClauseConversion(
                 "OpenACC bind clause requires a parenthesized name or string literal".to_string(),
-            ))
+            ));
         }
     };
     if content.is_empty() {
@@ -2864,7 +2855,7 @@ fn build_acc_bind_clause(
         _ => {
             return Err(AstBuildError::ClauseConversion(
                 "OpenACC bind target must be one host-language name or string literal".to_string(),
-            ))
+            ));
         }
     };
     Ok(AccClausePayload::Bind(target))
@@ -2950,7 +2941,7 @@ fn build_acc_gang_clause(
         _ => {
             return Err(AstBuildError::ClauseConversion(
                 "OpenACC gang clause has an invalid payload shape".to_string(),
-            ))
+            ));
         }
     };
     Ok(AccClausePayload::Gang(AccGangClause::new(arguments)?))
@@ -2977,7 +2968,7 @@ fn build_acc_device_type_clause(
         _ => {
             return Err(AstBuildError::ClauseConversion(
                 "OpenACC device_type clause requires a parenthesized name list".to_string(),
-            ))
+            ));
         }
     };
     if raw_values.is_empty() || raw_values.iter().any(|value| value.trim().is_empty()) {
@@ -3091,7 +3082,7 @@ fn require_acc_item_list(
             return Err(AstBuildError::ClauseConversion(format!(
                 "OpenACC {} clause requires a parenthesized variable list",
                 clause.name.as_ref()
-            )))
+            )));
         }
     };
 

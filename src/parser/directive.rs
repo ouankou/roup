@@ -4,7 +4,7 @@ use std::{
     ops::Deref,
 };
 
-use nom::{error::ErrorKind, IResult};
+use nom::{IResult, error::ErrorKind};
 
 use super::clause::{ClauseRegistry, LocatedClause};
 use crate::parser::directive_kind::DirectiveName;

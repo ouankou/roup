@@ -16,7 +16,7 @@ use crate::ast::{
 };
 use crate::host::{BinaryOp, ExprKind, HostLanguage, Literal, UnaryOp};
 use crate::ir::{
-    lang, AdjustArgsModifier, AllocateSourceSyntax, AtKind, AtomicOp, BindModifier, ClauseData,
+    AdjustArgsModifier, AllocateSourceSyntax, AtKind, AtomicOp, BindModifier, ClauseData,
     ClauseItem, ConversionError, DefaultKind, DefaultmapBehavior, DefaultmapCategory,
     DependIterator, DependType, DepobjUpdateDependence, DeviceModifier, DeviceType, DoacrossType,
     Expression, ExtendedAtomicKind, FirstprivateModifier, GrainsizeModifier, Identifier, LValue,
@@ -28,12 +28,12 @@ use crate::ir::{
     OmpParameterRange, OmpPreferenceSelector, OmpPreferenceSpecification, OrderKind, OrderModifier,
     OriginalSharing, ParserConfig, ProcBind, ReductionModifier, RequireModifier, ScanClauseMode,
     ScheduleKind, ScheduleModifier, SeverityKind, ThreadsetKind, UsesAllocatorBuiltin,
-    UsesAllocatorKind, UsesAllocatorSourceSyntax, UsesAllocatorSpec, Variable,
+    UsesAllocatorKind, UsesAllocatorSourceSyntax, UsesAllocatorSpec, Variable, lang,
 };
 use crate::lexer::{Language as LexerLanguage, LogicalSource};
 use crate::parser::clause::ReductionOperator as ParserReductionOperator;
 use crate::parser::clause::{lookup_clause_name, parse_variable_list};
-use crate::parser::directive_kind::{lookup_directive_name, DirectiveName};
+use crate::parser::directive_kind::{DirectiveName, lookup_directive_name};
 use crate::parser::{Clause, ClauseKind, ClauseName};
 
 /// Return a canonical payload keyword only for a case-insensitive host
@@ -245,7 +245,7 @@ fn convert_parser_reduction_operator(
             return Err(ConversionError::InvalidClauseSyntax(
                 "reduction identifier is not standardized for the configured host language"
                     .to_string(),
-            ))
+            ));
         }
         ParserReductionOperator::UserDefined => {
             let identifier = user_identifier
@@ -330,7 +330,7 @@ fn parse_original_reduction_modifier(
             return Err(ConversionError::InvalidClauseSyntax(format!(
                 "unknown original sharing value: {}",
                 value.trim()
-            )))
+            )));
         }
     };
     Ok(ReductionModifier::Original(sharing))
@@ -385,7 +385,7 @@ pub fn parse_schedule_clause(
                 _ => {
                     return Err(ConversionError::InvalidClauseSyntax(format!(
                         "Unknown schedule modifier: {raw}"
-                    )))
+                    )));
                 }
             };
 
@@ -444,7 +444,7 @@ pub fn parse_schedule_clause(
         Some(value) if value.trim().is_empty() => {
             return Err(ConversionError::InvalidClauseSyntax(
                 "schedule chunk expression must not be empty".to_string(),
-            ))
+            ));
         }
         Some(value) => Some(Expression::new(value.trim(), config)?),
         None => None,
@@ -578,15 +578,15 @@ pub fn parse_map_clause(
                     _ => {
                         return Err(ConversionError::InvalidClauseSyntax(format!(
                             "Unknown map modifier or type: {token}"
-                        )))
+                        )));
                     }
                 };
-                if let Some(parsed_type) = parsed_type {
-                    if map_type.replace(parsed_type).is_some() {
-                        return Err(ConversionError::InvalidClauseSyntax(
-                            "map clause specifies more than one map type".to_string(),
-                        ));
-                    }
+                if let Some(parsed_type) = parsed_type
+                    && map_type.replace(parsed_type).is_some()
+                {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "map clause specifies more than one map type".to_string(),
+                    ));
                 }
             }
             if modifiers.contains(&MapModifier::Delete) && map_type.is_none() {
@@ -958,7 +958,7 @@ fn parse_declare_target_enter_clause(
             return Err(ConversionError::InvalidClauseSyntax(format!(
                 "unknown declare-target enter modifier: {}",
                 modifier.trim()
-            )))
+            )));
         }
         None => (false, content.trim()),
     };
@@ -1281,7 +1281,7 @@ fn parse_apply_loop_modifier(
         _ => {
             return Err(ConversionError::InvalidClauseSyntax(format!(
                 "unknown apply loop modifier: {keyword_source}"
-            )))
+            )));
         }
     };
     let indices = indices_source
@@ -1299,7 +1299,7 @@ pub(crate) fn parse_at_clause(
     kind: &ClauseKind<'_>,
     config: &ParserConfig,
 ) -> Result<ClauseData, ConversionError> {
-    if let ClauseKind::Parenthesized(ref content) = kind {
+    if let ClauseKind::Parenthesized(content) = kind {
         let value = content.as_ref().trim();
         let keyword = payload_keyword(value, config);
         let at_kind = match keyword.as_ref() {
@@ -1308,12 +1308,12 @@ pub(crate) fn parse_at_clause(
             "" => {
                 return Err(ConversionError::InvalidClauseSyntax(
                     "at clause requires a value".to_string(),
-                ))
+                ));
             }
             _ => {
                 return Err(ConversionError::InvalidClauseSyntax(format!(
                     "Unknown at clause value: {value}"
-                )))
+                )));
             }
         };
         Ok(ClauseData::At(at_kind))
@@ -1459,7 +1459,7 @@ fn parse_depobj_init_clause(
         other => {
             return Err(ConversionError::InvalidClauseSyntax(format!(
                 "unknown depobj init dependence type: {other}"
-            )))
+            )));
         }
     };
     let locator_source = extract_paren_arg(depinfo_source)?.ok_or_else(|| {
@@ -1852,7 +1852,7 @@ pub(crate) fn parse_defaultmap_clause(
     kind: &ClauseKind<'_>,
     config: &ParserConfig,
 ) -> Result<ClauseData, ConversionError> {
-    if let ClauseKind::Parenthesized(ref content) = kind {
+    if let ClauseKind::Parenthesized(content) = kind {
         let text = content.as_ref().trim();
         if text.is_empty() {
             return Err(ConversionError::InvalidClauseSyntax(
@@ -1872,7 +1872,7 @@ pub(crate) fn parse_defaultmap_clause(
             Some("") => {
                 return Err(ConversionError::InvalidClauseSyntax(
                     "defaultmap category must not be empty".to_string(),
-                ))
+                ));
             }
             Some(value) => Some(parse_defaultmap_category(value, config)?),
             None => None,
@@ -1900,7 +1900,7 @@ pub(crate) fn parse_metadirective_selector(
             other => {
                 return Err(ConversionError::InvalidClauseSyntax(format!(
                     "{other:?} is not a metadirective selector clause"
-                )))
+                )));
             }
         };
         let selector = parse_selector_content(raw, config, mode, source)?;
@@ -1951,12 +1951,12 @@ fn parse_selector_content(
         {
             return Err(ConversionError::InvalidClauseSyntax(
                 "when clause requires a directive variant after ':'".to_string(),
-            ))
+            ));
         }
         SelectorClauseMode::Match if nested_directive_part.is_some() => {
             return Err(ConversionError::InvalidClauseSyntax(
                 "match clause does not accept a nested directive".to_string(),
-            ))
+            ));
         }
         _ => {}
     }
@@ -2073,7 +2073,7 @@ fn parse_selector_content(
             _ => {
                 return Err(ConversionError::InvalidClauseSyntax(format!(
                     "unknown metadirective selector key: {raw_key}"
-                )))
+                )));
             }
         }
     }
@@ -2081,10 +2081,10 @@ fn parse_selector_content(
     // Nested directive after colon (parse into nested_directive AST)
     if let Some(nested) = nested_directive_part {
         let nested_trimmed = nested.trim();
-        if !nested_trimmed.is_empty() {
-            if let Some(dir) = parse_nested_directive(nested_trimmed, config, source)? {
-                nested_directive = Some(Box::new(dir));
-            }
+        if !nested_trimmed.is_empty()
+            && let Some(dir) = parse_nested_directive(nested_trimmed, config, source)?
+        {
+            nested_directive = Some(Box::new(dir));
         }
     }
 
@@ -2406,7 +2406,7 @@ fn parse_selector_requirement(
         _ => {
             return Err(ConversionError::InvalidClauseSyntax(format!(
                 "unknown requires selector clause property: {source}"
-            )))
+            )));
         }
     };
     let required = argument
@@ -2824,7 +2824,7 @@ fn parse_defaultmap_behavior(
         _ => {
             return Err(ConversionError::InvalidClauseSyntax(format!(
                 "Unknown defaultmap behavior: {raw}"
-            )))
+            )));
         }
     };
     Ok(behavior)
@@ -2845,7 +2845,7 @@ fn parse_defaultmap_category(
         _ => {
             return Err(ConversionError::InvalidClauseSyntax(format!(
                 "Unknown defaultmap category: {raw}"
-            )))
+            )));
         }
     };
     Ok(category)
@@ -3026,7 +3026,7 @@ fn parse_omp_memory_space(
         _ => {
             return Err(ConversionError::InvalidClauseSyntax(format!(
                 "unknown predefined OpenMP memory space: {source}"
-            )))
+            )));
         }
     })
 }
@@ -3053,7 +3053,7 @@ pub(crate) fn parse_device_clause(
     kind: &ClauseKind<'_>,
     config: &ParserConfig,
 ) -> Result<ClauseData, ConversionError> {
-    if let ClauseKind::Parenthesized(ref content) = kind {
+    if let ClauseKind::Parenthesized(content) = kind {
         let text = content.as_ref().trim();
         let (modifier, expr_text) = match lang::split_once_top_level(text, ':')? {
             Some((name, rest)) if payload_keyword_eq(name.trim(), "ancestor", config) => {
@@ -3066,7 +3066,7 @@ pub(crate) fn parse_device_clause(
                 return Err(ConversionError::InvalidClauseSyntax(format!(
                     "unknown device modifier: {}",
                     name.trim()
-                )))
+                )));
             }
             None => (None, text),
         };
@@ -3244,7 +3244,7 @@ pub(crate) fn parse_scan_clause(
         _ => {
             return Err(ConversionError::InvalidClauseSyntax(
                 "scan clause requires a variable list".to_string(),
-            ))
+            ));
         }
     };
 
@@ -3529,7 +3529,7 @@ fn parse_depend_objects(
                 ClauseItem::FortranCommonBlock(_) | ClauseItem::Expression(_) => {
                     return Err(ConversionError::InvalidClauseSyntax(
                         "depend(depobj: ...) accepts only depend-object variables".to_string(),
-                    ))
+                    ));
                 }
             };
             if object.has_array_section() {
@@ -3595,7 +3595,7 @@ fn parse_doacross_vector_item(
                     return Err(ConversionError::InvalidClauseSyntax(
                         "doacross vector offsets must be non-negative constant integers"
                             .to_string(),
-                    ))
+                    ));
                 }
                 ObviousIntegerValue::Unknown | ObviousIntegerValue::NonNegative(_) => {}
             }
@@ -3609,7 +3609,7 @@ fn parse_doacross_vector_item(
         _ => {
             return Err(ConversionError::InvalidClauseSyntax(
                 "doacross vector entries must have the form variable[+/-offset]".to_string(),
-            ))
+            ));
         }
     };
     if payload_keyword_eq(variable.as_str(), "omp_cur_iteration", config) {
@@ -3660,22 +3660,20 @@ fn parse_doacross_iteration(
             left,
             right,
         } = &unparenthesized_expression(expression.ast()).kind
-        {
-            if simple_expression_identifier(left)
+            && simple_expression_identifier(left)
                 .is_some_and(|name| payload_keyword_eq(name.as_str(), "omp_cur_iteration", config))
-                && matches!(
-                    obvious_integer_value(&expression.subtree(right)),
-                    ObviousIntegerValue::NonNegative(1)
-                )
-            {
-                return if kind == DoacrossType::Sink {
-                    Ok(OmpDoacrossIteration::PreviousCurrent)
-                } else {
-                    Err(ConversionError::InvalidClauseSyntax(
-                        "source may specify only omp_cur_iteration".to_string(),
-                    ))
-                };
-            }
+            && matches!(
+                obvious_integer_value(&expression.subtree(right)),
+                ObviousIntegerValue::NonNegative(1)
+            )
+        {
+            return if kind == DoacrossType::Sink {
+                Ok(OmpDoacrossIteration::PreviousCurrent)
+            } else {
+                Err(ConversionError::InvalidClauseSyntax(
+                    "source may specify only omp_cur_iteration".to_string(),
+                ))
+            };
         }
     }
 
@@ -3791,7 +3789,7 @@ fn parse_doacross_clause(
         _ => {
             return Err(ConversionError::InvalidClauseSyntax(format!(
                 "unknown doacross dependence type: {kind_source}"
-            )))
+            )));
         }
     };
     Ok(ClauseData::Doacross {
@@ -4424,19 +4422,16 @@ fn parse_nonrecursive_clause_data<'a>(
                         ));
                     }
                 }
-                if let Some(lower) = lower_bound.as_ref() {
-                    if let (
+                if let Some(lower) = lower_bound.as_ref()
+                    && let (
                         ObviousIntegerValue::NonNegative(lower),
                         ObviousIntegerValue::NonNegative(upper),
                     ) = (obvious_integer_value(lower), obvious_integer_value(&upper_bound))
-                    {
-                        if lower > upper {
-                            return Err(ConversionError::InvalidClauseSyntax(
-                                "num_teams lower bound must not exceed its upper bound"
-                                    .to_string(),
-                            ));
-                        }
-                    }
+                    && lower > upper
+                {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "num_teams lower bound must not exceed its upper bound".to_string(),
+                    ));
                 }
                 Ok(ClauseData::NumTeams {
                     lower_bound,

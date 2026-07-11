@@ -49,6 +49,7 @@ error.
 
 Regression coverage is organized around the public typed API in
 `tests/openacc_public_api.rs`, `tests/openacc_directive_parameters.rs`,
-`tests/feature_availability.rs`, `tests/host_profile_gates.rs`, and the strict
-payload and error suites. The optional `roup-capi` crate and accparser adapter
-are tested separately from the safe Rust parser.
+`tests/openacc_line_continuations.rs`, `tests/feature_availability.rs`,
+`tests/host_profile_gates.rs`, and the strict payload and error suites. The
+optional `roup-capi` crate and accparser adapter are tested separately from the
+safe Rust parser.

@@ -8,16 +8,16 @@ use core::fmt;
 use core::ptr;
 use core::slice;
 use core::str;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use crate::service::{self, Failure, ServiceResult};
 use crate::{
-    RoupCallResult, RoupClauseKind, RoupClauseKindResult, RoupDirectiveHandle, RoupDirectiveKind,
-    RoupDirectiveKindResult, RoupDirectiveResult, RoupErrorHandle, RoupFieldInfo,
-    RoupFieldInfoResult, RoupNodeHandle, RoupNodeKind, RoupNodeKindResult, RoupNodeResult,
-    RoupParameterKind, RoupParameterKindResult, RoupParserHandle, RoupParserOptions,
-    RoupParserResult, RoupSizeResult, RoupSpan, RoupSpanResult, RoupU32Result, RoupU64Result,
-    ROUP_ABI_VERSION,
+    ROUP_ABI_VERSION, RoupCallResult, RoupClauseKind, RoupClauseKindResult, RoupDirectiveHandle,
+    RoupDirectiveKind, RoupDirectiveKindResult, RoupDirectiveResult, RoupErrorHandle,
+    RoupFieldInfo, RoupFieldInfoResult, RoupNodeHandle, RoupNodeKind, RoupNodeKindResult,
+    RoupNodeResult, RoupParameterKind, RoupParameterKindResult, RoupParserHandle,
+    RoupParserOptions, RoupParserResult, RoupSizeResult, RoupSpan, RoupSpanResult, RoupU32Result,
+    RoupU64Result,
 };
 
 /// A hard failure while validating a caller-provided buffer.
@@ -209,19 +209,19 @@ unsafe fn string_copy(
 }
 
 /// Return the implemented ABI version.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_abi_version() -> RoupU32Result {
     RoupU32Result::success(ROUP_ABI_VERSION)
 }
 
 /// Create a strict OpenMP or OpenACC parser from validated raw options.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_parser_create(options: RoupParserOptions) -> RoupParserResult {
     invoke(|| service::create_parser(options))
 }
 
 /// Release a parser handle. Existing directive handles remain independently owned.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_parser_release(parser: RoupParserHandle) -> RoupCallResult {
     invoke(|| service::release_parser(parser))
 }
@@ -231,7 +231,7 @@ pub extern "C" fn roup_parser_release(parser: RoupParserHandle) -> RoupCallResul
 /// # Safety
 ///
 /// `input` must satisfy [`copy_utf8_input`]'s safety contract.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn roup_parse(
     parser: RoupParserHandle,
     input: *const u8,
@@ -247,46 +247,46 @@ pub unsafe extern "C" fn roup_parse(
 }
 
 /// Release an owned directive handle.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_release(directive: RoupDirectiveHandle) -> RoupCallResult {
     invoke(|| service::release_directive(directive))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_dialect(directive: RoupDirectiveHandle) -> RoupU32Result {
     invoke(|| service::directive_dialect(directive))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_kind(directive: RoupDirectiveHandle) -> RoupDirectiveKindResult {
     invoke(|| service::directive_kind(directive))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_span(directive: RoupDirectiveHandle) -> RoupSpanResult {
     invoke(|| service::directive_span(directive))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_has_parameter(directive: RoupDirectiveHandle) -> RoupU32Result {
     invoke(|| service::directive_has_parameter(directive))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_parameter_kind(
     directive: RoupDirectiveHandle,
 ) -> RoupParameterKindResult {
     invoke(|| service::directive_parameter_kind(directive))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_parameter_field_count(
     directive: RoupDirectiveHandle,
 ) -> RoupSizeResult {
     invoke(|| service::directive_parameter_field_count(directive))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_parameter_field_info(
     directive: RoupDirectiveHandle,
     field_index: usize,
@@ -294,7 +294,7 @@ pub extern "C" fn roup_directive_parameter_field_info(
     invoke(|| service::directive_parameter_field_info(directive, field_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_parameter_field_name_length(
     directive: RoupDirectiveHandle,
     field_index: usize,
@@ -307,7 +307,7 @@ pub extern "C" fn roup_directive_parameter_field_name_length(
 /// # Safety
 ///
 /// `output` must satisfy [`copy_utf8_output`]'s safety contract.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn roup_directive_parameter_field_name_copy(
     directive: RoupDirectiveHandle,
     field_index: usize,
@@ -324,7 +324,7 @@ pub unsafe extern "C" fn roup_directive_parameter_field_name_copy(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_parameter_field_u32(
     directive: RoupDirectiveHandle,
     field_index: usize,
@@ -333,7 +333,7 @@ pub extern "C" fn roup_directive_parameter_field_u32(
     invoke(|| service::directive_parameter_field_u32(directive, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_parameter_field_u64(
     directive: RoupDirectiveHandle,
     field_index: usize,
@@ -342,7 +342,7 @@ pub extern "C" fn roup_directive_parameter_field_u64(
     invoke(|| service::directive_parameter_field_u64(directive, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_parameter_field_bool(
     directive: RoupDirectiveHandle,
     field_index: usize,
@@ -351,7 +351,7 @@ pub extern "C" fn roup_directive_parameter_field_bool(
     invoke(|| service::directive_parameter_field_bool(directive, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_parameter_field_string_length(
     directive: RoupDirectiveHandle,
     field_index: usize,
@@ -365,7 +365,7 @@ pub extern "C" fn roup_directive_parameter_field_string_length(
 /// # Safety
 ///
 /// `output` must satisfy [`copy_utf8_output`]'s safety contract.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn roup_directive_parameter_field_string_copy(
     directive: RoupDirectiveHandle,
     field_index: usize,
@@ -384,7 +384,7 @@ pub unsafe extern "C" fn roup_directive_parameter_field_string_copy(
 }
 
 /// Acquire an independently owned semantic child-node handle.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_parameter_field_node(
     directive: RoupDirectiveHandle,
     field_index: usize,
@@ -393,7 +393,7 @@ pub extern "C" fn roup_directive_parameter_field_node(
     invoke(|| service::directive_parameter_field_node(directive, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_name_length(directive: RoupDirectiveHandle) -> RoupSizeResult {
     string_length(|| service::directive_name(directive))
 }
@@ -403,7 +403,7 @@ pub extern "C" fn roup_directive_name_length(directive: RoupDirectiveHandle) -> 
 /// # Safety
 ///
 /// `output` must satisfy [`copy_utf8_output`]'s safety contract.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn roup_directive_name_copy(
     directive: RoupDirectiveHandle,
     output: *mut u8,
@@ -413,19 +413,19 @@ pub unsafe extern "C" fn roup_directive_name_copy(
     unsafe { string_copy(|| service::directive_name(directive), output, capacity) }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_clause_count(directive: RoupDirectiveHandle) -> RoupSizeResult {
     invoke(|| service::directive_clause_count(directive))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_directive_compatible_versions(
     directive: RoupDirectiveHandle,
 ) -> RoupU64Result {
     invoke(|| service::directive_compatible_versions(directive))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_kind(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -433,7 +433,7 @@ pub extern "C" fn roup_clause_kind(
     invoke(|| service::clause_kind(directive, clause_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_span(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -441,7 +441,7 @@ pub extern "C" fn roup_clause_span(
     invoke(|| service::clause_span(directive, clause_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_name_length(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -454,7 +454,7 @@ pub extern "C" fn roup_clause_name_length(
 /// # Safety
 ///
 /// `output` must satisfy [`copy_utf8_output`]'s safety contract.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn roup_clause_name_copy(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -471,7 +471,7 @@ pub unsafe extern "C" fn roup_clause_name_copy(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_field_count(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -479,7 +479,7 @@ pub extern "C" fn roup_clause_field_count(
     invoke(|| service::clause_field_count(directive, clause_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_field_info(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -488,7 +488,7 @@ pub extern "C" fn roup_clause_field_info(
     invoke(|| service::clause_field_info(directive, clause_index, field_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_field_name_length(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -502,7 +502,7 @@ pub extern "C" fn roup_clause_field_name_length(
 /// # Safety
 ///
 /// `output` must satisfy [`copy_utf8_output`]'s safety contract.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn roup_clause_field_name_copy(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -520,7 +520,7 @@ pub unsafe extern "C" fn roup_clause_field_name_copy(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_field_u32(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -530,7 +530,7 @@ pub extern "C" fn roup_clause_field_u32(
     invoke(|| service::clause_field_u32(directive, clause_index, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_field_u64(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -540,7 +540,7 @@ pub extern "C" fn roup_clause_field_u64(
     invoke(|| service::clause_field_u64(directive, clause_index, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_field_bool(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -550,7 +550,7 @@ pub extern "C" fn roup_clause_field_bool(
     invoke(|| service::clause_field_bool(directive, clause_index, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_field_string_length(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -567,7 +567,7 @@ pub extern "C" fn roup_clause_field_string_length(
 /// # Safety
 ///
 /// `output` must satisfy [`copy_utf8_output`]'s safety contract.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn roup_clause_field_string_copy(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -587,7 +587,7 @@ pub unsafe extern "C" fn roup_clause_field_string_copy(
 }
 
 /// Acquire an independently owned semantic child-node handle.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_clause_field_node(
     directive: RoupDirectiveHandle,
     clause_index: usize,
@@ -597,17 +597,17 @@ pub extern "C" fn roup_clause_field_node(
     invoke(|| service::clause_field_node(directive, clause_index, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_kind(node: RoupNodeHandle) -> RoupNodeKindResult {
     invoke(|| service::node_kind(node))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_field_count(node: RoupNodeHandle) -> RoupSizeResult {
     invoke(|| service::node_field_count(node))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_field_info(
     node: RoupNodeHandle,
     field_index: usize,
@@ -615,7 +615,7 @@ pub extern "C" fn roup_node_field_info(
     invoke(|| service::node_field_info(node, field_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_field_name_length(
     node: RoupNodeHandle,
     field_index: usize,
@@ -628,7 +628,7 @@ pub extern "C" fn roup_node_field_name_length(
 /// # Safety
 ///
 /// `output` must satisfy [`copy_utf8_output`]'s safety contract.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn roup_node_field_name_copy(
     node: RoupNodeHandle,
     field_index: usize,
@@ -645,7 +645,7 @@ pub unsafe extern "C" fn roup_node_field_name_copy(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_field_u32(
     node: RoupNodeHandle,
     field_index: usize,
@@ -654,7 +654,7 @@ pub extern "C" fn roup_node_field_u32(
     invoke(|| service::node_field_u32(node, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_field_u64(
     node: RoupNodeHandle,
     field_index: usize,
@@ -663,7 +663,7 @@ pub extern "C" fn roup_node_field_u64(
     invoke(|| service::node_field_u64(node, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_field_bool(
     node: RoupNodeHandle,
     field_index: usize,
@@ -672,7 +672,7 @@ pub extern "C" fn roup_node_field_bool(
     invoke(|| service::node_field_bool(node, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_field_string_length(
     node: RoupNodeHandle,
     field_index: usize,
@@ -686,7 +686,7 @@ pub extern "C" fn roup_node_field_string_length(
 /// # Safety
 ///
 /// `output` must satisfy [`copy_utf8_output`]'s safety contract.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn roup_node_field_string_copy(
     node: RoupNodeHandle,
     field_index: usize,
@@ -705,7 +705,7 @@ pub unsafe extern "C" fn roup_node_field_string_copy(
 }
 
 /// Acquire an independently owned nested semantic child-node handle.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_field_node(
     node: RoupNodeHandle,
     field_index: usize,
@@ -714,22 +714,22 @@ pub extern "C" fn roup_node_field_node(
     invoke(|| service::node_field_node(node, field_index, value_index))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_release(node: RoupNodeHandle) -> RoupCallResult {
     invoke(|| service::release_node(node))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_error_code(error: RoupErrorHandle) -> RoupU32Result {
     invoke(|| service::error_code(error))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_error_span(error: RoupErrorHandle) -> RoupSpanResult {
     invoke(|| service::error_span(error))
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_error_message_length(error: RoupErrorHandle) -> RoupSizeResult {
     string_length(|| service::error_message(error))
 }
@@ -739,7 +739,7 @@ pub extern "C" fn roup_error_message_length(error: RoupErrorHandle) -> RoupSizeR
 /// # Safety
 ///
 /// `output` must satisfy [`copy_utf8_output`]'s safety contract.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn roup_error_message_copy(
     error: RoupErrorHandle,
     output: *mut u8,
@@ -750,7 +750,7 @@ pub unsafe extern "C" fn roup_error_message_copy(
 }
 
 /// Release an error handle after all diagnostic fields have been copied.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_error_release(error: RoupErrorHandle) -> RoupCallResult {
     invoke(|| service::release_error(error))
 }
@@ -759,7 +759,7 @@ pub extern "C" fn roup_error_release(error: RoupErrorHandle) -> RoupCallResult {
 mod tests {
     use super::*;
     use crate::{
-        RoupStatus, ROUP_DIALECT_OPENMP, ROUP_HOST_C, ROUP_SOURCE_PRAGMA, ROUP_VERSION_ANY,
+        ROUP_DIALECT_OPENMP, ROUP_HOST_C, ROUP_SOURCE_PRAGMA, ROUP_VERSION_ANY, RoupStatus,
     };
 
     fn openmp_options() -> RoupParserOptions {

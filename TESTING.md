@@ -43,6 +43,8 @@ The first failure terminates the run.
 
 ## Toolchain policy
 
-The minimum supported Rust version is 1.88. CI tests Rust 1.88 and the current
-stable release on Linux, Windows, and macOS. The Linux integration job also
-runs the complete native and documentation gate.
+The minimum supported Rust version is 1.88, the highest minimum required by
+the complete Rust dependency and tooling graph, including the required pinned
+mdBook. CI tests Rust 1.88 and the current stable release on Ubuntu 26.04,
+Windows 2025, and macOS 26. The Ubuntu integration job also runs the complete
+native and documentation gate.

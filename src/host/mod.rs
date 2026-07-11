@@ -15,7 +15,7 @@ mod type_name;
 pub use ast::*;
 pub use lexer::{LexError, LexErrorKind, Lexer, Token, TokenKind};
 pub use parser::{
-    parse_expression, parse_expression_with_profile, ParseError, ParseErrorKind, Parser,
+    ParseError, ParseErrorKind, Parser, parse_expression, parse_expression_with_profile,
 };
 pub use render::CanonicalDisplay;
 pub use type_name::{Delimiter as TypeNameDelimiter, TypeName, TypeNameError};

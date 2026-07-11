@@ -11,8 +11,8 @@ pub(crate) mod semantic;
 pub(crate) use ast_builder::AstBuildError;
 
 pub(crate) use clause::{
-    lookup_clause_name, Clause, ClauseKind, ClauseName, ClauseRegistry, ClauseRegistryBuilder,
-    ClauseRule,
+    Clause, ClauseKind, ClauseName, ClauseRegistry, ClauseRegistryBuilder, ClauseRule,
+    lookup_clause_name,
 };
 pub(crate) use directive::{
     Directive, DirectiveRegistry, DirectiveRegistryBuilder, LocatedDirective,

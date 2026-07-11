@@ -1164,19 +1164,18 @@ fn validate_openmp_directive_specific_clause(
             }
         }
         ClauseData::Depend { dependence, .. } => {
-            if let crate::ir::OmpDependence::Locators { kind, locators } = dependence {
-                if locators.contains(&OmpLocator::AllMemory)
-                    && (!matches!(
-                        kind,
-                        crate::ir::DependType::Out | crate::ir::DependType::Inout
-                    ) || locators.len() != 1)
-                {
-                    return Err(Diagnostic::new(
-                        DiagnosticCode::InvalidClause,
-                        span,
-                        "omp_all_memory must be the only locator and use out or inout dependence",
-                    ));
-                }
+            if let crate::ir::OmpDependence::Locators { kind, locators } = dependence
+                && locators.contains(&OmpLocator::AllMemory)
+                && (!matches!(
+                    kind,
+                    crate::ir::DependType::Out | crate::ir::DependType::Inout
+                ) || locators.len() != 1)
+            {
+                return Err(Diagnostic::new(
+                    DiagnosticCode::InvalidClause,
+                    span,
+                    "omp_all_memory must be the only locator and use out or inout dependence",
+                ));
             }
             Ok(())
         }
@@ -1352,14 +1351,14 @@ fn validate_openmp_apply_clause(
                     modifier.kind,
                     directive.kind()
                 ),
-            ))
+            ));
         }
         None if !has_default => {
             return Err(Diagnostic::new(
                 DiagnosticCode::MissingRequiredClause,
                 span,
                 format!("apply on {:?} requires a loop modifier", directive.kind()),
-            ))
+            ));
         }
         Some(_) | None => {}
     }
@@ -1716,14 +1715,14 @@ fn require_openmp_semantic_facts(
                     DiagnosticCode::MissingContext,
                     span,
                     format!("missing required association fact: {association:?}"),
-                ))
+                ));
             }
             Some(false) => {
                 return Err(Diagnostic::new(
                     DiagnosticCode::InvalidAssociation,
                     span,
                     format!("invalid directive association: {association:?}"),
-                ))
+                ));
             }
             Some(true) => {}
         }
@@ -2464,14 +2463,14 @@ fn validate_openmp_obvious_scalar_constraints(
             }
         }
         ClauseData::Align { alignment } => {
-            if let Some(value) = reject_obvious_nonpositive(alignment, span, "align")? {
-                if !value.is_power_of_two() {
-                    return Err(Diagnostic::new(
-                        DiagnosticCode::InvalidClause,
-                        span,
-                        "align requires a power-of-two constant integer value",
-                    ));
-                }
+            if let Some(value) = reject_obvious_nonpositive(alignment, span, "align")?
+                && !value.is_power_of_two()
+            {
+                return Err(Diagnostic::new(
+                    DiagnosticCode::InvalidClause,
+                    span,
+                    "align requires a power-of-two constant integer value",
+                ));
             }
         }
         ClauseData::Allocate {
@@ -2479,14 +2478,13 @@ fn validate_openmp_obvious_scalar_constraints(
             ..
         } => {
             if let Some(value) = reject_obvious_nonpositive(alignment, span, "allocate alignment")?
+                && !value.is_power_of_two()
             {
-                if !value.is_power_of_two() {
-                    return Err(Diagnostic::new(
-                        DiagnosticCode::InvalidClause,
-                        span,
-                        "allocate alignment requires a power-of-two constant integer value",
-                    ));
-                }
+                return Err(Diagnostic::new(
+                    DiagnosticCode::InvalidClause,
+                    span,
+                    "allocate alignment requires a power-of-two constant integer value",
+                ));
             }
         }
         ClauseData::Looprange { first, count } => {
@@ -2593,14 +2591,14 @@ fn validate_openmp_obvious_scalar_constraints(
                 .transpose()?
                 .flatten();
             let upper = reject_obvious_nonpositive(upper_bound, span, "num_teams upper bound")?;
-            if let (Some(lower), Some(upper)) = (lower, upper) {
-                if lower > upper {
-                    return Err(Diagnostic::new(
-                        DiagnosticCode::InvalidClause,
-                        span,
-                        "num_teams lower bound must not exceed its upper bound",
-                    ));
-                }
+            if let (Some(lower), Some(upper)) = (lower, upper)
+                && lower > upper
+            {
+                return Err(Diagnostic::new(
+                    DiagnosticCode::InvalidClause,
+                    span,
+                    "num_teams lower bound must not exceed its upper bound",
+                ));
             }
         }
         ClauseData::ThreadLimit { limit } => {
@@ -2834,28 +2832,22 @@ fn validate_openmp_obvious_relations(
             .find(|clause| clause.kind() == kind)
             .map(crate::ast::OmpClause::payload)
     };
-    if let (
-        Some(ClauseData::Safelen { length: safe }),
-        Some(ClauseData::Simdlen { length: simd }),
-    ) = (
+    if let (Some(ClauseData::Safelen { length: safe }), Some(ClauseData::Simdlen { length: simd })) = (
         payload(OmpClauseKind::Safelen),
         payload(OmpClauseKind::Simdlen),
-    ) {
-        if let (
-            Some(IntegerEvaluation::NonNegative(safe)),
-            Some(IntegerEvaluation::NonNegative(simd)),
-        ) = (
-            obvious_integer_evaluation(safe),
-            obvious_integer_evaluation(simd),
-        ) {
-            if simd > safe {
-                return Err(Diagnostic::new(
-                    DiagnosticCode::InvalidClause,
-                    span,
-                    "simdlen must be less than or equal to safelen",
-                ));
-            }
-        }
+    ) && let (
+        Some(IntegerEvaluation::NonNegative(safe)),
+        Some(IntegerEvaluation::NonNegative(simd)),
+    ) = (
+        obvious_integer_evaluation(safe),
+        obvious_integer_evaluation(simd),
+    ) && simd > safe
+    {
+        return Err(Diagnostic::new(
+            DiagnosticCode::InvalidClause,
+            span,
+            "simdlen must be less than or equal to safelen",
+        ));
     }
     if let (
         Some(ClauseData::Collapse { n: collapsed }),
@@ -2863,22 +2855,19 @@ fn validate_openmp_obvious_relations(
     ) = (
         payload(OmpClauseKind::Collapse),
         payload(OmpClauseKind::Ordered),
-    ) {
-        if let (
-            Some(IntegerEvaluation::NonNegative(collapsed)),
-            Some(IntegerEvaluation::NonNegative(ordered)),
-        ) = (
-            obvious_integer_evaluation(collapsed),
-            obvious_integer_evaluation(ordered),
-        ) {
-            if ordered < collapsed {
-                return Err(Diagnostic::new(
-                    DiagnosticCode::InvalidClause,
-                    span,
-                    "ordered(n) must be greater than or equal to collapse(n)",
-                ));
-            }
-        }
+    ) && let (
+        Some(IntegerEvaluation::NonNegative(collapsed)),
+        Some(IntegerEvaluation::NonNegative(ordered)),
+    ) = (
+        obvious_integer_evaluation(collapsed),
+        obvious_integer_evaluation(ordered),
+    ) && ordered < collapsed
+    {
+        return Err(Diagnostic::new(
+            DiagnosticCode::InvalidClause,
+            span,
+            "ordered(n) must be greater than or equal to collapse(n)",
+        ));
     }
     Ok(())
 }
@@ -3041,14 +3030,14 @@ fn require_openmp_clause_semantic_facts(
                                 require_positive_constant_integer(upper, site, span, facts)
                             })
                             .transpose()?;
-                        if let (Some(lower), Some(upper)) = (lower_value, upper_value) {
-                            if lower > upper {
-                                return Err(Diagnostic::new(
-                                    DiagnosticCode::InvalidClause,
-                                    span,
-                                    "adjust_args range lower bound must not exceed its upper bound",
-                                ));
-                            }
+                        if let (Some(lower), Some(upper)) = (lower_value, upper_value)
+                            && lower > upper
+                        {
+                            return Err(Diagnostic::new(
+                                DiagnosticCode::InvalidClause,
+                                span,
+                                "adjust_args range lower bound must not exceed its upper bound",
+                            ));
                         }
                     }
                 }
@@ -3132,14 +3121,14 @@ fn require_openmp_clause_semantic_facts(
                         DiagnosticCode::MissingSemanticFact,
                         span,
                         "detach requires an encountering-final-task fact",
-                    ))
+                    ));
                 }
                 Some(true) => {
                     return Err(Diagnostic::new(
                         DiagnosticCode::InvalidAssociation,
                         span,
                         "a detach clause may not be encountered by a final task",
-                    ))
+                    ));
                 }
                 Some(false) => {}
             }
@@ -3159,17 +3148,17 @@ fn require_openmp_clause_semantic_facts(
                         DiagnosticCode::MissingSemanticFact,
                         span,
                         "a doacross vector requires the associated ordered(n) parameter fact",
-                    ))
+                    ));
                 }
                 Some(dimensions) if dimensions != vector.len() => {
                     return Err(Diagnostic::new(
                         DiagnosticCode::InvalidAssociation,
                         span,
                         format!(
-                        "doacross vector has {} dimensions but associated ordered has {dimensions}",
-                        vector.len()
-                    ),
-                    ))
+                            "doacross vector has {} dimensions but associated ordered has {dimensions}",
+                            vector.len()
+                        ),
+                    ));
                 }
                 Some(_) => {}
             }
@@ -3463,14 +3452,14 @@ fn require_openmp_clause_semantic_facts(
                                 DiagnosticCode::MissingSemanticFact,
                                 span,
                                 "num_teams bounds require a lower-not-greater-than-upper fact",
-                            ))
+                            ));
                         }
                         Some(false) => {
                             return Err(Diagnostic::new(
                                 DiagnosticCode::InvalidClause,
                                 span,
                                 "num_teams lower bound must not exceed its upper bound",
-                            ))
+                            ));
                         }
                         Some(true) => {}
                     }
@@ -3546,14 +3535,14 @@ fn require_openmp_clause_semantic_facts(
                             DiagnosticCode::MissingSemanticFact,
                             span,
                             "message requires a string-expression type fact",
-                        ))
+                        ));
                     }
                     Some(false) => {
                         return Err(Diagnostic::new(
                             DiagnosticCode::InvalidExpressionType,
                             span,
                             "message requires an expression of string OpenMP type",
-                        ))
+                        ));
                     }
                     Some(true) => {}
                 }
@@ -3583,7 +3572,7 @@ fn require_openmp_clause_semantic_facts(
                             format!(
                                 "declare_target enter(automap: ...) item {index} requires an allocatable-item fact"
                             ),
-                        ))
+                        ));
                     }
                     Some(false) => {
                         return Err(Diagnostic::new(
@@ -3592,7 +3581,7 @@ fn require_openmp_clause_semantic_facts(
                             format!(
                                 "declare_target enter(automap: ...) item {index} is not allocatable"
                             ),
-                        ))
+                        ));
                     }
                     Some(true) => {}
                 }
@@ -3612,14 +3601,14 @@ fn require_openmp_clause_semantic_facts(
                             DiagnosticCode::MissingSemanticFact,
                             span,
                             format!("data-motion locator {index} requires an lvalue-category fact"),
-                        ))
+                        ));
                     }
                     Some(false) => {
                         return Err(Diagnostic::new(
                             DiagnosticCode::InvalidLocator,
                             span,
                             format!("data-motion locator {index} is not an lvalue"),
-                        ))
+                        ));
                     }
                     Some(true) => {}
                 }

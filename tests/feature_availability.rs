@@ -162,8 +162,7 @@ fn openmp_uses_allocators_preserves_history_and_versions_new_forms() {
     assert_omp_accepted(OpenMpVersion::V5_0, historical);
     assert_omp_accepted(OpenMpVersion::V6_0, historical);
 
-    let modifier_form =
-        "#pragma omp target uses_allocators(traits(my_traits), memspace(omp_high_bw_mem_space): my_alloc)";
+    let modifier_form = "#pragma omp target uses_allocators(traits(my_traits), memspace(omp_high_bw_mem_space): my_alloc)";
     assert_omp_rejected(OpenMpVersion::V5_1, modifier_form);
     assert_omp_accepted(OpenMpVersion::V5_2, modifier_form);
 
@@ -174,11 +173,13 @@ fn openmp_uses_allocators_preserves_history_and_versions_new_forms() {
     let directive_modifier =
         "#pragma omp target uses_allocators(target, traits(my_traits): my_alloc)";
     for version in [OpenMpVersion::V5_2, OpenMpVersion::V6_0] {
-        assert!(OpenMpConfig::exact(version, c23(), SourceForm::Pragma)
-            .unwrap()
-            .parser()
-            .parse(directive_modifier)
-            .is_err());
+        assert!(
+            OpenMpConfig::exact(version, c23(), SourceForm::Pragma)
+                .unwrap()
+                .parser()
+                .parse(directive_modifier)
+                .is_err()
+        );
     }
 }
 
@@ -286,11 +287,13 @@ fn typed_data_motion_and_declare_target_payloads_have_independent_floors() {
     let automap = "!$omp declare target enter(automap: value)";
     assert_fortran_omp_rejected(OpenMpVersion::V5_2, automap);
     assert_fortran_omp_accepted(OpenMpVersion::V6_0, automap);
-    assert!(OpenMpConfig::new(c23(), SourceForm::Pragma)
-        .unwrap()
-        .parser()
-        .parse("#pragma omp declare target enter(automap: value)")
-        .is_err());
+    assert!(
+        OpenMpConfig::new(c23(), SourceForm::Pragma)
+            .unwrap()
+            .parser()
+            .parse("#pragma omp declare target enter(automap: value)")
+            .is_err()
+    );
 }
 
 #[test]

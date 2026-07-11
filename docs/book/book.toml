@@ -1,7 +1,7 @@
 [book]
 title = "ROUP Documentation"
 authors = ["Anjia Wang"]
-description = "Rust-based OpenMP/OpenACC Unified Parser - Safe, fast, and extensible"
+description = "Strict, safe Rust parser for typed OpenMP and OpenACC directive ASTs"
 language = "en"
 src = "src"
 

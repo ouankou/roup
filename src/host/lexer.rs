@@ -423,10 +423,12 @@ impl<'a> Lexer<'a> {
             return self.lex_identifier_or_keyword();
         }
 
-        if ch == '.' && self.language == HostLanguage::Fortran && !self.starts_with("..") {
-            if let Some(token) = self.lex_fortran_dotted()? {
-                return Ok(token);
-            }
+        if ch == '.'
+            && self.language == HostLanguage::Fortran
+            && !self.starts_with("..")
+            && let Some(token) = self.lex_fortran_dotted()?
+        {
+            return Ok(token);
         }
 
         self.lex_symbol()
@@ -518,7 +520,7 @@ impl<'a> Lexer<'a> {
             (HostLanguage::Cpp, "or_eq") => TokenKind::PipeEqual,
             (HostLanguage::Cpp, "xor_eq") => TokenKind::CaretEqual,
             _ if !self.allow_reserved_words && is_reserved_keyword(self.profile, text) => {
-                return Err(self.error(start, self.offset, LexErrorKind::UnsupportedKeyword))
+                return Err(self.error(start, self.offset, LexErrorKind::UnsupportedKeyword));
             }
             (HostLanguage::Fortran, _) => {
                 TokenKind::Identifier(Identifier::from_lexed(&text.to_lowercase()))
@@ -558,7 +560,7 @@ impl<'a> Lexer<'a> {
                     start,
                     end,
                     LexErrorKind::UnsupportedOperator("Fortran defined operator"),
-                ))
+                ));
             }
         };
         self.offset = end;
@@ -920,7 +922,7 @@ impl<'a> Lexer<'a> {
                     suffix_start,
                     self.offset,
                     LexErrorKind::InvalidNumber(self.source[start..self.offset].to_owned()),
-                ))
+                ));
             }
         };
         if matches!(suffix.width, CIntegerWidth::LongLong) && !self.supports_long_long_suffix() {
@@ -1016,10 +1018,10 @@ impl<'a> Lexer<'a> {
         ] {
             if self.starts_with(prefix) {
                 let after = self.offset + prefix.len();
-                if let Some(quote) = self.source[after..].chars().next() {
-                    if matches!(quote, '\'' | '"') {
-                        return Some((encoding, quote, prefix.len()));
-                    }
+                if let Some(quote) = self.source[after..].chars().next()
+                    && matches!(quote, '\'' | '"')
+                {
+                    return Some((encoding, quote, prefix.len()));
                 }
             }
         }
@@ -1146,7 +1148,7 @@ impl<'a> Lexer<'a> {
                     escape_start,
                     self.offset,
                     LexErrorKind::InvalidEscape(self.source[escape_start..self.offset].into()),
-                ))
+                ));
             }
         };
         let digits_start = self.offset;
@@ -1557,9 +1559,11 @@ mod tests {
         assert_eq!(integer.base, IntegerBase::Decimal);
         assert_eq!(integer.value, 12);
 
-        assert!(Lexer::new("0x10", HostLanguage::Fortran)
-            .tokenize()
-            .is_err());
+        assert!(
+            Lexer::new("0x10", HostLanguage::Fortran)
+                .tokenize()
+                .is_err()
+        );
         for source in ["1''2", "0x'1", "12uu", "12lz"] {
             assert!(
                 Lexer::new(source, HostLanguage::Cpp).tokenize().is_err(),

@@ -58,9 +58,11 @@ fn device_accepts_ternary_expression_colon() {
 fn if_modifier_disambiguation_preserves_ternary_expressions() {
     let ternary = omp("#pragma omp parallel if(flag ? enabled : disabled)")
         .expect("a ternary colon is part of the host expression");
-    assert!(ternary.directive().clauses()[0]
-        .directive_name_modifier()
-        .is_none());
+    assert!(
+        ternary.directive().clauses()[0]
+            .directive_name_modifier()
+            .is_none()
+    );
 
     let modified = omp("#pragma omp target parallel if(target: enabled)")
         .expect("a real directive-name modifier must remain typed");

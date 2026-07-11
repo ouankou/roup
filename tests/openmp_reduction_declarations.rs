@@ -303,7 +303,10 @@ fn induction_identifiers_accept_cpp_ids_and_only_fortran_defined_operators() {
         else {
             panic!("expected typed declare-induction parameter");
         };
-        assert!(matches!(induction.identifier(), OmpInductionIdentifier::Name(_)));
+        assert!(matches!(
+            induction.identifier(),
+            OmpInductionIdentifier::Name(_)
+        ));
         assert!(parsed.directive().clauses().iter().any(|clause| matches!(
             clause.payload(),
             ClauseData::Inductor {
@@ -338,16 +341,18 @@ fn induction_identifiers_accept_cpp_ids_and_only_fortran_defined_operators() {
         "!$omp declare_induction(.advance. : integer) inductor(advance_value(omp_var, omp_step)) collector(omp_step * omp_idx)",
     )
     .expect("Fortran inductor subroutine reference must parse");
-    assert!(procedure
-        .directive()
-        .clauses()
-        .iter()
-        .any(|clause| matches!(
-            clause.payload(),
-            ClauseData::Inductor {
-                expression: OmpInductorExpression::FortranSubroutineCall(_)
-            }
-        )));
+    assert!(
+        procedure
+            .directive()
+            .clauses()
+            .iter()
+            .any(|clause| matches!(
+                clause.payload(),
+                ClauseData::Inductor {
+                    expression: OmpInductorExpression::FortranSubroutineCall(_)
+                }
+            ))
+    );
 
     assert!(
         fortran(

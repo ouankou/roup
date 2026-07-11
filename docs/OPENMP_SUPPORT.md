@@ -57,5 +57,5 @@ directive sequence.
 
 Public-API regression coverage includes `tests/feature_availability.rs`,
 `tests/context_validation.rs`, `tests/host_profile_gates.rs`,
-`tests/source_span_regressions.rs`, `tests/openmp_directive_parameters.rs`, and
-the strict payload and error suites.
+`tests/source_span_regressions.rs`, `tests/openmp_directive_parameters.rs`,
+`tests/openmp_historical_legality.rs`, and the strict payload and error suites.

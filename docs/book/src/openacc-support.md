@@ -33,6 +33,7 @@ features, and trailing input are hard errors. The parser never returns opaque
 payload text or retries with a permissive grammar.
 
 Public behavior is covered by `tests/openacc_public_api.rs`,
-`tests/openacc_directive_parameters.rs`, `tests/feature_availability.rs`, and
-the strict payload and error suites. C ABI and accparser adapter checks are
-separate consumers of the safe parser.
+`tests/openacc_directive_parameters.rs`,
+`tests/openacc_line_continuations.rs`, `tests/feature_availability.rs`, and the
+strict payload and error suites. C ABI and accparser adapter checks are separate
+consumers of the safe parser.

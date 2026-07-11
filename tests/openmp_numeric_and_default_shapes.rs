@@ -62,11 +62,13 @@ fn num_threads_is_a_typed_positive_list_with_strict_prescriptiveness() {
         ClauseData::NumThreads { strict: true, nthreads }
             if nthreads.len() == 2
     ));
-    assert!(c_exact(
-        OpenMpVersion::V5_2,
-        "#pragma omp parallel num_threads(outer, inner)",
-    )
-    .is_err());
+    assert!(
+        c_exact(
+            OpenMpVersion::V5_2,
+            "#pragma omp parallel num_threads(outer, inner)",
+        )
+        .is_err()
+    );
     c_exact(
         OpenMpVersion::V6_0,
         "#pragma omp parallel num_threads(outer, inner)",
@@ -121,11 +123,13 @@ fn default_variable_categories_are_typed_and_host_gated() {
             kind: DefaultKind::Private,
         }
     ));
-    assert!(c_exact(
-        OpenMpVersion::V5_2,
-        "#pragma omp target default(scalar: private)",
-    )
-    .is_err());
+    assert!(
+        c_exact(
+            OpenMpVersion::V5_2,
+            "#pragma omp target default(scalar: private)",
+        )
+        .is_err()
+    );
     c_exact(
         OpenMpVersion::V6_0,
         "#pragma omp target default(scalar: private)",
@@ -170,11 +174,13 @@ fn linear_cumulative_grammars_canonicalize_without_losing_provenance() {
             ..
         }
     ));
-    assert!(c_exact(
-        OpenMpVersion::V5_1,
-        "#pragma omp declare simd linear(x: step(2), val)",
-    )
-    .is_err());
+    assert!(
+        c_exact(
+            OpenMpVersion::V5_1,
+            "#pragma omp declare simd linear(x: step(2), val)",
+        )
+        .is_err()
+    );
     c_exact(
         OpenMpVersion::V5_2,
         "#pragma omp declare simd linear(x: step(2), val)",

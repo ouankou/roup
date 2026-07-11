@@ -51,7 +51,10 @@ impl fmt::Display for DelimiterError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyEntry { separator } => {
-                write!(formatter, "list separated by '{separator}' contains an empty entry")
+                write!(
+                    formatter,
+                    "list separated by '{separator}' contains an empty entry"
+                )
             }
             Self::UnterminatedQuote { quote, offset } => {
                 write!(formatter, "unclosed {quote} quote at byte {offset}")
@@ -60,7 +63,10 @@ impl fmt::Display for DelimiterError {
                 write!(formatter, "unclosed block comment at byte {offset}")
             }
             Self::UnmatchedClosing { delimiter, offset } => {
-                write!(formatter, "unmatched closing delimiter '{delimiter}' at byte {offset}")
+                write!(
+                    formatter,
+                    "unmatched closing delimiter '{delimiter}' at byte {offset}"
+                )
             }
             Self::MismatchedClosing {
                 opening,
@@ -456,12 +462,14 @@ mod tests {
         for source in ["\"unterminated", "a /* unterminated"] {
             assert!(split_top_level(source, ',', &[], CommentStyle::CLike).is_err());
         }
-        assert!(split_top_level(
-            "a, f(x]",
-            ',',
-            &[('(', ')'), ('[', ']')],
-            CommentStyle::Block,
-        )
-        .is_err());
+        assert!(
+            split_top_level(
+                "a, f(x]",
+                ',',
+                &[('(', ')'), ('[', ']')],
+                CommentStyle::Block,
+            )
+            .is_err()
+        );
     }
 }

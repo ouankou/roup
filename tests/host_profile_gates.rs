@@ -93,38 +93,50 @@ fn type_name_features_use_the_same_exact_profile() {
         TypeName::parse_with_profile("long long", HostLanguageProfile::C(CStandard::C99),).is_ok()
     );
 
-    assert!(TypeName::parse_with_profile(
-        "decltype(value)",
-        HostLanguageProfile::Cpp(CppStandard::Cpp98),
-    )
-    .is_err());
-    assert!(TypeName::parse_with_profile(
-        "decltype(value)",
-        HostLanguageProfile::Cpp(CppStandard::Cpp11),
-    )
-    .is_ok());
+    assert!(
+        TypeName::parse_with_profile(
+            "decltype(value)",
+            HostLanguageProfile::Cpp(CppStandard::Cpp98),
+        )
+        .is_err()
+    );
+    assert!(
+        TypeName::parse_with_profile(
+            "decltype(value)",
+            HostLanguageProfile::Cpp(CppStandard::Cpp11),
+        )
+        .is_ok()
+    );
 
-    assert!(TypeName::parse_with_profile(
-        "integer(kind=8)",
-        HostLanguageProfile::Fortran(FortranStandard::Fortran77),
-    )
-    .is_err());
-    assert!(TypeName::parse_with_profile(
-        "integer(kind=8)",
-        HostLanguageProfile::Fortran(FortranStandard::Fortran90),
-    )
-    .is_ok());
+    assert!(
+        TypeName::parse_with_profile(
+            "integer(kind=8)",
+            HostLanguageProfile::Fortran(FortranStandard::Fortran77),
+        )
+        .is_err()
+    );
+    assert!(
+        TypeName::parse_with_profile(
+            "integer(kind=8)",
+            HostLanguageProfile::Fortran(FortranStandard::Fortran90),
+        )
+        .is_ok()
+    );
 
-    assert!(TypeName::parse_with_profile(
-        "class(my_type)",
-        HostLanguageProfile::Fortran(FortranStandard::Fortran95),
-    )
-    .is_err());
-    assert!(TypeName::parse_with_profile(
-        "class(my_type)",
-        HostLanguageProfile::Fortran(FortranStandard::Fortran2003),
-    )
-    .is_ok());
+    assert!(
+        TypeName::parse_with_profile(
+            "class(my_type)",
+            HostLanguageProfile::Fortran(FortranStandard::Fortran95),
+        )
+        .is_err()
+    );
+    assert!(
+        TypeName::parse_with_profile(
+            "class(my_type)",
+            HostLanguageProfile::Fortran(FortranStandard::Fortran2003),
+        )
+        .is_ok()
+    );
 }
 
 fn assert_omp_payload_rejected_by_c_and_cpp(source: &str) {

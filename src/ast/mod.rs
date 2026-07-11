@@ -11,8 +11,8 @@ use std::fmt;
 
 use crate::host::TypeName;
 use crate::ir::{ClauseData, ClauseItem, Expression, Identifier, LValue, Variable};
-use crate::parser::directive_kind::DirectiveName;
 use crate::parser::ClauseName;
+use crate::parser::directive_kind::DirectiveName;
 use crate::source::Span;
 
 /// Re-export the typed OpenMP clause payload primitives from the semantic IR.
@@ -3600,31 +3600,37 @@ mod tests {
 
     #[test]
     fn clause_constructors_reject_empty_required_payloads() {
-        assert!(OmpClause::new(
-            OmpClauseKind::Nontemporal,
-            ClauseData::ItemList(Vec::new()),
-            None,
-            None,
-            Span::entire("nontemporal"),
-        )
-        .is_err());
-        assert!(OmpClause::new(
-            OmpClauseKind::Apply,
-            ClauseData::Apply {
-                loop_modifier: None,
-                applied_directives: Vec::new(),
-            },
-            None,
-            None,
-            Span::entire("apply"),
-        )
-        .is_err());
-        assert!(AccClause::new(
-            AccClauseKind::Private,
-            AccClausePayload::ItemList(Vec::new()),
-            None,
-            Span::entire("private"),
-        )
-        .is_err());
+        assert!(
+            OmpClause::new(
+                OmpClauseKind::Nontemporal,
+                ClauseData::ItemList(Vec::new()),
+                None,
+                None,
+                Span::entire("nontemporal"),
+            )
+            .is_err()
+        );
+        assert!(
+            OmpClause::new(
+                OmpClauseKind::Apply,
+                ClauseData::Apply {
+                    loop_modifier: None,
+                    applied_directives: Vec::new(),
+                },
+                None,
+                None,
+                Span::entire("apply"),
+            )
+            .is_err()
+        );
+        assert!(
+            AccClause::new(
+                AccClauseKind::Private,
+                AccClausePayload::ItemList(Vec::new()),
+                None,
+                Span::entire("private"),
+            )
+            .is_err()
+        );
     }
 }
