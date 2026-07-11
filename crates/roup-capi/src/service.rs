@@ -3,14 +3,14 @@
 use crate::boundary::BoundaryError;
 use crate::handle::{GenerationalArena, Handle, HandleError};
 use crate::{
+    ROUP_ABI_VERSION, ROUP_DIAGNOSTIC_BUFFER_TOO_SMALL, ROUP_DIAGNOSTIC_INDEX_OUT_OF_RANGE,
+    ROUP_DIAGNOSTIC_INTERNAL_ERROR, ROUP_DIAGNOSTIC_INVALID_HANDLE,
+    ROUP_DIAGNOSTIC_INVALID_POINTER, ROUP_DIAGNOSTIC_INVALID_UTF8, ROUP_DIALECT_OPENACC,
+    ROUP_DIALECT_OPENMP, ROUP_HOST_C, ROUP_HOST_CPP, ROUP_HOST_FORTRAN, ROUP_SOURCE_FORTRAN_FIXED,
+    ROUP_SOURCE_FORTRAN_FREE, ROUP_SOURCE_PRAGMA, ROUP_VERSION_ANY, ROUP_VERSION_EXACT,
     RoupClauseKind, RoupDirectiveHandle, RoupDirectiveKind, RoupErrorHandle, RoupFieldInfo,
     RoupNodeHandle, RoupNodeKind, RoupParameterKind, RoupParserHandle, RoupParserOptions, RoupSpan,
-    RoupStatus, ROUP_ABI_VERSION, ROUP_DIAGNOSTIC_BUFFER_TOO_SMALL,
-    ROUP_DIAGNOSTIC_INDEX_OUT_OF_RANGE, ROUP_DIAGNOSTIC_INTERNAL_ERROR,
-    ROUP_DIAGNOSTIC_INVALID_HANDLE, ROUP_DIAGNOSTIC_INVALID_POINTER, ROUP_DIAGNOSTIC_INVALID_UTF8,
-    ROUP_DIALECT_OPENACC, ROUP_DIALECT_OPENMP, ROUP_HOST_C, ROUP_HOST_CPP, ROUP_HOST_FORTRAN,
-    ROUP_SOURCE_FORTRAN_FIXED, ROUP_SOURCE_FORTRAN_FREE, ROUP_SOURCE_PRAGMA, ROUP_VERSION_ANY,
-    ROUP_VERSION_EXACT,
+    RoupStatus,
 };
 use roup::api::{OpenAccConfig, OpenAccParser, OpenMpConfig, OpenMpParser};
 use roup::ast::{
@@ -902,10 +902,12 @@ fn lock_state() -> Result<MutexGuard<'static, State>, Failure> {
 
 fn with_state<T>(operation: impl FnOnce(&mut State) -> UnrecordedResult<T>) -> ServiceResult<T> {
     let mut state = lock_state()?;
-    match operation(&mut state) {
+    let result = match operation(&mut state) {
         Ok(value) => Ok(value),
         Err(unrecorded) => Err(state.record(unrecorded)),
-    }
+    };
+    drop(state);
+    result
 }
 
 pub(crate) fn record_internal(message: impl Into<String>) -> Failure {
@@ -1840,7 +1842,7 @@ fn validate_options(options: RoupParserOptions) -> UnrecordedResult<ParserRecord
             value => {
                 return Err(config_error(format!(
                     "unknown C language standard value {value}"
-                )))
+                )));
             }
         }),
         ROUP_HOST_CPP => HostLanguageProfile::Cpp(match options.host_standard {
@@ -1853,7 +1855,7 @@ fn validate_options(options: RoupParserOptions) -> UnrecordedResult<ParserRecord
             value => {
                 return Err(config_error(format!(
                     "unknown C++ language standard value {value}"
-                )))
+                )));
             }
         }),
         ROUP_HOST_FORTRAN => HostLanguageProfile::Fortran(match options.host_standard {
@@ -1867,7 +1869,7 @@ fn validate_options(options: RoupParserOptions) -> UnrecordedResult<ParserRecord
             value => {
                 return Err(config_error(format!(
                     "unknown Fortran language standard value {value}"
-                )))
+                )));
             }
         }),
         value => return Err(config_error(format!("unknown host language value {value}"))),
@@ -5143,9 +5145,11 @@ mod tests {
 
         assert_eq!(failure.status, RoupStatus::INVALID_ARGUMENT);
         assert_eq!(error_code(failure.error).unwrap(), 1000);
-        assert!(error_message(failure.error)
-            .unwrap()
-            .contains("unknown C language standard"));
+        assert!(
+            error_message(failure.error)
+                .unwrap()
+                .contains("unknown C language standard")
+        );
         release_error(failure.error).unwrap();
     }
 
@@ -5859,9 +5863,11 @@ mod tests {
             only_field(fields, crate::ROUP_FIELD_ALLOCATOR_EXPRESSION),
             FieldValue::String(expression) if expression == "select_allocator(device)"
         ));
-        assert!(fields
-            .iter()
-            .all(|field| field.id != crate::ROUP_FIELD_ALIGNMENT_EXPRESSION));
+        assert!(
+            fields
+                .iter()
+                .all(|field| field.id != crate::ROUP_FIELD_ALIGNMENT_EXPRESSION)
+        );
         assert!(matches!(
             only_field(fields, crate::ROUP_FIELD_ALLOCATE_SOURCE_SYNTAX),
             FieldValue::U32(crate::ROUP_OMP_ALLOCATE_SOURCE_SIMPLE_ALLOCATOR)

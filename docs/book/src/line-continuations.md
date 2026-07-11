@@ -27,10 +27,13 @@ with more directive text is a hard error.
 
 ## Fortran free and fixed forms
 
-Fortran continuations use a trailing `&`. A continuation line may repeat an
-OpenMP or OpenACC sentinel and may place `&` immediately after that sentinel.
-Only continuation syntax is removed; any source whitespace needed to separate
-tokens must be present in the input.
+Fortran continuations use a trailing `&`. A continuation line may repeat the
+sentinel for the configured dialect and may place `&` immediately after that
+sentinel. OpenMP accepts `!$omp`, OpenACC accepts `!$acc`, and both accept the
+standardized short `!$` form, case insensitively; using one dialect's long
+sentinel while parsing the other is a hard error. Only continuation syntax is
+removed, and any source whitespace needed to separate tokens must be present
+in the input.
 
 ```fortran
 !$omp target teams distribute &
@@ -38,10 +41,14 @@ tokens must be present in the input.
 !$omp& private(i, j)
 ```
 
-Fixed-form input accepts the configured standard sentinels, including `!$OMP`,
-`C$OMP`, and `*$OMP`, subject to fixed-form placement rules. A comment may
-follow a valid trailing `&`. Missing markers, text after a purported marker, or
-another directive line reached through ordinary whitespace are errors.
+The corresponding OpenACC form uses `!$acc` on each line. Fixed-form input
+accepts the configured standard sentinel family, including `!$OMP`, `C$OMP`,
+and `*$OMP`, the matching `ACC` forms, and their short `!$`, `C$`, and `*$`
+forms; leading horizontal whitespace is accepted before the sentinel. A
+comment may follow a valid trailing `&`.
+Missing markers, text after a purported marker, a conflicting-dialect
+sentinel, or another directive line reached through ordinary whitespace is an
+error.
 
 ## Spans
 
@@ -51,5 +58,6 @@ backslash and newline. Clause-name spans identify the exact source alias even
 when the semantic kind is canonicalized. Nested metadirective and construct
 selector directives use the same outer-source coordinate system.
 
-See `tests/openmp_line_continuations.rs` and
-`tests/source_span_regressions.rs` for executable examples.
+See `tests/openmp_line_continuations.rs`,
+`tests/openacc_line_continuations.rs`, and `tests/source_span_regressions.rs`
+for executable examples.

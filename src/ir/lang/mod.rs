@@ -70,10 +70,9 @@ fn classify_clause_item(expression: Expression) -> Result<ClauseItem, Conversion
         global: false,
         segments,
     }) = &expression.ast().kind
+        && segments.len() == 1
     {
-        if segments.len() == 1 {
-            return Ok(ClauseItem::Identifier(segments[0].clone()));
-        }
+        return Ok(ClauseItem::Identifier(segments[0].clone()));
     }
 
     if Variable::is_designator_expression(&expression) {

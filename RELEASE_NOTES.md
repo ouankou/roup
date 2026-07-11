@@ -19,6 +19,23 @@
   fail when an upstream IR cannot faithfully represent a parsed payload.
 - Replaced round-trip and permissive external-corpus gates with focused strict
   syntax, semantic-fact, ABI, adapter, and cross-language regression tests.
+- Made Fortran continuation handling dialect-aware: standard OpenACC sentinels
+  are stripped from continued OpenACC directives, while cross-dialect
+  continuation sentinels are hard errors.
+- Hardened documentation publication as a GitHub Pages Actions artifact
+  deployment and moved Linux and macOS CI to the Ubuntu 26.04 and macOS 26
+  hosted runners.
+- Refreshed the complete Cargo dependency lockfile to the newest available
+  releases while retaining the verified Rust 1.88.0 repository MSRV required
+  by the complete dependency and tooling graph.
+- Migrated both workspace crates to the Rust 2024 edition, including explicit
+  C export attributes and preserved mutex-guard drop ordering at the ABI
+  service boundary.
+
+> The versioned entries below describe each historical release at the time it
+> shipped. They may mention binaries, validation scripts, or FFI designs that
+> the breaking unreleased refactor above has intentionally removed. Use the
+> current README, book, and checked C header as the present API reference.
 
 ## 0.7.0 (2025-11-25)
 
@@ -69,7 +86,8 @@ None. All Rust, C, and C++ APIs remain backward compatible.
 - Rust entry point: `translate::translate()` detects the input format.
 - C API wrappers: `roup_translate_c_to_fortran()` and `roup_translate_fortran_to_c()`.
 - Handles both free-form and fixed-form Fortran, including column-7 sentinels.
-- See the [Translation API docs](https://roup.ouankou.com/api-reference.html#translation-api) for examples.
+- The then-current translation guide was removed with the breaking refactor
+  described in the unreleased section above.
 
 ### OpenMP_VV validation
 

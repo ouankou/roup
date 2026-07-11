@@ -23,71 +23,43 @@ hard-error expectation; it is never accepted or removed from the evidence.
 No fixture or source file is discovered by glob. Missing pinned files, changed
 fixture hashes, and changed exact correction evidence fail configuration. A
 parse exception, output mismatch, missing expectation, nonzero runner result,
-or timeout fails CTest. The larger builtin, OpenMP-VV, and example corpora remain evidence for
-future audit expansion; they are not silently skipped tests and are not the
-strict adapter contract because they mix invalid legacy acceptance, historical
-surface rendering, and whole-source harvesting.
+or timeout fails CTest. The larger builtin, OpenMP-VV, and example corpora
+remain evidence for future audit expansion; they are not silently skipped tests
+and are not the strict adapter contract because they mix invalid legacy
+acceptance, historical surface rendering, and whole-source harvesting.
 
-## Confirmed frontend/legality issues
+## Frontend and legality issues fixed during this audit
 
-- `#pragma omp declare mapper(myvec_t v) map(v, v.data[0:v.len])`
-  - Diagnostic 3003: `OpenMP clause Map is not allowed on directive DeclareMapper`.
-  - A `declare mapper` directive is defined by its mapper declaration followed
-    by one or more `map` clauses.
-- `#pragma omp declare mapper(short * a) map(to :w,e,r)`
-  - Diagnostic 3003: `OpenMP clause Map is not allowed on directive DeclareMapper`.
-  - The C declaration `short *a` must remain a type/declarator pair rather than
-    being reduced to an identifier string.
-- `#pragma omp declare mapper(default : const int *a)`
-  - Diagnostic 3002: `identifier cannot start with '*'`.
-  - The type/declarator split incorrectly assigns the pointer star to the
-    variable identifier.
-- `#pragma omp declare target (x,y,z)` and `!$omp declare target(s,t,f)`
-  - Diagnostic 3002: `identifier cannot start with '('`.
-  - This is the historical extended-list form and must stay accepted even
-    though canonical output may use the current spelling.
-- `!$omp end critical(test3)`
-  - Diagnostic 2001 with unconsumed input `(test3)`.
-  - A named Fortran critical construct repeats its name on `end critical`.
-- `!$omp end do nowait`, `!$omp end do simd nowait`,
-  `!$omp end sections nowait`, `!$omp end single nowait`, and
-  `!$omp end workshare nowait`
-  - Diagnostic 3003 says `Nowait` is not allowed on the respective terminating
-    directive.
-  - Fortran attaches these construct clauses to the terminating directive.
-- `!$omp end single copyprivate(to,b,c)`
-  - Diagnostic 3003: `Copyprivate` is not allowed on `EndSingle`.
-  - `copyprivate` is a standard clause on the Fortran `end single` directive.
-- `#pragma omp loop private(a,b,c)`,
-  `#pragma omp loop lastprivate(conditional:a,b,c)`, and
-  `#pragma omp loop reduction(default,max:a,b,c)`
-  - Diagnostic 3003 rejects `Private`, `Lastprivate`, and `Reduction` on `Loop`.
-  - These are standard loop data-environment clauses. Equivalent Fortran
-    inputs fail the same way.
-- `#pragma omp simd private(a,b,c)` and the corresponding `lastprivate` case
-  - Diagnostic 3003 rejects the standard SIMD data-environment clauses.
-- `#pragma omp master taskloop grainsize(3)` (and the other taskloop clauses in
-  the pinned `master_taskloop*.txt` fixtures)
-  - Diagnostic 3003 rejects taskloop clauses on the historical
-    `master taskloop` combined construct.
-  - The deprecated construct spelling remains required compatibility syntax;
-    it must inherit taskloop clause legality and may canonicalize its name.
-- `#pragma omp parallel loop bind(parallel)` and
-  `#pragma omp teams loop bind(teams)`
-  - Diagnostic 3003 rejects `Bind` on `ParallelLoop` and `TeamsLoop`.
-  - The combined loop forms retain the `bind` semantics of their loop region.
-- `#pragma omp requires ext_user_test reverse_offload unified_address unified_shared_memory,atomic_default_mem_order(acq_rel) dynamic_allocators`
-  - Diagnostic 2001 leaves all requirements after `ext_user_test` unconsumed.
-  - A requires directive contains an ordered sequence of requirement clauses;
-    the parser currently stops after the first implementation-defined one.
+The initial pinned-fixture failures exposed frontend bugs rather than adapter
+workarounds. They are fixed in the typed parser and retained as public-API
+regressions, primarily in `tests/openmp_historical_legality.rs`:
+
+- `declare mapper` now accepts its required `map` clauses and stores the mapper
+  type/declarator split structurally, including adjacent and spaced pointer
+  stars. Missing variables, array declarators, and missing map clauses remain
+  hard errors.
+- Historical C/C++ and Fortran `declare target` extended lists remain accepted
+  in later exact-version modes and use a dedicated typed parameter variant.
+- Named Fortran `end critical` parameters and the standardized `nowait` and
+  `copyprivate` end-directive clauses are retained instead of left unconsumed
+  or rejected by the wrong clause table.
+- `loop` and `simd` expose their standardized data-environment clauses, while
+  `parallel loop` and `teams loop` retain the `bind` semantics inherited from
+  their loop constituent.
+- Historical `master taskloop` and `master taskloop simd` spellings remain
+  cumulatively accepted and inherit their taskloop and SIMD clause sets.
+- A `requires` directive retains each standardized requirement as an ordered
+  typed clause. Unknown bare implementation spellings are hard errors rather
+  than partially consumed extension payloads.
 
 ## Adapter issues fixed during this audit
 
 - Directive and clause kinds are selected only from the C ABI's numeric
   OpenMP ordinals. The adapter has an explicit exhaustive mapping for all 194
-  directive ordinals and all 133 clause ordinals; every end ordinal maps to a
-  concrete paired construct, including `end allocators` and `end dispatch`.
-  Names are never queried and unknown ordinals are hard errors.
+  directive ordinals and all 132 clause ordinals at this audit revision; every
+  end ordinal maps to a concrete paired construct, including `end allocators`
+  and `end dispatch`. Names are never queried and unknown ordinals are hard
+  errors.
 - Closed clause semantics use scalar/list U32 fields, booleans use the
   dedicated boolean getter, and structured semantics use node families.
   Strings are restricted to identifiers, type names, expressions, and literal

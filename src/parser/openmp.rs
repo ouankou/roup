@@ -3,7 +3,7 @@ use super::{
     Parser,
 };
 use crate::parser::clause::{
-    parse_variable_list, ClauseKind, ReductionModifier, ReductionOperator,
+    ClauseKind, ReductionModifier, ReductionOperator, parse_variable_list,
 };
 
 const OPENMP_DEFAULT_CLAUSE_RULE: ClauseRule = ClauseRule::Unsupported;

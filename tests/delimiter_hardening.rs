@@ -104,9 +104,11 @@ fn braced_initializers_ignore_braces_inside_string_literals() {
 
 #[test]
 fn uses_allocators_traits_reject_non_variable_expressions() {
-    assert!(parser()
-        .parse("#pragma omp target uses_allocators(traits(f(\")\")): my_allocator)")
-        .is_err());
+    assert!(
+        parser()
+            .parse("#pragma omp target uses_allocators(traits(f(\")\")): my_allocator)")
+            .is_err()
+    );
 }
 
 #[test]

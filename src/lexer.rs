@@ -619,15 +619,15 @@ pub fn collapse_line_continuations(input: &str) -> Cow<'_, str> {
                 idx = next;
                 continue;
             }
-        } else if bytes[idx] == b'&' {
-            if let Some(next) = skip_fortran_continuation(input, idx) {
-                changed = true;
-                // Remove only syntax that belongs to the continuation. Token
-                // separation must come from actual whitespace before the
-                // trailing marker or after the optional leading marker.
-                idx = next;
-                continue;
-            }
+        } else if bytes[idx] == b'&'
+            && let Some(next) = skip_fortran_continuation(input, idx)
+        {
+            changed = true;
+            // Remove only syntax that belongs to the continuation. Token
+            // separation must come from actual whitespace before the
+            // trailing marker or after the optional leading marker.
+            idx = next;
+            continue;
         }
 
         let next = next_char_boundary(input, idx);
@@ -915,24 +915,28 @@ mod tests {
         assert!(
             validate_logical_line("#pragma omp parallel\nprivate(x)", Language::C, "omp").is_err()
         );
-        assert!(validate_logical_line(
-            "!$omp parallel\n!$omp private(x)",
-            Language::FortranFree,
-            "omp",
-        )
-        .is_err());
+        assert!(
+            validate_logical_line(
+                "!$omp parallel\n!$omp private(x)",
+                Language::FortranFree,
+                "omp",
+            )
+            .is_err()
+        );
 
         assert!(validate_logical_line("#pragma omp parallel\n  ", Language::C, "omp").is_ok());
         assert!(
             validate_logical_line("#pragma omp parallel \\\n  private(x)", Language::C, "omp",)
                 .is_ok()
         );
-        assert!(validate_logical_line(
-            "!$omp parallel & ! comment\n!$omp& private(x)",
-            Language::FortranFree,
-            "omp",
-        )
-        .is_ok());
+        assert!(
+            validate_logical_line(
+                "!$omp parallel & ! comment\n!$omp& private(x)",
+                Language::FortranFree,
+                "omp",
+            )
+            .is_ok()
+        );
     }
 
     #[test]

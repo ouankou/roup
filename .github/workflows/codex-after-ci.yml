@@ -7,7 +7,7 @@ name: Codex review (after CI success)
 # REQUIRES: Repository secret 'CODEX_COMMENT_TOKEN' - Personal Access Token with:
 #   - Permissions: pull_requests: write (to post comments as user)
 #   - Scopes: repo (for private repos) or public_repo (for public repos)
-# Without PAT, comments will be posted as github-actions[bot] and Copilot won't respond
+# Without the PAT, the comment step fails instead of silently using another identity.
 
 on:
   workflow_run:
@@ -27,7 +27,7 @@ jobs:
     if: >
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Debug workflow run info
         run: |
@@ -35,26 +35,59 @@ jobs:
           echo "Workflow event: ${{ github.event.workflow_run.event }}"
           echo "Workflow name: ${{ github.event.workflow_run.name }}"
           echo "Pull requests: ${{ toJson(github.event.workflow_run.pull_requests) }}"
-      
+
       - name: Get PR number
         id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WORKFLOW_PULL_REQUESTS: ${{ toJson(github.event.workflow_run.pull_requests) }}
         run: |
-          prs='${{ toJson(github.event.workflow_run.pull_requests) }}'
-          echo "PRs JSON: $prs"
-          
-          # Use jq to reliably check if array is empty
-          if echo "$prs" | jq -e 'length == 0' >/dev/null || [ -z "$prs" ]; then
-            echo "No PR found for this workflow run"
-            echo "pr=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          
-          pr_number=$(echo "$prs" | jq -r '.[0].number')
+          set -euo pipefail
+
+          payload_count=$(jq -er '
+            if type == "array" then length
+            else error("workflow_run.pull_requests is not an array")
+            end
+          ' <<< "$WORKFLOW_PULL_REQUESTS")
+
+          case "$payload_count" in
+            0)
+              if [ -z "$WORKFLOW_HEAD_SHA" ]; then
+                echo "error: workflow_run.head_sha is empty" >&2
+                exit 1
+              fi
+
+              associated_prs=$(gh api \
+                --header "Accept: application/vnd.github+json" \
+                "repos/$GITHUB_REPOSITORY/commits/$WORKFLOW_HEAD_SHA/pulls")
+              api_count=$(jq -er '
+                if type == "array" then [.[] | select(.state == "open")] | length
+                else error("associated pull-request response is not an array")
+                end
+              ' <<< "$associated_prs")
+              if [ "$api_count" -ne 1 ]; then
+                echo "error: expected exactly one open PR for workflow head $WORKFLOW_HEAD_SHA, found $api_count" >&2
+                exit 1
+              fi
+              pr_number=$(jq -er \
+                '[.[] | select(.state == "open")][0].number | select(type == "number")' \
+                <<< "$associated_prs")
+              ;;
+            1)
+              pr_number=$(jq -er '.[0].number | select(type == "number")' \
+                <<< "$WORKFLOW_PULL_REQUESTS")
+              ;;
+            *)
+              echo "error: expected at most one workflow_run PR, found $payload_count" >&2
+              exit 1
+              ;;
+          esac
+
           echo "Found PR number: $pr_number"
           echo "pr=$pr_number" >> "$GITHUB_OUTPUT"
 
       - name: Post @codex review comment
-        if: steps.pr.outputs.pr != ''
         env:
           # Use PAT to post as user instead of github-actions bot
           # This allows Copilot to respond to the @codex mention

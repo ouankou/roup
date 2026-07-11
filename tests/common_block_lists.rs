@@ -78,9 +78,11 @@ fn openmp_common_block_spelling_and_linear_restriction_are_hard_errors() {
     )
     .expect("valid C OpenMP profile")
     .parser();
-    assert!(c_parser
-        .parse("#pragma omp parallel private(/block/)")
-        .is_err());
+    assert!(
+        c_parser
+            .parse("#pragma omp parallel private(/block/)")
+            .is_err()
+    );
 }
 
 #[test]

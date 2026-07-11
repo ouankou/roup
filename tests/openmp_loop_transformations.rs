@@ -68,12 +68,16 @@ fn standardized_loop_transformations_parse_through_the_public_api() {
 
 #[test]
 fn transformation_version_floors_and_payload_errors_are_strict() {
-    assert!(parser(OpenMpVersion::V5_0)
-        .parse("#pragma omp tile sizes(4)")
-        .is_err());
-    assert!(parser(OpenMpVersion::V5_2)
-        .parse("#pragma omp fuse")
-        .is_err());
+    assert!(
+        parser(OpenMpVersion::V5_0)
+            .parse("#pragma omp tile sizes(4)")
+            .is_err()
+    );
+    assert!(
+        parser(OpenMpVersion::V5_2)
+            .parse("#pragma omp fuse")
+            .is_err()
+    );
 
     for source in [
         "#pragma omp tile sizes()",

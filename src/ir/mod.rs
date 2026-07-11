@@ -25,8 +25,8 @@ pub use clause::{
 };
 pub use error::ConversionError;
 pub use expression::{
-    BinaryOperator, Expression, ExpressionAst, ExpressionError, ExpressionKind, ParserConfig,
-    UnaryOperator, MAX_STRUCTURAL_NESTING_DEPTH,
+    BinaryOperator, Expression, ExpressionAst, ExpressionError, ExpressionKind,
+    MAX_STRUCTURAL_NESTING_DEPTH, ParserConfig, UnaryOperator,
 };
 pub use variable::{Identifier, IdentifierError, LValue, LValueError, Variable, VariableError};
 

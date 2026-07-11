@@ -460,7 +460,7 @@ fn write_escaped_c_char(f: &mut fmt::Formatter<'_>, value: char, delimiter: char
 
 #[cfg(test)]
 mod tests {
-    use crate::host::{parse_expression, HostLanguage};
+    use crate::host::{HostLanguage, parse_expression};
 
     #[test]
     fn canonical_c_render_preserves_tree_semantics() {

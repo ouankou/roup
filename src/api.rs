@@ -14,21 +14,22 @@
 
 use crate::ast::{AccDirective, OmpDirective, RoupDirective};
 use crate::availability::{
-    openacc_compatible_versions, openacc_directive_availability, openmp_compatible_versions,
-    openmp_directive_availability, OPENACC_NONSTANDARD_SPELLINGS, OPENMP_NONSTANDARD_SPELLINGS,
+    OPENACC_NONSTANDARD_SPELLINGS, OPENMP_NONSTANDARD_SPELLINGS, openacc_compatible_versions,
+    openacc_directive_availability, openmp_compatible_versions, openmp_directive_availability,
 };
 use crate::diagnostic::{Diagnostic, DiagnosticCode};
 use crate::feature_availability::{
-    openacc_clause_syntax_availability, openacc_directive_parameter_availability,
-    openmp_clause_syntax_availability, openmp_directive_spelling_availability, FeatureAvailability,
+    FeatureAvailability, openacc_clause_syntax_availability,
+    openacc_directive_parameter_availability, openmp_clause_syntax_availability,
+    openmp_directive_spelling_availability,
 };
 use crate::ir::ParserConfig;
 use crate::lexer::Language as LexerLanguage;
 use crate::parser::{self, AstBuildError};
 use crate::source::Span;
 use crate::validation::{
-    validate_openacc, validate_openacc_with_facts, validate_openmp, validate_openmp_with_facts,
-    SemanticFacts,
+    SemanticFacts, validate_openacc, validate_openacc_with_facts, validate_openmp,
+    validate_openmp_with_facts,
 };
 use crate::version::{
     HostLanguageProfile, OpenAccVersion, OpenMpVersion, SourceForm, VersionPolicy, VersionSet,
@@ -731,9 +732,11 @@ mod tests {
         let c_parser = OpenMpConfig::new(c23(), SourceForm::Pragma)
             .expect("valid C configuration")
             .parser();
-        assert!(c_parser
-            .parse("#pragma omp cancellationpoint parallel")
-            .is_err());
+        assert!(
+            c_parser
+                .parse("#pragma omp cancellationpoint parallel")
+                .is_err()
+        );
     }
 
     #[test]

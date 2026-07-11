@@ -6,8 +6,8 @@ use roup::ast::{
 use roup::diagnostic::{Diagnostic, DiagnosticCode};
 use roup::ir::{ClauseData, MemoryOrder, RequireModifier};
 use roup::validation::{
-    validate_openmp_with_facts, IntegerEvaluation, LogicalEvaluation, OmpClauseSite,
-    OmpExpressionSite, SemanticFacts,
+    IntegerEvaluation, LogicalEvaluation, OmpClauseSite, OmpExpressionSite, SemanticFacts,
+    validate_openmp_with_facts,
 };
 use roup::version::{CStandard, HostLanguageProfile, OpenMpVersion, SourceForm, VersionPolicy};
 
@@ -210,11 +210,13 @@ fn scored_user_conditions_remain_cumulative_and_openmp_5_0_remains_static() {
     )
     .expect("OpenMP 5.1 permits a dynamic scored user condition");
 
-    assert!(parse(
-        OpenMpVersion::V6_0,
-        "#pragma omp metadirective when(user={condition(score(-1): runtime_flag)}: parallel)"
-    )
-    .is_err());
+    assert!(
+        parse(
+            OpenMpVersion::V6_0,
+            "#pragma omp metadirective when(user={condition(score(-1): runtime_flag)}: parallel)"
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -311,11 +313,13 @@ fn extension_properties_are_recursive_and_user_maps_to_the_dynamic_context_witho
     )
     .expect("recursive extension and user facts");
 
-    assert!(parse(
-        OpenMpVersion::V6_0,
-        "#pragma omp metadirective when(dynamic={condition(runtime_flag)}: parallel)"
-    )
-    .is_err());
+    assert!(
+        parse(
+            OpenMpVersion::V6_0,
+            "#pragma omp metadirective when(dynamic={condition(runtime_flag)}: parallel)"
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -356,6 +360,9 @@ fn device_number_requires_integer_and_conforming_device_facts() {
         "#pragma omp metadirective when(device={vendor_trait(nested(foo) junk)}: parallel)",
         "#pragma omp metadirective when(implementation={vendor_trait(score(2): nested(foo)}: parallel)",
     ] {
-        assert!(parse(OpenMpVersion::V6_0, invalid).is_err(), "accepted {invalid}");
+        assert!(
+            parse(OpenMpVersion::V6_0, invalid).is_err(),
+            "accepted {invalid}"
+        );
     }
 }

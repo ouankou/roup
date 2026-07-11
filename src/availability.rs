@@ -717,8 +717,10 @@ mod tests {
 
         let acc_end = openacc_directive_availability("end").expect("end is standardized");
         assert!(openacc_compatible_versions(acc_end, HostLanguage::Cpp).is_empty());
-        assert!(openacc_compatible_versions(acc_end, HostLanguage::Fortran)
-            .contains(OpenAccVersion::V1_0));
+        assert!(
+            openacc_compatible_versions(acc_end, HostLanguage::Fortran)
+                .contains(OpenAccVersion::V1_0)
+        );
     }
 
     #[test]
@@ -727,11 +729,15 @@ mod tests {
             openacc_directive_availability("serial").expect("serial is standardized");
 
         assert_eq!(availability.introduced(), OpenAccVersion::V2_6);
-        assert!(!availability
-            .version_interval()
-            .contains(OpenAccVersion::V2_5));
-        assert!(availability
-            .version_interval()
-            .contains(OpenAccVersion::V2_6));
+        assert!(
+            !availability
+                .version_interval()
+                .contains(OpenAccVersion::V2_5)
+        );
+        assert!(
+            availability
+                .version_interval()
+                .contains(OpenAccVersion::V2_6)
+        );
     }
 }

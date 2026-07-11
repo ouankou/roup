@@ -74,7 +74,10 @@ fn every_standardized_uses_allocators_shape_is_typed() {
         "#pragma omp target uses_allocators(traits(custom_traits), memspace(omp_high_bw_mem_space): custom_allocator)",
         "#pragma omp target uses_allocators(first_allocator; second_allocator)",
     ] {
-        assert!(omp(source).is_ok(), "rejected standardized syntax {source:?}");
+        assert!(
+            omp(source).is_ok(),
+            "rejected standardized syntax {source:?}"
+        );
     }
 }
 
@@ -120,22 +123,30 @@ fn standardized_selector_spelling_still_builds_typed_data() {
     else {
         panic!("expected typed metadirective selector");
     };
-    assert!(selector
-        .entries()
-        .iter()
-        .any(|entry| matches!(entry, OmpSelectorEntry::Device { .. })));
-    assert!(selector
-        .entries()
-        .iter()
-        .any(|entry| matches!(entry, OmpSelectorEntry::Implementation { .. })));
-    assert!(selector
-        .entries()
-        .iter()
-        .any(|entry| matches!(entry, OmpSelectorEntry::User { .. })));
-    assert!(selector
-        .entries()
-        .iter()
-        .any(|entry| matches!(entry, OmpSelectorEntry::Construct { .. })));
+    assert!(
+        selector
+            .entries()
+            .iter()
+            .any(|entry| matches!(entry, OmpSelectorEntry::Device { .. }))
+    );
+    assert!(
+        selector
+            .entries()
+            .iter()
+            .any(|entry| matches!(entry, OmpSelectorEntry::Implementation { .. }))
+    );
+    assert!(
+        selector
+            .entries()
+            .iter()
+            .any(|entry| matches!(entry, OmpSelectorEntry::User { .. }))
+    );
+    assert!(
+        selector
+            .entries()
+            .iter()
+            .any(|entry| matches!(entry, OmpSelectorEntry::Construct { .. }))
+    );
     assert!(selector.nested_directive().is_some());
 }
 

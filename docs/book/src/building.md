@@ -5,6 +5,10 @@ ROUP is a Cargo workspace with two packages:
 - `roup`: the complete safe Rust parser (`rlib` only)
 - `roup-capi`: an optional C ABI (`rlib`, `staticlib`, and `cdylib`)
 
+Both packages use the Rust 2024 edition. The repository MSRV is Rust 1.88,
+which covers the complete required dependency and tooling graph, including the
+pinned mdBook 0.5.4 documentation tool.
+
 The root package is the default workspace member, so an ordinary build does
 not compile or link the ABI:
 

@@ -2,8 +2,8 @@
 name = "roup"
 version = "0.8.0"
 authors = ["Anjia Wang <anjia@ouankou.com>"]
-edition = "2021"
-rust-version = "1.88.0"  # MSRV: Verified against current dependencies
+edition = "2024"
+rust-version = "1.88.0"  # MSRV: Verified against all required Rust dependencies and tools
 license = "BSD-3-Clause"
 description = "Safe Rust parser for typed OpenMP and OpenACC directive ASTs"
 repository = "https://github.com/ouankou/roup"

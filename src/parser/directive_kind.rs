@@ -734,14 +734,14 @@ pub fn lookup_directive_name(name: &str) -> DirectiveName {
     // Preserve underscore spelling in begin/end declare_target even when
     // whitespace separates the tokens (e.g., "begin declare_target").
     let mut parts = trimmed.split_whitespace();
-    if let (Some(first), Some(second), None) = (parts.next(), parts.next(), parts.next()) {
-        if second.eq_ignore_ascii_case("declare_target") {
-            if first.eq_ignore_ascii_case("begin") {
-                return DirectiveName::BeginDeclareTargetUnderscore;
-            }
-            if first.eq_ignore_ascii_case("end") {
-                return DirectiveName::EndDeclareTargetUnderscore;
-            }
+    if let (Some(first), Some(second), None) = (parts.next(), parts.next(), parts.next())
+        && second.eq_ignore_ascii_case("declare_target")
+    {
+        if first.eq_ignore_ascii_case("begin") {
+            return DirectiveName::BeginDeclareTargetUnderscore;
+        }
+        if first.eq_ignore_ascii_case("end") {
+            return DirectiveName::EndDeclareTargetUnderscore;
         }
     }
     let normalized = normalize_directive_key(name);

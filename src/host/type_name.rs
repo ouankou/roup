@@ -862,7 +862,11 @@ fn validate_fortran_selector_list(nodes: &[TypeSyntax<'_>]) -> bool {
     }
     split_on_commas(nodes).is_some_and(|selectors| {
         selectors.into_iter().all(|selector| {
-            if let [TypeSyntax::Token(TokenKind::Identifier(_)), TypeSyntax::Token(TokenKind::Equal), rest @ ..] = selector
+            if let [
+                TypeSyntax::Token(TokenKind::Identifier(_)),
+                TypeSyntax::Token(TokenKind::Equal),
+                rest @ ..,
+            ] = selector
             {
                 !rest.is_empty() && validate_fortran_selector_value(rest)
             } else {
@@ -1362,10 +1366,11 @@ mod tests {
 
         let cpp =
             TypeName::parse("std::vector<std::pair<int, 4>> const &", HostLanguage::Cpp).unwrap();
-        assert!(cpp
-            .tokens()
-            .iter()
-            .all(|token| !matches!(token, TokenKind::End)));
+        assert!(
+            cpp.tokens()
+                .iter()
+                .all(|token| !matches!(token, TokenKind::End))
+        );
         assert_eq!(
             cpp.to_string(),
             "std :: vector < std :: pair < int , 4 >> const &"
