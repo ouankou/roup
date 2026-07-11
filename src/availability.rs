@@ -490,6 +490,7 @@ pub const OPENMP_NONSTANDARD_SPELLINGS: &[&str] = &[
     "end teams distribute parallel for",
     "end teams distribute parallel for simd",
     "end section",
+    "ompx",
     "target data composite",
 ];
 
@@ -643,6 +644,7 @@ mod tests {
         for spelling in OPENMP_NONSTANDARD_SPELLINGS
             .iter()
             .copied()
+            .filter(|spelling| !matches!(*spelling, "ompx" | "end section"))
             .chain(["parallel_for", "begin_declare_target"])
         {
             let raw = crate::parser::directive_kind::lookup_directive_name(spelling);

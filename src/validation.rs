@@ -1147,13 +1147,26 @@ fn validate_openmp_directive_specific_clause(
             }
             Ok(())
         }
-        ClauseData::UsesAllocators { allocators } if matches!(policy, VersionPolicy::Exact(version) if version <= OpenMpVersion::V5_1) => {
+        ClauseData::UsesAllocators { allocators } => {
             if allocators.iter().any(|allocator| {
                 matches!(
                     allocator.allocator(),
-                    crate::ir::UsesAllocatorKind::Custom(_)
-                ) && allocator.traits().is_none()
+                    crate::ir::UsesAllocatorKind::Builtin(_)
+                ) && (allocator.traits().is_some() || allocator.memspace().is_some())
             }) {
+                Err(Diagnostic::new(
+                    DiagnosticCode::InvalidModifier,
+                    span,
+                    "predefined allocators cannot have uses_allocators modifiers",
+                ))
+            } else if matches!(policy, VersionPolicy::Exact(version) if version <= OpenMpVersion::V5_1)
+                && allocators.iter().any(|allocator| {
+                    matches!(
+                        allocator.allocator(),
+                        crate::ir::UsesAllocatorKind::Custom(_)
+                    ) && allocator.traits().is_none()
+                })
+            {
                 Err(Diagnostic::new(
                     DiagnosticCode::MissingRequiredClause,
                     span,
@@ -1679,16 +1692,10 @@ pub fn validate_openacc_with_facts(
     facts: &SemanticFacts,
 ) -> Result<(), Diagnostic> {
     validate_openacc(directive, policy, span)?;
-    if matches!(
-        directive.kind(),
-        AccDirectiveKind::Declare | AccDirectiveKind::Routine
-    ) {
-        require_declaration_position(facts, span, "OpenACC declaration directive")?;
-    }
     require_openacc_semantic_facts(directive, span, facts)
 }
 
-fn require_openmp_semantic_facts(
+pub(crate) fn require_openmp_semantic_facts(
     directive: &OmpDirective,
     policy: VersionPolicy<OpenMpVersion>,
     span: Span,
@@ -2672,6 +2679,27 @@ fn validate_selector_obvious_constraints(
     for entry in selector.entries() {
         match entry {
             OmpSelectorEntry::Device { traits } | OmpSelectorEntry::TargetDevice { traits } => {
+                let kind_any = traits.iter().find_map(|trait_| match trait_ {
+                    OmpSelectorDeviceTrait::NameList(name_list)
+                        if name_list.kind() == crate::ast::OmpSelectorNameListKind::Kind
+                            && name_list
+                                .properties()
+                                .iter()
+                                .any(|property| property.semantic_name() == "any") =>
+                    {
+                        Some(name_list.properties().len())
+                    }
+                    _ => None,
+                });
+                if kind_any.is_some_and(|property_count| property_count != 1)
+                    || (kind_any.is_some() && traits.len() != 1)
+                {
+                    return Err(Diagnostic::new(
+                        DiagnosticCode::InvalidModifier,
+                        span,
+                        "kind(any) cannot be combined with another device trait property",
+                    ));
+                }
                 for trait_ in traits {
                     match trait_ {
                         OmpSelectorDeviceTrait::DeviceNum(expression) => {
@@ -4165,11 +4193,17 @@ fn expression_is_string_literal(expression: &Expression) -> bool {
     )
 }
 
-fn require_openacc_semantic_facts(
+pub(crate) fn require_openacc_semantic_facts(
     directive: &AccDirective,
     span: Span,
     facts: &SemanticFacts,
 ) -> Result<(), Diagnostic> {
+    if matches!(
+        directive.kind(),
+        AccDirectiveKind::Declare | AccDirectiveKind::Routine
+    ) {
+        require_declaration_position(facts, span, "OpenACC declaration directive")?;
+    }
     let mut occurrences = HashMap::new();
     for clause in directive.clauses() {
         let occurrence = occurrences.entry(clause.kind()).or_insert(0usize);
@@ -4836,7 +4870,8 @@ fn clause_item_names_variable(
         }
         crate::ir::ClauseItem::Variable(item_variable) => item_variable == variable,
         crate::ir::ClauseItem::Expression(expression) => expression == variable.expression(),
-        crate::ir::ClauseItem::FortranCommonBlock(_) => false,
+        crate::ir::ClauseItem::FortranCommonBlock(_)
+        | crate::ir::ClauseItem::LegacyTrailingSlash(_) => false,
     }
 }
 
@@ -5293,7 +5328,7 @@ fn validate_depobj_action_form(directive: &OmpDirective, span: Span) -> Result<(
             } => Some(variable),
             _ => None,
         };
-        if explicit_variable.is_some_and(|variable| target.expression() != variable.expression()) {
+        if explicit_variable.is_some_and(|variable| target != variable.expression()) {
             return Err(Diagnostic::new(
                 DiagnosticCode::InvalidClause,
                 span,
@@ -5315,6 +5350,8 @@ fn omp_locator_has_designator_root(
         }
         OmpLocator::AllMemory
         | OmpLocator::FortranCommonBlock(_)
+        | OmpLocator::Distributed { .. }
+        | OmpLocator::ArrayShaping { .. }
         | OmpLocator::PotentialLValue(_) => false,
     }
 }
@@ -5444,7 +5481,7 @@ fn openacc_clause_allowed(directive: AccDirectiveKind, clause: AccClauseKind) ->
                 | AccDirectiveKind::Kernels
                 | AccDirectiveKind::KernelsLoop
         ),
-        C::Bind | C::NoHost => directive == AccDirectiveKind::Routine,
+        C::Bind | C::Indirect | C::NoHost => directive == AccDirectiveKind::Routine,
         C::DeviceType => {
             compute
                 || loop_directive

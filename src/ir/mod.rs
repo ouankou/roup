@@ -8,7 +8,6 @@ pub use crate::ast::{
     OmpSelectorImplementationTraitKind, OmpSelectorNameListKind, OmpSelectorNameListTrait,
     OmpSelectorRequirement, OmpSelectorTraitValue,
 };
-pub(crate) use clause::UsesAllocatorSourceSyntax;
 pub use clause::{
     AdjustArgsModifier, AllocateSourceSyntax, AtKind, AtomicOp, BindModifier, ClauseData,
     ClauseItem, DefaultKind, DefaultmapBehavior, DefaultmapCategory, DependIterator, DependType,
@@ -16,12 +15,13 @@ pub use clause::{
     FirstprivateModifier, GrainsizeModifier, LastprivateModifier, LinearModifier,
     LinearSourceSyntax, MapModifier, MapRefKind, MapType, MapTypeSpelling, MemoryOrder,
     MemscopeKind, NumTasksModifier, OmpAppendOperation, OmpApplyLoopKind, OmpApplyLoopModifier,
-    OmpCount, OmpDependence, OmpDoacrossIteration, OmpDoacrossOffset, OmpDoacrossVectorItem,
-    OmpForeignRuntimeIdentifier, OmpInductionModifier, OmpInteropInitModifiers, OmpInteropType,
-    OmpLocator, OmpMemorySpace, OmpParameterListItem, OmpParameterRange, OmpPreferenceSelector,
-    OmpPreferenceSpecification, OrderKind, OrderModifier, OriginalSharing, ProcBind,
-    ReductionModifier, RequireModifier, ScanClauseMode, ScheduleKind, ScheduleModifier,
-    SeverityKind, ThreadsetKind, UsesAllocatorBuiltin, UsesAllocatorKind, UsesAllocatorSpec,
+    OmpArrayShapingSubscript, OmpCount, OmpDependence, OmpDistDataPolicy, OmpDoacrossIteration,
+    OmpDoacrossOffset, OmpDoacrossVectorItem, OmpForeignRuntimeIdentifier, OmpInductionModifier,
+    OmpInteropInitModifiers, OmpInteropType, OmpLocator, OmpMemorySpace, OmpParameterListItem,
+    OmpParameterRange, OmpPreferenceSelector, OmpPreferenceSpecification, OrderKind, OrderModifier,
+    OriginalSharing, ProcBind, ReductionModifier, RequireModifier, ScanClauseMode, ScheduleKind,
+    ScheduleModifier, SeverityKind, ThreadsetKind, UsesAllocatorBuiltin, UsesAllocatorKind,
+    UsesAllocatorSourceSyntax, UsesAllocatorSpec,
 };
 pub use error::ConversionError;
 pub use expression::{

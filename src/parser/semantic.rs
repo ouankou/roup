@@ -22,13 +22,14 @@ use crate::ir::{
     Expression, ExtendedAtomicKind, FirstprivateModifier, GrainsizeModifier, Identifier, LValue,
     LastprivateModifier, LinearModifier, LinearSourceSyntax, MapModifier, MapRefKind, MapType,
     MapTypeSpelling, MemoryOrder, MemscopeKind, NumTasksModifier, OmpAppendOperation,
-    OmpApplyLoopKind, OmpApplyLoopModifier, OmpCount, OmpDependence, OmpDoacrossIteration,
-    OmpDoacrossOffset, OmpDoacrossVectorItem, OmpForeignRuntimeIdentifier, OmpInductionModifier,
-    OmpInteropInitModifiers, OmpInteropType, OmpLocator, OmpMemorySpace, OmpParameterListItem,
-    OmpParameterRange, OmpPreferenceSelector, OmpPreferenceSpecification, OrderKind, OrderModifier,
-    OriginalSharing, ParserConfig, ProcBind, ReductionModifier, RequireModifier, ScanClauseMode,
-    ScheduleKind, ScheduleModifier, SeverityKind, ThreadsetKind, UsesAllocatorBuiltin,
-    UsesAllocatorKind, UsesAllocatorSourceSyntax, UsesAllocatorSpec, Variable, lang,
+    OmpApplyLoopKind, OmpApplyLoopModifier, OmpArrayShapingSubscript, OmpCount, OmpDependence,
+    OmpDistDataPolicy, OmpDoacrossIteration, OmpDoacrossOffset, OmpDoacrossVectorItem,
+    OmpForeignRuntimeIdentifier, OmpInductionModifier, OmpInteropInitModifiers, OmpInteropType,
+    OmpLocator, OmpMemorySpace, OmpParameterListItem, OmpParameterRange, OmpPreferenceSelector,
+    OmpPreferenceSpecification, OrderKind, OrderModifier, OriginalSharing, ParserConfig, ProcBind,
+    ReductionModifier, RequireModifier, ScanClauseMode, ScheduleKind, ScheduleModifier,
+    SeverityKind, ThreadsetKind, UsesAllocatorBuiltin, UsesAllocatorKind,
+    UsesAllocatorSourceSyntax, UsesAllocatorSpec, Variable, lang,
 };
 use crate::lexer::{Language as LexerLanguage, LogicalSource};
 use crate::parser::clause::ReductionOperator as ParserReductionOperator;
@@ -53,6 +54,15 @@ fn payload_keyword_eq(value: &str, expected: &str, config: &ParserConfig) -> boo
     } else {
         value == expected
     }
+}
+
+fn rfind_payload_keyword(value: &str, expected: &str, config: &ParserConfig) -> Option<usize> {
+    value.char_indices().rev().find_map(|(start, _)| {
+        value
+            .get(start..start + expected.len())
+            .filter(|candidate| payload_keyword_eq(candidate, expected, config))
+            .map(|_| start)
+    })
 }
 
 fn skip_host_trivia<'a>(input: &'a str, config: &ParserConfig) -> Result<&'a str, ConversionError> {
@@ -84,7 +94,11 @@ pub(crate) fn parse_identifier_list(
         .map(|item| match item {
             ClauseItem::Identifier(_)
             | ClauseItem::Variable(_)
-            | ClauseItem::FortranCommonBlock(_) => Ok(item),
+            | ClauseItem::FortranCommonBlock(_)
+            | ClauseItem::LegacyTrailingSlash(_) => Ok(item),
+            ClauseItem::Expression(expression) if config.source_compatibility() => {
+                Ok(ClauseItem::Expression(expression))
+            }
             ClauseItem::Expression(expression) => Err(ConversionError::InvalidClauseSyntax(
                 format!("variable or locator list contains a general expression: `{expression}`"),
             )),
@@ -101,7 +115,11 @@ pub(crate) fn parse_acc_identifier_list(
         .map(|item| match item {
             ClauseItem::Identifier(_)
             | ClauseItem::Variable(_)
-            | ClauseItem::FortranCommonBlock(_) => Ok(item),
+            | ClauseItem::FortranCommonBlock(_)
+            | ClauseItem::LegacyTrailingSlash(_) => Ok(item),
+            ClauseItem::Expression(expression) if config.source_compatibility() => {
+                Ok(ClauseItem::Expression(expression))
+            }
             ClauseItem::Expression(expression) => Err(ConversionError::InvalidClauseSyntax(
                 format!("variable or locator list contains a general expression: `{expression}`"),
             )),
@@ -119,13 +137,19 @@ pub(crate) fn parse_single_clause_expression(
     config: &ParserConfig,
     subject: &str,
 ) -> Result<Expression, ConversionError> {
-    let entries = split_top_level_items(source)?;
-    let [entry] = entries.as_slice() else {
+    let expression = Expression::new(source.trim(), config)?;
+    if matches!(
+        expression.ast().kind,
+        ExprKind::Binary {
+            op: BinaryOp::Comma,
+            ..
+        }
+    ) {
         return Err(ConversionError::InvalidClauseSyntax(format!(
             "{subject} requires exactly one assignment-expression"
         )));
-    };
-    Expression::new(entry.trim(), config).map_err(ConversionError::from)
+    }
+    Ok(expression)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -311,16 +335,20 @@ fn parse_original_reduction_modifier(
             "original reduction modifier requires exactly one sharing= value".to_string(),
         ));
     };
-    let (name, value) = argument.as_ref().split_once('=').ok_or_else(|| {
-        ConversionError::InvalidClauseSyntax(
-            "original reduction modifier requires sharing=default|private|shared".to_string(),
-        )
-    })?;
-    if !payload_keyword_eq(name.trim(), "sharing", config) {
+    let value = if let Some((name, value)) = argument.as_ref().split_once('=') {
+        if !payload_keyword_eq(name.trim(), "sharing", config) {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "original reduction modifier requires a sharing= argument".to_string(),
+            ));
+        }
+        value
+    } else if config.source_compatibility() {
+        argument.as_ref()
+    } else {
         return Err(ConversionError::InvalidClauseSyntax(
-            "original reduction modifier requires a sharing= argument".to_string(),
+            "original reduction modifier requires sharing=default|private|shared".to_string(),
         ));
-    }
+    };
     let sharing_keyword = payload_keyword(value.trim(), config);
     let sharing = match sharing_keyword.as_ref() {
         "default" => OriginalSharing::Default,
@@ -450,7 +478,10 @@ pub fn parse_schedule_clause(
         None => None,
     };
 
-    if chunk_size.is_some() && matches!(kind, ScheduleKind::Auto | ScheduleKind::Runtime) {
+    if chunk_size.is_some()
+        && matches!(kind, ScheduleKind::Auto | ScheduleKind::Runtime)
+        && !config.source_compatibility()
+    {
         return Err(ConversionError::InvalidClauseSyntax(
             "schedule(auto) and schedule(runtime) do not accept a chunk expression".to_string(),
         ));
@@ -760,7 +791,24 @@ fn parse_omp_locator_list_with_reserved(
     config: &ParserConfig,
     allow_all_memory: bool,
 ) -> Result<Vec<OmpLocator>, ConversionError> {
-    let items = lang::parse_clause_item_list(source, config)?;
+    let mut items = Vec::new();
+    for item_source in split_top_level_items(source)? {
+        if let Some(locator) = parse_array_shaping_locator(item_source, config)? {
+            items.push(Ok(locator));
+            continue;
+        }
+        if let Some(locator) = parse_distributed_locator(item_source, config)? {
+            items.push(Ok(locator));
+            continue;
+        }
+        let mut parsed = lang::parse_clause_item_list(item_source, config)?;
+        if parsed.len() != 1 {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "one locator source produced multiple typed items".to_string(),
+            ));
+        }
+        items.push(Err(parsed.remove(0)));
+    }
     if items.is_empty() {
         return Err(ConversionError::InvalidClauseSyntax(
             "data-motion clause requires at least one locator".to_string(),
@@ -771,8 +819,22 @@ fn parse_omp_locator_list_with_reserved(
             ExprKind::FortranApply { .. } => true,
             ExprKind::Parenthesized(inner)
             | ExprKind::Unary { operand: inner, .. }
+            | ExprKind::FortranDefinedUnary { operand: inner, .. }
             | ExprKind::Postfix { operand: inner, .. } => contains_fortran_apply(inner),
+            ExprKind::CppTemplateId {
+                template,
+                arguments,
+            } => {
+                contains_fortran_apply(template)
+                    || arguments
+                        .iter()
+                        .filter_map(crate::host::CppTemplateArgument::expression)
+                        .any(contains_fortran_apply)
+            }
             ExprKind::Binary { left, right, .. } => {
+                contains_fortran_apply(left) || contains_fortran_apply(right)
+            }
+            ExprKind::FortranDefinedBinary { left, right, .. } => {
                 contains_fortran_apply(left) || contains_fortran_apply(right)
             }
             ExprKind::Conditional {
@@ -803,7 +865,9 @@ fn parse_omp_locator_list_with_reserved(
                     }
             }
             ExprKind::Member { base, .. } => contains_fortran_apply(base),
-            ExprKind::Literal(_) | ExprKind::Name(_) => false,
+            ExprKind::Literal(_) | ExprKind::Name(_) | ExprKind::LegacyQualifiedInteger { .. } => {
+                false
+            }
         }
     }
 
@@ -830,7 +894,16 @@ fn parse_omp_locator_list_with_reserved(
         }
     }
 
-    fn classify(expression: Expression) -> Result<OmpLocator, ConversionError> {
+    fn classify(
+        expression: Expression,
+        config: &ParserConfig,
+    ) -> Result<OmpLocator, ConversionError> {
+        if config.source_compatibility() {
+            return Ok(LValue::from_expression(expression.clone()).map_or_else(
+                |_| OmpLocator::PotentialLValue(expression),
+                OmpLocator::LValue,
+            ));
+        }
         if is_potential_lvalue(&expression) {
             return Ok(OmpLocator::PotentialLValue(expression));
         }
@@ -840,23 +913,221 @@ fn parse_omp_locator_list_with_reserved(
     items
         .into_iter()
         .map(|item| match item {
-            ClauseItem::FortranCommonBlock(name) => Ok(OmpLocator::FortranCommonBlock(name)),
-            ClauseItem::Identifier(identifier) => {
-                if payload_keyword_eq(identifier.as_str(), "omp_all_memory", config) {
-                    return if allow_all_memory {
-                        Ok(OmpLocator::AllMemory)
-                    } else {
-                        Err(ConversionError::InvalidClauseSyntax(
-                            "omp_all_memory is not permitted in this locator list".to_string(),
-                        ))
-                    };
+            Ok(locator) => Ok(locator),
+            Err(item) => match item {
+                ClauseItem::FortranCommonBlock(name) => Ok(OmpLocator::FortranCommonBlock(name)),
+                ClauseItem::Identifier(identifier) => {
+                    if payload_keyword_eq(identifier.as_str(), "omp_all_memory", config) {
+                        return if allow_all_memory {
+                            Ok(OmpLocator::AllMemory)
+                        } else {
+                            Err(ConversionError::InvalidClauseSyntax(
+                                "omp_all_memory is not permitted in this locator list".to_string(),
+                            ))
+                        };
+                    }
+                    classify(Expression::new(identifier.as_str(), config)?, config)
                 }
-                classify(Expression::new(identifier.as_str(), config)?)
-            }
-            ClauseItem::Variable(variable) => classify(variable.expression().clone()),
-            ClauseItem::Expression(expression) => classify(expression),
+                ClauseItem::Variable(variable) => classify(variable.expression().clone(), config),
+                ClauseItem::Expression(expression) => classify(expression, config),
+                ClauseItem::LegacyTrailingSlash(_) => Err(ConversionError::InvalidClauseSyntax(
+                    "a legacy trailing-slash item is not a locator".to_string(),
+                )),
+            },
         })
         .collect()
+}
+
+fn parse_array_shaping_locator(
+    source: &str,
+    config: &ParserConfig,
+) -> Result<Option<OmpLocator>, ConversionError> {
+    if !config.source_compatibility()
+        || !matches!(config.host_language(), HostLanguage::C | HostLanguage::Cpp)
+    {
+        return Ok(None);
+    }
+    let source = source.trim();
+    if !source.starts_with("(([") {
+        return Ok(None);
+    }
+    let Some(outer_close) = lang::find_matching_delimiter(source, 0, '(', ')')? else {
+        return Err(ConversionError::InvalidClauseSyntax(
+            "array-shaping locator has an unclosed outer parenthesis".to_string(),
+        ));
+    };
+    let shaping = &source[1..outer_close];
+    let suffix = &source[outer_close + 1..];
+    if !shaping.starts_with('(') {
+        return Ok(None);
+    }
+    let Some(shape_close) = lang::find_matching_delimiter(shaping, 0, '(', ')')? else {
+        return Err(ConversionError::InvalidClauseSyntax(
+            "array-shaping dimension list is unclosed".to_string(),
+        ));
+    };
+    let shape_source = &shaping[1..shape_close];
+    let base_source = shaping[shape_close + 1..].trim();
+    if base_source.is_empty() {
+        return Err(ConversionError::InvalidClauseSyntax(
+            "array-shaping locator is missing its base expression".to_string(),
+        ));
+    }
+
+    let mut dimensions = Vec::new();
+    let mut remaining = shape_source.trim();
+    while !remaining.is_empty() {
+        if !remaining.starts_with('[') {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "array-shaping dimensions must be bracketed expressions".to_string(),
+            ));
+        }
+        let Some(close) = lang::find_matching_delimiter(remaining, 0, '[', ']')? else {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "array-shaping dimension has an unclosed bracket".to_string(),
+            ));
+        };
+        let dimension = remaining[1..close].trim();
+        if dimension.is_empty() {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "array-shaping dimensions must not be empty".to_string(),
+            ));
+        }
+        dimensions.push(Expression::new(dimension, config)?);
+        remaining = remaining[close + 1..].trim_start();
+    }
+    if dimensions.is_empty() {
+        return Ok(None);
+    }
+
+    let mut subscripts = Vec::new();
+    remaining = suffix.trim_start();
+    while !remaining.is_empty() {
+        if !remaining.starts_with('[') {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "array-shaping locator has unexpected trailing syntax".to_string(),
+            ));
+        }
+        let Some(close) = lang::find_matching_delimiter(remaining, 0, '[', ']')? else {
+            return Err(ConversionError::InvalidClauseSyntax(
+                "array-shaping locator subscript has an unclosed bracket".to_string(),
+            ));
+        };
+        let content = remaining[1..close].trim();
+        let components = lang::split_top_level(content, ':', &[('(', ')'), ('[', ']')])?;
+        let subscript = match components.as_slice() {
+            [index] if !index.trim().is_empty() => {
+                OmpArrayShapingSubscript::Index(Box::new(Expression::new(index.trim(), config)?))
+            }
+            [lower, length] => OmpArrayShapingSubscript::Section {
+                lower: parse_optional_array_shaping_expression(lower, config)?.map(Box::new),
+                length: parse_optional_array_shaping_expression(length, config)?.map(Box::new),
+                stride: None,
+            },
+            [lower, length, stride] => OmpArrayShapingSubscript::Section {
+                lower: parse_optional_array_shaping_expression(lower, config)?.map(Box::new),
+                length: parse_optional_array_shaping_expression(length, config)?.map(Box::new),
+                stride: parse_optional_array_shaping_expression(stride, config)?.map(Box::new),
+            },
+            _ => {
+                return Err(ConversionError::InvalidClauseSyntax(
+                    "array-shaping subscript must be an index or C array section".to_string(),
+                ));
+            }
+        };
+        subscripts.push(subscript);
+        remaining = remaining[close + 1..].trim_start();
+    }
+
+    Ok(Some(OmpLocator::ArrayShaping {
+        dimensions,
+        base: Expression::new(base_source, config)?,
+        subscripts,
+    }))
+}
+
+fn parse_optional_array_shaping_expression(
+    source: &str,
+    config: &ParserConfig,
+) -> Result<Option<Expression>, ConversionError> {
+    let source = source.trim();
+    if source.is_empty() {
+        Ok(None)
+    } else {
+        Expression::new(source, config)
+            .map(Some)
+            .map_err(ConversionError::from)
+    }
+}
+
+fn parse_distributed_locator(
+    source: &str,
+    config: &ParserConfig,
+) -> Result<Option<OmpLocator>, ConversionError> {
+    if !config.source_compatibility() {
+        return Ok(None);
+    }
+    let source = source.trim();
+    let Some(keyword_start) = rfind_payload_keyword(source, "dist_data", config) else {
+        return Ok(None);
+    };
+    if keyword_start == 0
+        || !source[..keyword_start]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_whitespace)
+    {
+        return Ok(None);
+    }
+    let after_keyword = &source[keyword_start + "dist_data".len()..];
+    let after_keyword = after_keyword.trim_start();
+    if !after_keyword.starts_with('(') {
+        return Ok(None);
+    }
+    let Some(close) = lang::find_matching_delimiter(after_keyword, 0, '(', ')')? else {
+        return Err(ConversionError::InvalidClauseSyntax(
+            "dist_data suffix has an unclosed policy argument".to_string(),
+        ));
+    };
+    if !after_keyword[close + 1..].trim().is_empty() {
+        return Ok(None);
+    }
+    let base_source = source[..keyword_start].trim_end();
+    if base_source.is_empty()
+        || base_source.chars().next_back().is_some_and(|character| {
+            matches!(
+                character,
+                '+' | '-'
+                    | '*'
+                    | '/'
+                    | '%'
+                    | '&'
+                    | '|'
+                    | '^'
+                    | '!'
+                    | '<'
+                    | '>'
+                    | '='
+                    | '?'
+                    | ':'
+                    | ','
+                    | '.'
+                    | '('
+            )
+        })
+    {
+        return Ok(None);
+    }
+    let policy_source = after_keyword[1..close].trim();
+    if !payload_keyword_eq(policy_source, "duplicate", config) {
+        return Err(ConversionError::InvalidClauseSyntax(format!(
+            "unknown dist_data policy: {policy_source}"
+        )));
+    }
+    Ok(Some(OmpLocator::Distributed {
+        base: Expression::new(base_source, config)?,
+        policy: OmpDistDataPolicy::Duplicate,
+    }))
 }
 
 fn parse_depend_locator_list(
@@ -1947,7 +2218,8 @@ fn parse_selector_content(
     let (selector_part, nested_directive_part) = split_selector_and_directive(trimmed)?;
     match mode {
         SelectorClauseMode::When
-            if nested_directive_part.is_none_or(|directive| directive.trim().is_empty()) =>
+            if nested_directive_part.is_none_or(|directive| directive.trim().is_empty())
+                && !config.source_compatibility() =>
         {
             return Err(ConversionError::InvalidClauseSyntax(
                 "when clause requires a directive variant after ':'".to_string(),
@@ -2161,22 +2433,34 @@ fn parse_device_selector(
         }
         if let Some(args) = parse_selector_trait_call(item, "kind", config)? {
             insert_selector_trait_name(&mut names, "kind")?;
-            traits.push(OmpSelectorDeviceTrait::NameList(
-                parse_name_list_selector_trait(args, OmpSelectorNameListKind::Kind, false, config)?
-                    .1,
-            ));
+            let (score, mut name_list) = parse_name_list_selector_trait(
+                args,
+                OmpSelectorNameListKind::Kind,
+                config.source_compatibility(),
+                config,
+            )?;
+            name_list.set_score(score);
+            traits.push(OmpSelectorDeviceTrait::NameList(name_list));
         } else if let Some(args) = parse_selector_trait_call(item, "isa", config)? {
             insert_selector_trait_name(&mut names, "isa")?;
-            traits.push(OmpSelectorDeviceTrait::NameList(
-                parse_name_list_selector_trait(args, OmpSelectorNameListKind::Isa, false, config)?
-                    .1,
-            ));
+            let (score, mut name_list) = parse_name_list_selector_trait(
+                args,
+                OmpSelectorNameListKind::Isa,
+                config.source_compatibility(),
+                config,
+            )?;
+            name_list.set_score(score);
+            traits.push(OmpSelectorDeviceTrait::NameList(name_list));
         } else if let Some(args) = parse_selector_trait_call(item, "arch", config)? {
             insert_selector_trait_name(&mut names, "arch")?;
-            traits.push(OmpSelectorDeviceTrait::NameList(
-                parse_name_list_selector_trait(args, OmpSelectorNameListKind::Arch, false, config)?
-                    .1,
-            ));
+            let (score, mut name_list) = parse_name_list_selector_trait(
+                args,
+                OmpSelectorNameListKind::Arch,
+                config.source_compatibility(),
+                config,
+            )?;
+            name_list.set_score(score);
+            traits.push(OmpSelectorDeviceTrait::NameList(name_list));
         } else if let Some(expr) = parse_selector_trait_call(item, "device_num", config)? {
             insert_selector_trait_name(&mut names, "device_num")?;
             if !target_device {
@@ -2625,14 +2909,14 @@ fn parse_constructs_selector(
 
         let lexer_lang = map_host_language_to_lexer(config.host_language());
         let parser = crate::parser::openmp::parser().with_language(lexer_lang);
-        let directive = parser
+        let (directive, score) = parser
             .parse_construct_trait_ast_in_source(text, config, source)
             .map_err(|error| {
                 ConversionError::InvalidClauseSyntax(format!(
                     "invalid construct selector trait: {error}"
                 ))
             })?;
-        constructs.push(OmpSelectorConstruct::new(directive));
+        constructs.push(OmpSelectorConstruct::new(directive, score));
     }
 
     if constructs.is_empty() {
@@ -2643,7 +2927,7 @@ fn parse_constructs_selector(
     Ok(constructs)
 }
 
-fn parse_scored_value<'a>(
+pub(crate) fn parse_scored_value<'a>(
     input: &'a str,
     config: &ParserConfig,
 ) -> Result<(Option<Expression>, &'a str), ConversionError> {
@@ -2895,10 +3179,13 @@ fn parse_historical_uses_allocator_spec(
     let (allocator_name, traits_source) = split_allocator_entry(entry)?;
     let allocator = classify_allocator_name(allocator_name, config)?;
     let traits = traits_source
-        .map(|source| Variable::parse(source.trim(), config).map_err(ConversionError::from))
+        .map(|source| parse_uses_allocator_traits(source.trim(), config))
         .transpose()?;
 
-    if traits.is_some() && matches!(allocator, UsesAllocatorKind::Builtin(_)) {
+    if traits.is_some()
+        && matches!(allocator, UsesAllocatorKind::Builtin(_))
+        && !config.source_compatibility()
+    {
         return Err(ConversionError::InvalidClauseSyntax(
             "predefined allocators cannot specify allocator traits".to_string(),
         ));
@@ -2941,7 +3228,7 @@ fn parse_uses_allocator_modifier_spec(
             let raw_modifier = raw_modifier.trim();
             if let Some(arguments) = allocator_modifier_arguments(raw_modifier, "traits", config)? {
                 if traits
-                    .replace(Variable::parse(arguments.trim(), config)?)
+                    .replace(parse_uses_allocator_traits(arguments.trim(), config)?)
                     .is_some()
                 {
                     return Err(ConversionError::InvalidClauseSyntax(
@@ -2971,6 +3258,7 @@ fn parse_uses_allocator_modifier_spec(
 
     if matches!(allocator, UsesAllocatorKind::Builtin(_))
         && (traits.is_some() || memspace.is_some())
+        && !config.source_compatibility()
     {
         return Err(ConversionError::InvalidClauseSyntax(
             "predefined allocators cannot have uses_allocators modifiers".to_string(),
@@ -2984,6 +3272,17 @@ fn parse_uses_allocator_modifier_spec(
         UsesAllocatorSourceSyntax::Modifier,
     )
     .map_err(|message| ConversionError::InvalidClauseSyntax(message.to_string()))
+}
+
+fn parse_uses_allocator_traits(
+    source: &str,
+    config: &ParserConfig,
+) -> Result<Expression, ConversionError> {
+    let expression = Expression::new(source, config)?;
+    if !config.source_compatibility() {
+        Variable::from_expression(expression.clone())?;
+    }
+    Ok(expression)
 }
 
 fn allocator_modifier_arguments<'a>(
@@ -3212,10 +3511,13 @@ fn parse_allocate_clause(
                 ObviousIntegerValue::NonNegative(value)
                     if value != 0 && value.is_power_of_two() => {}
                 ObviousIntegerValue::Unknown => {}
-                _ => return Err(ConversionError::InvalidClauseSyntax(
-                    "allocate align modifier requires a positive integer power-of-two expression"
-                        .to_string(),
-                )),
+                _ if config.source_compatibility() => {}
+                _ => {
+                    return Err(ConversionError::InvalidClauseSyntax(
+                        "allocate align modifier requires a positive integer power-of-two expression"
+                            .to_string(),
+                    ));
+                }
             }
             alignment = Some(expression);
             continue;
@@ -3434,12 +3736,12 @@ fn parse_parameter_list_item(
     })?;
     match item {
         ClauseItem::Identifier(identifier) => Ok(OmpParameterListItem::Named(identifier)),
-        ClauseItem::Variable(_) | ClauseItem::FortranCommonBlock(_) | ClauseItem::Expression(_) => {
-            Err(ConversionError::InvalidClauseSyntax(
-                "adjust_args parameter item must be a parameter name, position, or range"
-                    .to_string(),
-            ))
-        }
+        ClauseItem::Variable(_)
+        | ClauseItem::FortranCommonBlock(_)
+        | ClauseItem::Expression(_)
+        | ClauseItem::LegacyTrailingSlash(_) => Err(ConversionError::InvalidClauseSyntax(
+            "adjust_args parameter item must be a parameter name, position, or range".to_string(),
+        )),
     }
 }
 
@@ -3512,26 +3814,32 @@ fn parse_append_args_clause(
 fn parse_depend_objects(
     source: &str,
     config: &ParserConfig,
-) -> Result<Vec<Variable>, ConversionError> {
+) -> Result<Vec<LValue>, ConversionError> {
     let objects = lang::parse_clause_item_list(source, config)?
         .into_iter()
         .map(|item| {
-            let object = match item {
+            let expression = match item {
                 ClauseItem::Identifier(identifier) => {
                     if payload_keyword_eq(identifier.as_str(), "omp_all_memory", config) {
                         return Err(ConversionError::InvalidClauseSyntax(
                             "omp_all_memory is not a depend object".to_string(),
                         ));
                     }
-                    Variable::parse(identifier.as_str(), config)?
+                    Expression::new(identifier.as_str(), config)?
                 }
-                ClauseItem::Variable(variable) => variable,
-                ClauseItem::FortranCommonBlock(_) | ClauseItem::Expression(_) => {
+                ClauseItem::Variable(variable) => variable.expression().clone(),
+                ClauseItem::Expression(expression) => expression,
+                ClauseItem::FortranCommonBlock(_) | ClauseItem::LegacyTrailingSlash(_) => {
                     return Err(ConversionError::InvalidClauseSyntax(
-                        "depend(depobj: ...) accepts only depend-object variables".to_string(),
+                        "depend(depobj: ...) accepts only depend-object lvalues".to_string(),
                     ));
                 }
             };
+            let object = LValue::from_expression(expression).map_err(|_| {
+                ConversionError::InvalidClauseSyntax(
+                    "depend(depobj: ...) accepts only depend-object lvalues".to_string(),
+                )
+            })?;
             if object.has_array_section() {
                 return Err(ConversionError::InvalidClauseSyntax(
                     "array sections are not permitted in depend(depobj: ...)".to_string(),
@@ -3636,6 +3944,9 @@ fn parse_doacross_iteration(
     };
     let source = source.trim();
     if source.is_empty() {
+        if kind == DoacrossType::Source && config.source_compatibility() {
+            return Ok(OmpDoacrossIteration::Current);
+        }
         return Err(ConversionError::InvalidClauseSyntax(
             "a doacross ':' must be followed by an iteration specifier".to_string(),
         ));
@@ -4096,7 +4407,10 @@ fn parse_nonrecursive_clause_data<'a>(
                     };
                 let nthreads = split_top_level_items(values_source)?
                     .into_iter()
-                    .map(|value| Expression::new(value.trim(), config).map_err(ConversionError::from))
+                    .map(|value| {
+                        Expression::new(value.trim(), config)
+                            .map_err(ConversionError::from)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 if nthreads.is_empty() {
                     return Err(ConversionError::InvalidClauseSyntax(
@@ -4772,7 +5086,12 @@ fn parse_nonrecursive_clause_data<'a>(
                         ));
                     }
                     let rest = rest.trim_start();
-                    let Some(rest) = rest.strip_prefix(',') else {
+                    let separator = if config.source_compatibility() {
+                        rest.strip_prefix(',').or_else(|| rest.strip_prefix(':'))
+                    } else {
+                        rest.strip_prefix(',')
+                    };
+                    let Some(rest) = separator else {
                         return Err(ConversionError::InvalidClauseSyntax(
                             "affinity iterator modifier must be followed by a comma".to_string(),
                         ));
@@ -5134,7 +5453,8 @@ fn parse_nonrecursive_clause_data<'a>(
                 let parameters = items
                     .into_iter()
                     .map(|item| match item {
-                        ClauseItem::Identifier(identifier) => Ok(identifier),
+                        ClauseItem::Identifier(_) => Ok(item),
+                        _ if config.source_compatibility() => Ok(item),
                         other => Err(ConversionError::InvalidClauseSyntax(format!(
                             "uniform accepts only named parameters, not `{other}`"
                         ))),
@@ -5434,6 +5754,7 @@ fn parse_nonrecursive_clause_data<'a>(
                     ObviousIntegerValue::NonNegative(value)
                         if value.is_power_of_two() && value != 0 => {}
                     ObviousIntegerValue::Unknown => {}
+                    _ if config.source_compatibility() => {}
                     _ => {
                         return Err(ConversionError::InvalidClauseSyntax(
                             "align requires a positive integer power-of-two expression"
@@ -5607,7 +5928,7 @@ fn parse_nonrecursive_clause_data<'a>(
                             }
                             ObviousIntegerValue::Unknown
                             | ObviousIntegerValue::NonNegative(_) => {
-                                Ok(OmpCount::Expression(expression))
+                                Ok(OmpCount::Expression(Box::new(expression)))
                             }
                         }
                     })
@@ -5652,6 +5973,26 @@ fn parse_nonrecursive_clause_data<'a>(
                 "use clause expects exactly one variable".to_string(),
             )),
         },
+
+        ClauseName::Other(name)
+            if directive_kind == OmpDirectiveKind::Requires
+                && name.to_ascii_lowercase().starts_with("ext_") =>
+        {
+            let implementation = name
+                .get("ext_".len()..)
+                .filter(|name| !name.is_empty())
+                .ok_or_else(|| {
+                    ConversionError::InvalidClauseSyntax(
+                        "implementation-defined requirement needs a name after ext_".to_string(),
+                    )
+                })?;
+            Ok(ClauseData::Requirement {
+                requirement: RequireModifier::ExtImplementationDefinedRequirement(Some(
+                    Identifier::new(implementation)?,
+                )),
+                required: parse_optional_clause_expression(clause, config, "required")?,
+            })
+        }
 
         _ => Err(ConversionError::UnknownClause(format!(
             "{clause_name:?} ({:?})",

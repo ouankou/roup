@@ -111,6 +111,15 @@ fn cpp_reduction_ids_and_initializer_forms_are_structural() {
         OmpReductionIdentifier::Name(OmpIdExpression::CppOperatorFunction(_))
     ));
 
+    let standard_library = cpp(
+        "#pragma omp declare reduction(+ : std::vector<int>) combiner(std::transform(omp_out.begin(), omp_out.end(), omp_in.begin(), omp_in.end(), std::plus<int>()))",
+    )
+    .expect("C++ template calls in a combiner must remain typed");
+    assert!(matches!(
+        reduction(&standard_library).combiner(),
+        OmpReductionCombiner::COrCppExpression(_)
+    ));
+
     for (source, expected) in [
         (
             "#pragma omp declare_reduction(copy : widget) combiner(omp_out = omp_in) initializer(omp_priv = {omp_orig})",

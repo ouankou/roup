@@ -1,95 +1,44 @@
-# Strict accparser fixture audit
+# accparser compatibility audit
 
-This audit distinguishes adapter failures from intentionally rejected fixture
-inputs. The upstream fixture corpus is retained unchanged in the pinned
-submodule. It was written for a permissive parser and normalization-oriented
-unparser, so its aggregate result is not the strict adapter's acceptance
-contract.
+The compatibility criterion is the complete test suite from the pinned
+accparser submodule, registered unchanged with `add_subdirectory`. At the
+currently recorded revision, CTest runs all 918 upstream tests and two
+repository-owned tests, for 920 tests total.
 
-## Validated contract
+The build does not copy or edit upstream fixtures, patch reference output,
+replace expected failures, maintain an allowlist, or discover only a selected
+subset. An upstream registration failure, parse mismatch, missing file,
+nonzero runner result, or timeout fails the compatibility gate.
 
-The local `strict_contract` test proves:
+## Adapter boundary
 
-- exhaustive directive and clause ordinal conversion without display-name
-  classification;
-- numeric closed-enum conversion and hard errors for unknown numeric tags;
-- exact directive and clause start line/column propagation;
-- ordered copy modifiers and variable lists;
-- typed `collapse`, `gang`, `tile`, `worker`, `vector`, and directive-form
-  `wait` data, including tagged automatic `*` sizes;
-- tagged device types and reduction operators, without string reparsing;
-- typed cache array elements and contiguous subarrays, with scalar and strided
-  items rejected;
-- the closed standardized Fortran `end`-kind set and required named-routine
-  payloads;
-- `update host(...)` conversion to the same canonical `self` clause and payload
-  as `update self(...)`;
-- historical `pcopy` acceptance with canonical `copy` output;
-- mandatory explicit C, C++, and Fortran host profiles, with pre-selection and
-  source/profile mismatches rejected; and
-- exceptions for empty, prefix-free, malformed, and unknown input.
+The Rust frontend remains authoritative. Directives, parameters, clauses,
+modifiers, device types, locators, cache items, queue expressions, reduction
+operators, aliases, and host expressions are parsed into typed AST nodes before
+the C ABI exposes them. Closed semantics cross as numeric tags and structured
+alternatives cross as child nodes. The adapter never classifies an enum from a
+display name or reparses a rendered payload.
 
-Repository-owned strict equivalents retain the logical coverage of upstream
-`lang_flag_test` and `compat_caller` while calling `setLang` explicitly.
-Focused upstream `atomic` and `atomic_fortran` fixtures pass without correction. The
-upstream cache fixtures contain only scalar names, which OpenACC does not
-permit as cache items, so equivalent repository-owned cache and cache-Fortran
-fixtures exercise array elements and contiguous subarrays instead.
+Source spelling is retained as typed expression provenance where accparser's
+public round-trip contract requires it. This is not an opaque fallback: every
+such leaf has a validated host-expression AST, and semantic consumers use that
+tree. If the upstream IR cannot represent a typed value without changing its
+meaning, conversion fails instead of dropping, defaulting, or substituting
+data.
 
-These eight tests are the complete registered CTest gate: the three contract
-executables, the no-string-enum source audit, two upstream atomic fixture
-pairs, and two repository-owned cache fixture pairs. CMake does not import the
-upstream test directory or glob OpenACC-VV sources. Every registered test is
-mandatory and has a hard timeout; a missing fixture/reference pair fails
-configuration. Input and reference hashes also make fixture drift a hard
-configure-time re-audit requirement.
+## Compatibility behavior covered upstream
 
-## Intentionally rejected fixture categories
+The upstream suite exercises C, C++, and Fortran source forms; the complete
+builtin fixture corpus; OpenACC-VV sources; default and explicit language
+selection; historical aliases; clause merging and order; cache and array
+sections; atomic expressions; source spelling; unparsing; and the public
+accparser callers. The local tests additionally audit numeric enum conversion,
+field consumption, source locations, malformed-input behavior, and the absence
+of string-based closed-enum classification.
 
-The following exact upstream patterns are not valid inputs for the selected
-host language or directive context and now fail immediately:
-
-- C fixtures use C++ qualified expressions such as `readonly::m`,
-  `zero::12`, and `max::x`.
-- Fortran fixtures use C array-section spelling such as `x[0:N]` and `x[5]`.
-- `routine` fixtures repeat the singleton `bind` clause.
-- early `update` fixture lines contain only `async`, `device_type`, `wait`, or
-  `if` and omit the required `host`, `device`, or `self` action.
-- several locator lists use numeric literals (`12`, `23`, `34`) where a
-  variable designator is required.
-- the builtin cache fixtures list scalar names (`a`, `b`, and `c`) instead of
-  the required array elements or contiguous subarrays.
-
-These are hard errors. The adapter does not drop the offending item, switch
-host languages, return null, or continue with a partial AST.
-
-## Canonical output differences
-
-The strict AST stores wait device and queue semantics, not whether the optional
-`queues:` keyword was written. A wait parameter with `devnum:` therefore emits
-the canonical explicit `queues:` form. The old reference files preserve that
-surface distinction.
-
-The adapter does not add an output rewrite to reproduce the old spelling. Any
-remaining divergence in accparser's own `toString()` implementation is kept
-visible instead of being repaired after conversion.
-
-## Deliberate unsupported extension
-
-The pinned accparser accepts an `indirect` clause, but it is not part of the
-standardized OpenACC 1.0 through 3.4 surface implemented by ROUP. It remains a
-hard parse error rather than entering the typed AST as an opaque extension.
-
-## Upstream representation limits
-
-The pinned accparser IR cannot preserve every typed ROUP value. The adapter
-therefore hard-rejects these shapes instead of changing or dropping data:
-
-- user-defined OpenACC reduction operators, because accparser exposes only a
-  closed reduction enum;
-- UTF-8, UTF-16, UTF-32, and wide prefixes on `bind` string literals, because
-  accparser retains only a string-literal boolean (ordinary C/C++ and Fortran
-  encodings are consumed and checked explicitly);
-- a builtin `device_type` after a named type, because accparser stores builtin
-  and named types in separate vectors and would reorder them; and
-- duplicate device types, because accparser would silently deduplicate them.
+Failures found while enabling the complete suite resulted in typed frontend or
+ABI changes, including source provenance for standard aliases, scalar cache
+items, wait keyword state, `indirect`, historical qualified values, reduction
+subtraction, and separate source-preserving versus compact AST rendering at the
+two compatibility boundaries. No upstream fixture or expected output is
+rewritten.

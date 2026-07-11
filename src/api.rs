@@ -28,8 +28,8 @@ use crate::lexer::Language as LexerLanguage;
 use crate::parser::{self, AstBuildError};
 use crate::source::Span;
 use crate::validation::{
-    SemanticFacts, validate_openacc, validate_openacc_with_facts, validate_openmp,
-    validate_openmp_with_facts,
+    SemanticFacts, require_openacc_semantic_facts, require_openmp_semantic_facts, validate_openacc,
+    validate_openacc_with_facts, validate_openmp, validate_openmp_with_facts,
 };
 use crate::version::{
     HostLanguageProfile, OpenAccVersion, OpenMpVersion, SourceForm, VersionPolicy, VersionSet,
@@ -41,6 +41,7 @@ pub struct OpenMpConfig {
     version_policy: VersionPolicy<OpenMpVersion>,
     host: HostLanguageProfile,
     source_form: SourceForm,
+    source_compatibility: bool,
 }
 
 impl OpenMpConfig {
@@ -51,6 +52,7 @@ impl OpenMpConfig {
             version_policy: VersionPolicy::Any,
             host,
             source_form,
+            source_compatibility: false,
         })
     }
 
@@ -89,6 +91,17 @@ impl OpenMpConfig {
         self.source_form
     }
 
+    /// Match the accepted source contract of the historical parser frontend.
+    ///
+    /// The result remains a fully typed AST. This mode relaxes only
+    /// specification-level validation that the historical frontend did not
+    /// perform; malformed syntax and unrepresentable data remain hard errors.
+    #[must_use]
+    pub const fn with_source_compatibility(mut self) -> Self {
+        self.source_compatibility = true;
+        self
+    }
+
     #[must_use]
     pub const fn parser(self) -> OpenMpParser {
         OpenMpParser { config: self }
@@ -101,6 +114,7 @@ pub struct OpenAccConfig {
     version_policy: VersionPolicy<OpenAccVersion>,
     host: HostLanguageProfile,
     source_form: SourceForm,
+    source_compatibility: bool,
 }
 
 impl OpenAccConfig {
@@ -111,6 +125,7 @@ impl OpenAccConfig {
             version_policy: VersionPolicy::Any,
             host,
             source_form,
+            source_compatibility: false,
         })
     }
 
@@ -147,6 +162,17 @@ impl OpenAccConfig {
     #[must_use]
     pub const fn source_form(self) -> SourceForm {
         self.source_form
+    }
+
+    /// Match the accepted source contract of the historical parser frontend.
+    ///
+    /// The result remains a fully typed AST. This mode relaxes only
+    /// specification-level validation that the historical frontend did not
+    /// perform; malformed syntax and unrepresentable data remain hard errors.
+    #[must_use]
+    pub const fn with_source_compatibility(mut self) -> Self {
+        self.source_compatibility = true;
+        self
     }
 
     #[must_use]
@@ -199,8 +225,9 @@ impl OpenMpParser {
     ) -> Result<ParsedOpenMpDirective, Diagnostic> {
         let parser =
             parser::openmp::parser().with_language(lexer_language(self.config.source_form));
-        let parser_config =
-            parser_config(self.config.host).with_openmp_version_policy(self.config.version_policy);
+        let parser_config = parser_config(self.config.host)
+            .with_openmp_version_policy(self.config.version_policy)
+            .with_source_compatibility(self.config.source_compatibility);
         let directive = parser
             .parse_ast(source, &parser_config)
             .map_err(|error| ast_error(error, source))?;
@@ -214,38 +241,61 @@ impl OpenMpParser {
         };
         let spelling = openmp.kind().as_str();
 
-        let Some(availability) = openmp_directive_availability(spelling) else {
-            return Err(uncatalogued_directive(
-                "OpenMP",
-                spelling,
-                source,
-                OPENMP_NONSTANDARD_SPELLINGS.contains(&spelling),
-            ));
+        let mut compatible_versions = match openmp_directive_availability(spelling) {
+            Some(availability) => {
+                openmp_compatible_versions(availability, self.config.host.language())
+            }
+            None if self.config.source_compatibility
+                && matches!(
+                    openmp.kind(),
+                    crate::ast::OmpDirectiveKind::Ompx | crate::ast::OmpDirectiveKind::EndSection
+                ) =>
+            {
+                VersionSet::empty()
+            }
+            None => {
+                return Err(uncatalogued_directive(
+                    "OpenMP",
+                    spelling,
+                    source,
+                    OPENMP_NONSTANDARD_SPELLINGS.contains(&spelling),
+                ));
+            }
         };
-        let mut compatible_versions =
-            openmp_compatible_versions(availability, self.config.host.language());
         let spelling_availability =
             openmp_directive_spelling_availability(&openmp, self.config.host.language());
-        compatible_versions = match spelling_availability {
-            FeatureAvailability::Standardized { .. } => compatible_versions.intersection(
-                spelling_availability
-                    .compatible_versions()
-                    .ok_or_else(|| internal_availability_error("OpenMP", source))?,
-            ),
+        match spelling_availability {
+            FeatureAvailability::Standardized { .. } => {
+                compatible_versions = compatible_versions.intersection(
+                    spelling_availability
+                        .compatible_versions()
+                        .ok_or_else(|| internal_availability_error("OpenMP", source))?,
+                );
+            }
+            FeatureAvailability::Nonstandard { .. } if self.config.source_compatibility => {
+                compatible_versions = VersionSet::empty();
+            }
             FeatureAvailability::Nonstandard { reason } => {
                 return Err(nonstandard_directive("OpenMP", spelling, reason, source));
             }
-        };
+        }
         for clause in openmp.clauses() {
             let availability = openmp_clause_syntax_availability(
                 openmp.kind(),
                 clause,
                 self.config.host.language(),
             );
-            let clause_versions = match availability {
-                FeatureAvailability::Standardized { .. } => availability
-                    .compatible_versions()
-                    .ok_or_else(|| internal_availability_error("OpenMP", source))?,
+            match availability {
+                FeatureAvailability::Standardized { .. } => {
+                    compatible_versions = compatible_versions.intersection(
+                        availability
+                            .compatible_versions()
+                            .ok_or_else(|| internal_availability_error("OpenMP", source))?,
+                    );
+                }
+                FeatureAvailability::Nonstandard { .. } if self.config.source_compatibility => {
+                    compatible_versions = VersionSet::empty();
+                }
                 FeatureAvailability::Nonstandard { reason } => {
                     return Err(nonstandard_clause(
                         "OpenMP",
@@ -254,22 +304,32 @@ impl OpenMpParser {
                         source,
                     ));
                 }
-            };
-            compatible_versions = compatible_versions.intersection(clause_versions);
+            }
         }
-        enforce_openmp_policy(
-            self.config.version_policy,
-            spelling,
-            compatible_versions,
-            source,
-        )?;
+        if !self.config.source_compatibility
+            || matches!(self.config.version_policy, VersionPolicy::Exact(_))
+        {
+            enforce_openmp_policy(
+                self.config.version_policy,
+                spelling,
+                compatible_versions,
+                source,
+            )?;
+        }
         match facts {
+            Some(facts) if self.config.source_compatibility => require_openmp_semantic_facts(
+                &openmp,
+                self.config.version_policy,
+                Span::entire(source),
+                facts,
+            )?,
             Some(facts) => validate_openmp_with_facts(
                 &openmp,
                 self.config.version_policy,
                 Span::entire(source),
                 facts,
             )?,
+            None if self.config.source_compatibility => {}
             None => validate_openmp(&openmp, self.config.version_policy, Span::entire(source))?,
         }
 
@@ -319,7 +379,8 @@ impl OpenAccParser {
     ) -> Result<ParsedOpenAccDirective, Diagnostic> {
         let parser =
             parser::openacc::parser().with_language(lexer_language(self.config.source_form));
-        let parser_config = parser_config(self.config.host);
+        let parser_config = parser_config(self.config.host)
+            .with_source_compatibility(self.config.source_compatibility);
         let directive = parser
             .parse_ast(source, &parser_config)
             .map_err(|error| ast_error(error, source))?;
@@ -344,22 +405,34 @@ impl OpenAccParser {
         let mut compatible_versions =
             openacc_compatible_versions(availability, self.config.host.language());
         let parameter_availability = openacc_directive_parameter_availability(&openacc);
-        compatible_versions = match parameter_availability {
-            FeatureAvailability::Standardized { .. } => compatible_versions.intersection(
-                parameter_availability
-                    .compatible_versions()
-                    .ok_or_else(|| internal_availability_error("OpenACC", source))?,
-            ),
+        match parameter_availability {
+            FeatureAvailability::Standardized { .. } => {
+                compatible_versions = compatible_versions.intersection(
+                    parameter_availability
+                        .compatible_versions()
+                        .ok_or_else(|| internal_availability_error("OpenACC", source))?,
+                );
+            }
+            FeatureAvailability::Nonstandard { .. } if self.config.source_compatibility => {
+                compatible_versions = VersionSet::empty();
+            }
             FeatureAvailability::Nonstandard { reason } => {
                 return Err(nonstandard_directive("OpenACC", spelling, reason, source));
             }
-        };
+        }
         for clause in openacc.clauses() {
             let availability = openacc_clause_syntax_availability(openacc.kind(), clause);
-            let clause_versions = match availability {
-                FeatureAvailability::Standardized { .. } => availability
-                    .compatible_versions()
-                    .ok_or_else(|| internal_availability_error("OpenACC", source))?,
+            match availability {
+                FeatureAvailability::Standardized { .. } => {
+                    compatible_versions = compatible_versions.intersection(
+                        availability
+                            .compatible_versions()
+                            .ok_or_else(|| internal_availability_error("OpenACC", source))?,
+                    );
+                }
+                FeatureAvailability::Nonstandard { .. } if self.config.source_compatibility => {
+                    compatible_versions = VersionSet::empty();
+                }
                 FeatureAvailability::Nonstandard { reason } => {
                     return Err(nonstandard_clause(
                         "OpenACC",
@@ -368,22 +441,29 @@ impl OpenAccParser {
                         source,
                     ));
                 }
-            };
-            compatible_versions = compatible_versions.intersection(clause_versions);
+            }
         }
-        enforce_openacc_policy(
-            self.config.version_policy,
-            spelling,
-            compatible_versions,
-            source,
-        )?;
+        if !self.config.source_compatibility
+            || matches!(self.config.version_policy, VersionPolicy::Exact(_))
+        {
+            enforce_openacc_policy(
+                self.config.version_policy,
+                spelling,
+                compatible_versions,
+                source,
+            )?;
+        }
         match facts {
+            Some(facts) if self.config.source_compatibility => {
+                require_openacc_semantic_facts(&openacc, Span::entire(source), facts)?
+            }
             Some(facts) => validate_openacc_with_facts(
                 &openacc,
                 self.config.version_policy,
                 Span::entire(source),
                 facts,
             )?,
+            None if self.config.source_compatibility => {}
             None => validate_openacc(&openacc, self.config.version_policy, Span::entire(source))?,
         }
 
@@ -394,8 +474,9 @@ impl OpenAccParser {
     }
 }
 
-/// OpenMP parse result with the standardized compatibility set for its
-/// directive spelling.
+/// OpenMP parse result with the standardized compatibility set for all syntax
+/// in the directive. The set is empty when source-compatibility mode accepts a
+/// nonstandard extension.
 #[derive(Debug)]
 pub struct ParsedOpenMpDirective {
     directive: OmpDirective,
@@ -419,8 +500,9 @@ impl ParsedOpenMpDirective {
     }
 }
 
-/// OpenACC parse result with the standardized compatibility set for its
-/// directive spelling.
+/// OpenACC parse result with the standardized compatibility set for all syntax
+/// in the directive. The set is empty when source-compatibility mode accepts a
+/// nonstandard extension.
 #[derive(Debug)]
 pub struct ParsedOpenAccDirective {
     directive: AccDirective,

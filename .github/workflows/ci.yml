@@ -17,13 +17,61 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  rust:
-    name: Rust ${{ matrix.rust }} on ${{ matrix.os }}
+  test:
+    name: Rust ${{ matrix.rust }} full suite on ubuntu-26.04
     strategy:
       fail-fast: true
       matrix:
         rust: ["1.88", stable]
-        os: [ubuntu-26.04, windows-2025, macos-26]
+    runs-on: ubuntu-26.04
+    permissions:
+      actions: read
+      contents: read
+      pages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang-format cmake g++ gcc gfortran make ninja-build pkg-config python3 ripgrep
+
+      - name: Install pinned mdBook
+        run: cargo install mdbook --version 0.5.4 --locked
+
+      - name: Run every repository and upstream compatibility test
+        run: ./test.sh
+
+      - name: Package tested documentation
+        if: ${{ matrix.rust == 'stable' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          mkdir -p docs/book/book/api
+          cp -R target/doc/. docs/book/book/api/
+
+      - name: Configure GitHub Pages
+        if: ${{ matrix.rust == 'stable' && github.event_name == 'push' && github.ref == 'refs/heads/main' && !env.ACT }}
+        uses: actions/configure-pages@v6
+
+      - name: Upload Pages artifact
+        if: ${{ matrix.rust == 'stable' && github.event_name == 'push' && github.ref == 'refs/heads/main' && !env.ACT }}
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/book/book
+
+  basic:
+    name: Rust ${{ matrix.rust }} basic build on ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        rust: ["1.88", stable]
+        os: [windows-2025, macos-26]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -35,93 +83,18 @@ jobs:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
 
-      - name: Check formatting
-        run: cargo fmt --all --check
-
-      - name: Check the standalone safe Rust parser
-        run: cargo check --locked -p roup --all-targets
-
-      - name: Check the complete workspace
-        run: cargo check --locked --workspace --all-targets
-
-      - name: Deny Clippy warnings
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
-
-      - name: Test the complete workspace
-        run: cargo test --locked --workspace --all-targets
-
-  integration:
-    name: C ABI, adapters, examples, and documentation
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-
-      - name: Install native build dependencies
+      - name: Run the basic Rust build and test gate
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes cmake g++ gcc gfortran make ninja-build pkg-config ripgrep
-
-      - name: Install pinned mdBook
-        run: cargo install mdbook --version 0.5.4 --locked
-
-      - name: Run the fail-fast repository test matrix
-        run: ./test.sh
-
-  documentation:
-    name: Build documentation artifact
-    needs: [rust, integration]
-    runs-on: ubuntu-26.04
-    permissions:
-      contents: read
-      pages: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-
-      - name: Install pinned mdBook
-        run: cargo install mdbook --version 0.5.4 --locked
-
-      - name: Test and build the book
-        run: |
-          mdbook test docs/book
-          mdbook build docs/book
-
-      - name: Build Rust API documentation
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --locked --workspace --no-deps
-
-      - name: Combine book and API documentation
-        run: |
-          mkdir -p docs/book/book/api
-          cp -R target/doc/. docs/book/book/api/
-
-      - name: Configure GitHub Pages
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !env.ACT }}
-        uses: actions/configure-pages@v6
-
-      - name: Upload Pages artifact
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !env.ACT }}
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: docs/book/book
+          cargo fmt --all --check
+          cargo check --locked -p roup --all-targets
+          cargo check --locked --workspace --all-targets
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo test --locked --workspace --all-targets
 
   deploy:
     name: Deploy documentation
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: documentation
+    needs: [test, basic]
     runs-on: ubuntu-26.04
     permissions:
       actions: read

@@ -6,7 +6,10 @@ use crate::parser::clause::{
     ClauseKind, ReductionModifier, ReductionOperator, parse_variable_list,
 };
 
-const OPENMP_DEFAULT_CLAUSE_RULE: ClauseRule = ClauseRule::Unsupported;
+// Tokenize unknown spellings so semantic lowering can recognize typed
+// implementation-defined `requires` properties. In every other context the
+// unknown spelling remains a hard semantic error.
+const OPENMP_DEFAULT_CLAUSE_RULE: ClauseRule = ClauseRule::Flexible;
 
 macro_rules! openmp_clauses {
     ($( $variant:ident => { name: $name:literal, rule: $rule:expr } ),+ $(,)?) => {
@@ -1089,6 +1092,7 @@ pub(crate) fn directive_registry() -> DirectiveRegistry {
     builder = builder.register_custom("endcritical", parse_critical_directive);
     builder = builder.register_custom("flush", parse_flush_directive);
     builder = builder.register_generic("end parallel single");
+    builder = builder.register_generic("omp teams");
 
     // OpenMP 6.0 made these underscore-bearing directive names canonical and
     // retained the historical spaced spellings as explicit alternatives. Both

@@ -50,4 +50,7 @@ Unsupported conversions are hard errors.
 
 The upstream projects are pinned git submodules. A repository test requires
 both worktrees to match their recorded gitlinks, builds each adapter from a
-clean CMake directory, and runs the upstream ctest suites.
+clean CMake directory, and registers both upstream ctest directories unchanged.
+At the current pins this runs all 1,534 ompparser and 918 accparser upstream
+tests, plus five local ABI/adapter checks. No upstream fixture or reference is
+rewritten and no test is filtered, disabled, or allowed to fail.

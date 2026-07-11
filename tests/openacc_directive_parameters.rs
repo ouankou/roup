@@ -47,8 +47,20 @@ fn cache_parameter_is_typed_once_at_the_ast_boundary() {
         cache.items()[1],
         AccCacheItem::ContiguousSubarray(_)
     ));
-    assert_eq!(cache.items()[0].variable().to_string(), "values[index]");
-    assert_eq!(cache.items()[1].variable().to_string(), "tile[0:n]");
+    assert_eq!(
+        cache.items()[0]
+            .variable()
+            .expect("array element has a variable")
+            .to_string(),
+        "values[index]"
+    );
+    assert_eq!(
+        cache.items()[1]
+            .variable()
+            .expect("array section has a variable")
+            .to_string(),
+        "tile[0:n]"
+    );
 }
 
 #[test]

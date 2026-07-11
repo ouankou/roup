@@ -1,6 +1,7 @@
 use crate::host::ast::{
-    ArraySection, AssignmentOp, BinaryOp, Expr, ExprKind, FortranArgument, HostLanguage, Literal,
-    MemberAccess, PostfixOp, QualifiedName, SectionSemantics, Subscript, UnaryOp,
+    ArraySection, AssignmentOp, BinaryOp, CppTemplateArgument, Expr, ExprKind, FortranArgument,
+    HostLanguage, Literal, MemberAccess, PostfixOp, QualifiedName, SectionSemantics, Subscript,
+    UnaryOp,
 };
 use crate::host::lexer::{LexError, LexErrorKind, Lexer, Token, TokenKind};
 use crate::source::{SourceError, Span};
@@ -94,6 +95,18 @@ pub fn parse_expression_with_profile(
     Parser::with_profile(source, profile)?.parse()
 }
 
+pub(crate) fn parse_expression_source_compatible_with_profile(
+    source: &str,
+    profile: HostLanguageProfile,
+) -> Result<Expr, ParseError> {
+    Parser::with_tokens(
+        source,
+        profile,
+        Lexer::for_source_compatibility_with_profile(source, profile).tokenize()?,
+    )
+    .parse()
+}
+
 /// Strict Pratt parser over typed tokens.
 pub struct Parser<'a> {
     source: &'a str,
@@ -104,22 +117,32 @@ pub struct Parser<'a> {
     recursion_depth: u16,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CppTemplateDelimiter {
+    Parenthesis,
+    Bracket,
+}
+
 impl<'a> Parser<'a> {
     pub fn new(source: &'a str, language: HostLanguage) -> Result<Self, ParseError> {
         Self::with_profile(source, HostLanguageProfile::latest(language))
     }
 
     pub fn with_profile(source: &'a str, profile: HostLanguageProfile) -> Result<Self, ParseError> {
+        let tokens = Lexer::for_expression_with_profile(source, profile).tokenize()?;
+        Ok(Self::with_tokens(source, profile, tokens))
+    }
+
+    fn with_tokens(source: &'a str, profile: HostLanguageProfile, tokens: Vec<Token>) -> Self {
         let language = profile.language();
-        let tokens = Lexer::with_profile(source, profile).tokenize()?;
-        Ok(Self {
+        Self {
             source,
             profile,
             language,
             tokens,
             cursor: 0,
             recursion_depth: 0,
-        })
+        }
     }
 
     pub fn parse(mut self) -> Result<Expr, ParseError> {
@@ -155,6 +178,11 @@ impl<'a> Parser<'a> {
         loop {
             if self.is_postfix_start() {
                 left = self.parse_postfix(left)?;
+                continue;
+            }
+
+            if let Some(template_id) = self.try_parse_cpp_template_id(&left)? {
+                left = template_id;
                 continue;
             }
 
@@ -207,6 +235,28 @@ impl<'a> Parser<'a> {
                 continue;
             }
 
+            if self.language == HostLanguage::Fortran
+                && let TokenKind::FortranDefinedOperator(operator) = self.current().kind.clone()
+            {
+                const LEFT_BP: u8 = 1;
+                const RIGHT_BP: u8 = 2;
+                if LEFT_BP < minimum {
+                    break;
+                }
+                self.advance();
+                let right = self.parse_binding_power(RIGHT_BP)?;
+                let span = self.join(left.span, right.span)?;
+                left = Expr::new(
+                    span,
+                    ExprKind::FortranDefinedBinary {
+                        operator,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                );
+                continue;
+            }
+
             let Some((op, left_bp, right_bp)) = self.binary_operator() else {
                 break;
             };
@@ -231,6 +281,20 @@ impl<'a> Parser<'a> {
 
     fn parse_prefix(&mut self) -> Result<Expr, ParseError> {
         let token = self.current().clone();
+        if self.language == HostLanguage::Fortran
+            && let TokenKind::FortranDefinedOperator(operator) = token.kind.clone()
+        {
+            self.advance();
+            let operand = self.parse_binding_power(17)?;
+            let span = self.join(token.span, operand.span)?;
+            return Ok(Expr::new(
+                span,
+                ExprKind::FortranDefinedUnary {
+                    operator,
+                    operand: Box::new(operand),
+                },
+            ));
+        }
         let unary = match (&token.kind, self.language) {
             (TokenKind::Plus, _) => Some((UnaryOp::Plus, self.prefix_binding_power(false))),
             (TokenKind::Minus, _) => Some((UnaryOp::Minus, self.prefix_binding_power(false))),
@@ -392,6 +456,340 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn try_parse_cpp_template_id(&mut self, expression: &Expr) -> Result<Option<Expr>, ParseError> {
+        if self.language != HostLanguage::Cpp
+            || !matches!(self.current().kind, TokenKind::Less)
+            || !matches!(
+                expression.kind,
+                ExprKind::Name(_) | ExprKind::Member { .. } | ExprKind::CppTemplateId { .. }
+            )
+        {
+            return Ok(None);
+        }
+
+        let checkpoint = self.cursor;
+        let open = self.current().span;
+        self.advance();
+        let mut depth = 1usize;
+        let mut delimiters = Vec::new();
+        let mut argument_start = self.cursor;
+        let mut arguments = Vec::new();
+        let close_span;
+
+        loop {
+            let token = self.current().clone();
+            match token.kind {
+                TokenKind::End => {
+                    self.cursor = checkpoint;
+                    return Ok(None);
+                }
+                TokenKind::LeftParen => {
+                    delimiters.push(CppTemplateDelimiter::Parenthesis);
+                    self.advance();
+                }
+                TokenKind::LeftBracket => {
+                    delimiters.push(CppTemplateDelimiter::Bracket);
+                    self.advance();
+                }
+                TokenKind::RightParen => {
+                    if delimiters.pop() != Some(CppTemplateDelimiter::Parenthesis) {
+                        self.cursor = checkpoint;
+                        return Ok(None);
+                    }
+                    self.advance();
+                }
+                TokenKind::RightBracket => {
+                    if delimiters.pop() != Some(CppTemplateDelimiter::Bracket) {
+                        self.cursor = checkpoint;
+                        return Ok(None);
+                    }
+                    self.advance();
+                }
+                TokenKind::Less if delimiters.is_empty() => {
+                    depth += 1;
+                    self.advance();
+                }
+                TokenKind::Greater if delimiters.is_empty() && depth > 1 => {
+                    depth -= 1;
+                    self.advance();
+                }
+                TokenKind::Greater if delimiters.is_empty() => {
+                    if argument_start == self.cursor {
+                        self.cursor = checkpoint;
+                        return Ok(None);
+                    }
+                    let Some(argument) =
+                        self.parse_cpp_template_argument(argument_start, self.cursor, None)?
+                    else {
+                        self.cursor = checkpoint;
+                        return Ok(None);
+                    };
+                    arguments.push(argument);
+                    close_span = token.span;
+                    self.advance();
+                    break;
+                }
+                TokenKind::ShiftRight if delimiters.is_empty() && depth > 2 => {
+                    depth -= 2;
+                    self.advance();
+                }
+                TokenKind::ShiftRight if delimiters.is_empty() && depth == 2 => {
+                    if argument_start == self.cursor {
+                        self.cursor = checkpoint;
+                        return Ok(None);
+                    }
+                    let Some(argument) = self.parse_cpp_template_argument(
+                        argument_start,
+                        self.cursor,
+                        Some(token.span),
+                    )?
+                    else {
+                        self.cursor = checkpoint;
+                        return Ok(None);
+                    };
+                    arguments.push(argument);
+                    close_span = token.span;
+                    self.advance();
+                    break;
+                }
+                TokenKind::Comma if delimiters.is_empty() && depth == 1 => {
+                    if argument_start == self.cursor {
+                        self.cursor = checkpoint;
+                        return Ok(None);
+                    }
+                    let Some(argument) =
+                        self.parse_cpp_template_argument(argument_start, self.cursor, None)?
+                    else {
+                        self.cursor = checkpoint;
+                        return Ok(None);
+                    };
+                    arguments.push(argument);
+                    self.advance();
+                    argument_start = self.cursor;
+                }
+                _ => {
+                    self.advance();
+                }
+            }
+        }
+
+        if arguments.is_empty() {
+            self.cursor = checkpoint;
+            return Ok(None);
+        }
+        // Without a C++ symbol table, `name<type>(value)` and
+        // `left < middle > (right)` are grammatically indistinguishable. Keep
+        // the tightly spelled form as a template-id, including when a binary
+        // operator legally follows it, but treat a separated `<` as the
+        // ordinary relational spelling in the ambiguous cases below.
+        let tightly_spelled_template = expression.span.end_byte() == open.start_byte();
+        let spaced_parenthesized_operand = matches!(self.current().kind, TokenKind::LeftParen)
+            && !tightly_spelled_template
+            && close_span.end_byte() < self.current().span.start_byte();
+        let primary_or_prefix_only = matches!(
+            self.current().kind,
+            TokenKind::Identifier(_)
+                | TokenKind::ReservedKeyword(_)
+                | TokenKind::Integer(_)
+                | TokenKind::Real(_)
+                | TokenKind::Character(_)
+                | TokenKind::String(_)
+                | TokenKind::Boolean(_)
+                | TokenKind::NullPointer
+                | TokenKind::LogicalNot
+                | TokenKind::BitwiseNot
+                | TokenKind::PlusPlus
+                | TokenKind::MinusMinus
+        );
+        let separated_binary_or_prefix_operator = !tightly_spelled_template
+            && matches!(
+                self.current().kind,
+                TokenKind::Plus | TokenKind::Minus | TokenKind::Star | TokenKind::Ampersand
+            );
+        if primary_or_prefix_only
+            || separated_binary_or_prefix_operator
+            || spaced_parenthesized_operand
+        {
+            // A primary- or prefix-only expression cannot immediately follow
+            // a template-id. Restore `<` as a relational operator instead of
+            // stealing inputs such as `a < b > c` or `a < b > -1` as the
+            // incomplete template-id `a<b>`.
+            self.cursor = checkpoint;
+            return Ok(None);
+        }
+        let span = self.join(expression.span, close_span)?;
+        debug_assert!(open.start_byte() < close_span.end_byte());
+        Ok(Some(Expr::new(
+            span,
+            ExprKind::CppTemplateId {
+                template: Box::new(expression.clone()),
+                arguments,
+            },
+        )))
+    }
+
+    fn parse_cpp_template_argument(
+        &self,
+        start_token: usize,
+        end_token: usize,
+        first_shift_close: Option<Span>,
+    ) -> Result<Option<CppTemplateArgument>, ParseError> {
+        let Some(argument_tokens) = self.tokens.get(start_token..end_token) else {
+            return Err(ParseError {
+                span: self.current().span,
+                kind: ParseErrorKind::InternalInvariant(
+                    "template argument range is outside the token stream",
+                ),
+            });
+        };
+        let Some(last) = argument_tokens.last() else {
+            return Err(ParseError {
+                span: self.current().span,
+                kind: ParseErrorKind::InternalInvariant("template argument is empty"),
+            });
+        };
+
+        let mut expression_tokens = argument_tokens.to_vec();
+        let (source, end_byte) =
+            if let Some(close_span) = first_shift_close {
+                let source = self
+                    .template_argument_source_through_first_shift_close(start_token, close_span)?;
+                let Some(end_byte) = close_span.start_byte().checked_add(1) else {
+                    return Err(ParseError {
+                        span: close_span,
+                        kind: ParseErrorKind::InternalInvariant(
+                            "shift-right template closer offset overflowed",
+                        ),
+                    });
+                };
+                let first_close = Span::new(self.source, close_span.start_byte(), end_byte)
+                    .map_err(|error| ParseError {
+                        span: close_span,
+                        kind: ParseErrorKind::InvalidSpan(error),
+                    })?;
+                expression_tokens.push(Token {
+                    kind: TokenKind::Greater,
+                    span: first_close,
+                });
+                (source, end_byte)
+            } else {
+                (
+                    self.template_argument_source(start_token, end_token)?,
+                    last.span.end_byte(),
+                )
+            };
+        let end_span = Span::point(self.source, end_byte).map_err(|error| ParseError {
+            span: last.span,
+            kind: ParseErrorKind::InvalidSpan(error),
+        })?;
+        expression_tokens.push(Token {
+            kind: TokenKind::End,
+            span: end_span,
+        });
+
+        let type_name = super::TypeName::parse_with_profile(source, self.profile).ok();
+        let mut parser = Self::with_tokens(self.source, self.profile, expression_tokens);
+        parser.recursion_depth = self.recursion_depth;
+        let expression = match parser.parse() {
+            Ok(expression) => Some(expression),
+            Err(error)
+                if matches!(
+                    error.kind,
+                    ParseErrorKind::Lexical(_)
+                        | ParseErrorKind::NestingLimitExceeded
+                        | ParseErrorKind::InvalidSpan(_)
+                        | ParseErrorKind::InternalInvariant(_)
+                ) =>
+            {
+                return Err(error);
+            }
+            Err(_) => None,
+        };
+
+        Ok(match (type_name, expression) {
+            (Some(type_name), Some(expression)) => Some(CppTemplateArgument::Ambiguous {
+                type_name,
+                expression: Box::new(expression),
+            }),
+            (Some(type_name), None) => Some(CppTemplateArgument::Type(type_name)),
+            (None, Some(expression)) => Some(CppTemplateArgument::Expression(Box::new(expression))),
+            (None, None) => None,
+        })
+    }
+
+    fn template_argument_source(
+        &self,
+        start_token: usize,
+        end_token: usize,
+    ) -> Result<&'a str, ParseError> {
+        let Some(first) = self.tokens.get(start_token) else {
+            return Err(ParseError {
+                span: self.current().span,
+                kind: ParseErrorKind::InternalInvariant(
+                    "template argument start is outside the token stream",
+                ),
+            });
+        };
+        let Some(last) = end_token
+            .checked_sub(1)
+            .and_then(|index| self.tokens.get(index))
+        else {
+            return Err(ParseError {
+                span: first.span,
+                kind: ParseErrorKind::InternalInvariant("template argument is empty"),
+            });
+        };
+        first
+            .span
+            .cover(self.source, last.span)
+            .and_then(|span| span.slice(self.source))
+            .map_err(|error| ParseError {
+                span: first.span,
+                kind: ParseErrorKind::InvalidSpan(error),
+            })
+    }
+
+    fn template_argument_source_through_first_shift_close(
+        &self,
+        start_token: usize,
+        close_span: Span,
+    ) -> Result<&'a str, ParseError> {
+        let Some(first) = self.tokens.get(start_token) else {
+            return Err(ParseError {
+                span: self.current().span,
+                kind: ParseErrorKind::InternalInvariant(
+                    "template argument start is outside the token stream",
+                ),
+            });
+        };
+        let close_source = close_span.slice(self.source).map_err(|error| ParseError {
+            span: close_span,
+            kind: ParseErrorKind::InvalidSpan(error),
+        })?;
+        if close_source != ">>" {
+            return Err(ParseError {
+                span: close_span,
+                kind: ParseErrorKind::InternalInvariant(
+                    "shift-right template closer does not cover `>>`",
+                ),
+            });
+        }
+        let Some(end_byte) = close_span.start_byte().checked_add(1) else {
+            return Err(ParseError {
+                span: close_span,
+                kind: ParseErrorKind::InternalInvariant(
+                    "shift-right template closer offset overflowed",
+                ),
+            });
+        };
+        Span::new(self.source, first.span.start_byte(), end_byte)
+            .and_then(|span| span.slice(self.source))
+            .map_err(|error| ParseError {
+                span: first.span,
+                kind: ParseErrorKind::InvalidSpan(error),
+            })
+    }
+
     fn is_postfix_start(&self) -> bool {
         matches!(
             (&self.current().kind, self.language),
@@ -401,6 +799,7 @@ impl<'a> Parser<'a> {
                     TokenKind::Dot | TokenKind::Arrow,
                     HostLanguage::C | HostLanguage::Cpp
                 )
+                | (TokenKind::Scope, HostLanguage::Cpp)
                 | (TokenKind::Percent, HostLanguage::Fortran)
                 | (
                     TokenKind::PlusPlus | TokenKind::MinusMinus,
@@ -473,6 +872,31 @@ impl<'a> Parser<'a> {
                     ExprKind::Member {
                         base: Box::new(expression),
                         access,
+                        member,
+                    },
+                ))
+            }
+            (TokenKind::Scope, HostLanguage::Cpp) => {
+                self.advance();
+                let member_token = self.consume_expected(
+                    |kind| matches!(kind, TokenKind::Identifier(_)),
+                    "qualified identifier",
+                )?;
+                let member_span = member_token.span;
+                let TokenKind::Identifier(member) = member_token.kind else {
+                    return Err(ParseError {
+                        span: member_span,
+                        kind: ParseErrorKind::InternalInvariant(
+                            "qualified identifier expectation returned a different token",
+                        ),
+                    });
+                };
+                let span = self.join(expression.span, member_span)?;
+                Ok(Expr::new(
+                    span,
+                    ExprKind::Member {
+                        base: Box::new(expression),
+                        access: MemberAccess::Scope,
                         member,
                     },
                 ))
@@ -971,7 +1395,7 @@ mod tests {
             (HostLanguage::Cpp, "a @ b"),
             (HostLanguage::Fortran, "array("),
             (HostLanguage::Fortran, "array(1::2:3)"),
-            (HostLanguage::Fortran, ".unknown. value"),
+            (HostLanguage::Fortran, ".unknown."),
             (HostLanguage::Fortran, "value /= "),
         ];
 
@@ -993,6 +1417,15 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn fortran_defined_operators_are_typed() {
+        let unary = parse_expression(".normalize. value", HostLanguage::Fortran).unwrap();
+        assert!(matches!(unary.kind, ExprKind::FortranDefinedUnary { .. }));
+
+        let binary = parse_expression("left .combine. right", HostLanguage::Fortran).unwrap();
+        assert!(matches!(binary.kind, ExprKind::FortranDefinedBinary { .. }));
     }
 
     #[test]
@@ -1030,6 +1463,177 @@ mod tests {
                 op: UnaryOp::Dereference,
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn relational_chain_is_not_stolen_by_cpp_template_id_heuristic() {
+        for source in [
+            "a < b > c",
+            "a < b > -1",
+            "a < b > +c",
+            "a < b > !c",
+            "a < b > ~c",
+            "a < b > *c",
+            "a < b > &c",
+            "a < b > ++c",
+            "a < b > --c",
+            "a < b > (c)",
+        ] {
+            let expression = parse_expression(source, HostLanguage::Cpp).unwrap();
+            let ExprKind::Binary {
+                op: BinaryOp::Greater,
+                left,
+                right,
+            } = expression.kind
+            else {
+                panic!("expected greater-than root for {source}")
+            };
+            assert!(
+                matches!(
+                    left.kind,
+                    ExprKind::Binary {
+                        op: BinaryOp::Less,
+                        ..
+                    }
+                ),
+                "expected less-than left operand for {source}"
+            );
+            if source == "a < b > (c)" {
+                assert!(matches!(right.kind, ExprKind::Parenthesized(_)));
+            }
+        }
+
+        let template = parse_expression("factory<unsigned long>()", HostLanguage::Cpp).unwrap();
+        let ExprKind::Call { callee, .. } = template.kind else {
+            panic!("expected template function call")
+        };
+        assert!(matches!(callee.kind, ExprKind::CppTemplateId { .. }));
+
+        let template_with_argument =
+            parse_expression("factory<int>(value)", HostLanguage::Cpp).unwrap();
+        let ExprKind::Call { callee, arguments } = template_with_argument.kind else {
+            panic!("expected template function call with an argument")
+        };
+        assert!(matches!(callee.kind, ExprKind::CppTemplateId { .. }));
+        assert_eq!(arguments.len(), 1);
+
+        let qualified = parse_expression("Trait<int>::enabled", HostLanguage::Cpp).unwrap();
+        assert!(matches!(
+            qualified.kind,
+            ExprKind::Member {
+                base,
+                access: MemberAccess::Scope,
+                member,
+            } if matches!(base.kind, ExprKind::CppTemplateId { .. })
+                && member.as_str() == "enabled"
+        ));
+
+        let nested_call =
+            parse_expression("factory<std::vector<int>>()", HostLanguage::Cpp).unwrap();
+        assert!(matches!(
+            nested_call.kind,
+            ExprKind::Call { callee, .. }
+                if matches!(callee.kind, ExprKind::CppTemplateId { ref arguments, .. }
+                    if arguments.len() == 1
+                        && arguments[0].type_name().is_some_and(|type_name|
+                            type_name.compact_source_spelling() == "std::vector<int>"))
+        ));
+
+        let nested_qualified =
+            parse_expression("Trait<std::vector<int>>::enabled", HostLanguage::Cpp).unwrap();
+        assert!(matches!(
+            nested_qualified.kind,
+            ExprKind::Member {
+                base,
+                access: MemberAccess::Scope,
+                member,
+            } if matches!(base.kind, ExprKind::CppTemplateId { ref arguments, .. }
+                    if arguments.len() == 1
+                        && arguments[0].type_name().is_some_and(|type_name|
+                            type_name.compact_source_spelling() == "std::vector<int>"))
+                && member.as_str() == "enabled"
+        ));
+    }
+
+    #[test]
+    fn tightly_spelled_cpp_template_ids_can_precede_binary_operators() {
+        for (source, expected_operator) in [
+            ("value<T> + 1", BinaryOp::Add),
+            ("value<T> - 1", BinaryOp::Subtract),
+            ("value<T> * 2", BinaryOp::Multiply),
+            ("value<T> & mask", BinaryOp::BitwiseAnd),
+        ] {
+            let expression = parse_expression(source, HostLanguage::Cpp).unwrap();
+            let ExprKind::Binary {
+                op, left, right, ..
+            } = expression.kind
+            else {
+                panic!("expected binary operator root for {source}")
+            };
+            assert_eq!(op, expected_operator, "wrong operator for {source}");
+            assert!(
+                matches!(left.kind, ExprKind::CppTemplateId { .. }),
+                "left operand lost its template-id for {source}"
+            );
+            assert!(
+                matches!(right.kind, ExprKind::Literal(_) | ExprKind::Name(_)),
+                "right operand was not parsed normally for {source}"
+            );
+        }
+    }
+
+    #[test]
+    fn cpp_template_arguments_retain_type_expression_and_ambiguity() {
+        let source = "factory<int, 4, N, (N > 0)>()";
+        let expression = parse_expression(source, HostLanguage::Cpp).unwrap();
+        let ExprKind::Call { callee, .. } = &expression.kind else {
+            panic!("expected template function call")
+        };
+        let ExprKind::CppTemplateId { arguments, .. } = &callee.kind else {
+            panic!("expected a typed template-id callee")
+        };
+        assert!(matches!(&arguments[0], CppTemplateArgument::Type(_)));
+        assert!(matches!(
+            &arguments[1],
+            CppTemplateArgument::Expression(value)
+                if matches!(value.kind, ExprKind::Literal(Literal::Integer(_)))
+                    && value.span.slice(source).unwrap() == "4"
+        ));
+        assert!(matches!(
+            &arguments[2],
+            CppTemplateArgument::Ambiguous {
+                type_name,
+                expression,
+            } if type_name.compact_source_spelling() == "N"
+                && matches!(expression.kind, ExprKind::Name(_))
+                && expression.span.slice(source).unwrap() == "N"
+        ));
+        assert!(matches!(
+            &arguments[3],
+            CppTemplateArgument::Expression(value)
+                if matches!(value.kind, ExprKind::Parenthesized(_))
+                    && value.span.slice(source).unwrap() == "(N > 0)"
+        ));
+        assert_eq!(
+            expression.canonical(HostLanguage::Cpp).to_string(),
+            "factory<int, 4, N, (N > 0)>()"
+        );
+
+        let source = "Trait<4>::enabled";
+        let expression = parse_expression(source, HostLanguage::Cpp).unwrap();
+        let ExprKind::Member { base, member, .. } = expression.kind else {
+            panic!("expected a template-qualified static member")
+        };
+        let ExprKind::CppTemplateId { arguments, .. } = base.kind else {
+            panic!("expected a typed template-id base")
+        };
+        assert_eq!(member.as_str(), "enabled");
+        assert!(matches!(
+            arguments.as_slice(),
+            [CppTemplateArgument::Expression(value)]
+                if matches!(value.kind, ExprKind::Literal(Literal::Integer(_)))
+                    && value.span.slice(source).unwrap() == "4"
         ));
     }
 }

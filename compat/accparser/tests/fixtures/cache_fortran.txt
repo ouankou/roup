@@ -1,3 +1,0 @@
-!$acc cache ( values(index), tile(1:n))
-
-!$acc cache ( readonly : values(index), tile(1:n))

@@ -466,6 +466,8 @@ pub(crate) struct Clause<'a> {
 pub(crate) struct LocatedClause<'a> {
     syntax: Clause<'a>,
     name_source: &'a str,
+    preceded_by_comma: bool,
+    followed_by_trailing_comma: bool,
 }
 
 impl<'a> LocatedClause<'a> {
@@ -473,11 +475,21 @@ impl<'a> LocatedClause<'a> {
         Self {
             syntax,
             name_source,
+            preceded_by_comma: false,
+            followed_by_trailing_comma: false,
         }
     }
 
     pub(crate) const fn name_source(&self) -> &'a str {
         self.name_source
+    }
+
+    pub(crate) const fn preceded_by_comma(&self) -> bool {
+        self.preceded_by_comma
+    }
+
+    pub(crate) const fn followed_by_trailing_comma(&self) -> bool {
+        self.followed_by_trailing_comma
     }
 }
 
@@ -616,25 +628,28 @@ impl ClauseRegistry {
         let (mut rest, _) = self.skip_trivia(input)?;
 
         let mut clauses = Vec::new();
+        let mut preceded_by_comma = false;
         loop {
             let before = rest;
             match self.parse_clause(rest) {
-                Ok((after_clause, clause)) => {
+                Ok((after_clause, mut clause)) => {
                     // Ensure progress to avoid infinite loops
                     if after_clause.len() == before.len() {
                         break;
                     }
+                    clause.preceded_by_comma = preceded_by_comma;
                     clauses.push(clause);
                     // Prepare for the next clause: optional whitespace/comma
                     let (after_ws, _) = self.skip_trivia(after_clause)?;
                     let (after_sep, _) = nom::combinator::opt(nom::character::complete::char(','))
                         .parse(after_ws)?;
+                    preceded_by_comma = after_sep != after_ws;
                     let (after_ws2, _) = self.skip_trivia(after_sep)?;
-                    if after_sep != after_ws && after_ws2.is_empty() {
-                        return Err(nom::Err::Error(nom::error::Error::new(
-                            after_ws,
-                            nom::error::ErrorKind::Fail,
-                        )));
+                    if preceded_by_comma && after_ws2.is_empty() {
+                        clauses
+                            .last_mut()
+                            .expect("a separator follows a parsed clause")
+                            .followed_by_trailing_comma = true;
                     }
                     rest = after_ws2;
                 }

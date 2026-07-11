@@ -31,6 +31,7 @@ fn item_name(item: &ClauseItem) -> &str {
         ClauseItem::Variable(variable) => variable.expression().source(),
         ClauseItem::FortranCommonBlock(name) => name.as_str(),
         ClauseItem::Expression(expression) => expression.source(),
+        ClauseItem::LegacyTrailingSlash(identifier) => identifier.as_str(),
     }
 }
 

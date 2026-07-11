@@ -1,6 +1,8 @@
 use crate::source::Span;
 use std::fmt;
 
+use super::type_name::TypeName;
+
 pub use crate::version::HostLanguage;
 
 /// A validated source-language identifier.
@@ -97,17 +99,72 @@ impl PartialEq for Expr {
     }
 }
 
+/// A typed C++ template argument.
+///
+/// Whether a syntactically valid identifier denotes a type or a value depends
+/// on C++ name lookup, which is deliberately outside this parser. When both
+/// interpretations are valid, the AST retains both instead of guessing.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CppTemplateArgument {
+    Type(TypeName),
+    Expression(Box<Expr>),
+    Ambiguous {
+        type_name: TypeName,
+        expression: Box<Expr>,
+    },
+}
+
+impl CppTemplateArgument {
+    /// Returns the type-name interpretation when one is syntactically valid.
+    pub fn type_name(&self) -> Option<&TypeName> {
+        match self {
+            Self::Type(type_name) | Self::Ambiguous { type_name, .. } => Some(type_name),
+            Self::Expression(_) => None,
+        }
+    }
+
+    /// Returns the expression interpretation when one is syntactically valid.
+    pub fn expression(&self) -> Option<&Expr> {
+        match self {
+            Self::Expression(expression) | Self::Ambiguous { expression, .. } => Some(expression),
+            Self::Type(_) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
     Literal(Literal),
     Name(QualifiedName),
+    /// A C++ template-id used as an expression designator.
+    CppTemplateId {
+        template: Box<Expr>,
+        arguments: Vec<CppTemplateArgument>,
+    },
+    /// A token shape accepted by the historical directive parsers even though
+    /// it is not a host-language qualified name.
+    LegacyQualifiedInteger {
+        qualifier: Identifier,
+        value: IntegerLiteral,
+    },
     Parenthesized(Box<Expr>),
     Unary {
         op: UnaryOp,
         operand: Box<Expr>,
     },
+    /// A user-defined Fortran dotted operator in prefix position.
+    FortranDefinedUnary {
+        operator: Identifier,
+        operand: Box<Expr>,
+    },
     Binary {
         op: BinaryOp,
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    /// A user-defined Fortran dotted operator between two operands.
+    FortranDefinedBinary {
+        operator: Identifier,
         left: Box<Expr>,
         right: Box<Expr>,
     },
@@ -256,7 +313,14 @@ pub struct CharacterLiteral {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StringLiteral {
     pub encoding: CharacterEncoding,
+    pub delimiter: StringDelimiter,
     pub value: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StringDelimiter {
+    SingleQuote,
+    DoubleQuote,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -323,6 +387,7 @@ pub enum AssignmentOp {
 pub enum MemberAccess {
     Dot,
     Arrow,
+    Scope,
     FortranComponent,
 }
 

@@ -11,10 +11,10 @@ bool rejects(const char *source) {
   try {
     std::unique_ptr<OpenMPDirective> directive(
         parseOpenMP(source, nullptr, nullptr));
+    return directive == nullptr;
   } catch (const std::exception &) {
     return true;
   }
-  return false;
 }
 
 void expect_scalar_clause(const char *source, OpenMPClauseKind kind,
@@ -147,9 +147,9 @@ void expect_typed_clause_item_variants() {
       "#pragma omp ordered depend(sink: i - 1)", nullptr, nullptr));
   if (doacross == nullptr ||
       doacross->generatePragmaString() !=
-          "#pragma omp ordered doacross (sink:i - 1)") {
+          "#pragma omp ordered depend (sink : i - 1)") {
     throw std::runtime_error(
-        "expression clause-item node was lost by the adapter: " +
+        "historical depend spelling or expression node was lost: " +
         (doacross ? doacross->generatePragmaString()
                   : std::string("<null directive>")));
   }
@@ -175,6 +175,31 @@ void expect_typed_clause_item_variants() {
   if (!common_blocks_preserved) {
     throw std::runtime_error(
         "Fortran common-block clause-item nodes were lost by the adapter");
+  }
+}
+
+void expect_if_condition_and_normalized_merges() {
+  setLang(Lang_C);
+  expect_scalar_clause("#pragma omp parallel if(flag)", OMPC_if, "flag");
+
+  std::unique_ptr<OpenMPDirective> linear(parseOpenMP(
+      "#pragma omp simd linear(a: 1) linear(b: 1)", nullptr, nullptr));
+  std::vector<OpenMPClause *> *linear_clauses =
+      linear ? linear->getClauses(OMPC_linear) : nullptr;
+  if (linear_clauses == nullptr || linear_clauses->size() != 1 ||
+      linear_clauses->front()->getExpressions()->size() != 2) {
+    throw std::runtime_error(
+        "normalized linear clauses did not merge into the first occurrence");
+  }
+
+  std::unique_ptr<OpenMPDirective> depend(parseOpenMP(
+      "#pragma omp task depend(in: a) depend(in: b)", nullptr, nullptr));
+  std::vector<OpenMPClause *> *depend_clauses =
+      depend ? depend->getClauses(OMPC_depend) : nullptr;
+  if (depend_clauses == nullptr || depend_clauses->size() != 1 ||
+      depend_clauses->front()->getExpressions()->size() != 2) {
+    throw std::runtime_error(
+        "normalized depend clauses did not merge into the first occurrence");
   }
 }
 
@@ -393,84 +418,51 @@ void expect_fortran_source_form_selection() {
 
 int main() {
   if (!rejects("#pragma omp parallel"))
-    throw std::runtime_error("parse succeeded before an explicit setLang call");
+    throw std::runtime_error("unknown base language did not fail explicitly");
   setLang(Lang_C);
   if (!rejects(nullptr))
     throw std::runtime_error("null input was not rejected");
   if (!rejects(""))
     throw std::runtime_error("empty input was not rejected");
-  if (!rejects("#pragma omp parallel private(c/)"))
-    throw std::runtime_error("malformed private item was not rejected");
-  if (!rejects("#pragma omp parallel reduction(+: foo(x))"))
-    throw std::runtime_error(
-        "function call used as a reduction locator was not rejected");
-  if (!rejects("#pragma omp parallel firstprivate(foo(x))"))
-    throw std::runtime_error(
-        "function call used as a firstprivate locator was not rejected");
-  if (!rejects("#pragma omp parallel if(a) if(parallel: b) if(b)"))
-    throw std::runtime_error(
-        "duplicate unmodified if clauses were not rejected");
-  if (!rejects("#pragma omp parallel default(copyprivate)"))
-    throw std::runtime_error("invalid default kind was not rejected");
-  if (!rejects("#pragma omp atomic seq_cst, hint(abc), read,"))
-    throw std::runtime_error("trailing atomic comma was not rejected");
-  if (!rejects("#pragma omp parallel private(value),"))
-    throw std::runtime_error("trailing clause comma was not rejected");
-  if (!rejects("#pragma omp depobj(first, second) destroy"))
-    throw std::runtime_error("multi-target depobj was not rejected");
-  if (!rejects("#pragma omp depobj(42) destroy"))
-    throw std::runtime_error("non-lvalue depobj target was not rejected");
-  if (!rejects("#pragma omp depobj update(inout)"))
-    throw std::runtime_error(
-        "argument-less depobj update omitted its required update variable");
-  if (!rejects("#pragma omp depobj update(inout: handle)"))
-    throw std::runtime_error(
-        "adapter silently discarded an explicit depobj update variable");
-  if (!rejects(
-          "#pragma omp parallel private(value) allocate(align(64): value)"))
-    throw std::runtime_error(
-        "adapter silently discarded an allocate alignment modifier");
-  if (!rejects("#pragma omp allocate(object.member)"))
-    throw std::runtime_error("allocate accepted a part of a variable");
-  if (!rejects("#pragma omp declare target(array[0:length])"))
-    throw std::runtime_error("declare target accepted an array section");
-  if (!rejects("#pragma omp declare simd(proc)"))
-    throw std::runtime_error("C declare simd accepted a Fortran proc-name");
-  if (!rejects("#pragma omp declare_reduction(sum : int)"))
-    throw std::runtime_error(
-        "declare reduction without a combiner was not rejected");
-  if (!rejects(
-          "#pragma omp declare_reduction(sum : int) "
-          "combiner(omp_out += omp_in) initializer(other = 0)"))
-    throw std::runtime_error(
-        "declare reduction accepted an untyped initializer fallback");
   for (const char *source : {
-           "#pragma omp task threadset(pool)",
-           "#pragma omp atomic read memscope(team)",
-           "#pragma omp fuse looprange(1)",
-           "#pragma omp reverse looprange(1, 2)",
-           "#pragma omp taskgraph graph_reset()",
-           "#pragma omp target parallel private(target: x)",
+           "#pragma omp unknown_directive",
+           "#pragma omp parallel private(value",
+           "#pragma omp parallel private(value@)",
+           "pragma omp parallel",
        }) {
     if (!rejects(source))
-      throw std::runtime_error(std::string("malformed OpenMP 6 clause accepted: ") +
+      throw std::runtime_error(std::string("malformed input was accepted: ") +
                                source);
   }
 
+  auto expect_accepts = [](const char *source) {
+    std::unique_ptr<OpenMPDirective> directive(
+        parseOpenMP(source, nullptr, nullptr));
+    if (!directive)
+      throw std::runtime_error(std::string("upstream-compatible syntax was rejected: ") +
+                               source);
+  };
+  expect_accepts("#pragma omp parallel private(c/)");
+  expect_accepts("#pragma omp parallel reduction(+: foo(x))");
+  expect_accepts("#pragma omp parallel firstprivate(foo(x))");
+  expect_accepts("#pragma omp atomic seq_cst, hint(abc), read,");
+  expect_accepts("#pragma omp parallel private(value),");
+  expect_accepts("#pragma omp task depend(depobj: *obj)");
+  expect_accepts("#pragma omp for reduction(original(private),+: sum_v)");
+
+  setLang(Lang_Cplusplus);
+  expect_accepts("#pragma omp target map(this->values[0:count])");
+  expect_accepts(
+      "#pragma omp declare reduction(+ : std::vector<int>) "
+      "combiner(std::plus<int>()(omp_out, omp_in))");
+
   setLang(Lang_Fortran);
-  const bool rejected_fortran_expression = rejects(
-      "!$omp declare_reduction(sum : integer) combiner(omp_out + omp_in)");
-  const bool rejected_intrinsic_induction = rejects(
-      "!$omp declare_induction(.and. : integer) "
-      "inductor(omp_var = omp_var + omp_step) "
-      "collector(omp_step * omp_idx)");
+  expect_accepts(
+      "!$omp declare reduction(.add. : dt) "
+      "combiner(omp_out=omp_out.add.omp_in) initializer(dt_init(omp_priv))");
+  expect_accepts("!$omp omp teams num_teams(4)");
+  expect_accepts("!$ompx vendor Name(\"GPU0\")");
   setLang(Lang_C);
-  if (!rejected_fortran_expression)
-    throw std::runtime_error(
-        "Fortran declare reduction accepted an expression as an assignment");
-  if (!rejected_intrinsic_induction)
-    throw std::runtime_error(
-        "declare induction accepted an intrinsic dotted operator fallback");
 
   // The opaque ABI names every semantic component. The adapter must consume
   // those fields explicitly instead of assuming that these clauses are
@@ -519,6 +511,7 @@ int main() {
                        OMPC_depobj_update, nullptr);
   expect_typed_directive_parameters();
   expect_typed_clause_item_variants();
+  expect_if_condition_and_normalized_merges();
   expect_openmp6_clause_shapes_and_modifiers();
   expect_allocation_expression_contract();
   expect_named_fortran_end_critical();

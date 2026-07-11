@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 use std::fmt;
 
 use crate::host::TypeName;
-use crate::ir::{ClauseData, ClauseItem, Expression, Identifier, LValue, Variable};
+use crate::ir::{ClauseData, ClauseItem, Expression, Identifier, Variable};
 use crate::parser::ClauseName;
 use crate::parser::directive_kind::DirectiveName;
 use crate::source::Span;
@@ -69,11 +69,13 @@ pub struct OmpDirective {
 /// This provenance is private because it affects syntax-version checks, not
 /// the directive's semantic identity. Raw source text never enters the AST.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum OmpDirectiveSourceAlias {
+pub enum OmpDirectiveSourceAlias {
     /// An underscore-bearing directive name standardized in OpenMP 6.0.
     OpenMp60Underscore,
     /// A Fortran spelling with omitted blanks between adjacent keywords.
     FortranCompact,
+    /// Historical spelling with a second `omp` token after the sentinel.
+    FortranRedundantOmp,
 }
 
 /// Fully structured OpenACC directive.
@@ -152,7 +154,7 @@ impl OmpDirective {
     }
 
     #[must_use]
-    pub(crate) const fn source_alias(&self) -> Option<OmpDirectiveSourceAlias> {
+    pub const fn source_alias(&self) -> Option<OmpDirectiveSourceAlias> {
         self.source_alias
     }
 
@@ -231,12 +233,20 @@ pub struct OmpClause {
     payload: OmpClausePayload,
     directive_name_modifier: Option<OmpDirectiveKind>,
     source_alias: Option<OmpClauseSourceAlias>,
+    source_separator: OmpClauseSourceSeparator,
     span: Span,
+}
+
+/// Exact separator that preceded a clause in the directive source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OmpClauseSourceSeparator {
+    Space,
+    Comma,
 }
 
 /// Historical standardized spelling accepted before canonical AST lowering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum OmpClauseSourceAlias {
+pub enum OmpClauseSourceAlias {
     DependSource,
     DependSourceCurrent,
     DependSink,
@@ -244,6 +254,8 @@ pub(crate) enum OmpClauseSourceAlias {
     MetadirectiveDefault,
     DeclareTargetTo,
     ProcBindMaster,
+    DoacrossSourceEmpty,
+    ReductionOriginalPositional,
 }
 
 impl OmpClause {
@@ -252,6 +264,7 @@ impl OmpClause {
         payload: OmpClausePayload,
         directive_name_modifier: Option<OmpDirectiveKind>,
         source_alias: Option<OmpClauseSourceAlias>,
+        source_separator: OmpClauseSourceSeparator,
         span: Span,
     ) -> Result<Self, AstInvariantError> {
         if !omp_payload_matches_kind(kind, &payload) {
@@ -279,6 +292,7 @@ impl OmpClause {
             payload,
             directive_name_modifier,
             source_alias,
+            source_separator,
             span,
         })
     }
@@ -303,8 +317,13 @@ impl OmpClause {
     }
 
     #[must_use]
-    pub(crate) const fn source_alias(&self) -> Option<OmpClauseSourceAlias> {
+    pub const fn source_alias(&self) -> Option<OmpClauseSourceAlias> {
         self.source_alias
+    }
+
+    #[must_use]
+    pub const fn source_separator(&self) -> OmpClauseSourceSeparator {
+        self.source_separator
     }
 
     #[must_use]
@@ -331,7 +350,7 @@ pub struct AccClause {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum AccClauseSourceAlias {
+pub enum AccClauseSourceAlias {
     PCopy,
     PresentOrCopy,
     PCopyIn,
@@ -403,7 +422,7 @@ impl AccClause {
     }
 
     #[must_use]
-    pub(crate) const fn source_alias(&self) -> Option<AccClauseSourceAlias> {
+    pub const fn source_alias(&self) -> Option<AccClauseSourceAlias> {
         self.source_alias
     }
 
@@ -553,6 +572,7 @@ pub enum OmpSelectorNameListKind {
 pub struct OmpSelectorNameListTrait {
     kind: OmpSelectorNameListKind,
     properties: Vec<OmpSelectorTraitValue>,
+    score: Option<Expression>,
 }
 
 impl OmpSelectorNameListTrait {
@@ -574,7 +594,15 @@ impl OmpSelectorNameListTrait {
                 "a name-list selector trait cannot repeat a property",
             ));
         }
-        Ok(Self { kind, properties })
+        Ok(Self {
+            kind,
+            properties,
+            score: None,
+        })
+    }
+
+    pub(crate) fn set_score(&mut self, score: Option<Expression>) {
+        self.score = score;
     }
 
     #[must_use]
@@ -585,6 +613,11 @@ impl OmpSelectorNameListTrait {
     #[must_use]
     pub fn properties(&self) -> &[OmpSelectorTraitValue] {
         &self.properties
+    }
+
+    #[must_use]
+    pub const fn score(&self) -> Option<&Expression> {
+        self.score.as_ref()
     }
 }
 
@@ -710,7 +743,6 @@ fn validate_device_selector_traits(
     target_device: bool,
 ) -> Result<(), AstInvariantError> {
     let mut names = std::collections::HashSet::new();
-    let mut kind_any = false;
     for selector in traits {
         let key = match selector {
             OmpSelectorDeviceTrait::NameList(name_list) => {
@@ -723,19 +755,6 @@ fn validate_device_selector_traits(
                     return Err(AstInvariantError::new(
                         "device selector contains an implementation name-list trait",
                     ));
-                }
-                if name_list.kind() == OmpSelectorNameListKind::Kind
-                    && name_list
-                        .properties()
-                        .iter()
-                        .any(|property| property.semantic_name() == "any")
-                {
-                    if name_list.properties().len() != 1 {
-                        return Err(AstInvariantError::new(
-                            "kind(any) cannot contain another property",
-                        ));
-                    }
-                    kind_any = true;
                 }
                 format!("name-list:{:?}", name_list.kind())
             }
@@ -764,11 +783,6 @@ fn validate_device_selector_traits(
                 "each device trait selector may appear at most once",
             ));
         }
-    }
-    if kind_any && traits.len() != 1 {
-        return Err(AstInvariantError::new(
-            "kind(any) cannot be combined with another device trait property",
-        ));
     }
     Ok(())
 }
@@ -876,11 +890,76 @@ pub enum OmpSelectorTraitValue {
     StringLiteral(crate::host::StringLiteral),
 }
 
+/// A standardized device-kind selector property with a closed semantic value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OmpSelectorDeviceKind {
+    Host,
+    NoHost,
+    Any,
+    Cpu,
+    Gpu,
+    Fpga,
+}
+
+/// A standardized implementation-vendor selector property known to OpenMP.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OmpSelectorVendor {
+    Amd,
+    Arm,
+    Bsc,
+    Cray,
+    Fujitsu,
+    Gnu,
+    Ibm,
+    Intel,
+    Llvm,
+    Nvidia,
+    Pgi,
+    Ti,
+}
+
 impl OmpSelectorTraitValue {
-    fn semantic_name(&self) -> &str {
+    pub(crate) fn semantic_name(&self) -> &str {
         match self {
             Self::Identifier(identifier) => identifier.as_str(),
             Self::StringLiteral(literal) => literal.value.as_str(),
+        }
+    }
+
+    /// Return the closed device-kind meaning when this open property names a
+    /// standardized kind understood by the compatibility schema.
+    #[must_use]
+    pub fn device_kind(&self) -> Option<OmpSelectorDeviceKind> {
+        match self.semantic_name() {
+            "host" => Some(OmpSelectorDeviceKind::Host),
+            "nohost" => Some(OmpSelectorDeviceKind::NoHost),
+            "any" => Some(OmpSelectorDeviceKind::Any),
+            "cpu" => Some(OmpSelectorDeviceKind::Cpu),
+            "gpu" => Some(OmpSelectorDeviceKind::Gpu),
+            "fpga" => Some(OmpSelectorDeviceKind::Fpga),
+            _ => None,
+        }
+    }
+
+    /// Return the closed implementation-vendor meaning when this open
+    /// property names a standardized vendor understood by the compatibility
+    /// schema.
+    #[must_use]
+    pub fn vendor(&self) -> Option<OmpSelectorVendor> {
+        match self.semantic_name() {
+            "amd" => Some(OmpSelectorVendor::Amd),
+            "arm" => Some(OmpSelectorVendor::Arm),
+            "bsc" => Some(OmpSelectorVendor::Bsc),
+            "cray" => Some(OmpSelectorVendor::Cray),
+            "fujitsu" => Some(OmpSelectorVendor::Fujitsu),
+            "gnu" => Some(OmpSelectorVendor::Gnu),
+            "ibm" => Some(OmpSelectorVendor::Ibm),
+            "intel" => Some(OmpSelectorVendor::Intel),
+            "llvm" => Some(OmpSelectorVendor::Llvm),
+            "nvidia" => Some(OmpSelectorVendor::Nvidia),
+            "pgi" => Some(OmpSelectorVendor::Pgi),
+            "ti" => Some(OmpSelectorVendor::Ti),
+            _ => None,
         }
     }
 }
@@ -892,15 +971,19 @@ impl fmt::Display for OmpSelectorTraitValue {
             Self::StringLiteral(literal)
                 if literal.encoding == crate::host::CharacterEncoding::Fortran =>
             {
-                f.write_str("'")?;
+                let delimiter = match literal.delimiter {
+                    crate::host::StringDelimiter::SingleQuote => '\'',
+                    crate::host::StringDelimiter::DoubleQuote => '"',
+                };
+                write!(f, "{delimiter}")?;
                 for ch in literal.value.chars() {
-                    if ch == '\'' {
-                        f.write_str("''")?;
+                    if ch == delimiter {
+                        write!(f, "{delimiter}{delimiter}")?;
                     } else {
                         write!(f, "{ch}")?;
                     }
                 }
-                f.write_str("'")
+                write!(f, "{delimiter}")
             }
             Self::StringLiteral(literal) => {
                 let prefix = match literal.encoding {
@@ -938,18 +1021,25 @@ impl fmt::Display for OmpSelectorTraitValue {
 #[derive(Debug, Clone, PartialEq)]
 pub struct OmpSelectorConstruct {
     directive: Box<OmpDirective>,
+    score: Option<Box<Expression>>,
 }
 
 impl OmpSelectorConstruct {
-    pub(crate) fn new(directive: OmpDirective) -> Self {
+    pub(crate) fn new(directive: OmpDirective, score: Option<Expression>) -> Self {
         Self {
             directive: Box::new(directive),
+            score: score.map(Box::new),
         }
     }
 
     #[must_use]
     pub const fn directive(&self) -> &OmpDirective {
         &self.directive
+    }
+
+    #[must_use]
+    pub fn score(&self) -> Option<&Expression> {
+        self.score.as_deref()
     }
 }
 
@@ -1108,13 +1198,63 @@ pub enum OmpDirectiveParameter {
     DeclareTargetList(Vec<OmpDeclareTargetListItem>),
     DeclareMapper(OmpDeclareMapper),
     DeclareVariant(OmpDeclareVariantTarget),
-    Depobj(LValue),
+    Depobj(Expression),
     Construct(OmpConstructType),
     CriticalSection(OmpIdentifier),
     FlushList(Vec<OmpFlushListItem>),
     DeclareReduction(Box<OmpDeclareReduction>),
     DeclareInduction(OmpDeclareInduction),
     DeclareSimd(OmpSimdTarget),
+    Ompx(OmpxPayload),
+}
+
+/// Fully typed payload following an implementation-defined `!$ompx`
+/// sentinel. Only identifiers and invocation records enter this AST; the
+/// upstream parser's raw payload string is not retained.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OmpxPayload {
+    items: Vec<OmpxPayloadItem>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum OmpxPayloadItem {
+    Identifier(OmpIdentifier),
+    Invocation {
+        name: OmpIdentifier,
+        arguments: Vec<Expression>,
+    },
+}
+
+impl OmpxPayload {
+    pub(crate) fn new(items: Vec<OmpxPayloadItem>) -> Result<Self, AstInvariantError> {
+        if items.is_empty() {
+            return Err(AstInvariantError::new("OMPX payload must not be empty"));
+        }
+        Ok(Self { items })
+    }
+
+    #[must_use]
+    pub fn items(&self) -> &[OmpxPayloadItem] {
+        &self.items
+    }
+}
+
+impl fmt::Display for OmpxPayloadItem {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Identifier(identifier) => identifier.fmt(formatter),
+            Self::Invocation { name, arguments } => {
+                write!(formatter, "{name}(")?;
+                for (index, argument) in arguments.iter().enumerate() {
+                    if index != 0 {
+                        formatter.write_str(", ")?;
+                    }
+                    argument.fmt(formatter)?;
+                }
+                formatter.write_str(")")
+            }
+        }
+    }
 }
 
 /// OpenMP constructs accepted by `cancel` / `cancellation point` parameters.
@@ -1138,7 +1278,7 @@ pub struct OmpDeclareReduction {
 
 /// Source grammar used for a declare-reduction directive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum OmpDeclareReductionSyntax {
+pub enum OmpDeclareReductionSyntax {
     /// The standardized historical `identifier : types : combiner` argument.
     InlineCombiner,
     /// The OpenMP 6.0 `identifier : types` argument plus `combiner` clause.
@@ -1337,7 +1477,7 @@ impl fmt::Display for OmpReductionIdentifier {
 #[derive(Debug, Clone, PartialEq)]
 pub enum OmpReductionCombiner {
     COrCppExpression(Expression),
-    FortranAssignment(OmpFortranAssignment),
+    FortranAssignment(Box<OmpFortranAssignment>),
     FortranSubroutineCall(Expression),
 }
 
@@ -1447,7 +1587,7 @@ pub enum OmpReductionInitializer {
     CppDirect(Expression),
     CppList(OmpBracedInitializer),
     COrCppFunctionCall(Expression),
-    FortranAssignment(OmpFortranAssignment),
+    FortranAssignment(Box<OmpFortranAssignment>),
     FortranSubroutineCall(Expression),
 }
 
@@ -1473,7 +1613,7 @@ impl fmt::Display for OmpReductionInitializer {
 #[derive(Debug, Clone, PartialEq)]
 pub enum OmpInductorExpression {
     COrCppExpression(Expression),
-    FortranAssignment(OmpFortranAssignment),
+    FortranAssignment(Box<OmpFortranAssignment>),
     FortranSubroutineCall(Expression),
 }
 
@@ -1606,7 +1746,7 @@ impl OmpDeclareReduction {
     }
 
     #[must_use]
-    pub(crate) const fn source_syntax(&self) -> OmpDeclareReductionSyntax {
+    pub const fn source_syntax(&self) -> OmpDeclareReductionSyntax {
         self.source_syntax
     }
 }
@@ -1619,16 +1759,25 @@ impl OmpDeclareReduction {
 #[derive(Debug, Clone, PartialEq)]
 pub struct OmpSimdTarget {
     function: OmpIdentifier,
+    hash_prefixed: bool,
 }
 
 impl OmpSimdTarget {
-    pub(crate) const fn new(function: OmpIdentifier) -> Self {
-        Self { function }
+    pub(crate) const fn new(function: OmpIdentifier, hash_prefixed: bool) -> Self {
+        Self {
+            function,
+            hash_prefixed,
+        }
     }
 
     #[must_use]
     pub const fn function(&self) -> &OmpIdentifier {
         &self.function
+    }
+
+    #[must_use]
+    pub const fn hash_prefixed(&self) -> bool {
+        self.hash_prefixed
     }
 }
 
@@ -1643,6 +1792,13 @@ pub struct OmpDeclareMapper {
     identifier: Option<OmpMapperId>,
     type_name: TypeName,
     variable: Identifier,
+    declarator_separator: OmpDeclaratorSeparator,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OmpDeclaratorSeparator {
+    Adjacent,
+    Space,
 }
 
 impl OmpDeclareMapper {
@@ -1650,11 +1806,13 @@ impl OmpDeclareMapper {
         identifier: Option<OmpMapperId>,
         type_name: TypeName,
         variable: Identifier,
+        declarator_separator: OmpDeclaratorSeparator,
     ) -> Self {
         Self {
             identifier,
             type_name,
             variable,
+            declarator_separator,
         }
     }
 
@@ -1672,24 +1830,32 @@ impl OmpDeclareMapper {
     pub const fn variable(&self) -> &Identifier {
         &self.variable
     }
+
+    /// Whether the mapper variable attaches directly to a trailing C/C++
+    /// pointer or reference declarator token.
+    #[must_use]
+    pub fn variable_is_attached(&self) -> bool {
+        self.declarator_separator == OmpDeclaratorSeparator::Adjacent
+    }
 }
 
 /// OpenACC directive parameter payloads.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AccDirectiveParameter {
     Cache(AccCacheDirective),
-    Wait(AccWaitDirective),
+    Wait(Box<AccWaitDirective>),
     Routine(AccRoutineDirective),
     End(AccEndKind),
 }
 
 /// One syntactically valid OpenACC `cache` item.
 ///
-/// Cache items must identify either one array element or one contiguous
-/// subarray. A scalar designator and an array section with an explicit stride
-/// cannot be represented by this type.
+/// Cache items identify a scalar, one array element, or one contiguous
+/// subarray. An array section with an explicit stride cannot be represented by
+/// this type.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AccCacheItem {
+    Scalar(Identifier),
     ArrayElement(Variable),
     ContiguousSubarray(Variable),
 }
@@ -1716,16 +1882,22 @@ impl AccCacheItem {
     }
 
     #[must_use]
-    pub const fn variable(&self) -> &Variable {
+    pub const fn variable(&self) -> Option<&Variable> {
         match self {
-            Self::ArrayElement(variable) | Self::ContiguousSubarray(variable) => variable,
+            Self::Scalar(_) => None,
+            Self::ArrayElement(variable) | Self::ContiguousSubarray(variable) => Some(variable),
         }
     }
 }
 
 impl fmt::Display for AccCacheItem {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.variable().fmt(formatter)
+        match self {
+            Self::Scalar(identifier) => identifier.fmt(formatter),
+            Self::ArrayElement(variable) | Self::ContiguousSubarray(variable) => {
+                variable.fmt(formatter)
+            }
+        }
     }
 }
 
@@ -1805,8 +1977,12 @@ fn acc_cache_designator_shape(
             true
         }
         ExprKind::Literal(_)
+        | ExprKind::CppTemplateId { .. }
+        | ExprKind::LegacyQualifiedInteger { .. }
         | ExprKind::Unary { .. }
+        | ExprKind::FortranDefinedUnary { .. }
         | ExprKind::Binary { .. }
+        | ExprKind::FortranDefinedBinary { .. }
         | ExprKind::Conditional { .. }
         | ExprKind::Assignment { .. }
         | ExprKind::Call { .. }
@@ -1819,19 +1995,25 @@ fn acc_cache_designator_shape(
 pub struct AccWaitDirective {
     devnum: Option<Expression>,
     queues: Vec<Expression>,
+    queues_keyword: bool,
 }
 
 impl AccWaitDirective {
     pub(crate) fn new(
         devnum: Option<Expression>,
         queues: Vec<Expression>,
+        queues_keyword: bool,
     ) -> Result<Self, AstInvariantError> {
         if queues.is_empty() {
             return Err(AstInvariantError::new(
                 "parenthesized OpenACC wait directive requires at least one queue",
             ));
         }
-        Ok(Self { devnum, queues })
+        Ok(Self {
+            devnum,
+            queues,
+            queues_keyword,
+        })
     }
 
     #[must_use]
@@ -1842,6 +2024,11 @@ impl AccWaitDirective {
     #[must_use]
     pub fn queues(&self) -> &[Expression] {
         &self.queues
+    }
+
+    #[must_use]
+    pub const fn has_queues_keyword(&self) -> bool {
+        self.queues_keyword
     }
 }
 
@@ -1917,6 +2104,7 @@ pub enum AccClausePayload {
     Tile(Vec<AccSizeExpression>),
     ItemList(Vec<ClauseItem>),
     Bind(AccBindTarget),
+    Indirect(Option<AccBindTarget>),
     Collapse(AccCollapseClause),
     Default(AccDefaultKind),
     Copy(AccCopyClause),
@@ -2023,13 +2211,6 @@ impl AccCopyClause {
                 "OpenACC copy clause requires at least one variable",
             ));
         }
-        if has_duplicate_acc_data_modifiers(&modifiers)
-            || modifiers.iter().any(|modifier| !kind.allows(*modifier))
-        {
-            return Err(AstInvariantError::new(
-                "OpenACC copy clause has duplicate or incompatible modifiers",
-            ));
-        }
         Ok(Self {
             kind,
             modifiers,
@@ -2070,15 +2251,6 @@ impl AccCreateClause {
         if variables.is_empty() {
             return Err(AstInvariantError::new(
                 "OpenACC create clause requires at least one variable",
-            ));
-        }
-        if has_duplicate_acc_data_modifiers(&modifiers)
-            || modifiers.iter().any(|modifier| {
-                !matches!(modifier, AccDataModifier::Zero | AccDataModifier::Capture)
-            })
-        {
-            return Err(AstInvariantError::new(
-                "OpenACC create clause has duplicate or incompatible modifiers",
             ));
         }
         Ok(Self {
@@ -2165,33 +2337,6 @@ pub struct AccGangClause {
 
 impl AccGangClause {
     pub(crate) fn new(arguments: Vec<AccGangArgument>) -> Result<Self, AstInvariantError> {
-        let mut saw_num = false;
-        let mut saw_dim = false;
-        let mut saw_static = false;
-        for argument in &arguments {
-            let duplicate = match argument {
-                AccGangArgument::Positional(_) | AccGangArgument::Num(_) => {
-                    let duplicate = saw_num;
-                    saw_num = true;
-                    duplicate
-                }
-                AccGangArgument::Dim(_) => {
-                    let duplicate = saw_dim;
-                    saw_dim = true;
-                    duplicate
-                }
-                AccGangArgument::Static(_) => {
-                    let duplicate = saw_static;
-                    saw_static = true;
-                    duplicate
-                }
-            };
-            if duplicate {
-                return Err(AstInvariantError::new(
-                    "OpenACC gang clause contains a duplicate argument kind",
-                ));
-            }
-        }
         Ok(Self { arguments })
     }
 
@@ -2288,19 +2433,25 @@ pub enum AccVectorModifier {
 pub struct AccWaitClause {
     devnum: Option<Expression>,
     queues: Vec<Expression>,
+    queues_keyword: bool,
 }
 
 impl AccWaitClause {
     pub(crate) fn new(
         devnum: Option<Expression>,
         queues: Vec<Expression>,
+        queues_keyword: bool,
     ) -> Result<Self, AstInvariantError> {
         if devnum.is_some() && queues.is_empty() {
             return Err(AstInvariantError::new(
                 "OpenACC wait devnum modifier requires at least one queue",
             ));
         }
-        Ok(Self { devnum, queues })
+        Ok(Self {
+            devnum,
+            queues,
+            queues_keyword,
+        })
     }
 
     #[must_use]
@@ -2311,6 +2462,11 @@ impl AccWaitClause {
     #[must_use]
     pub fn queues(&self) -> &[Expression] {
         &self.queues
+    }
+
+    #[must_use]
+    pub const fn has_queues_keyword(&self) -> bool {
+        self.queues_keyword
     }
 }
 
@@ -2359,6 +2515,7 @@ impl AccReductionClause {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AccReductionOperator {
     Add,
+    Sub,
     Mul,
     Max,
     Min,
@@ -2397,39 +2554,6 @@ impl AccCopyKind {
             AccCopyKind::CopyOut => "copyout",
         }
     }
-
-    const fn allows(self, modifier: AccDataModifier) -> bool {
-        match self {
-            Self::Copy => matches!(
-                modifier,
-                AccDataModifier::Always
-                    | AccDataModifier::AlwaysIn
-                    | AccDataModifier::AlwaysOut
-                    | AccDataModifier::Capture
-            ),
-            Self::CopyIn => matches!(
-                modifier,
-                AccDataModifier::Always
-                    | AccDataModifier::AlwaysIn
-                    | AccDataModifier::Capture
-                    | AccDataModifier::Readonly
-            ),
-            Self::CopyOut => matches!(
-                modifier,
-                AccDataModifier::Always
-                    | AccDataModifier::AlwaysOut
-                    | AccDataModifier::Capture
-                    | AccDataModifier::Zero
-            ),
-        }
-    }
-}
-
-fn has_duplicate_acc_data_modifiers(modifiers: &[AccDataModifier]) -> bool {
-    modifiers
-        .iter()
-        .enumerate()
-        .any(|(index, modifier)| modifiers[..index].contains(modifier))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -2472,6 +2596,7 @@ fn omp_parameter_matches_kind(
                 | OmpDirectiveKind::CancellationPoint
                 | OmpDirectiveKind::DeclareReduction
                 | OmpDirectiveKind::DeclareInduction
+                | OmpDirectiveKind::Ompx
         );
     };
     match parameter {
@@ -2504,6 +2629,9 @@ fn omp_parameter_matches_kind(
         OmpDirectiveParameter::DeclareReduction(_) => kind == OmpDirectiveKind::DeclareReduction,
         OmpDirectiveParameter::DeclareInduction(_) => kind == OmpDirectiveKind::DeclareInduction,
         OmpDirectiveParameter::DeclareSimd(_) => kind == OmpDirectiveKind::DeclareSimd,
+        OmpDirectiveParameter::Ompx(payload) => {
+            !payload.items().is_empty() && kind == OmpDirectiveKind::Ompx
+        }
     }
 }
 
@@ -2527,6 +2655,7 @@ fn omp_directive_alias_matches_kind(
     match alias {
         None => true,
         Some(OmpDirectiveSourceAlias::FortranCompact) => kind.as_str().contains(' '),
+        Some(OmpDirectiveSourceAlias::FortranRedundantOmp) => kind == OmpDirectiveKind::Teams,
         Some(OmpDirectiveSourceAlias::OpenMp60Underscore) => matches!(
             kind,
             OmpDirectiveKind::CancellationPoint
@@ -2562,6 +2691,8 @@ fn omp_alias_matches_kind(alias: Option<OmpClauseSourceAlias>, kind: OmpClauseKi
         Some(OmpClauseSourceAlias::MetadirectiveDefault) => kind == OmpClauseKind::Otherwise,
         Some(OmpClauseSourceAlias::DeclareTargetTo) => kind == OmpClauseKind::Enter,
         Some(OmpClauseSourceAlias::ProcBindMaster) => kind == OmpClauseKind::ProcBind,
+        Some(OmpClauseSourceAlias::DoacrossSourceEmpty) => kind == OmpClauseKind::Doacross,
+        Some(OmpClauseSourceAlias::ReductionOriginalPositional) => kind == OmpClauseKind::Reduction,
     }
 }
 
@@ -2765,6 +2896,7 @@ fn acc_payload_has_required_contents(payload: &AccClausePayload) -> bool {
         AccClausePayload::Bare
         | AccClausePayload::Expression(_)
         | AccClausePayload::Bind(_)
+        | AccClausePayload::Indirect(_)
         | AccClausePayload::Collapse(_)
         | AccClausePayload::Default(_)
         | AccClausePayload::Copy(_)
@@ -2971,6 +3103,7 @@ fn acc_payload_matches_kind(kind: AccClauseKind, payload: &AccClausePayload) -> 
                 | K::SelfClause
         ),
         AccClausePayload::Bind(_) => kind == K::Bind,
+        AccClausePayload::Indirect(_) => kind == K::Indirect,
         AccClausePayload::NumGangs(_) => kind == K::NumGangs,
         AccClausePayload::Tile(_) => kind == K::Tile,
         AccClausePayload::ItemList(_) => matches!(
@@ -3050,6 +3183,7 @@ macro_rules! define_omp_directive_kind {
                     DirectiveName::ParallelDoCompact => Ok(OmpDirectiveKind::ParallelDo),
                     DirectiveName::EndDoCompact => Ok(OmpDirectiveKind::EndDo),
                     DirectiveName::EndDoSimdCompact => Ok(OmpDirectiveKind::EndDoSimd),
+                    DirectiveName::TeamsWithRedundantOmp => Ok(OmpDirectiveKind::Teams),
                     $( DirectiveName::$variant => Ok(OmpDirectiveKind::$variant), )+
                     other => Err(other),
                 }
@@ -3369,6 +3503,8 @@ define_omp_directive_kind! {
     Unroll => "unroll",
     Workdistribute => "workdistribute",
     Workshare => "workshare",
+    EndSection => "end section",
+    Ompx => "ompx",
 }
 
 define_omp_clause_kind! {
@@ -3556,6 +3692,7 @@ define_acc_clause_kind! {
     If => "if",
     IfPresent => "if_present",
     Independent => "independent",
+    Indirect => "indirect",
     Link => "link",
     NoCreate => "no_create",
     NoHost => "nohost",
@@ -3606,6 +3743,7 @@ mod tests {
                 ClauseData::ItemList(Vec::new()),
                 None,
                 None,
+                OmpClauseSourceSeparator::Space,
                 Span::entire("nontemporal"),
             )
             .is_err()
@@ -3619,6 +3757,7 @@ mod tests {
                 },
                 None,
                 None,
+                OmpClauseSourceSeparator::Space,
                 Span::entire("apply"),
             )
             .is_err()

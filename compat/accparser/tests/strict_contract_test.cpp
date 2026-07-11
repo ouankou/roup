@@ -28,9 +28,18 @@ void require(bool condition, const char *message) {
     throw std::runtime_error(message);
 }
 
-void test_language_selection_is_mandatory() {
-  require_hard_error([] { parseOpenACC("#pragma acc parallel"); },
-                     "parse before explicit language selection");
+void test_language_auto_detection() {
+  std::unique_ptr<OpenACCDirective> c(
+      parseOpenACC("#pragma acc parallel"));
+  require(c != nullptr && c->getBaseLang() == ACC_Lang_C,
+          "default C language detection failed");
+  require_hard_error(
+      [] { parseOpenACC("#pragma acc parallel if(ns::ready)"); },
+      "C++ scope expression under the default C profile");
+  std::unique_ptr<OpenACCDirective> fortran(
+      parseOpenACC("!$acc parallel"));
+  require(fortran != nullptr && fortran->getBaseLang() == ACC_Lang_Fortran,
+          "Fortran sentinel language detection failed");
 }
 
 void test_numeric_contract_rejects_unknown_tags() {
@@ -89,6 +98,9 @@ void test_numeric_contract_rejects_unknown_tags() {
 
 void test_locations_and_typed_data() {
   setLang(ACC_Lang_C);
+  require_hard_error(
+      [] { parseOpenACC("#pragma acc parallel if(ns::ready)"); },
+      "C++ scope expression under an explicit C profile");
   OpenACCDirective *raw = parseOpenACC(
       "#pragma acc parallel copyin(always, readonly: a, b[0:n])");
   require(raw != nullptr, "strict parser returned null");
@@ -262,9 +274,13 @@ void test_aliases_and_host_languages() {
   std::unique_ptr<OpenACCDirective> alias(
       parseOpenACC("#pragma acc parallel pcopy(a)"));
   require(alias->getClauses(ACCC_copy)->size() == 1,
-          "historical pcopy alias was not canonicalized");
-  require(alias->generatePragmaString() == "#pragma acc parallel copy(a)",
-          "historical pcopy alias did not render canonically");
+          "historical pcopy alias lost its semantic copy kind");
+  auto *pcopy = static_cast<OpenACCCopyClause *>(
+      alias->getClauses(ACCC_copy)->at(0));
+  require(pcopy->getVariant() == ACCC_DATA_COPY_pcopy &&
+              alias->generatePragmaString() ==
+                  "#pragma acc parallel pcopy(a)",
+          "historical pcopy spelling was not preserved by the drop-in API");
 
   setLang(ACC_Lang_Cplusplus);
   std::unique_ptr<OpenACCDirective> cpp(
@@ -313,22 +329,39 @@ void test_aliases_and_host_languages() {
 
   std::unique_ptr<OpenACCDirective> host_alias(
       parseOpenACC("#pragma acc update host(a)"));
-  require(host_alias->getClauses(ACCC_host)->empty() &&
-              host_alias->getClauses(ACCC_self)->size() == 1,
-          "update host did not arrive as the canonical self kind");
-  auto *host_as_self = static_cast<OpenACCSelfClause *>(
-      host_alias->getClauses(ACCC_self)->at(0));
-  require(host_as_self->getVars().size() == 1 &&
-              host_as_self->getVars()[0].text == "a" &&
+  require(host_alias->getClauses(ACCC_host)->size() == 1 &&
+              host_alias->getClauses(ACCC_self)->empty(),
+          "update host spelling was not preserved by the drop-in API");
+  auto *host = static_cast<OpenACCHostClause *>(
+      host_alias->getClauses(ACCC_host)->at(0));
+  require(host->getVars().size() == 1 && host->getVars()[0].text == "a" &&
               host_alias->generatePragmaString() ==
-                  "#pragma acc update self(a)",
-          "update host did not preserve the canonical self payload");
+                  "#pragma acc update host(a)",
+          "update host did not preserve its source-facing payload");
 
   std::unique_ptr<OpenACCDirective> canonical_self(
       parseOpenACC("#pragma acc update self(a)"));
   require(canonical_self->getClauses(ACCC_self)->size() == 1 &&
               canonical_self->getClauses(ACCC_host)->empty(),
           "update self did not retain its canonical semantic kind");
+}
+
+void test_upstream_clause_merging_owns_incoming_clauses() {
+  OpenACCDirective::setClauseMerging(true);
+  std::unique_ptr<OpenACCDirective> directive(
+      parseOpenACC("#pragma acc parallel copyin(a) copyin(b)"));
+  OpenACCDirective::setClauseMerging(false);
+
+  auto *copyins = directive->getClauses(ACCC_copyin);
+  auto *order = directive->getClausesInOriginalOrder();
+  require(copyins->size() == 1 && order->size() == 1 &&
+              copyins->front() == order->front(),
+          "merged OpenACC clause ownership is inconsistent");
+  auto *copyin = static_cast<OpenACCCopyinClause *>(copyins->front());
+  require(copyin->getVars().size() == 2 &&
+              copyin->getVars()[0].text == "a" &&
+              copyin->getVars()[1].text == "b",
+          "upstream clause merging lost the incoming payload");
 }
 
 void test_failures_are_exceptions() {
@@ -342,8 +375,12 @@ void test_failures_are_exceptions() {
       "unknown clause");
   require_hard_error([] { parseOpenACC("#pragma acc parallel bind()"); },
                      "empty expression");
-  require_hard_error([] { parseOpenACC("#pragma acc cache(scalar)"); },
-                     "scalar cache item");
+  std::unique_ptr<OpenACCDirective> scalar_cache(
+      parseOpenACC("#pragma acc cache(scalar)"));
+  require(static_cast<OpenACCCacheDirective *>(scalar_cache.get())
+                      ->getVars()
+                      .size() == 1,
+          "scalar cache item was not preserved by the drop-in API");
   require_hard_error(
       [] { parseOpenACC("#pragma acc cache(values[0:n:2])"); },
       "strided cache subarray");
@@ -386,11 +423,12 @@ void test_failures_are_exceptions() {
 
 int main() {
   try {
-    test_language_selection_is_mandatory();
+    test_language_auto_detection();
     test_numeric_contract_rejects_unknown_tags();
     test_locations_and_typed_data();
     test_structured_payloads();
     test_aliases_and_host_languages();
+    test_upstream_clause_merging_owns_incoming_clauses();
     test_failures_are_exceptions();
     std::cout << "strict OpenACC adapter contract: OK\n";
     return 0;

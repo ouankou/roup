@@ -20,30 +20,13 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace {
 
 OpenACCBaseLang current_lang = ACC_Lang_unknown;
-
-class ClauseMergingGuard {
-public:
-  ClauseMergingGuard()
-      : previous_(OpenACCDirective::getClauseMerging()) {
-    OpenACCDirective::setClauseMerging(false);
-  }
-
-  ClauseMergingGuard(const ClauseMergingGuard &) = delete;
-  ClauseMergingGuard &operator=(const ClauseMergingGuard &) = delete;
-
-  ~ClauseMergingGuard() {
-    OpenACCDirective::setClauseMerging(previous_);
-  }
-
-private:
-  bool previous_;
-};
 
 int location_component(std::size_t value, const char *context) {
   if (value == 0 ||
@@ -478,9 +461,19 @@ private:
   std::vector<bool> consumed_;
 };
 
+template <typename Clause, typename = void>
+struct HasMergeClause : std::false_type {};
+
 template <typename Clause>
-Clause *attach_clause(OpenACCDirective &directive,
-                      std::unique_ptr<Clause> clause, const RoupSpan &span) {
+struct HasMergeClause<
+    Clause,
+    std::void_t<decltype(std::declval<Clause &>().mergeClause(
+        std::declval<OpenACCDirective *>(),
+        std::declval<OpenACCClause *>()))>> : std::true_type {};
+
+template <typename Clause>
+void attach_clause(OpenACCDirective &directive,
+                   std::unique_ptr<Clause> clause, const RoupSpan &span) {
   OpenACCClause *base = clause.get();
   if (base->getKind() == ACCC_unknown) {
     throw std::runtime_error("refusing to attach an unknown OpenACC clause");
@@ -494,7 +487,23 @@ Clause *attach_clause(OpenACCDirective &directive,
   order->push_back(base);
   base->setClausePosition(static_cast<int>(order->size() - 1));
   clause.release();
-  return static_cast<Clause *>(base);
+  if constexpr (HasMergeClause<Clause>::value) {
+    if (by_kind->size() < 2)
+      return;
+    // Upstream mergeClause implementations own the consumption decision. A
+    // consumed incoming clause is removed from both directive vectors and
+    // deleted by mergeClause; an unconsumed clause remains in both vectors and
+    // is deleted by OpenACCDirective's destructor. Unconditionally popping or
+    // deleting here would double-delete merged clauses and orphan distinct
+    // occurrences.
+    static_cast<Clause *>(by_kind->front())->mergeClause(&directive, base);
+  } else if constexpr (std::is_same_v<Clause, OpenACCClause>) {
+    if (OpenACCDirective::getClauseMerging() && by_kind->size() > 1) {
+      by_kind->pop_back();
+      order->pop_back();
+      delete base;
+    }
+  }
 }
 
 void require_nonempty(const std::string &value, const char *subject) {
@@ -581,6 +590,52 @@ void fill_data_clause(Clause &clause, OpenACCDataClauseVariant variant,
         "accparser silently altered typed OpenACC data modifiers");
   }
   add_vars(clause, items);
+}
+
+OpenACCDataClauseVariant
+source_data_variant(std::optional<std::uint32_t> alias,
+                    OpenACCClauseKind clause_kind,
+                    OpenACCDataClauseVariant canonical) {
+  if (!alias.has_value())
+    return canonical;
+  switch (*alias) {
+  case ROUP_ACC_CLAUSE_ALIAS_PCOPY:
+    if (clause_kind == ACCC_copy)
+      return ACCC_DATA_COPY_pcopy;
+    break;
+  case ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_COPY:
+    if (clause_kind == ACCC_copy)
+      return ACCC_DATA_COPY_present_or_copy;
+    break;
+  case ROUP_ACC_CLAUSE_ALIAS_PCOPYIN:
+    if (clause_kind == ACCC_copyin)
+      return ACCC_DATA_COPYIN_pcopyin;
+    break;
+  case ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_COPYIN:
+    if (clause_kind == ACCC_copyin)
+      return ACCC_DATA_COPYIN_present_or_copyin;
+    break;
+  case ROUP_ACC_CLAUSE_ALIAS_PCOPYOUT:
+    if (clause_kind == ACCC_copyout)
+      return ACCC_DATA_COPYOUT_pcopyout;
+    break;
+  case ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_COPYOUT:
+    if (clause_kind == ACCC_copyout)
+      return ACCC_DATA_COPYOUT_present_or_copyout;
+    break;
+  case ROUP_ACC_CLAUSE_ALIAS_PCREATE:
+    if (clause_kind == ACCC_create)
+      return ACCC_DATA_CREATE_pcreate;
+    break;
+  case ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_CREATE:
+    if (clause_kind == ACCC_create)
+      return ACCC_DATA_CREATE_present_or_create;
+    break;
+  default:
+    break;
+  }
+  throw std::runtime_error(
+      "typed OpenACC source alias disagrees with its canonical clause");
 }
 
 struct AccSizeValue {
@@ -675,7 +730,20 @@ AccBindValue read_acc_bind_target(FieldReader &fields,
     if (kind.variant == ROUP_ACC_BIND_STRING_LITERAL) {
       const std::uint32_t encoding =
           node_fields.required_u32(ROUP_FIELD_ENCODING);
+      const std::uint32_t quote_style =
+          node_fields.required_u32(ROUP_FIELD_QUOTE_STYLE);
       roup_acc_contract::validate_bind_encoding(encoding, language);
+      if ((language == ACC_Lang_C || language == ACC_Lang_Cplusplus) &&
+          quote_style != ROUP_QUOTE_DOUBLE) {
+        throw std::runtime_error(
+            "C and C++ OpenACC bind strings require double quotes");
+      }
+      if (language == ACC_Lang_Fortran &&
+          quote_style != ROUP_QUOTE_SINGLE &&
+          quote_style != ROUP_QUOTE_DOUBLE) {
+        throw std::runtime_error(
+            "unknown typed Fortran OpenACC bind quote style");
+      }
       value = encode_bind_literal(value, language);
     } else {
       require_nonempty(value, "OpenACC bind name");
@@ -703,7 +771,8 @@ std::vector<AccCacheValue> read_acc_cache_items(FieldReader &fields) {
     if (kind.family != ROUP_NODE_FAMILY_ACC_CACHE_ITEM) {
       throw std::runtime_error("OpenACC cache item has the wrong node family");
     }
-    if (kind.variant != ROUP_ACC_CACHE_ARRAY_ELEMENT &&
+    if (kind.variant != ROUP_ACC_CACHE_SCALAR &&
+        kind.variant != ROUP_ACC_CACHE_ARRAY_ELEMENT &&
         kind.variant != ROUP_ACC_CACHE_CONTIGUOUS_SUBARRAY) {
       throw std::runtime_error("unknown typed OpenACC cache-item variant " +
                                std::to_string(kind.variant));
@@ -979,6 +1048,8 @@ void convert_clause(OpenACCDirective &target, RoupDirectiveHandle source,
                     "querying OpenACC clause source span")
           .value;
   FieldReader fields = FieldReader::clause(source, index);
+  const std::optional<std::uint32_t> source_alias =
+      fields.optional_u32(ROUP_FIELD_SOURCE_ALIAS);
 
   switch (clause_kind) {
   case ACCC_auto:
@@ -1037,8 +1108,9 @@ void convert_clause(OpenACCDirective &target, RoupDirectiveHandle source,
     const std::vector<std::string> items =
         required_clause_items(fields);
     fields.finish();
-    const OpenACCDataClauseVariant variant =
-        roup_acc_contract::copy_variant(kind_tag, clause_kind);
+    const OpenACCDataClauseVariant variant = source_data_variant(
+        source_alias, clause_kind,
+        roup_acc_contract::copy_variant(kind_tag, clause_kind));
     if (clause_kind == ACCC_copy) {
       auto clause = std::make_unique<OpenACCCopyClause>();
       fill_data_clause(*clause, variant, modifiers, items);
@@ -1062,8 +1134,11 @@ void convert_clause(OpenACCDirective &target, RoupDirectiveHandle source,
         required_clause_items(fields);
     fields.finish();
     auto clause = std::make_unique<OpenACCCreateClause>();
-    fill_data_clause(*clause, roup_acc_contract::create_variant(kind_tag),
-                     modifiers, items);
+    fill_data_clause(
+        *clause,
+        source_data_variant(source_alias, clause_kind,
+                            roup_acc_contract::create_variant(kind_tag)),
+        modifiers, items);
     attach_clause(target, std::move(clause), span);
     return;
   }
@@ -1204,6 +1279,12 @@ void convert_clause(OpenACCDirective &target, RoupDirectiveHandle source,
     auto clause = std::make_unique<OpenACCGangClause>();
     const std::vector<AccGangValue> arguments = read_acc_gang_arguments(fields);
     fields.finish();
+    if (target.getKind() == ACCD_routine &&
+        (arguments.size() > 1 ||
+         (!arguments.empty() && arguments.front().kind != ROUP_ACC_GANG_DIM))) {
+      throw std::runtime_error(
+          "OpenACC routine gang accepts only the dim argument");
+    }
     for (const AccGangValue &argument : arguments) {
       OpenACCGangArgKind target_kind;
       if (argument.kind == ROUP_ACC_GANG_POSITIONAL)
@@ -1252,12 +1333,25 @@ void convert_clause(OpenACCDirective &target, RoupDirectiveHandle source,
     return;
   }
   case ACCC_self: {
-    auto clause = std::make_unique<OpenACCSelfClause>();
     const bool has_value = fields.find(ROUP_FIELD_VALUE).has_value();
     const bool has_items = fields.find(ROUP_FIELD_ITEMS).has_value();
     if (has_value && has_items) {
       throw std::runtime_error("typed OpenACC self clause has two payloads");
     }
+    if (source_alias.has_value()) {
+      if (*source_alias != ROUP_ACC_CLAUSE_ALIAS_UPDATE_HOST || has_value ||
+          !has_items) {
+        throw std::runtime_error(
+            "typed OpenACC update-host alias has an invalid payload");
+      }
+      const std::vector<std::string> items = required_clause_items(fields);
+      fields.finish();
+      auto clause = std::make_unique<OpenACCHostClause>();
+      add_vars(*clause, items);
+      attach_clause(target, std::move(clause), span);
+      return;
+    }
+    auto clause = std::make_unique<OpenACCSelfClause>();
     if (has_value) {
       const std::string value = fields.required_string(ROUP_FIELD_VALUE);
       require_nonempty(value, "OpenACC self condition");
@@ -1291,6 +1385,10 @@ void convert_clause(OpenACCDirective &target, RoupDirectiveHandle source,
       throw std::runtime_error(
           "typed OpenACC worker/vector modifier and expression disagree");
     }
+    if (target.getKind() == ACCD_routine && value.has_value()) {
+      throw std::runtime_error(
+          "OpenACC routine worker/vector clauses do not accept expressions");
+    }
     if (clause_kind == ACCC_vector) {
       auto clause = std::make_unique<OpenACCVectorClause>();
       if (modifier.has_value()) {
@@ -1316,13 +1414,15 @@ void convert_clause(OpenACCDirective &target, RoupDirectiveHandle source,
         fields.optional_string(ROUP_FIELD_DEVICE_NUM);
     const std::vector<std::string> queues =
         fields.required_strings(ROUP_FIELD_VALUES);
+    const bool queues_keyword =
+        fields.required_bool(ROUP_FIELD_QUEUES_KEYWORD);
     fields.finish();
     if (devnum.has_value()) {
       require_nonempty(*devnum, "OpenACC wait device number");
       require_nonempty(queues, "OpenACC wait queue list");
       clause->setDevnum(*devnum);
-      clause->setQueues(true);
     }
+    clause->setQueues(queues_keyword);
     for (const std::string &queue : queues) {
       require_nonempty(queue, "OpenACC wait queue");
       clause->addAsyncId(queue);
@@ -1333,9 +1433,17 @@ void convert_clause(OpenACCDirective &target, RoupDirectiveHandle source,
   case ACCC_host:
     throw std::runtime_error(
         "OpenACC update host must arrive as the canonical typed self clause");
-  case ACCC_indirect:
-    throw std::runtime_error(
-        "ROUP's typed OpenACC schema does not yet expose indirect clauses");
+  case ACCC_indirect: {
+    auto clause = std::make_unique<OpenACCIndirectClause>();
+    if (fields.find(ROUP_FIELD_VALUE).has_value()) {
+      const AccBindValue value =
+          read_acc_bind_target(fields, target.getBaseLang());
+      clause->setValue(value.value, value.is_string_literal);
+    }
+    fields.finish();
+    attach_clause(target, std::move(clause), span);
+    return;
+  }
   case ACCC_unknown:
     break;
   }
@@ -1395,13 +1503,15 @@ void convert_parameter(OpenACCDirective &target, OpenACCDirectiveKind kind,
         fields.optional_string(ROUP_FIELD_DEVICE_NUM);
     const std::vector<std::string> queues =
         fields.required_strings(ROUP_FIELD_VALUES);
+    const bool queues_keyword =
+        fields.required_bool(ROUP_FIELD_QUEUES_KEYWORD);
     fields.finish();
     require_nonempty(queues, "OpenACC wait directive queue list");
     if (devnum.has_value()) {
       require_nonempty(*devnum, "OpenACC wait directive device number");
       wait.setDevnum(*devnum);
-      wait.setQueues(true);
     }
+    wait.setQueues(queues_keyword);
     for (const std::string &queue : queues)
       wait.addAsyncId(queue);
     return;
@@ -1485,14 +1595,11 @@ bool starts_with_case_insensitive(const std::string &text,
 }
 
 ParseProfile parser_profile(const std::string &input) {
-  if (current_lang == ACC_Lang_unknown) {
-    throw std::invalid_argument(
-        "setLang must select an explicit base language before parsing");
-  }
   const std::size_t first = input.find_first_not_of(" \t\r\n");
   if (first == std::string::npos)
     throw std::invalid_argument("parseOpenACC input must contain a directive");
   const std::string leading = input.substr(first);
+  const bool language_is_explicit = current_lang != ACC_Lang_unknown;
 
   ParseProfile profile{};
   profile.options.abi_version = ROUP_ABI_VERSION;
@@ -1500,10 +1607,10 @@ ParseProfile parser_profile(const std::string &input) {
   profile.options.dialect = ROUP_DIALECT_OPENACC;
   profile.options.version_policy = ROUP_VERSION_ANY;
   profile.options.version = 0;
-  profile.options.flags = 0;
+  profile.options.flags = ROUP_PARSER_SOURCE_COMPATIBILITY;
 
   if (starts_with_case_insensitive(leading, "!$acc")) {
-    if (current_lang != ACC_Lang_Fortran) {
+    if (language_is_explicit && current_lang != ACC_Lang_Fortran) {
       throw std::invalid_argument(
           "Fortran OpenACC sentinel conflicts with selected base language");
     }
@@ -1513,7 +1620,7 @@ ParseProfile parser_profile(const std::string &input) {
     profile.options.source_form = ROUP_SOURCE_FORTRAN_FREE;
   } else if (starts_with_case_insensitive(leading, "c$acc") ||
              starts_with_case_insensitive(leading, "*$acc")) {
-    if (current_lang != ACC_Lang_Fortran) {
+    if (language_is_explicit && current_lang != ACC_Lang_Fortran) {
       throw std::invalid_argument(
           "Fortran OpenACC sentinel conflicts with selected base language");
     }
@@ -1522,16 +1629,17 @@ ParseProfile parser_profile(const std::string &input) {
     profile.options.host_standard = ROUP_FORTRAN_2023;
     profile.options.source_form = ROUP_SOURCE_FORTRAN_FIXED;
   } else if (starts_with_case_insensitive(leading, "#pragma")) {
-    if (current_lang != ACC_Lang_C && current_lang != ACC_Lang_Cplusplus) {
+    if (language_is_explicit && current_lang != ACC_Lang_C &&
+        current_lang != ACC_Lang_Cplusplus) {
       throw std::invalid_argument(
           "C/C++ OpenACC pragma conflicts with selected base language");
     }
-    profile.language = current_lang;
+    profile.language = language_is_explicit ? current_lang : ACC_Lang_C;
     profile.options.host_language =
-        current_lang == ACC_Lang_Cplusplus ? ROUP_HOST_CPP : ROUP_HOST_C;
-    profile.options.host_standard = current_lang == ACC_Lang_Cplusplus
-                                        ? ROUP_CPP_23
-                                        : ROUP_C_23;
+        profile.language == ACC_Lang_Cplusplus ? ROUP_HOST_CPP : ROUP_HOST_C;
+    profile.options.host_standard =
+        profile.options.host_language == ROUP_HOST_CPP ? ROUP_CPP_23
+                                                       : ROUP_C_23;
     profile.options.source_form = ROUP_SOURCE_PRAGMA;
   } else {
     throw std::invalid_argument(
@@ -1556,7 +1664,6 @@ OpenACCDirective *parseOpenACC(std::string input) {
   }
 
   const ParseProfile profile = parser_profile(input);
-  const ClauseMergingGuard preserve_clause_occurrences;
   const RoupParserResult parser = require_value(
       roup_parser_create(profile.options), "creating ROUP OpenACC parser");
   bool parser_live = true;

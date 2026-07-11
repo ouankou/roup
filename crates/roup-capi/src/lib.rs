@@ -13,14 +13,19 @@ mod handle;
 
 mod service;
 
-/// First version of the redesigned handle-based C ABI.
-pub const ROUP_ABI_VERSION: u32 = 1;
+/// Current version of the redesigned handle-based C ABI.
+///
+/// Version 2 adds typed source-compatibility data and expands closed ordinal
+/// sets. Version 1 callers are rejected instead of silently observing shifted
+/// ordinals through a layout they compiled against.
+pub const ROUP_ABI_VERSION: u32 = 2;
 
 pub const ROUP_DIALECT_OPENMP: u32 = 1;
 pub const ROUP_DIALECT_OPENACC: u32 = 2;
 
 pub const ROUP_VERSION_ANY: u32 = 0;
 pub const ROUP_VERSION_EXACT: u32 = 1;
+pub const ROUP_PARSER_SOURCE_COMPATIBILITY: u32 = 1 << 0;
 
 pub const ROUP_OMP_VERSION_1_0: u32 = 100;
 pub const ROUP_OMP_VERSION_1_1: u32 = 110;
@@ -206,6 +211,51 @@ pub const ROUP_FIELD_DEPENDENCE: u32 = 110;
 pub const ROUP_FIELD_PROPERTIES: u32 = 120;
 pub const ROUP_FIELD_TRAIT_NAME: u32 = 121;
 pub const ROUP_FIELD_REQUIREMENT: u32 = 122;
+pub const ROUP_FIELD_SOURCE_ALIAS: u32 = 123;
+pub const ROUP_FIELD_QUEUES_KEYWORD: u32 = 124;
+pub const ROUP_FIELD_MAP_TYPE_SPELLING: u32 = 125;
+pub const ROUP_FIELD_PRECEDING_SEPARATOR: u32 = 126;
+pub const ROUP_FIELD_QUOTE_STYLE: u32 = 127;
+pub const ROUP_FIELD_DECLARATOR_ATTACHED: u32 = 128;
+pub const ROUP_FIELD_LENGTH: u32 = 129;
+pub const ROUP_FIELD_STRIDE: u32 = 130;
+
+pub const ROUP_OMP_CLAUSE_ALIAS_DEPEND_SOURCE: u32 = 1;
+pub const ROUP_OMP_CLAUSE_ALIAS_DEPEND_SOURCE_CURRENT: u32 = 2;
+pub const ROUP_OMP_CLAUSE_ALIAS_DEPEND_SINK: u32 = 3;
+pub const ROUP_OMP_CLAUSE_ALIAS_DEPEND_SINK_PREVIOUS_CURRENT: u32 = 4;
+pub const ROUP_OMP_CLAUSE_ALIAS_METADIRECTIVE_DEFAULT: u32 = 5;
+pub const ROUP_OMP_CLAUSE_ALIAS_DECLARE_TARGET_TO: u32 = 6;
+pub const ROUP_OMP_CLAUSE_ALIAS_PROC_BIND_MASTER: u32 = 7;
+pub const ROUP_OMP_CLAUSE_ALIAS_DOACROSS_SOURCE_EMPTY: u32 = 8;
+pub const ROUP_OMP_CLAUSE_ALIAS_REDUCTION_ORIGINAL_POSITIONAL: u32 = 9;
+
+pub const ROUP_OMP_DIRECTIVE_ALIAS_NONE: u32 = 0;
+pub const ROUP_OMP_DIRECTIVE_ALIAS_OPENMP60_UNDERSCORE: u32 = 1;
+pub const ROUP_OMP_DIRECTIVE_ALIAS_FORTRAN_COMPACT: u32 = 2;
+pub const ROUP_OMP_DIRECTIVE_ALIAS_FORTRAN_REDUNDANT_OMP: u32 = 3;
+
+pub const ROUP_OMP_CLAUSE_SEPARATOR_SPACE: u32 = 1;
+pub const ROUP_OMP_CLAUSE_SEPARATOR_COMMA: u32 = 2;
+
+pub const ROUP_OMP_DECLARE_REDUCTION_INLINE_COMBINER: u32 = 1;
+pub const ROUP_OMP_DECLARE_REDUCTION_COMBINER_CLAUSE: u32 = 2;
+
+pub const ROUP_QUOTE_SINGLE: u32 = 1;
+pub const ROUP_QUOTE_DOUBLE: u32 = 2;
+
+pub const ROUP_OMP_USES_ALLOCATORS_HISTORICAL: u32 = 1;
+pub const ROUP_OMP_USES_ALLOCATORS_MODIFIER: u32 = 2;
+
+pub const ROUP_ACC_CLAUSE_ALIAS_PCOPY: u32 = 1;
+pub const ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_COPY: u32 = 2;
+pub const ROUP_ACC_CLAUSE_ALIAS_PCOPYIN: u32 = 3;
+pub const ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_COPYIN: u32 = 4;
+pub const ROUP_ACC_CLAUSE_ALIAS_PCOPYOUT: u32 = 5;
+pub const ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_COPYOUT: u32 = 6;
+pub const ROUP_ACC_CLAUSE_ALIAS_PCREATE: u32 = 7;
+pub const ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_CREATE: u32 = 8;
+pub const ROUP_ACC_CLAUSE_ALIAS_UPDATE_HOST: u32 = 9;
 
 pub const ROUP_NODE_FAMILY_REQUIRE_MODIFIER: u32 = 3;
 pub const ROUP_NODE_FAMILY_DEPEND_ITERATOR: u32 = 4;
@@ -255,6 +305,8 @@ pub const ROUP_NODE_FAMILY_OMP_SELECTOR_EXTENSION_PROPERTY: u32 = 65;
 pub const ROUP_NODE_FAMILY_OMP_SELECTOR_REQUIREMENT: u32 = 66;
 pub const ROUP_NODE_FAMILY_OMP_SELECTOR_CONSTRUCT: u32 = 67;
 pub const ROUP_NODE_FAMILY_OMP_SELECTOR_TRAIT_VALUE: u32 = 68;
+pub const ROUP_NODE_FAMILY_OMP_ARRAY_SHAPING_SUBSCRIPT: u32 = 69;
+pub const ROUP_NODE_FAMILY_OMPX_PAYLOAD_ITEM: u32 = 70;
 
 pub const ROUP_NODE_RECORD: u32 = 1;
 
@@ -310,6 +362,7 @@ pub const ROUP_ACC_GANG_STATIC: u32 = 4;
 
 pub const ROUP_ACC_CACHE_ARRAY_ELEMENT: u32 = 1;
 pub const ROUP_ACC_CACHE_CONTIGUOUS_SUBARRAY: u32 = 2;
+pub const ROUP_ACC_CACHE_SCALAR: u32 = 3;
 
 pub const ROUP_ACC_END_ATOMIC: u32 = 1;
 pub const ROUP_ACC_END_DATA: u32 = 2;
@@ -329,6 +382,8 @@ pub const ROUP_CLAUSE_ITEM_IDENTIFIER: u32 = 1;
 pub const ROUP_CLAUSE_ITEM_VARIABLE: u32 = 2;
 pub const ROUP_CLAUSE_ITEM_FORTRAN_COMMON_BLOCK: u32 = 3;
 pub const ROUP_CLAUSE_ITEM_EXPRESSION: u32 = 4;
+pub const ROUP_CLAUSE_ITEM_LEGACY_TRAILING_SLASH: u32 = 5;
+pub const ROUP_CLAUSE_ITEM_LVALUE: u32 = 6;
 
 pub const ROUP_OMP_STORAGE_ITEM_NAME: u32 = 1;
 pub const ROUP_OMP_STORAGE_ITEM_FORTRAN_COMMON_BLOCK: u32 = 2;
@@ -418,6 +473,7 @@ pub const ROUP_ACC_REDUCTION_FORTRAN_NEQV: u32 = 13;
 pub const ROUP_ACC_REDUCTION_FORTRAN_IAND: u32 = 14;
 pub const ROUP_ACC_REDUCTION_FORTRAN_IOR: u32 = 15;
 pub const ROUP_ACC_REDUCTION_FORTRAN_IEOR: u32 = 16;
+pub const ROUP_ACC_REDUCTION_SUB: u32 = 17;
 
 pub const ROUP_OMP_COUNT_FILL: u32 = 1;
 pub const ROUP_OMP_COUNT_EXPRESSION: u32 = 2;
@@ -426,6 +482,12 @@ pub const ROUP_OMP_LOCATOR_LVALUE: u32 = 1;
 pub const ROUP_OMP_LOCATOR_FORTRAN_COMMON_BLOCK: u32 = 2;
 pub const ROUP_OMP_LOCATOR_POTENTIAL_LVALUE: u32 = 3;
 pub const ROUP_OMP_LOCATOR_ALL_MEMORY: u32 = 4;
+pub const ROUP_OMP_LOCATOR_DISTRIBUTED: u32 = 5;
+pub const ROUP_OMP_LOCATOR_ARRAY_SHAPING: u32 = 6;
+
+pub const ROUP_OMP_ARRAY_SHAPING_INDEX: u32 = 1;
+pub const ROUP_OMP_ARRAY_SHAPING_SECTION: u32 = 2;
+pub const ROUP_OMP_DIST_DATA_DUPLICATE: u32 = 1;
 
 pub const ROUP_OMP_DATA_MOTION_PRESENT: u32 = 1;
 pub const ROUP_OMP_ENTER_AUTOMAP: u32 = 1;
@@ -481,6 +543,10 @@ pub const ROUP_OMP_MAP_TO: u32 = 1;
 pub const ROUP_OMP_MAP_FROM: u32 = 2;
 pub const ROUP_OMP_MAP_TOFROM: u32 = 3;
 pub const ROUP_OMP_MAP_STORAGE: u32 = 4;
+pub const ROUP_OMP_MAP_TYPE_SPELLING_CANONICAL: u32 = 1;
+pub const ROUP_OMP_MAP_TYPE_SPELLING_ALLOC: u32 = 2;
+pub const ROUP_OMP_MAP_TYPE_SPELLING_RELEASE: u32 = 3;
+pub const ROUP_OMP_MAP_TYPE_SPELLING_DELETE: u32 = 4;
 pub const ROUP_OMP_MAP_MODIFIER_ALWAYS: u32 = 1;
 pub const ROUP_OMP_MAP_MODIFIER_CLOSE: u32 = 2;
 pub const ROUP_OMP_MAP_MODIFIER_PRESENT: u32 = 3;
@@ -645,6 +711,28 @@ pub const ROUP_SELECTOR_CONSTRUCT: u32 = 1;
 
 pub const ROUP_SELECTOR_TRAIT_IDENTIFIER: u32 = 1;
 pub const ROUP_SELECTOR_TRAIT_STRING_LITERAL: u32 = 2;
+pub const ROUP_SELECTOR_TRAIT_PREDEFINED_DEVICE_KIND: u32 = 3;
+pub const ROUP_SELECTOR_TRAIT_PREDEFINED_VENDOR: u32 = 4;
+
+pub const ROUP_OMP_DEVICE_KIND_HOST: u32 = 1;
+pub const ROUP_OMP_DEVICE_KIND_NOHOST: u32 = 2;
+pub const ROUP_OMP_DEVICE_KIND_ANY: u32 = 3;
+pub const ROUP_OMP_DEVICE_KIND_CPU: u32 = 4;
+pub const ROUP_OMP_DEVICE_KIND_GPU: u32 = 5;
+pub const ROUP_OMP_DEVICE_KIND_FPGA: u32 = 6;
+
+pub const ROUP_OMP_VENDOR_AMD: u32 = 1;
+pub const ROUP_OMP_VENDOR_ARM: u32 = 2;
+pub const ROUP_OMP_VENDOR_BSC: u32 = 3;
+pub const ROUP_OMP_VENDOR_CRAY: u32 = 4;
+pub const ROUP_OMP_VENDOR_FUJITSU: u32 = 5;
+pub const ROUP_OMP_VENDOR_GNU: u32 = 6;
+pub const ROUP_OMP_VENDOR_IBM: u32 = 7;
+pub const ROUP_OMP_VENDOR_INTEL: u32 = 8;
+pub const ROUP_OMP_VENDOR_LLVM: u32 = 9;
+pub const ROUP_OMP_VENDOR_NVIDIA: u32 = 10;
+pub const ROUP_OMP_VENDOR_PGI: u32 = 11;
+pub const ROUP_OMP_VENDOR_TI: u32 = 12;
 
 pub const ROUP_OMP_PARAMETER_ALLOCATE_LIST: u32 = 1;
 pub const ROUP_OMP_PARAMETER_THREADPRIVATE_LIST: u32 = 2;
@@ -659,6 +747,10 @@ pub const ROUP_OMP_PARAMETER_FLUSH_LIST: u32 = 10;
 pub const ROUP_OMP_PARAMETER_DECLARE_REDUCTION: u32 = 11;
 pub const ROUP_OMP_PARAMETER_DECLARE_SIMD: u32 = 12;
 pub const ROUP_OMP_PARAMETER_DECLARE_INDUCTION: u32 = 13;
+pub const ROUP_OMP_PARAMETER_OMPX: u32 = 14;
+
+pub const ROUP_OMPX_PAYLOAD_IDENTIFIER: u32 = 1;
+pub const ROUP_OMPX_PAYLOAD_INVOCATION: u32 = 2;
 
 pub const ROUP_ACC_PARAMETER_CACHE: u32 = 1;
 pub const ROUP_ACC_PARAMETER_WAIT: u32 = 2;
@@ -859,6 +951,8 @@ pub const ROUP_OMP_DIRECTIVE_TILE: u32 = 190;
 pub const ROUP_OMP_DIRECTIVE_UNROLL: u32 = 191;
 pub const ROUP_OMP_DIRECTIVE_WORKDISTRIBUTE: u32 = 192;
 pub const ROUP_OMP_DIRECTIVE_WORKSHARE: u32 = 193;
+pub const ROUP_OMP_DIRECTIVE_END_SECTION: u32 = 194;
+pub const ROUP_OMP_DIRECTIVE_OMPX: u32 = 195;
 
 pub const ROUP_OMP_CLAUSE_ABSENT: u32 = 0;
 pub const ROUP_OMP_CLAUSE_ACQ_REL: u32 = 1;
@@ -1040,25 +1134,26 @@ pub const ROUP_ACC_CLAUSE_GANG: u32 = 21;
 pub const ROUP_ACC_CLAUSE_IF: u32 = 22;
 pub const ROUP_ACC_CLAUSE_IF_PRESENT: u32 = 23;
 pub const ROUP_ACC_CLAUSE_INDEPENDENT: u32 = 24;
-pub const ROUP_ACC_CLAUSE_LINK: u32 = 25;
-pub const ROUP_ACC_CLAUSE_NO_CREATE: u32 = 26;
-pub const ROUP_ACC_CLAUSE_NO_HOST: u32 = 27;
-pub const ROUP_ACC_CLAUSE_NUM_GANGS: u32 = 28;
-pub const ROUP_ACC_CLAUSE_NUM_WORKERS: u32 = 29;
-pub const ROUP_ACC_CLAUSE_PRESENT: u32 = 30;
-pub const ROUP_ACC_CLAUSE_PRIVATE: u32 = 31;
-pub const ROUP_ACC_CLAUSE_REDUCTION: u32 = 32;
-pub const ROUP_ACC_CLAUSE_READ: u32 = 33;
-pub const ROUP_ACC_CLAUSE_SELF_CLAUSE: u32 = 34;
-pub const ROUP_ACC_CLAUSE_SEQ: u32 = 35;
-pub const ROUP_ACC_CLAUSE_TILE: u32 = 36;
-pub const ROUP_ACC_CLAUSE_UPDATE: u32 = 37;
-pub const ROUP_ACC_CLAUSE_USE_DEVICE: u32 = 38;
-pub const ROUP_ACC_CLAUSE_VECTOR: u32 = 39;
-pub const ROUP_ACC_CLAUSE_VECTOR_LENGTH: u32 = 40;
-pub const ROUP_ACC_CLAUSE_WAIT: u32 = 41;
-pub const ROUP_ACC_CLAUSE_WORKER: u32 = 42;
-pub const ROUP_ACC_CLAUSE_WRITE: u32 = 43;
+pub const ROUP_ACC_CLAUSE_INDIRECT: u32 = 25;
+pub const ROUP_ACC_CLAUSE_LINK: u32 = 26;
+pub const ROUP_ACC_CLAUSE_NO_CREATE: u32 = 27;
+pub const ROUP_ACC_CLAUSE_NO_HOST: u32 = 28;
+pub const ROUP_ACC_CLAUSE_NUM_GANGS: u32 = 29;
+pub const ROUP_ACC_CLAUSE_NUM_WORKERS: u32 = 30;
+pub const ROUP_ACC_CLAUSE_PRESENT: u32 = 31;
+pub const ROUP_ACC_CLAUSE_PRIVATE: u32 = 32;
+pub const ROUP_ACC_CLAUSE_REDUCTION: u32 = 33;
+pub const ROUP_ACC_CLAUSE_READ: u32 = 34;
+pub const ROUP_ACC_CLAUSE_SELF_CLAUSE: u32 = 35;
+pub const ROUP_ACC_CLAUSE_SEQ: u32 = 36;
+pub const ROUP_ACC_CLAUSE_TILE: u32 = 37;
+pub const ROUP_ACC_CLAUSE_UPDATE: u32 = 38;
+pub const ROUP_ACC_CLAUSE_USE_DEVICE: u32 = 39;
+pub const ROUP_ACC_CLAUSE_VECTOR: u32 = 40;
+pub const ROUP_ACC_CLAUSE_VECTOR_LENGTH: u32 = 41;
+pub const ROUP_ACC_CLAUSE_WAIT: u32 = 42;
+pub const ROUP_ACC_CLAUSE_WORKER: u32 = 43;
+pub const ROUP_ACC_CLAUSE_WRITE: u32 = 44;
 
 /// Numeric status returned by every fallible C ABI operation.
 ///
@@ -1409,7 +1504,8 @@ mod tests {
         let result = RoupU32Result::success(ROUP_ABI_VERSION);
         assert!(result.result.status.is_ok());
         assert!(!result.result.error.is_active());
-        assert_eq!(result.value, 1);
+        assert_eq!(result.value, ROUP_ABI_VERSION);
+        assert_eq!(ROUP_ABI_VERSION, 2);
     }
 
     #[test]
@@ -1436,6 +1532,7 @@ mod tests {
             "roup_directive_dialect",
             "roup_directive_has_parameter",
             "roup_directive_kind",
+            "roup_directive_source_alias",
             "roup_directive_name_copy",
             "roup_directive_name_length",
             "roup_directive_parameter_field_count",
