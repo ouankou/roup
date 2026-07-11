@@ -68,6 +68,7 @@ openacc_clauses! {
     If => { name: "if", rule: ClauseRule::Parenthesized },
     IfPresent => { name: "if_present", rule: ClauseRule::Bare },
     Independent => { name: "independent", rule: ClauseRule::Bare },
+    Indirect => { name: "indirect", rule: ClauseRule::Flexible },
     Link => { name: "link", rule: ClauseRule::Parenthesized },
     NoCreate => { name: "no_create", rule: ClauseRule::Parenthesized },
     Nohost => { name: "nohost", rule: ClauseRule::Bare },

@@ -153,6 +153,54 @@ impl Parser {
         input: &str,
         parser_config: &ParserConfig,
     ) -> Result<RoupDirective, AstBuildError> {
+        if self.dialect == Dialect::OpenMp
+            && parser_config.source_compatibility()
+            && matches!(
+                self.language,
+                Language::FortranFree | Language::FortranFixed
+            )
+        {
+            let sentinel = match self.language {
+                Language::FortranFree => {
+                    lexer::lex_fortran_free_sentinel_with_prefix(input, "ompx")
+                }
+                Language::FortranFixed => {
+                    lexer::lex_fortran_fixed_sentinel_with_prefix(input, "ompx")
+                }
+                Language::C => unreachable!(),
+            };
+            if sentinel.is_ok() {
+                let logical = lexer::LogicalSource::new(input, self.language, "ompx")
+                    .map_err(|error| AstBuildError::ParseFailure(error.to_string()))?;
+                let (remaining, sentinel_source) = match self.language {
+                    Language::FortranFree => {
+                        lexer::lex_fortran_free_sentinel_with_prefix(logical.text(), "ompx")
+                    }
+                    Language::FortranFixed => {
+                        lexer::lex_fortran_fixed_sentinel_with_prefix(logical.text(), "ompx")
+                    }
+                    Language::C => unreachable!(),
+                }
+                .map_err(|error| AstBuildError::ParseFailure(format!("{error:?}")))?;
+                if !remaining.chars().next().is_some_and(char::is_whitespace) {
+                    return Err(AstBuildError::ParseFailure(
+                        "OMPX sentinel must be followed by whitespace and a payload".to_string(),
+                    ));
+                }
+                let payload = remaining.trim();
+                if payload.is_empty() {
+                    return Err(AstBuildError::ParseFailure(
+                        "OMPX sentinel requires a non-empty typed payload".to_string(),
+                    ));
+                }
+                return ast_builder::build_ompx_directive(
+                    payload,
+                    sentinel_source,
+                    parser_config,
+                    &logical,
+                );
+            }
+        }
         let ir_language = parser_config.language();
         let logical = lexer::LogicalSource::new(input, self.language, self.dialect.keyword())
             .map_err(|error| AstBuildError::ParseFailure(error.to_string()))?;
@@ -226,7 +274,7 @@ impl Parser {
         input: &str,
         parser_config: &ParserConfig,
         source: &lexer::LogicalSource<'_>,
-    ) -> Result<OmpDirective, AstBuildError> {
+    ) -> Result<(OmpDirective, Option<crate::ir::Expression>), AstBuildError> {
         let input = input.trim();
         source.span_of(input)?;
         let (after_name, (name, name_source)) = self
@@ -235,8 +283,8 @@ impl Parser {
             .map_err(|error| AstBuildError::ParseFailure(format!("{error:?}")))?;
         let remainder = after_name.trim();
 
-        let clauses = if remainder.is_empty() {
-            Vec::new()
+        let (clauses, score) = if remainder.is_empty() {
+            (Vec::new(), None)
         } else {
             let after_open = remainder.strip_prefix('(').ok_or_else(|| {
                 AstBuildError::ParseFailure(
@@ -266,6 +314,12 @@ impl Parser {
                     "construct selector property list must not be empty".to_string(),
                 ));
             }
+            let (score, property_source) = if parser_config.source_compatibility() {
+                semantic::parse_scored_value(property_source, parser_config)
+                    .map_err(|error| AstBuildError::ParseFailure(error.to_string()))?
+            } else {
+                (None, property_source)
+            };
             let (rest, clauses) = self
                 .clause_registry
                 .parse_sequence(property_source)
@@ -276,7 +330,7 @@ impl Parser {
                     rest.trim()
                 )));
             }
-            clauses
+            (clauses, score)
         };
 
         let directive = LocatedDirective::new(Directive::new(name, None, clauses), name_source);
@@ -292,12 +346,15 @@ impl Parser {
                 "construct selector produced a non-OpenMP directive".to_string(),
             ));
         };
-        if directive.kind() != OmpDirectiveKind::Simd && !directive.clauses().is_empty() {
+        if !parser_config.source_compatibility()
+            && directive.kind() != OmpDirectiveKind::Simd
+            && !directive.clauses().is_empty()
+        {
             return Err(AstBuildError::ParseFailure(
                 "only the simd construct selector trait accepts clause properties".to_string(),
             ));
         }
-        Ok(*directive)
+        Ok((*directive, score))
     }
 }
 

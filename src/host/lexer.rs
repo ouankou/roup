@@ -16,6 +16,7 @@ pub struct Token {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     Identifier(Identifier),
+    ReservedKeyword(Identifier),
     Integer(IntegerLiteral),
     Real(RealLiteral),
     Character(CharacterLiteral),
@@ -49,6 +50,7 @@ pub enum TokenKind {
     LogicalOr,
     LogicalEqv,
     LogicalNeqv,
+    FortranDefinedOperator(Identifier),
     Equal,
     EqualEqual,
     NotEqual,
@@ -77,6 +79,7 @@ impl TokenKind {
     pub fn description(&self) -> &'static str {
         match self {
             TokenKind::Identifier(_) => "identifier",
+            TokenKind::ReservedKeyword(_) => "reserved keyword",
             TokenKind::Integer(_) => "integer literal",
             TokenKind::Real(_) => "real literal",
             TokenKind::Character(_) => "character literal",
@@ -110,6 +113,7 @@ impl TokenKind {
             TokenKind::LogicalOr => "logical or",
             TokenKind::LogicalEqv => "logical equivalence",
             TokenKind::LogicalNeqv => "logical inequivalence",
+            TokenKind::FortranDefinedOperator(_) => "Fortran defined operator",
             TokenKind::Equal => "`=`",
             TokenKind::EqualEqual => "`==`",
             TokenKind::NotEqual => "not equal",
@@ -210,6 +214,7 @@ pub struct Lexer<'a> {
     language: HostLanguage,
     offset: usize,
     allow_reserved_words: bool,
+    tokenize_reserved_words: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -224,6 +229,7 @@ impl<'a> Lexer<'a> {
             language: profile.language(),
             offset: 0,
             allow_reserved_words: false,
+            tokenize_reserved_words: false,
         }
     }
 
@@ -241,6 +247,43 @@ impl<'a> Lexer<'a> {
             language: profile.language(),
             offset: 0,
             allow_reserved_words: true,
+            tokenize_reserved_words: false,
+        }
+    }
+
+    /// Create a lexer for a compatibility expression grammar in which host
+    /// keywords may occupy identifier positions. The expression parser still
+    /// classifies the complete token stream and rejects malformed syntax; this
+    /// only mirrors the historical directive parsers' lack of keyword lookup.
+    pub(crate) fn for_source_compatibility_with_profile(
+        source: &'a str,
+        profile: HostLanguageProfile,
+    ) -> Self {
+        Self {
+            source,
+            profile,
+            language: profile.language(),
+            offset: 0,
+            allow_reserved_words: true,
+            tokenize_reserved_words: false,
+        }
+    }
+
+    /// Create a lexer for the strict expression parser. Reserved words are
+    /// emitted as distinct typed tokens so a C++ template-argument grammar can
+    /// consume type keywords while ordinary expression positions still reject
+    /// them.
+    pub(crate) fn for_expression_with_profile(
+        source: &'a str,
+        profile: HostLanguageProfile,
+    ) -> Self {
+        Self {
+            source,
+            profile,
+            language: profile.language(),
+            offset: 0,
+            allow_reserved_words: false,
+            tokenize_reserved_words: true,
         }
     }
 
@@ -520,7 +563,11 @@ impl<'a> Lexer<'a> {
             (HostLanguage::Cpp, "or_eq") => TokenKind::PipeEqual,
             (HostLanguage::Cpp, "xor_eq") => TokenKind::CaretEqual,
             _ if !self.allow_reserved_words && is_reserved_keyword(self.profile, text) => {
-                return Err(self.error(start, self.offset, LexErrorKind::UnsupportedKeyword));
+                if self.tokenize_reserved_words {
+                    TokenKind::ReservedKeyword(Identifier::from_lexed(text))
+                } else {
+                    return Err(self.error(start, self.offset, LexErrorKind::UnsupportedKeyword));
+                }
             }
             (HostLanguage::Fortran, _) => {
                 TokenKind::Identifier(Identifier::from_lexed(&text.to_lowercase()))
@@ -555,13 +602,15 @@ impl<'a> Lexer<'a> {
             ".le." => TokenKind::LessEqual,
             ".gt." => TokenKind::Greater,
             ".ge." => TokenKind::GreaterEqual,
-            _ => {
-                return Err(self.error(
-                    start,
-                    end,
-                    LexErrorKind::UnsupportedOperator("Fortran defined operator"),
-                ));
-            }
+            _ => TokenKind::FortranDefinedOperator(
+                Identifier::new(&lower[1..lower.len() - 1]).map_err(|_| {
+                    self.error(
+                        start,
+                        end,
+                        LexErrorKind::UnsupportedOperator("invalid Fortran defined operator"),
+                    )
+                })?,
+            ),
         };
         self.offset = end;
         Ok(Some(Token {
@@ -1082,7 +1131,15 @@ impl<'a> Lexer<'a> {
                 value: character,
             })
         } else {
-            TokenKind::String(StringLiteral { encoding, value })
+            TokenKind::String(StringLiteral {
+                encoding,
+                delimiter: if quote == '\'' {
+                    crate::host::StringDelimiter::SingleQuote
+                } else {
+                    crate::host::StringDelimiter::DoubleQuote
+                },
+                value,
+            })
         };
         Ok(Token {
             kind,
@@ -1321,7 +1378,7 @@ fn is_identifier_continue(ch: char) -> bool {
     ch == '_' || ch.is_alphanumeric()
 }
 
-fn is_reserved_keyword(profile: HostLanguageProfile, text: &str) -> bool {
+pub(crate) fn is_reserved_keyword(profile: HostLanguageProfile, text: &str) -> bool {
     match profile {
         HostLanguageProfile::Fortran(_) => false,
         HostLanguageProfile::C(standard) => {

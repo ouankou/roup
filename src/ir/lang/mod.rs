@@ -31,7 +31,18 @@ pub fn parse_clause_item_list(
             continue;
         }
 
-        let expression = Expression::new(trimmed, config)?;
+        if config.source_compatibility()
+            && let Some(identifier) = trimmed.strip_suffix('/')
+            && !identifier.is_empty()
+            && !identifier.contains('/')
+        {
+            items.push(ClauseItem::LegacyTrailingSlash(Identifier::new(
+                identifier,
+            )?));
+            continue;
+        }
+
+        let expression = Expression::new_with_legacy_qualified_value(trimmed, config)?;
         items.push(classify_clause_item(expression)?);
     }
 

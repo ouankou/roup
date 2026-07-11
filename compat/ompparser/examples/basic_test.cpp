@@ -14,6 +14,7 @@
 #include <cassert>
 #include <csignal>
 #include <execinfo.h>
+#include <stdexcept>
 #include <unistd.h>
 
 static void handle_signal(int sig) {
@@ -100,7 +101,10 @@ void test_invalid_input() {
     } catch (const std::exception&) {
         rejected = true;
     }
-    assert(rejected);
+    if (!rejected) {
+        throw std::runtime_error(
+            "parseOpenMP accepted input without an OpenMP sentinel");
+    }
 
     std::cout << "  ✓ PASS (hard error)" << std::endl;
 }

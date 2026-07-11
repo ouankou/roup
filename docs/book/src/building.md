@@ -38,15 +38,19 @@ git submodule update --init --recursive
 Then build and test either adapter in a separate directory:
 
 ```bash
+cargo build --locked --release -p roup-capi
+
 cmake -S compat/ompparser -B target/compat/ompparser -DCMAKE_BUILD_TYPE=Release
 cmake --build target/compat/ompparser --parallel
-ctest --test-dir target/compat/ompparser --output-on-failure
+ctest --test-dir target/compat/ompparser --output-on-failure --no-tests=error
 
 cmake -S compat/accparser -B target/compat/accparser -DCMAKE_BUILD_TYPE=Release
 cmake --build target/compat/accparser --parallel
-ctest --test-dir target/compat/accparser --output-on-failure
+ctest --test-dir target/compat/accparser --output-on-failure --no-tests=error
 ```
 
 CMake treats a missing or mismatched prerequisite as an error. It never changes
 the recorded submodule revisions or silently substitutes a previously built
-library.
+library. Each adapter imports its pinned upstream test directory unchanged; at
+the current revisions this is 1,534 ompparser tests and 918 accparser tests,
+plus five repository-owned contract/audit tests across the two builds.

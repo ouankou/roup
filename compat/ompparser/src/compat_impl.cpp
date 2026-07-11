@@ -32,6 +32,7 @@ constexpr std::size_t mapped_directive_count =
 #define ROUP_COUNT_MAPPING(Abi, Parser) +1
         ROUP_OMPPARSER_DIRECTIVES(ROUP_COUNT_MAPPING)
         ROUP_OMPPARSER_END_DIRECTIVES(ROUP_COUNT_MAPPING)
+        ROUP_OMPPARSER_DIRECT_END_DIRECTIVES(ROUP_COUNT_MAPPING)
 #undef ROUP_COUNT_MAPPING
     ;
 constexpr std::size_t mapped_clause_count =
@@ -40,7 +41,7 @@ constexpr std::size_t mapped_clause_count =
         ROUP_OMPPARSER_CLAUSES(ROUP_COUNT_MAPPING)
 #undef ROUP_COUNT_MAPPING
     ;
-static_assert(mapped_directive_count == ROUP_OMP_DIRECTIVE_WORKSHARE + 1,
+static_assert(mapped_directive_count == ROUP_OMP_DIRECTIVE_OMPX + 1,
               "typed OpenMP directive ordinal map is incomplete");
 static_assert(mapped_clause_count == ROUP_OMP_CLAUSE_WRITE + 1,
               "typed OpenMP clause ordinal map is incomplete");
@@ -473,6 +474,11 @@ private:
 
 OpenMPDirectiveKind directive_kind(std::uint32_t ordinal) {
   switch (ordinal) {
+#define ROUP_MAP_DIRECT_END_DIRECTIVE(Abi, Parser)                            \
+  case ROUP_OMP_DIRECTIVE_##Abi:                                              \
+    return OMPD_##Parser;
+    ROUP_OMPPARSER_DIRECT_END_DIRECTIVES(ROUP_MAP_DIRECT_END_DIRECTIVE)
+#undef ROUP_MAP_DIRECT_END_DIRECTIVE
 #define ROUP_MAP_DIRECTIVE(Abi, Parser)                                        \
   case ROUP_OMP_DIRECTIVE_##Abi:                                               \
     return OMPD_##Parser;
@@ -587,6 +593,12 @@ std::string read_clause_item(RoupNodeHandle node) {
   case ROUP_CLAUSE_ITEM_EXPRESSION:
     value = fields.required_string(ROUP_FIELD_VALUE);
     break;
+  case ROUP_CLAUSE_ITEM_LEGACY_TRAILING_SLASH:
+    value = fields.required_string(ROUP_FIELD_NAME) + "/";
+    break;
+  case ROUP_CLAUSE_ITEM_LVALUE:
+    value = fields.required_string(ROUP_FIELD_VALUE);
+    break;
   default:
     throw std::runtime_error("unknown typed clause-item variant");
   }
@@ -616,6 +628,58 @@ std::string read_omp_locator(RoupNodeHandle node) {
   if (kind.variant == ROUP_OMP_LOCATOR_LVALUE ||
       kind.variant == ROUP_OMP_LOCATOR_POTENTIAL_LVALUE) {
     value = fields.required_string(ROUP_FIELD_VALUE);
+  } else if (kind.variant == ROUP_OMP_LOCATOR_DISTRIBUTED) {
+    value = fields.required_string(ROUP_FIELD_VALUE);
+    const std::uint32_t policy = fields.required_u32(ROUP_FIELD_KIND);
+    if (policy != ROUP_OMP_DIST_DATA_DUPLICATE)
+      throw std::runtime_error("unknown typed dist_data policy");
+    value += " dist_data(duplicate)";
+  } else if (kind.variant == ROUP_OMP_LOCATOR_ARRAY_SHAPING) {
+    const std::vector<std::string> dimensions =
+        fields.required_strings(ROUP_FIELD_VALUES);
+    const std::string base = fields.required_string(ROUP_FIELD_BASE);
+    if (dimensions.empty() || base.empty())
+      throw std::runtime_error(
+          "typed array-shaping locator is missing dimensions or a base");
+    value = "((";
+    for (const std::string &dimension : dimensions)
+      value += "[" + dimension + "]";
+    value += ")" + base + ")";
+    fields.for_each_node(ROUP_FIELD_ITEMS, [&](RoupNodeHandle subscript) {
+      const RoupNodeKind subscript_kind =
+          require_value(roup_node_kind(subscript),
+                        "querying array-shaping subscript kind")
+              .value;
+      if (subscript_kind.family !=
+          ROUP_NODE_FAMILY_OMP_ARRAY_SHAPING_SUBSCRIPT) {
+        throw std::runtime_error(
+            "array-shaping subscript has the wrong semantic node family");
+      }
+      FieldReader subscript_fields = FieldReader::node(subscript);
+      value += "[";
+      if (subscript_kind.variant == ROUP_OMP_ARRAY_SHAPING_INDEX) {
+        value += subscript_fields.required_string(ROUP_FIELD_VALUE);
+      } else if (subscript_kind.variant == ROUP_OMP_ARRAY_SHAPING_SECTION) {
+        const std::optional<std::string> lower =
+            subscript_fields.optional_string(ROUP_FIELD_LOWER_BOUND);
+        const std::optional<std::string> length =
+            subscript_fields.optional_string(ROUP_FIELD_LENGTH);
+        const std::optional<std::string> stride =
+            subscript_fields.optional_string(ROUP_FIELD_STRIDE);
+        if (lower.has_value())
+          value += *lower;
+        value += ":";
+        if (length.has_value())
+          value += *length;
+        if (stride.has_value())
+          value += ":" + *stride;
+      } else {
+        throw std::runtime_error(
+            "unknown typed array-shaping subscript variant");
+      }
+      subscript_fields.finish();
+      value += "]";
+    });
   } else if (kind.variant == ROUP_OMP_LOCATOR_FORTRAN_COMMON_BLOCK) {
     value = "/" + fields.required_string(ROUP_FIELD_NAME) + "/";
   } else if (kind.variant == ROUP_OMP_LOCATOR_ALL_MEMORY) {
@@ -791,13 +855,44 @@ void convert_schedule(OpenMPDirective &directive, FieldReader &fields) {
   record_clause(directive, raw);
 }
 
-void convert_if(OpenMPDirective &directive, FieldReader &fields) {
+OpenMPIfClauseModifier if_modifier(std::uint32_t value) {
+  switch (value) {
+  case ROUP_OMP_DIRECTIVE_PARALLEL: return OMPC_IF_MODIFIER_parallel;
+  case ROUP_OMP_DIRECTIVE_SIMD: return OMPC_IF_MODIFIER_simd;
+  case ROUP_OMP_DIRECTIVE_TASK: return OMPC_IF_MODIFIER_task;
+  case ROUP_OMP_DIRECTIVE_CANCEL: return OMPC_IF_MODIFIER_cancel;
+  case ROUP_OMP_DIRECTIVE_TARGET_DATA: return OMPC_IF_MODIFIER_target_data;
+  case ROUP_OMP_DIRECTIVE_TARGET_ENTER_DATA:
+    return OMPC_IF_MODIFIER_target_enter_data;
+  case ROUP_OMP_DIRECTIVE_TARGET_EXIT_DATA:
+    return OMPC_IF_MODIFIER_target_exit_data;
+  case ROUP_OMP_DIRECTIVE_TARGET: return OMPC_IF_MODIFIER_target;
+  case ROUP_OMP_DIRECTIVE_TARGET_UPDATE:
+    return OMPC_IF_MODIFIER_target_update;
+  case ROUP_OMP_DIRECTIVE_TASKLOOP: return OMPC_IF_MODIFIER_taskloop;
+  case ROUP_OMP_DIRECTIVE_TEAMS: return OMPC_IF_MODIFIER_teams;
+  case ROUP_OMP_DIRECTIVE_TASK_ITERATION:
+    return OMPC_IF_MODIFIER_task_iteration;
+  case ROUP_OMP_DIRECTIVE_TASKGRAPH: return OMPC_IF_MODIFIER_taskgraph;
+  default:
+    throw std::runtime_error("unsupported typed if directive-name modifier " +
+                             std::to_string(value));
+  }
+}
+
+void convert_if(OpenMPDirective &directive, FieldReader &fields,
+                const std::optional<std::uint32_t> modifier) {
   const std::string condition =
       fields.required_string(ROUP_FIELD_CONDITION);
   fields.finish();
-  OpenMPClause *clause =
-      OpenMPIfClause::addIfClause(&directive, OMPC_IF_MODIFIER_unspecified,
-                                  nullptr);
+  OpenMPClause *clause = OpenMPIfClause::addIfClause(
+      &directive,
+      modifier.has_value() ? if_modifier(*modifier)
+                           : OMPC_IF_MODIFIER_unspecified,
+      // The third upstream parameter is a user-defined directive-name
+      // modifier, not the if condition. The condition is the typed language
+      // expression attached immediately below.
+      nullptr);
   if (clause == nullptr) {
     throw std::runtime_error("ompparser failed to create if clause");
   }
@@ -959,6 +1054,9 @@ struct TypedReductionIdentifier {
   std::string user_spelling;
 };
 
+std::string
+reduction_identifier_spelling(const TypedReductionIdentifier &identifier);
+
 TypedReductionIdentifier read_reduction_identifier(RoupNodeHandle node) {
   const RoupNodeKind kind =
       require_value(roup_node_kind(node),
@@ -990,18 +1088,26 @@ TypedReductionIdentifier read_reduction_identifier(RoupNodeHandle node) {
     result.kind = OMPC_REDUCTION_IDENTIFIER_bitxor;
     break;
   case ROUP_OMP_IDENTIFIER_LOGICAL_AND:
-  case ROUP_OMP_IDENTIFIER_FORTRAN_LOGICAL_AND:
     result.kind = OMPC_REDUCTION_IDENTIFIER_logand;
     break;
+  case ROUP_OMP_IDENTIFIER_FORTRAN_LOGICAL_AND:
+    result.kind = OMPC_REDUCTION_IDENTIFIER_user;
+    result.user_spelling = ".and.";
+    break;
   case ROUP_OMP_IDENTIFIER_LOGICAL_OR:
-  case ROUP_OMP_IDENTIFIER_FORTRAN_LOGICAL_OR:
     result.kind = OMPC_REDUCTION_IDENTIFIER_logor;
     break;
+  case ROUP_OMP_IDENTIFIER_FORTRAN_LOGICAL_OR:
+    result.kind = OMPC_REDUCTION_IDENTIFIER_user;
+    result.user_spelling = ".or.";
+    break;
   case ROUP_OMP_IDENTIFIER_FORTRAN_LOGICAL_EQV:
-    result.kind = OMPC_REDUCTION_IDENTIFIER_eqv;
+    result.kind = OMPC_REDUCTION_IDENTIFIER_user;
+    result.user_spelling = ".eqv.";
     break;
   case ROUP_OMP_IDENTIFIER_FORTRAN_LOGICAL_NEQV:
-    result.kind = OMPC_REDUCTION_IDENTIFIER_neqv;
+    result.kind = OMPC_REDUCTION_IDENTIFIER_user;
+    result.user_spelling = ".neqv.";
     break;
   case ROUP_OMP_IDENTIFIER_FORTRAN_MAX:
     result.kind = OMPC_REDUCTION_IDENTIFIER_max;
@@ -1039,8 +1145,10 @@ TypedReductionIdentifier read_reduction_identifier(RoupNodeHandle node) {
 }
 
 void convert_reduction(OpenMPDirective &directive, OpenMPClauseKind clause_kind,
-                       FieldReader &fields) {
+                       FieldReader &fields,
+                       bool original_uses_positional_syntax = false) {
   std::vector<std::uint32_t> modifier_variants;
+  std::optional<std::uint32_t> original_sharing;
   fields.for_each_node(ROUP_FIELD_MODIFIERS, [&](RoupNodeHandle node) {
     const RoupNodeKind kind =
         require_value(roup_node_kind(node), "querying reduction modifier kind")
@@ -1050,7 +1158,7 @@ void convert_reduction(OpenMPDirective &directive, OpenMPClauseKind clause_kind,
     }
     FieldReader node_fields = FieldReader::node(node);
     if (kind.variant == ROUP_REDUCTION_MODIFIER_ORIGINAL) {
-      (void)node_fields.required_u32(ROUP_FIELD_KIND);
+      original_sharing = node_fields.required_u32(ROUP_FIELD_KIND);
     } else if (kind.variant != ROUP_REDUCTION_MODIFIER_TASK &&
                kind.variant != ROUP_REDUCTION_MODIFIER_INSCAN &&
                kind.variant != ROUP_REDUCTION_MODIFIER_DEFAULT) {
@@ -1076,8 +1184,8 @@ void convert_reduction(OpenMPDirective &directive, OpenMPClauseKind clause_kind,
       modifier = OMPC_REDUCTION_MODIFIER_default;
       break;
     case ROUP_REDUCTION_MODIFIER_ORIGINAL:
-      throw std::runtime_error(
-          "ompparser cannot represent the original reduction modifier");
+      modifier = OMPC_REDUCTION_MODIFIER_unknown;
+      break;
     default:
       throw std::runtime_error("unknown typed reduction modifier variant");
     }
@@ -1101,6 +1209,23 @@ void convert_reduction(OpenMPDirective &directive, OpenMPClauseKind clause_kind,
       throw std::runtime_error("ompparser returned the wrong reduction class");
     for (const std::string &item : items)
       reduction->addOperand(item);
+    if (original_sharing.has_value()) {
+      const char *sharing = nullptr;
+      if (*original_sharing == ROUP_OMP_ORIGINAL_SHARING_DEFAULT) {
+        sharing = "default";
+      } else if (*original_sharing == ROUP_OMP_ORIGINAL_SHARING_PRIVATE) {
+        sharing = "private";
+      } else if (*original_sharing == ROUP_OMP_ORIGINAL_SHARING_SHARED) {
+        sharing = "shared";
+      } else {
+        throw std::runtime_error("unknown typed original sharing kind");
+      }
+      const std::string spelling =
+          original_uses_positional_syntax
+              ? "original(" + std::string(sharing) + ")"
+              : "original(sharing=" + std::string(sharing) + ")";
+      reduction->setUserDefinedModifier(spelling.c_str());
+    }
   } else {
     if (!modifier_variants.empty()) {
       throw std::runtime_error(
@@ -1140,20 +1265,223 @@ void convert_reduction(OpenMPDirective &directive, OpenMPClauseKind clause_kind,
 }
 
 void convert_induction(OpenMPDirective &directive, FieldReader &fields) {
-  (void)directive;
-  (void)fields;
-  throw std::runtime_error(
-      "ompparser cannot represent the typed OpenMP induction clause");
+  const std::optional<std::uint32_t> modifier =
+      fields.optional_u32(ROUP_FIELD_MODIFIER);
+  const std::string step = fields.required_string(ROUP_FIELD_STEP);
+  const TypedReductionIdentifier identifier = required_node(
+      fields, ROUP_FIELD_IDENTIFIER, read_reduction_identifier);
+  const std::vector<std::string> items = required_clause_items(fields);
+  fields.finish();
+
+  OpenMPClause *raw =
+      directive.addOpenMPClause(static_cast<int>(OMPC_induction), "");
+  auto *clause = dynamic_cast<OpenMPInductionClause *>(raw);
+  if (clause == nullptr)
+    throw std::runtime_error("ompparser failed to create induction clause");
+  if (modifier.has_value()) {
+    if (*modifier != ROUP_OMP_INDUCTION_RELAXED &&
+        *modifier != ROUP_OMP_INDUCTION_STRICT) {
+      throw std::runtime_error("unknown typed induction modifier " +
+                               std::to_string(*modifier));
+    }
+    throw std::runtime_error(
+        "ompparser cannot represent a typed induction modifier");
+  }
+  clause->addStepExpression(step.c_str());
+  std::string joined_items;
+  for (const std::string &item : items) {
+    if (!joined_items.empty())
+      joined_items += ", ";
+    joined_items += item;
+  }
+  clause->addBinding(reduction_identifier_spelling(identifier).c_str(),
+                     joined_items.c_str());
+  record_clause(directive, raw);
+}
+
+std::string apply_loop_modifier_label(RoupNodeHandle node) {
+  const RoupNodeKind kind =
+      require_value(roup_node_kind(node), "querying apply modifier kind").value;
+  if (kind.family != ROUP_NODE_FAMILY_OMP_APPLY_MODIFIER)
+    throw std::runtime_error("apply modifier has the wrong node family");
+  const char *name = nullptr;
+  switch (kind.variant) {
+  case ROUP_OMP_APPLY_FUSED: name = "fused"; break;
+  case ROUP_OMP_APPLY_GRID: name = "grid"; break;
+  case ROUP_OMP_APPLY_IDENTITY: name = "identity"; break;
+  case ROUP_OMP_APPLY_INTERCHANGED: name = "interchanged"; break;
+  case ROUP_OMP_APPLY_INTRATILE: name = "intratile"; break;
+  case ROUP_OMP_APPLY_OFFSETS: name = "offsets"; break;
+  case ROUP_OMP_APPLY_REVERSED: name = "reversed"; break;
+  case ROUP_OMP_APPLY_SPLIT: name = "split"; break;
+  case ROUP_OMP_APPLY_UNROLLED: name = "unrolled"; break;
+  default:
+    throw std::runtime_error("unknown typed apply modifier " +
+                             std::to_string(kind.variant));
+  }
+  FieldReader fields = FieldReader::node(node);
+  const std::vector<std::string> indices =
+      fields.required_strings(ROUP_FIELD_INDICES);
+  fields.finish();
+  std::string label(name);
+  if (!indices.empty()) {
+    label.push_back('(');
+    for (std::size_t index = 0; index < indices.size(); ++index) {
+      if (index != 0)
+        label += ", ";
+      label += indices[index];
+    }
+    label.push_back(')');
+  }
+  return label;
+}
+
+OpenMPClauseSeparator source_clause_separator(std::uint32_t value);
+
+void populate_apply_clause(OpenMPApplyClause &target, FieldReader fields);
+
+void append_applied_directive(OpenMPApplyClause &target, RoupNodeHandle node,
+                              OpenMPClauseSeparator separator) {
+  const RoupNodeKind node_kind =
+      require_value(roup_node_kind(node), "querying applied directive kind")
+          .value;
+  if (node_kind.family != ROUP_NODE_FAMILY_OMP_DIRECTIVE)
+    throw std::runtime_error("applied directive has the wrong node family");
+
+  const OpenMPDirectiveKind kind = directive_kind(node_kind.variant);
+  OpenMPApplyTransformKind transform = OMPC_APPLY_TRANSFORM_unknown;
+  std::string argument;
+  bool saw_primary_clause = false;
+  std::vector<std::pair<std::unique_ptr<OpenMPApplyClause>,
+                        OpenMPClauseSeparator>>
+      nested;
+
+  FieldReader fields = FieldReader::node(node);
+  (void)fields.optional_u32(ROUP_FIELD_SOURCE_ALIAS);
+  if (fields.find(ROUP_FIELD_PARAMETER).has_value())
+    throw std::runtime_error(
+        "ompparser cannot represent parameters on an applied directive");
+  fields.for_each_node(ROUP_FIELD_CLAUSES, [&](RoupNodeHandle clause_node) {
+    const RoupNodeKind clause_node_kind =
+        require_value(roup_node_kind(clause_node),
+                      "querying applied directive clause kind")
+            .value;
+    if (clause_node_kind.family != ROUP_NODE_FAMILY_OMP_CLAUSE)
+      throw std::runtime_error(
+          "applied directive clause has the wrong node family");
+    const OpenMPClauseKind clause_kind =
+        ::clause_kind(clause_node_kind.variant);
+    FieldReader clause_fields = FieldReader::node(clause_node);
+    const OpenMPClauseSeparator clause_separator = source_clause_separator(
+        clause_fields.required_u32(ROUP_FIELD_PRECEDING_SEPARATOR));
+    if (clause_fields.optional_u32(ROUP_FIELD_SOURCE_ALIAS).has_value() ||
+        clause_fields
+            .optional_u32(ROUP_FIELD_DIRECTIVE_NAME_MODIFIER)
+            .has_value()) {
+      throw std::runtime_error(
+          "applied directive transform carries unsupported source metadata");
+    }
+    if (clause_kind == OMPC_apply) {
+      auto child = std::make_unique<OpenMPApplyClause>();
+      populate_apply_clause(*child, std::move(clause_fields));
+      nested.emplace_back(std::move(child), clause_separator);
+      return;
+    }
+    if (kind == OMPD_unroll && clause_kind == OMPC_partial) {
+      if (saw_primary_clause)
+        throw std::runtime_error(
+            "applied unroll directive has conflicting modifiers");
+      transform = OMPC_APPLY_TRANSFORM_unroll_partial;
+      argument = clause_fields
+                     .optional_string(ROUP_FIELD_UNROLL_FACTOR)
+                     .value_or(std::string());
+      clause_fields.finish();
+      saw_primary_clause = true;
+      return;
+    }
+    if (kind == OMPD_unroll && clause_kind == OMPC_full) {
+      if (saw_primary_clause)
+        throw std::runtime_error(
+            "applied unroll directive has conflicting modifiers");
+      if (clause_fields
+              .optional_string(ROUP_FIELD_FULLY_UNROLL)
+              .has_value())
+        throw std::runtime_error(
+            "ompparser cannot represent a conditional full unroll transform");
+      clause_fields.finish();
+      transform = OMPC_APPLY_TRANSFORM_unroll_full;
+      saw_primary_clause = true;
+      return;
+    }
+    if (kind == OMPD_tile && clause_kind == OMPC_sizes) {
+      if (saw_primary_clause)
+        throw std::runtime_error(
+            "applied tile directive has multiple sizes clauses");
+      const std::vector<std::string> sizes =
+          clause_fields.required_strings(ROUP_FIELD_VALUES);
+      clause_fields.finish();
+      for (const std::string &size : sizes) {
+        if (!argument.empty())
+          argument += ", ";
+        argument += size;
+      }
+      transform = OMPC_APPLY_TRANSFORM_tile_sizes;
+      saw_primary_clause = true;
+      return;
+    }
+    throw std::runtime_error(
+        "unsupported clause on a typed applied directive");
+  });
+  fields.finish();
+
+  if (!saw_primary_clause) {
+    switch (kind) {
+    case OMPD_unroll: transform = OMPC_APPLY_TRANSFORM_unroll; break;
+    case OMPD_reverse: transform = OMPC_APPLY_TRANSFORM_reverse; break;
+    case OMPD_interchange:
+      transform = OMPC_APPLY_TRANSFORM_interchange;
+      break;
+    case OMPD_nothing: transform = OMPC_APPLY_TRANSFORM_nothing; break;
+    default:
+      throw std::runtime_error(
+          "ompparser cannot represent this typed applied directive kind");
+    }
+  }
+  target.addTransformation(transform, argument, separator);
+  for (auto &child : nested)
+    target.addNestedApply(child.first.release(), child.second);
+}
+
+void populate_apply_clause(OpenMPApplyClause &target, FieldReader fields) {
+  const std::optional<std::string> label = optional_node(
+      fields, ROUP_FIELD_LOOP_MODIFIER, apply_loop_modifier_label);
+  if (label.has_value())
+    target.setLabel(*label);
+  std::size_t count = 0;
+  fields.for_each_node(
+      ROUP_FIELD_APPLIED_DIRECTIVES, [&](RoupNodeHandle directive_node) {
+        append_applied_directive(target, directive_node,
+                                 OMPC_CLAUSE_SEP_comma);
+        ++count;
+      });
+  fields.finish();
+  if (count == 0)
+    throw std::runtime_error("apply clause has no applied directives");
 }
 
 void convert_apply(OpenMPDirective &directive, FieldReader &fields) {
-  (void)directive;
-  (void)fields;
-  throw std::runtime_error(
-      "ompparser cannot represent typed applied directive specifications");
+  OpenMPClause *raw =
+      directive.addOpenMPClause(static_cast<int>(OMPC_apply), "");
+  auto *clause = dynamic_cast<OpenMPApplyClause *>(raw);
+  if (clause == nullptr)
+    throw std::runtime_error("ompparser failed to create apply clause");
+  populate_apply_clause(*clause, std::move(fields));
+  record_clause(directive, raw);
 }
 
-void convert_firstprivate(OpenMPDirective &directive, FieldReader &fields) {
+void convert_firstprivate(
+    OpenMPDirective &directive, FieldReader &fields,
+    const std::optional<std::uint32_t> directive_name_modifier) {
   const std::optional<std::uint32_t> modifier =
       fields.optional_u32(ROUP_FIELD_MODIFIER);
   const std::vector<std::string> items =
@@ -1166,14 +1494,18 @@ void convert_firstprivate(OpenMPDirective &directive, FieldReader &fields) {
   if (firstprivate == nullptr) {
     throw std::runtime_error("ompparser failed to create firstprivate clause");
   }
+  firstprivate->setSaved(modifier.has_value());
   if (modifier.has_value()) {
     if (*modifier != ROUP_OMP_FIRSTPRIVATE_SAVED) {
       throw std::runtime_error("unknown typed firstprivate modifier " +
                                std::to_string(*modifier));
     }
-    firstprivate->setSaved(true);
   }
+  if (directive_name_modifier.has_value())
+    firstprivate->setCurrentDirectiveNameModifier(
+        directive_kind(*directive_name_modifier));
   add_leaf_values(*firstprivate, items);
+  firstprivate->clearCurrentDirectiveNameModifier();
   record_clause(directive, raw);
 }
 
@@ -1400,6 +1732,31 @@ OpenMPMapClauseType map_type(std::uint32_t value) {
   }
 }
 
+OpenMPMapClauseType map_type_with_source_spelling(
+    const std::optional<std::uint32_t> type, std::uint32_t spelling) {
+  switch (spelling) {
+  case ROUP_OMP_MAP_TYPE_SPELLING_CANONICAL:
+    return type.has_value() ? map_type(*type) : OMPC_MAP_TYPE_unspecified;
+  case ROUP_OMP_MAP_TYPE_SPELLING_ALLOC:
+    if (type != ROUP_OMP_MAP_STORAGE)
+      break;
+    return OMPC_MAP_TYPE_alloc;
+  case ROUP_OMP_MAP_TYPE_SPELLING_RELEASE:
+    if (type != ROUP_OMP_MAP_STORAGE)
+      break;
+    return OMPC_MAP_TYPE_release;
+  case ROUP_OMP_MAP_TYPE_SPELLING_DELETE:
+    if (type != ROUP_OMP_MAP_STORAGE)
+      break;
+    return OMPC_MAP_TYPE_delete;
+  default:
+    throw std::runtime_error("unknown typed map-type source spelling " +
+                             std::to_string(spelling));
+  }
+  throw std::runtime_error(
+      "typed map semantics disagree with the map-type source spelling");
+}
+
 OpenMPMapClauseModifier map_modifier(std::uint32_t value) {
   switch (value) {
   case ROUP_OMP_MAP_MODIFIER_ALWAYS: return OMPC_MAP_MODIFIER_always;
@@ -1526,7 +1883,7 @@ void convert_default(OpenMPDirective &directive, FieldReader &fields) {
   OpenMPClause *clause =
       OpenMPDefaultClause::addDefaultClause(&directive, kind);
   if (clause == nullptr)
-    throw std::runtime_error("ompparser failed to create default clause");
+    return;
   record_clause(directive, clause);
 }
 
@@ -1570,9 +1927,25 @@ void convert_linear(OpenMPDirective &directive, FieldReader &fields) {
   if (clause == nullptr)
     throw std::runtime_error("ompparser failed to create linear clause");
   add_leaf_values(*clause, items);
-  if (step.has_value())
-    clause->setUserDefinedStep(step->c_str());
+  clause->setModifierFirstSyntax(
+      source_syntax == ROUP_OMP_LINEAR_SOURCE_MODIFIER_PREFIX);
+  if (step.has_value()) {
+    const std::string upstream_step =
+        source_syntax == ROUP_OMP_LINEAR_SOURCE_CANONICAL_MODIFIERS
+            ? "step(" + *step + ")"
+            : *step;
+    clause->setUserDefinedStep(upstream_step.c_str());
+  }
   record_clause(directive, clause);
+  std::vector<OpenMPClause *> *linear_clauses =
+      directive.getClauses(OMPC_linear);
+  if (linear_clauses->size() > 1) {
+    auto *merge_target =
+        dynamic_cast<OpenMPLinearClause *>(linear_clauses->front());
+    if (merge_target == nullptr)
+      throw std::runtime_error("ompparser linear merge target has wrong type");
+    merge_target->mergeLinear(&directive, clause);
+  }
 }
 
 void convert_aligned(OpenMPDirective &directive, FieldReader &fields) {
@@ -1711,18 +2084,28 @@ void convert_allocate(OpenMPDirective &directive, FieldReader &fields) {
     throw std::runtime_error("unknown typed allocate source-syntax tag " +
                              std::to_string(source_syntax));
   }
-  if (alignment.has_value()) {
-    throw std::runtime_error(
-        "ompparser cannot represent an allocate alignment modifier");
+  std::optional<std::string> upstream_allocator;
+  if (allocator.has_value()) {
+    upstream_allocator =
+        source_syntax == ROUP_OMP_ALLOCATE_SOURCE_MODIFIERS
+            ? "allocator(" + *allocator + ")"
+            : *allocator;
   }
-  const OpenMPAllocateClauseAllocator kind =
-      allocator.has_value() ? OMPC_ALLOCATE_ALLOCATOR_user
-                            : OMPC_ALLOCATE_ALLOCATOR_unspecified;
+  const OpenMPAllocateClauseAllocator kind = upstream_allocator.has_value()
+                                                ? OMPC_ALLOCATE_ALLOCATOR_user
+                                                : OMPC_ALLOCATE_ALLOCATOR_unspecified;
   OpenMPClause *clause = OpenMPAllocateClause::addAllocateClause(
       &directive, kind,
-      allocator.has_value() ? const_cast<char *>(allocator->c_str()) : nullptr);
+      upstream_allocator.has_value()
+          ? const_cast<char *>(upstream_allocator->c_str())
+          : nullptr);
   if (clause == nullptr)
     throw std::runtime_error("ompparser failed to create allocate clause");
+  auto *allocate = dynamic_cast<OpenMPAllocateClause *>(clause);
+  if (allocate == nullptr)
+    throw std::runtime_error("ompparser returned the wrong allocate class");
+  if (alignment.has_value())
+    allocate->addExtraAllocatorParameter("align(" + *alignment + ")");
   add_leaf_values(*clause, items);
   record_clause(directive, clause);
 }
@@ -1742,6 +2125,8 @@ void convert_allocator(OpenMPDirective &directive, FieldReader &fields) {
 void convert_map(OpenMPDirective &directive, FieldReader &fields) {
   const std::optional<std::uint32_t> type =
       fields.optional_u32(ROUP_FIELD_KIND);
+  const std::uint32_t type_spelling =
+      fields.required_u32(ROUP_FIELD_MAP_TYPE_SPELLING);
   std::vector<std::uint32_t> modifiers =
       fields.optional_u32s(ROUP_FIELD_MODIFIERS);
   const std::optional<TypedMapperId> mapper = optional_node(
@@ -1764,6 +2149,12 @@ void convert_map(OpenMPDirective &directive, FieldReader &fields) {
       ref = map_ref_modifier(modifier);
     } else if (modifier == ROUP_OMP_MAP_MODIFIER_ITERATOR) {
       ++iterator_marker_count;
+    } else if (modifier == ROUP_OMP_MAP_MODIFIER_DELETE &&
+               type_spelling == ROUP_OMP_MAP_TYPE_SPELLING_DELETE) {
+      // The pre-6.0 `delete` spelling selected the map type. ROUP carries
+      // that historical semantic marker alongside its typed source spelling;
+      // ompparser represents the form solely as OMPC_MAP_TYPE_delete.
+      continue;
     } else {
       mapped.push_back(map_modifier(modifier));
     }
@@ -1792,7 +2183,7 @@ void convert_map(OpenMPDirective &directive, FieldReader &fields) {
           : std::string();
   OpenMPClause *raw = OpenMPMapClause::addMapClause(
       &directive, mapped[0], mapped[1], mapped[2],
-      type.has_value() ? map_type(*type) : OMPC_MAP_TYPE_unspecified, ref,
+      map_type_with_source_spelling(type, type_spelling), ref,
       mapper_name);
   auto *clause = dynamic_cast<OpenMPMapClause *>(raw);
   if (clause == nullptr)
@@ -1866,9 +2257,20 @@ void convert_depend(OpenMPDirective &directive, FieldReader &fields) {
   clause->setDependIteratorsDefinitionClass(definitions);
   add_leaf_values(*clause, dependence.items);
   record_clause(directive, clause);
+  std::vector<OpenMPClause *> *depend_clauses =
+      directive.getClauses(OMPC_depend);
+  if (depend_clauses->size() > 1) {
+    auto *merge_target =
+        dynamic_cast<OpenMPDependClause *>(depend_clauses->front());
+    if (merge_target == nullptr)
+      throw std::runtime_error("ompparser depend merge target has wrong type");
+    merge_target->mergeDepend(&directive, clause);
+  }
 }
 
-void convert_doacross(OpenMPDirective &directive, FieldReader &fields) {
+void convert_doacross(OpenMPDirective &directive, FieldReader &fields,
+                      std::optional<std::uint32_t> source_alias =
+                          std::nullopt) {
   const std::uint32_t kind = fields.required_u32(ROUP_FIELD_KIND);
   struct TypedIteration {
     std::uint32_t variant;
@@ -1938,6 +2340,63 @@ void convert_doacross(OpenMPDirective &directive, FieldReader &fields) {
         return result;
       });
   fields.finish();
+  const bool source_is_empty =
+      source_alias == ROUP_OMP_CLAUSE_ALIAS_DOACROSS_SOURCE_EMPTY;
+  if (source_alias.has_value() && !source_is_empty) {
+    OpenMPDependClauseType legacy_type;
+    std::string dependence_vector;
+    switch (*source_alias) {
+    case ROUP_OMP_CLAUSE_ALIAS_DEPEND_SOURCE:
+      if (kind != ROUP_OMP_DOACROSS_SOURCE ||
+          iteration.variant != ROUP_OMP_DOACROSS_CURRENT) {
+        throw std::runtime_error(
+            "typed depend(source) alias has an invalid payload");
+      }
+      legacy_type = OMPC_DEPENDENCE_TYPE_source;
+      break;
+    case ROUP_OMP_CLAUSE_ALIAS_DEPEND_SINK:
+      if (kind != ROUP_OMP_DOACROSS_SINK ||
+          iteration.variant != ROUP_OMP_DOACROSS_VECTOR ||
+          iteration.vector.empty()) {
+        throw std::runtime_error(
+            "typed depend(sink) alias has an invalid payload");
+      }
+      legacy_type = OMPC_DEPENDENCE_TYPE_sink;
+      for (const std::string &item : iteration.vector) {
+        if (!dependence_vector.empty())
+          dependence_vector += ", ";
+        dependence_vector += item;
+      }
+      break;
+    case ROUP_OMP_CLAUSE_ALIAS_DEPEND_SINK_PREVIOUS_CURRENT:
+      if (kind != ROUP_OMP_DOACROSS_SINK ||
+          iteration.variant != ROUP_OMP_DOACROSS_PREVIOUS_CURRENT) {
+        throw std::runtime_error(
+            "typed historical depend(sink) alias has an invalid payload");
+      }
+      legacy_type = OMPC_DEPENDENCE_TYPE_sink;
+      dependence_vector = "omp_cur_iteration - 1";
+      break;
+    case ROUP_OMP_CLAUSE_ALIAS_DEPEND_SOURCE_CURRENT:
+      throw std::runtime_error(
+          "ompparser cannot represent explicit depend(source: "
+          "omp_cur_iteration) without changing its spelling");
+    default:
+      throw std::runtime_error(
+          "typed source alias is not a historical depend clause");
+    }
+    OpenMPClause *raw = OpenMPDependClause::addDependClause(
+        &directive, OMPC_DEPEND_MODIFIER_unspecified, legacy_type);
+    auto *clause = dynamic_cast<OpenMPDependClause *>(raw);
+    if (clause == nullptr) {
+      throw std::runtime_error(
+          "ompparser failed to create a historical depend clause");
+    }
+    if (!dependence_vector.empty())
+      clause->addDependenceVector(dependence_vector.c_str());
+    record_clause(directive, raw);
+    return;
+  }
   OpenMPDoacrossClauseType type;
   if (kind == ROUP_OMP_DOACROSS_SOURCE) {
     type = OMPC_DOACROSS_TYPE_source;
@@ -1953,7 +2412,8 @@ void convert_doacross(OpenMPDirective &directive, FieldReader &fields) {
       throw std::runtime_error(
           "doacross source requires the current-iteration value");
     }
-    clause->setSourceExpression("omp_cur_iteration");
+    if (!source_is_empty)
+      clause->setSourceExpression("omp_cur_iteration");
   } else {
     if (iteration.variant == ROUP_OMP_DOACROSS_CURRENT) {
       throw std::runtime_error(
@@ -2021,6 +2481,8 @@ void convert_uses_allocators(OpenMPDirective &directive, FieldReader &fields) {
     FieldReader entry = FieldReader::node(node);
     const TypedAllocator allocator = required_node(
         entry, ROUP_FIELD_ALLOCATOR, read_allocator_kind);
+    const std::uint32_t source_syntax =
+        entry.required_u32(ROUP_FIELD_SOURCE_SYNTAX);
     const std::optional<std::string> traits =
         entry.optional_string(ROUP_FIELD_TRAITS);
     const std::optional<std::uint32_t> memspace =
@@ -2044,7 +2506,13 @@ void convert_uses_allocators(OpenMPDirective &directive, FieldReader &fields) {
     bool user_defined = false;
     OpenMPUsesAllocatorsClauseAllocator kind =
         uses_allocator_kind(allocator, user_defined);
-    if (traits.has_value())
+    if (source_syntax != ROUP_OMP_USES_ALLOCATORS_HISTORICAL &&
+        source_syntax != ROUP_OMP_USES_ALLOCATORS_MODIFIER) {
+      throw std::runtime_error("unknown typed uses_allocators source syntax " +
+                               std::to_string(source_syntax));
+    }
+    if (traits.has_value() &&
+        source_syntax == ROUP_OMP_USES_ALLOCATORS_MODIFIER)
       kind = OMPC_USESALLOCATORS_ALLOCATOR_unspecified;
     clause->addUsesAllocatorsAllocatorSequence(
         kind, traits.value_or(std::string()),
@@ -2070,11 +2538,19 @@ void convert_num_threads(OpenMPDirective &directive, FieldReader &fields) {
        modifiers.front() != ROUP_OMP_NUM_THREADS_STRICT)) {
     throw std::runtime_error("unknown typed num_threads modifier");
   }
-  if (!modifiers.empty() || values.size() != 1) {
-    throw std::runtime_error(
-        "ompparser cannot represent OpenMP 6.0 num_threads lists");
+  OpenMPClause *raw =
+      directive.addOpenMPClause(static_cast<int>(OMPC_num_threads), "");
+  auto *clause = dynamic_cast<OpenMPNumThreadsClause *>(raw);
+  if (clause == nullptr)
+    throw std::runtime_error("ompparser failed to create num_threads clause");
+  clause->setStrict(!modifiers.empty());
+  for (std::size_t index = 0; index < values.size(); ++index) {
+    clause->addLangExpr(values[index].c_str(),
+                        index == 0 ? OMPC_CLAUSE_SEP_space
+                                   : OMPC_CLAUSE_SEP_comma,
+                        0, 0, OMP_EXPR_PARSE_expression);
   }
-  add_simple_clause(directive, OMPC_num_threads, values);
+  record_clause(directive, raw);
 }
 
 void convert_num_teams(OpenMPDirective &directive, FieldReader &fields) {
@@ -2112,8 +2588,10 @@ void convert_use(OpenMPDirective &directive, FieldReader &fields) {
 }
 
 void convert_uniform(OpenMPDirective &directive, FieldReader &fields) {
-  const std::vector<std::string> parameters =
-      fields.required_strings(ROUP_FIELD_ARGUMENTS);
+  std::vector<std::string> parameters;
+  fields.for_each_node(ROUP_FIELD_ARGUMENTS, [&](RoupNodeHandle node) {
+    parameters.push_back(read_clause_item(node));
+  });
   if (parameters.empty())
     throw std::runtime_error("uniform parameter list must not be empty");
   fields.finish();
@@ -2696,6 +3174,8 @@ void convert_optional_expression(OpenMPDirective &directive,
 
 void convert_selector(OpenMPDirective &directive, OpenMPClauseKind kind,
                       FieldReader &fields);
+void convert_source_alias(OpenMPDirective &directive, std::uint32_t ordinal,
+                          std::uint32_t source_alias, FieldReader &fields);
 std::string read_stylized_expression(RoupNodeHandle node);
 
 void convert_inductor(OpenMPDirective &directive, FieldReader &fields) {
@@ -2766,14 +3246,16 @@ void convert_graph_reset(OpenMPDirective &directive, FieldReader &fields) {
 
 void convert_clause_payload_fields(OpenMPDirective &directive,
                                    std::uint32_t ordinal,
-                                   FieldReader fields) {
+                                   FieldReader fields,
+                                   const std::optional<std::uint32_t>
+                                       directive_name_modifier) {
   const OpenMPClauseKind kind = clause_kind(ordinal);
   switch (kind) {
   case OMPC_schedule:
     convert_schedule(directive, fields);
     return;
   case OMPC_if:
-    convert_if(directive, fields);
+    convert_if(directive, fields, directive_name_modifier);
     return;
   case OMPC_reduction:
   case OMPC_task_reduction:
@@ -2802,7 +3284,7 @@ void convert_clause_payload_fields(OpenMPDirective &directive,
     convert_apply(directive, fields);
     return;
   case OMPC_firstprivate:
-    convert_firstprivate(directive, fields);
+    convert_firstprivate(directive, fields, directive_name_modifier);
     return;
   case OMPC_lastprivate:
     convert_lastprivate(directive, fields);
@@ -3061,15 +3543,41 @@ void convert_clause_payload_fields(OpenMPDirective &directive,
   }
 }
 
-void convert_clause_fields(OpenMPDirective &directive, std::uint32_t ordinal,
-                           FieldReader fields) {
+OpenMPClauseSeparator source_clause_separator(std::uint32_t value) {
+  if (value == ROUP_OMP_CLAUSE_SEPARATOR_SPACE)
+    return OMPC_CLAUSE_SEP_space;
+  if (value == ROUP_OMP_CLAUSE_SEPARATOR_COMMA)
+    return OMPC_CLAUSE_SEP_comma;
+  throw std::runtime_error("unknown typed clause source separator " +
+                           std::to_string(value));
+}
+
+struct ConvertedClauseMetadata {
+  OpenMPClauseSeparator preceding_separator;
+  std::optional<std::uint32_t> source_alias;
+};
+
+ConvertedClauseMetadata convert_clause_fields(OpenMPDirective &directive,
+                                               std::uint32_t ordinal,
+                                               FieldReader fields) {
+  const OpenMPClauseSeparator preceding_separator = source_clause_separator(
+      fields.required_u32(ROUP_FIELD_PRECEDING_SEPARATOR));
+  const std::optional<std::uint32_t> source_alias =
+      fields.optional_u32(ROUP_FIELD_SOURCE_ALIAS);
   const std::optional<std::uint32_t> directive_name_modifier =
       fields.optional_u32(ROUP_FIELD_DIRECTIVE_NAME_MODIFIER);
   const std::size_t first_new_clause =
       directive.getClausesInOriginalOrder()->size();
-  convert_clause_payload_fields(directive, ordinal, std::move(fields));
-  if (!directive_name_modifier.has_value())
-    return;
+  if (source_alias.has_value()) {
+    convert_source_alias(directive, ordinal, *source_alias, fields);
+  } else {
+    convert_clause_payload_fields(directive, ordinal, std::move(fields),
+                                  directive_name_modifier);
+  }
+  if (!directive_name_modifier.has_value() ||
+      clause_kind(ordinal) == OMPC_if ||
+      clause_kind(ordinal) == OMPC_firstprivate)
+    return {preceding_separator, source_alias};
 
   const OpenMPDirectiveKind modifier =
       directive_kind(*directive_name_modifier);
@@ -3084,20 +3592,29 @@ void convert_clause_fields(OpenMPDirective &directive, std::uint32_t ordinal,
           "ompparser stored a null clause for directive-name modifier");
     clauses->at(index)->setDirectiveNameModifier(modifier);
   }
+  return {preceding_separator, source_alias};
 }
 
 void convert_clause(OpenMPDirective &directive, RoupDirectiveHandle source,
                     std::size_t index) {
   const std::size_t first_new_clause =
       directive.getClausesInOriginalOrder()->size();
-  convert_clause_fields(directive, clause_ordinal(source, index),
-                        FieldReader::clause(source, index));
-  const RoupSpan span =
+  const ConvertedClauseMetadata metadata = convert_clause_fields(
+      directive, clause_ordinal(source, index),
+      FieldReader::clause(source, index));
+  const OpenMPClauseSeparator upstream_separator =
+      directive.getKind() == OMPD_atomic ? OMPC_CLAUSE_SEP_space
+                                         : metadata.preceding_separator;
+  RoupSpan span =
       require_value(roup_clause_span(source, index), "querying clause source span")
           .value;
+  if (metadata.source_alias == ROUP_OMP_CLAUSE_ALIAS_METADIRECTIVE_DEFAULT)
+    span.start_column += std::strlen("default");
   std::vector<OpenMPClause *> *clauses = directive.getClausesInOriginalOrder();
-  for (std::size_t clause = first_new_clause; clause < clauses->size(); ++clause)
+  for (std::size_t clause = first_new_clause; clause < clauses->size(); ++clause) {
+    clauses->at(clause)->setPrecedingSeparator(upstream_separator);
     set_source_location(*clauses->at(clause), span, "clause source location");
+  }
 }
 
 std::unique_ptr<OpenMPDirective> make_directive(OpenMPDirectiveKind kind,
@@ -3144,6 +3661,59 @@ std::unique_ptr<OpenMPDirective> make_directive(OpenMPDirectiveKind kind,
   default:
     return std::make_unique<OpenMPDirective>(kind, current_lang);
   }
+}
+
+OpenMPDirectiveKind source_facing_directive_kind(
+    OpenMPDirectiveKind canonical, std::uint32_t source_alias) {
+  if (source_alias == ROUP_OMP_DIRECTIVE_ALIAS_OPENMP60_UNDERSCORE &&
+      canonical == OMPD_target_data)
+    return OMPD_target_data_composite;
+  return canonical;
+}
+
+void apply_directive_source_alias(OpenMPDirective &target,
+                                  OpenMPDirectiveKind canonical,
+                                  std::uint32_t source_alias) {
+  if (source_alias == ROUP_OMP_DIRECTIVE_ALIAS_NONE)
+    return;
+  if (source_alias == ROUP_OMP_DIRECTIVE_ALIAS_OPENMP60_UNDERSCORE) {
+    if (canonical == OMPD_declare_target ||
+        canonical == OMPD_begin_declare_target ||
+        canonical == OMPD_end_declare_target) {
+      target.setDeclareTargetUnderscore(true);
+    } else if (canonical == OMPD_end) {
+      auto *end = dynamic_cast<OpenMPEndDirective *>(&target);
+      OpenMPDirective *paired = end ? end->getPairedDirective() : nullptr;
+      if (paired != nullptr &&
+          (paired->getKind() == OMPD_declare_target ||
+           paired->getKind() == OMPD_begin_declare_target ||
+           paired->getKind() == OMPD_end_declare_target))
+        paired->setDeclareTargetUnderscore(true);
+    }
+    return;
+  }
+  if (source_alias == ROUP_OMP_DIRECTIVE_ALIAS_FORTRAN_COMPACT) {
+    if (canonical == OMPD_end) {
+      auto *end = dynamic_cast<OpenMPEndDirective *>(&target);
+      if (end == nullptr)
+        throw std::runtime_error(
+            "compact end-directive alias is attached to the wrong IR class");
+      if (end->getPairedDirective() != nullptr &&
+          end->getPairedDirective()->getKind() == OMPD_do)
+        end->setUseCompactEndDo(true);
+    } else {
+      target.setCompactParallelDo(true);
+    }
+    return;
+  }
+  if (source_alias == ROUP_OMP_DIRECTIVE_ALIAS_FORTRAN_REDUNDANT_OMP) {
+    if (canonical != OMPD_teams)
+      throw std::runtime_error(
+          "redundant omp alias is attached to a non-teams directive");
+    return;
+  }
+  throw std::runtime_error("unknown typed OpenMP directive source alias " +
+                           std::to_string(source_alias));
 }
 
 std::string read_storage_parameter_item(RoupNodeHandle node) {
@@ -3323,7 +3893,7 @@ std::string read_reduction_initializer(RoupNodeHandle node) {
   switch (kind.variant) {
   case ROUP_OMP_INITIALIZER_C_ASSIGNMENT:
   case ROUP_OMP_INITIALIZER_CPP_COPY:
-    result = "omp_priv = " +
+    result = "omp_priv=" +
              required_node(fields, ROUP_FIELD_VALUE, read_initializer_value);
     break;
   case ROUP_OMP_INITIALIZER_CPP_DIRECT:
@@ -3346,7 +3916,7 @@ std::string read_reduction_initializer(RoupNodeHandle node) {
     break;
   }
   case ROUP_OMP_INITIALIZER_FORTRAN_ASSIGNMENT:
-    result = fields.required_string(ROUP_FIELD_VARIABLE) + " = " +
+    result = fields.required_string(ROUP_FIELD_VARIABLE) + "=" +
              fields.required_string(ROUP_FIELD_VALUE);
     break;
   default:
@@ -3502,6 +4072,8 @@ void convert_parameter_fields(OpenMPDirective &target,
     std::string type = fields.required_string(ROUP_FIELD_TYPE_NAME);
     const std::string variable =
         fields.required_string(ROUP_FIELD_VARIABLE);
+    const std::optional<bool> declarator_attached =
+        fields.optional_bool(ROUP_FIELD_DECLARATOR_ATTACHED);
     fields.finish();
     if (kind != OMPD_declare_mapper) {
       throw std::runtime_error("declare-mapper parameter on wrong directive");
@@ -3518,14 +4090,19 @@ void convert_parameter_fields(OpenMPDirective &target,
       directive.setIdentifier(OMPD_DECLARE_MAPPER_IDENTIFIER_unspecified);
     }
     if (current_lang != Lang_Fortran) {
-      type.push_back(' ');
-      directive.setTypeVarHasSpace(true);
+      if (!declarator_attached.has_value()) {
+        throw std::runtime_error(
+            "declare-mapper parameter lacks typed declarator attachment");
+      }
+      directive.setTypeVarHasSpace(!*declarator_attached);
     }
     directive.setDeclareMapperType(type.c_str());
     directive.setDeclareMapperVar(variable.c_str());
     return;
   }
   case ROUP_OMP_PARAMETER_DECLARE_REDUCTION: {
+    const std::uint32_t source_syntax =
+        fields.required_u32(ROUP_FIELD_SOURCE_SYNTAX);
     const TypedReductionIdentifier identifier = required_node(
         fields, ROUP_FIELD_NAME, read_reduction_identifier);
     const std::string operation = reduction_identifier_spelling(identifier);
@@ -3543,7 +4120,24 @@ void convert_parameter_fields(OpenMPDirective &target,
     directive.setIdentifier(operation);
     for (const std::string &type : types)
       directive.addTypenameList(type.c_str());
-    directive.setCombiner(combiner.c_str());
+    if (source_syntax == ROUP_OMP_DECLARE_REDUCTION_INLINE_COMBINER) {
+      directive.setCombiner(combiner.c_str());
+    } else if (source_syntax ==
+               ROUP_OMP_DECLARE_REDUCTION_COMBINER_CLAUSE) {
+      OpenMPClause *combiner_clause =
+          directive.addOpenMPClause(static_cast<int>(OMPC_combiner), "");
+      if (combiner_clause == nullptr) {
+        throw std::runtime_error(
+            "ompparser failed to create declare-reduction combiner clause");
+      }
+      combiner_clause->addLangExpr(combiner.c_str(), OMPC_CLAUSE_SEP_space,
+                                   0, 0, OMP_EXPR_PARSE_expression);
+      record_clause(directive, combiner_clause);
+    } else {
+      throw std::runtime_error(
+          "unknown typed declare-reduction source syntax " +
+          std::to_string(source_syntax));
+    }
     if (initializer.has_value()) {
       OpenMPClause *clause = OpenMPInitializerClause::addInitializerClause(
           &directive, OMPC_INITIALIZER_PRIV_user,
@@ -3557,12 +4151,105 @@ void convert_parameter_fields(OpenMPDirective &target,
     return;
   }
   case ROUP_OMP_PARAMETER_DECLARE_INDUCTION: {
-    (void)target;
-    (void)kind;
-    (void)fields;
-    throw std::runtime_error(
-        "ompparser cannot represent the structured declare-induction "
-        "parameter without its raw passthrough API");
+    if (kind != OMPD_declare_induction) {
+      throw std::runtime_error(
+          "declare-induction parameter is attached to the wrong directive");
+    }
+    const TypedReductionIdentifier identifier = required_node(
+        fields, ROUP_FIELD_NAME, read_reduction_identifier);
+    std::vector<std::string> type_specifiers;
+    fields.for_each_node(ROUP_FIELD_TYPE_SPECIFIERS,
+                         [&](RoupNodeHandle node) {
+      const RoupNodeKind node_kind =
+          require_value(roup_node_kind(node),
+                        "querying induction type-specifier kind")
+              .value;
+      if (node_kind.family != ROUP_NODE_FAMILY_OMP_INDUCTION_TYPE) {
+        throw std::runtime_error(
+            "declare-induction type specifier has the wrong node family");
+      }
+      FieldReader type_fields = FieldReader::node(node);
+      if (node_kind.variant == ROUP_INDUCTION_TYPE_SAME) {
+        type_specifiers.push_back(
+            type_fields.required_string(ROUP_FIELD_TYPE_NAME));
+      } else if (node_kind.variant == ROUP_INDUCTION_TYPE_PAIR) {
+        const std::string variable =
+            type_fields.required_string(ROUP_FIELD_VARIABLE_TYPE);
+        const std::string step =
+            type_fields.required_string(ROUP_FIELD_STEP_TYPE);
+        type_specifiers.push_back("(" + variable + ", " + step + ")");
+      } else {
+        throw std::runtime_error(
+            "unknown typed declare-induction type specifier");
+      }
+      type_fields.finish();
+    });
+    fields.finish();
+    if (type_specifiers.empty())
+      throw std::runtime_error(
+          "declare-induction parameter has no type specifiers");
+
+    std::string type_list;
+    for (std::size_t index = 0; index < type_specifiers.size(); ++index) {
+      if (index != 0)
+        type_list += ", ";
+      type_list += type_specifiers[index];
+    }
+    OpenMPClause *raw =
+        target.addOpenMPClause(static_cast<int>(OMPC_induction), "");
+    auto *clause = dynamic_cast<OpenMPInductionClause *>(raw);
+    if (clause == nullptr) {
+      throw std::runtime_error(
+          "ompparser failed to create declare-induction parameter storage");
+    }
+    clause->addBinding(reduction_identifier_spelling(identifier).c_str(),
+                       type_list.c_str());
+    record_clause(target, raw);
+    return;
+  }
+  case ROUP_OMP_PARAMETER_OMPX: {
+    if (kind != OMPD_ompx) {
+      throw std::runtime_error("OMPX payload parameter on wrong directive");
+    }
+    std::vector<std::string> payload_items;
+    fields.for_each_node(ROUP_FIELD_ITEMS, [&](RoupNodeHandle node) {
+      const RoupNodeKind item_kind =
+          require_value(roup_node_kind(node), "querying OMPX payload item kind")
+              .value;
+      if (item_kind.family != ROUP_NODE_FAMILY_OMPX_PAYLOAD_ITEM) {
+        throw std::runtime_error(
+            "OMPX payload item has the wrong semantic node family");
+      }
+      FieldReader item_fields = FieldReader::node(node);
+      std::string item = item_fields.required_string(ROUP_FIELD_NAME);
+      if (item_kind.variant == ROUP_OMPX_PAYLOAD_INVOCATION) {
+        const std::vector<std::string> arguments =
+            item_fields.required_strings(ROUP_FIELD_ARGUMENTS);
+        item += "(";
+        for (std::size_t index = 0; index < arguments.size(); ++index) {
+          if (index != 0)
+            item += ", ";
+          item += arguments[index];
+        }
+        item += ")";
+      } else if (item_kind.variant != ROUP_OMPX_PAYLOAD_IDENTIFIER) {
+        throw std::runtime_error("unknown typed OMPX payload item variant");
+      }
+      item_fields.finish();
+      payload_items.push_back(std::move(item));
+    });
+    fields.finish();
+    if (payload_items.empty())
+      throw std::runtime_error("typed OMPX payload is empty");
+    std::string payload;
+    for (std::size_t index = 0; index < payload_items.size(); ++index) {
+      if (index != 0)
+        payload += " ";
+      payload += payload_items[index];
+    }
+    target.setFortranSentinel(OMPFS_ompx);
+    target.setImplementationDefinedPayload(payload);
+    return;
   }
   default:
     throw std::runtime_error(
@@ -3613,9 +4300,14 @@ std::unique_ptr<OpenMPDirective> convert_directive_node(RoupNodeHandle node) {
   FieldReader fields = FieldReader::node(node);
   const std::uint32_t ordinal = node_kind.variant;
   const OpenMPDirectiveKind kind = directive_kind(ordinal);
-  std::unique_ptr<OpenMPDirective> target = make_directive(kind, ordinal);
+  const std::uint32_t source_alias =
+      fields.optional_u32(ROUP_FIELD_SOURCE_ALIAS)
+          .value_or(ROUP_OMP_DIRECTIVE_ALIAS_NONE);
+  std::unique_ptr<OpenMPDirective> target = make_directive(
+      source_facing_directive_kind(kind, source_alias), ordinal);
   target->setBaseLang(current_lang);
   target->setNormalizeClauses(normalize_clauses_global);
+  apply_directive_source_alias(*target, kind, source_alias);
   std::size_t parameter_count = 0;
   fields.for_each_node(ROUP_FIELD_PARAMETER, [&](RoupNodeHandle parameter) {
     ++parameter_count;
@@ -3640,25 +4332,47 @@ std::unique_ptr<OpenMPDirective> convert_directive_node(RoupNodeHandle node) {
       throw std::runtime_error("nested clause has the wrong node family");
     }
     FieldReader clause_fields = FieldReader::node(clause);
-    convert_clause_fields(*target, clause_node_kind.variant,
-                          std::move(clause_fields));
+    const std::size_t first_new_clause =
+        target->getClausesInOriginalOrder()->size();
+    const ConvertedClauseMetadata metadata = convert_clause_fields(
+        *target, clause_node_kind.variant, std::move(clause_fields));
+    const OpenMPClauseSeparator upstream_separator =
+        target->getKind() == OMPD_atomic ? OMPC_CLAUSE_SEP_space
+                                         : metadata.preceding_separator;
+    std::vector<OpenMPClause *> *clauses =
+        target->getClausesInOriginalOrder();
+    for (std::size_t index = first_new_clause; index < clauses->size(); ++index)
+      clauses->at(index)->setPrecedingSeparator(upstream_separator);
   });
   fields.finish();
   return target;
 }
 
-std::string selector_string_literal(std::string value, std::uint32_t encoding) {
+std::string selector_string_literal(std::string value, std::uint32_t encoding,
+                                    std::uint32_t quote_style) {
   if (encoding == ROUP_CHARACTER_ENCODING_FORTRAN) {
-    std::string result("'");
+    const char quote = quote_style == ROUP_QUOTE_SINGLE    ? '\''
+                       : quote_style == ROUP_QUOTE_DOUBLE ? '"'
+                                                          : '\0';
+    if (quote == '\0')
+      throw std::runtime_error("unknown typed string-literal quote style " +
+                               std::to_string(quote_style));
+    std::string result(1, quote);
     for (const char character : value) {
-      if (character == '\'')
-        result += "''";
+      if (character == quote) {
+        result.push_back(quote);
+        result.push_back(quote);
+      }
       else
         result.push_back(character);
     }
-    result.push_back('\'');
+    result.push_back(quote);
     return result;
   }
+
+  if (quote_style != ROUP_QUOTE_DOUBLE)
+    throw std::runtime_error(
+        "C and C++ string literals require the double-quote delimiter");
 
   std::string prefix;
   if (encoding == ROUP_CHARACTER_ENCODING_ORDINARY) {
@@ -3705,28 +4419,47 @@ std::string selector_string_literal(std::string value, std::uint32_t encoding) {
   return result;
 }
 
-std::string selector_trait_value(RoupNodeHandle node) {
+struct SelectorProperty {
+  std::uint32_t variant;
+  std::uint32_t closed_value;
+  std::string lexical_value;
+};
+
+SelectorProperty selector_trait_value(RoupNodeHandle node) {
   const RoupNodeKind kind =
       require_value(roup_node_kind(node), "querying selector value node kind")
           .value;
-  if (kind.family != ROUP_NODE_FAMILY_OMP_SELECTOR_TRAIT_VALUE ||
-      (kind.variant != ROUP_SELECTOR_TRAIT_IDENTIFIER &&
-       kind.variant != ROUP_SELECTOR_TRAIT_STRING_LITERAL)) {
+  if (kind.family != ROUP_NODE_FAMILY_OMP_SELECTOR_TRAIT_VALUE) {
     throw std::runtime_error("selector trait value has the wrong node kind");
   }
   FieldReader fields = FieldReader::node(node);
-  std::string value = fields.required_string(ROUP_FIELD_VALUE);
-  if (kind.variant == ROUP_SELECTOR_TRAIT_STRING_LITERAL) {
-    value = selector_string_literal(
-        std::move(value), fields.required_u32(ROUP_FIELD_ENCODING));
+  SelectorProperty result{kind.variant, 0, {}};
+  switch (kind.variant) {
+  case ROUP_SELECTOR_TRAIT_IDENTIFIER:
+    result.lexical_value = fields.required_string(ROUP_FIELD_VALUE);
+    break;
+  case ROUP_SELECTOR_TRAIT_STRING_LITERAL:
+    result.lexical_value = selector_string_literal(
+        fields.required_string(ROUP_FIELD_VALUE),
+        fields.required_u32(ROUP_FIELD_ENCODING),
+        fields.required_u32(ROUP_FIELD_QUOTE_STYLE));
+    break;
+  case ROUP_SELECTOR_TRAIT_PREDEFINED_DEVICE_KIND:
+  case ROUP_SELECTOR_TRAIT_PREDEFINED_VENDOR:
+    result.closed_value = fields.required_u32(ROUP_FIELD_KIND);
+    break;
+  default:
+    throw std::runtime_error("unknown typed selector-property variant " +
+                             std::to_string(kind.variant));
   }
   fields.finish();
-  return value;
+  return result;
 }
 
 struct SelectorNameList {
   std::uint32_t kind;
-  std::vector<std::string> properties;
+  std::vector<SelectorProperty> properties;
+  std::string score;
 };
 
 SelectorNameList read_selector_name_list(RoupNodeHandle node) {
@@ -3737,8 +4470,10 @@ SelectorNameList read_selector_name_list(RoupNodeHandle node) {
     throw std::runtime_error(
         "selector name-list trait has the wrong node family");
   }
-  SelectorNameList result{kind.variant, {}};
+  SelectorNameList result{kind.variant, {}, {}};
   FieldReader fields = FieldReader::node(node);
+  result.score =
+      fields.optional_string(ROUP_FIELD_SCORE).value_or(std::string());
   fields.for_each_node(ROUP_FIELD_PROPERTIES, [&](RoupNodeHandle property) {
     result.properties.push_back(selector_trait_value(property));
   });
@@ -3748,6 +4483,41 @@ SelectorNameList read_selector_name_list(RoupNodeHandle node) {
         "selector name-list trait must contain at least one property");
   }
   return result;
+}
+
+OpenMPClauseContextKind selector_context_kind(std::uint32_t property) {
+  switch (property) {
+  case ROUP_OMP_DEVICE_KIND_HOST: return OMPC_CONTEXT_KIND_host;
+  case ROUP_OMP_DEVICE_KIND_NOHOST: return OMPC_CONTEXT_KIND_nohost;
+  case ROUP_OMP_DEVICE_KIND_ANY: return OMPC_CONTEXT_KIND_any;
+  case ROUP_OMP_DEVICE_KIND_CPU: return OMPC_CONTEXT_KIND_cpu;
+  case ROUP_OMP_DEVICE_KIND_GPU: return OMPC_CONTEXT_KIND_gpu;
+  case ROUP_OMP_DEVICE_KIND_FPGA: return OMPC_CONTEXT_KIND_fpga;
+  default:
+    throw std::runtime_error("unknown typed device-kind property " +
+                             std::to_string(property));
+  }
+}
+
+OpenMPClauseContextVendor
+selector_context_vendor(std::uint32_t property) {
+  switch (property) {
+  case ROUP_OMP_VENDOR_AMD: return OMPC_CONTEXT_VENDOR_amd;
+  case ROUP_OMP_VENDOR_ARM: return OMPC_CONTEXT_VENDOR_arm;
+  case ROUP_OMP_VENDOR_BSC: return OMPC_CONTEXT_VENDOR_bsc;
+  case ROUP_OMP_VENDOR_CRAY: return OMPC_CONTEXT_VENDOR_cray;
+  case ROUP_OMP_VENDOR_FUJITSU: return OMPC_CONTEXT_VENDOR_fujitsu;
+  case ROUP_OMP_VENDOR_GNU: return OMPC_CONTEXT_VENDOR_gnu;
+  case ROUP_OMP_VENDOR_IBM: return OMPC_CONTEXT_VENDOR_ibm;
+  case ROUP_OMP_VENDOR_INTEL: return OMPC_CONTEXT_VENDOR_intel;
+  case ROUP_OMP_VENDOR_LLVM: return OMPC_CONTEXT_VENDOR_llvm;
+  case ROUP_OMP_VENDOR_NVIDIA: return OMPC_CONTEXT_VENDOR_nvidia;
+  case ROUP_OMP_VENDOR_PGI: return OMPC_CONTEXT_VENDOR_pgi;
+  case ROUP_OMP_VENDOR_TI: return OMPC_CONTEXT_VENDOR_ti;
+  default:
+    throw std::runtime_error("unknown typed implementation-vendor property " +
+                             std::to_string(property));
+  }
 }
 
 struct SelectorState {
@@ -3786,24 +4556,38 @@ void convert_device_trait(OpenMPVariantClause &target, RoupNodeHandle node,
       throw std::runtime_error(
           "ompparser cannot represent multiple properties in one device name-list trait");
     }
-    const std::string &property = name_list.properties.front();
+    const SelectorProperty &property = name_list.properties.front();
     switch (name_list.kind) {
     case ROUP_SELECTOR_NAME_LIST_KIND:
-      throw std::runtime_error(
-          "ompparser requires a closed enum for device kind traits, but the "
-          "typed ROUP node deliberately carries an open name list");
+      if (property.variant != ROUP_SELECTOR_TRAIT_PREDEFINED_DEVICE_KIND) {
+        throw std::runtime_error(
+            "ompparser cannot represent an open device-kind property");
+      }
+      target.setContextKind(name_list.score.c_str(),
+                            selector_context_kind(property.closed_value));
+      return;
     case ROUP_SELECTOR_NAME_LIST_ISA:
+      if (property.variant != ROUP_SELECTOR_TRAIT_IDENTIFIER &&
+          property.variant != ROUP_SELECTOR_TRAIT_STRING_LITERAL) {
+        throw std::runtime_error("isa requires an open lexical property");
+      }
       if (state.isa)
         throw std::runtime_error(
             "ompparser cannot represent repeated isa traits");
-      target.setIsaExpression("", property.c_str());
+      target.setIsaExpression(name_list.score.c_str(),
+                              property.lexical_value.c_str());
       state.isa = true;
       return;
     case ROUP_SELECTOR_NAME_LIST_ARCH:
+      if (property.variant != ROUP_SELECTOR_TRAIT_IDENTIFIER &&
+          property.variant != ROUP_SELECTOR_TRAIT_STRING_LITERAL) {
+        throw std::runtime_error("arch requires an open lexical property");
+      }
       if (state.arch)
         throw std::runtime_error(
             "ompparser cannot represent repeated arch traits");
-      target.setArchExpression("", property.c_str());
+      target.setArchExpression(name_list.score.c_str(),
+                               property.lexical_value.c_str());
       state.arch = true;
       return;
     default:
@@ -3833,6 +4617,70 @@ void convert_device_trait(OpenMPVariantClause &target, RoupNodeHandle node,
   }
 }
 
+std::string selector_requirement_name(RoupNodeHandle node) {
+  const RoupNodeKind kind =
+      require_value(roup_node_kind(node), "querying requirement kind").value;
+  if (kind.family != ROUP_NODE_FAMILY_REQUIRE_MODIFIER)
+    throw std::runtime_error("requirement has the wrong node family");
+  FieldReader fields = FieldReader::node(node);
+  std::string result;
+  switch (kind.variant) {
+  case ROUP_REQUIRE_REVERSE_OFFLOAD: result = "reverse_offload"; break;
+  case ROUP_REQUIRE_UNIFIED_ADDRESS: result = "unified_address"; break;
+  case ROUP_REQUIRE_UNIFIED_SHARED_MEMORY:
+    result = "unified_shared_memory";
+    break;
+  case ROUP_REQUIRE_DYNAMIC_ALLOCATORS: result = "dynamic_allocators"; break;
+  case ROUP_REQUIRE_SELF_MAPS: result = "self_maps"; break;
+  case ROUP_REQUIRE_DEVICE_SAFESYNC: result = "device_safesync"; break;
+  case ROUP_REQUIRE_ATOMIC_DEFAULT_MEM_ORDER: {
+    const std::uint32_t order =
+        fields.required_u32(ROUP_FIELD_MEMORY_ORDER);
+    if (order == ROUP_OMP_MEMORY_ORDER_SEQ_CST)
+      result = "atomic_default_mem_order(seq_cst)";
+    else if (order == ROUP_OMP_MEMORY_ORDER_ACQ_REL)
+      result = "atomic_default_mem_order(acq_rel)";
+    else if (order == ROUP_OMP_MEMORY_ORDER_RELEASE)
+      result = "atomic_default_mem_order(release)";
+    else if (order == ROUP_OMP_MEMORY_ORDER_ACQUIRE)
+      result = "atomic_default_mem_order(acquire)";
+    else if (order == ROUP_OMP_MEMORY_ORDER_RELAXED)
+      result = "atomic_default_mem_order(relaxed)";
+    else
+      throw std::runtime_error("unknown typed requirement memory order");
+    break;
+  }
+  case ROUP_REQUIRE_EXTENSION:
+    result = fields.required_string(ROUP_FIELD_VALUE);
+    break;
+  default:
+    throw std::runtime_error("unknown typed implementation requirement");
+  }
+  fields.finish();
+  return result;
+}
+
+std::string selector_requirement(RoupNodeHandle node) {
+  const RoupNodeKind kind =
+      require_value(roup_node_kind(node),
+                    "querying selector requirement node kind")
+          .value;
+  if (kind.family != ROUP_NODE_FAMILY_OMP_SELECTOR_REQUIREMENT ||
+      kind.variant != ROUP_SELECTOR_REQUIREMENT) {
+    throw std::runtime_error(
+        "selector requirement has the wrong semantic node kind");
+  }
+  FieldReader fields = FieldReader::node(node);
+  std::string result = required_node(
+      fields, ROUP_FIELD_REQUIREMENT, selector_requirement_name);
+  const std::optional<std::string> required =
+      fields.optional_string(ROUP_FIELD_REQUIRED);
+  fields.finish();
+  if (required.has_value())
+    result += "(" + *required + ")";
+  return result;
+}
+
 void convert_implementation_trait(OpenMPVariantClause &target,
                                   RoupNodeHandle node,
                                   SelectorState &state) {
@@ -3859,9 +4707,18 @@ void convert_implementation_trait(OpenMPVariantClause &target,
           "implementation name-list trait must contain one typed name-list node");
     }
     if (name_list.kind == ROUP_SELECTOR_NAME_LIST_VENDOR) {
-      throw std::runtime_error(
-          "ompparser requires a closed enum for implementation vendor traits, "
-          "but the typed ROUP node deliberately carries an open name list");
+      if (name_list.properties.size() != 1) {
+        throw std::runtime_error(
+            "ompparser cannot represent multiple implementation vendor properties");
+      }
+      const SelectorProperty &property = name_list.properties.front();
+      if (property.variant != ROUP_SELECTOR_TRAIT_PREDEFINED_VENDOR) {
+        throw std::runtime_error(
+            "ompparser cannot represent an open implementation-vendor property");
+      }
+      target.setImplementationKind(
+          score.c_str(), selector_context_vendor(property.closed_value));
+      return;
     }
     if (name_list.kind != ROUP_SELECTOR_NAME_LIST_EXTENSION) {
       throw std::runtime_error(
@@ -3875,20 +4732,62 @@ void convert_implementation_trait(OpenMPVariantClause &target,
       throw std::runtime_error(
           "ompparser cannot represent repeated extension traits");
     }
+    const SelectorProperty &property = name_list.properties.front();
+    if (property.variant != ROUP_SELECTOR_TRAIT_IDENTIFIER &&
+        property.variant != ROUP_SELECTOR_TRAIT_STRING_LITERAL) {
+      throw std::runtime_error(
+          "implementation extension requires an open lexical property");
+    }
     target.setExtensionExpression(score.c_str(),
-                                  name_list.properties.front().c_str());
+                                  property.lexical_value.c_str());
     state.extension = true;
     return;
   }
   case ROUP_SELECTOR_IMPLEMENTATION_ATOMIC_DEFAULT_MEM_ORDER:
+  {
+    const std::uint32_t order =
+        fields.required_u32(ROUP_FIELD_MEMORY_ORDER);
     fields.finish();
-    throw std::runtime_error(
-        "ompparser cannot represent atomic_default_mem_order selector semantics");
-  case ROUP_SELECTOR_IMPLEMENTATION_REQUIREMENT:
-  case ROUP_SELECTOR_IMPLEMENTATION_REQUIRES:
+    const char *spelling = nullptr;
+    if (order == ROUP_OMP_MEMORY_ORDER_SEQ_CST)
+      spelling = "atomic_default_mem_order(seq_cst)";
+    else if (order == ROUP_OMP_MEMORY_ORDER_ACQ_REL)
+      spelling = "atomic_default_mem_order(acq_rel)";
+    else if (order == ROUP_OMP_MEMORY_ORDER_RELEASE)
+      spelling = "atomic_default_mem_order(release)";
+    else if (order == ROUP_OMP_MEMORY_ORDER_ACQUIRE)
+      spelling = "atomic_default_mem_order(acquire)";
+    else if (order == ROUP_OMP_MEMORY_ORDER_RELAXED)
+      spelling = "atomic_default_mem_order(relaxed)";
+    else
+      throw std::runtime_error(
+          "unknown typed selector atomic-default memory order");
+    target.setImplementationRequiresExpression(score.c_str(), spelling);
+    return;
+  }
+  case ROUP_SELECTOR_IMPLEMENTATION_REQUIREMENT: {
+    const std::string requirement = required_node(
+        fields, ROUP_FIELD_REQUIREMENT, selector_requirement_name);
     fields.finish();
-    throw std::runtime_error(
-        "ompparser cannot represent typed implementation requirement nodes without rendering them back to source");
+    target.setImplementationRequiresExpression(score.c_str(),
+                                                requirement.c_str());
+    return;
+  }
+  case ROUP_SELECTOR_IMPLEMENTATION_REQUIRES: {
+    std::string requirements;
+    fields.for_each_node(ROUP_FIELD_PROPERTIES, [&](RoupNodeHandle property) {
+      if (!requirements.empty())
+        requirements += ", ";
+      requirements += selector_requirement(property);
+    });
+    fields.finish();
+    if (requirements.empty())
+      throw std::runtime_error(
+          "typed implementation requires trait is empty");
+    target.setImplementationRequiresExpression(score.c_str(),
+                                                requirements.c_str());
+    return;
+  }
   case ROUP_SELECTOR_IMPLEMENTATION_EXTENSION:
     fields.finish();
     throw std::runtime_error(
@@ -4025,9 +4924,9 @@ void convert_selector(OpenMPDirective &directive, OpenMPClauseKind kind,
         }
       });
   fields.finish();
-  if ((kind == OMPC_when || kind == OMPC_otherwise) && nested_count != 1) {
+  if (kind == OMPC_otherwise && nested_count != 1) {
     throw std::runtime_error(
-        "when/otherwise clause must contain one nested directive");
+        "otherwise clause must contain one nested directive");
   }
   if (kind == OMPC_match && nested_count != 0)
     throw std::runtime_error("match clause must not contain a nested directive");
@@ -4036,6 +4935,110 @@ void convert_selector(OpenMPDirective &directive, OpenMPClauseKind kind,
     throw std::runtime_error("otherwise clause must not contain selectors");
   }
   record_clause(directive, raw);
+}
+
+void convert_source_alias(OpenMPDirective &directive, std::uint32_t ordinal,
+                          std::uint32_t source_alias, FieldReader &fields) {
+  const OpenMPClauseKind kind = clause_kind(ordinal);
+  switch (source_alias) {
+  case ROUP_OMP_CLAUSE_ALIAS_DEPEND_SOURCE:
+  case ROUP_OMP_CLAUSE_ALIAS_DEPEND_SOURCE_CURRENT:
+  case ROUP_OMP_CLAUSE_ALIAS_DEPEND_SINK:
+  case ROUP_OMP_CLAUSE_ALIAS_DEPEND_SINK_PREVIOUS_CURRENT:
+  case ROUP_OMP_CLAUSE_ALIAS_DOACROSS_SOURCE_EMPTY:
+    if (kind != OMPC_doacross) {
+      throw std::runtime_error(
+          "typed historical depend alias is attached to another clause");
+    }
+    convert_doacross(directive, fields, source_alias);
+    return;
+  case ROUP_OMP_CLAUSE_ALIAS_METADIRECTIVE_DEFAULT: {
+    if (kind != OMPC_otherwise) {
+      throw std::runtime_error(
+          "typed metadirective default alias is attached to another clause");
+    }
+    std::size_t selector_count = 0;
+    fields.for_each_node(ROUP_FIELD_ENTRIES,
+                         [&](RoupNodeHandle) { ++selector_count; });
+    std::size_t nested_count = 0;
+    std::unique_ptr<OpenMPDirective> nested;
+    fields.for_each_node(
+        ROUP_FIELD_NESTED_DIRECTIVE, [&](RoupNodeHandle node) {
+          ++nested_count;
+          nested = convert_directive_node(node);
+        });
+    fields.finish();
+    if (selector_count != 0 || nested_count != 1 || nested == nullptr) {
+      throw std::runtime_error(
+          "typed metadirective default alias has an invalid payload");
+    }
+    OpenMPClause *raw = OpenMPDefaultClause::addDefaultClause(
+        &directive, OMPC_DEFAULT_variant);
+    auto *clause = dynamic_cast<OpenMPDefaultClause *>(raw);
+    if (clause == nullptr) {
+      throw std::runtime_error(
+          "ompparser failed to create a metadirective default clause");
+    }
+    clause->setVariantDirective(std::move(nested));
+    record_clause(directive, raw);
+    return;
+  }
+  case ROUP_OMP_CLAUSE_ALIAS_DECLARE_TARGET_TO: {
+    if (kind != OMPC_enter) {
+      throw std::runtime_error(
+          "typed declare-target to alias is attached to another clause");
+    }
+    const std::vector<std::uint32_t> modifiers =
+        fields.optional_u32s(ROUP_FIELD_MODIFIERS);
+    const std::vector<std::string> items = required_clause_items(fields);
+    fields.finish();
+    if (!modifiers.empty() || items.empty()) {
+      throw std::runtime_error(
+          "typed declare-target to alias has an invalid payload");
+    }
+    OpenMPClause *raw = OpenMPToClause::addToClause(
+        &directive, OMPC_TO_unspecified);
+    auto *clause = dynamic_cast<OpenMPToClause *>(raw);
+    if (clause == nullptr) {
+      throw std::runtime_error(
+          "ompparser failed to create a declare-target to clause");
+    }
+    for (const std::string &item : items)
+      clause->addItem(item);
+    record_clause(directive, raw);
+    return;
+  }
+  case ROUP_OMP_CLAUSE_ALIAS_PROC_BIND_MASTER: {
+    if (kind != OMPC_proc_bind) {
+      throw std::runtime_error(
+          "typed proc_bind(master) alias is attached to another clause");
+    }
+    const std::uint32_t canonical = fields.required_u32(ROUP_FIELD_KIND);
+    fields.finish();
+    if (canonical != ROUP_OMP_PROC_BIND_PRIMARY) {
+      throw std::runtime_error(
+          "typed proc_bind(master) alias has a non-primary payload");
+    }
+    OpenMPClause *raw = OpenMPProcBindClause::addProcBindClause(
+        &directive, OMPC_PROC_BIND_master);
+    if (raw == nullptr) {
+      throw std::runtime_error(
+          "ompparser failed to create a proc_bind(master) clause");
+    }
+    record_clause(directive, raw);
+    return;
+  }
+  case ROUP_OMP_CLAUSE_ALIAS_REDUCTION_ORIGINAL_POSITIONAL:
+    if (kind != OMPC_reduction) {
+      throw std::runtime_error(
+          "typed positional original alias is attached to another clause");
+    }
+    convert_reduction(directive, kind, fields, true);
+    return;
+  default:
+    throw std::runtime_error("unknown typed OpenMP source alias " +
+                             std::to_string(source_alias));
+  }
 }
 
 std::unique_ptr<OpenMPDirective>
@@ -4047,9 +5050,15 @@ convert_directive(RoupDirectiveHandle source) {
   }
   const std::uint32_t ordinal = directive_ordinal(source);
   const OpenMPDirectiveKind kind = directive_kind(ordinal);
-  std::unique_ptr<OpenMPDirective> target = make_directive(kind, ordinal);
+  const std::uint32_t source_alias =
+      require_value(roup_directive_source_alias(source),
+                    "querying directive source alias")
+          .value;
+  std::unique_ptr<OpenMPDirective> target = make_directive(
+      source_facing_directive_kind(kind, source_alias), ordinal);
   target->setBaseLang(current_lang);
   target->setNormalizeClauses(normalize_clauses_global);
+  apply_directive_source_alias(*target, kind, source_alias);
   const RoupSpan span =
       require_value(roup_directive_span(source),
                     "querying directive source span")
@@ -4092,7 +5101,7 @@ RoupParserOptions parser_options(const std::string &input) {
   options.dialect = ROUP_DIALECT_OPENMP;
   options.version_policy = ROUP_VERSION_ANY;
   options.version = 0;
-  options.flags = 0;
+  options.flags = ROUP_PARSER_SOURCE_COMPATIBILITY;
 
   if (starts_with_case_insensitive(leading, "!$")) {
     if (current_lang != Lang_Fortran) {
@@ -4131,7 +5140,8 @@ RoupParserOptions parser_options(const std::string &input) {
 } // namespace
 
 extern "C" void setLang(OpenMPBaseLang lang) {
-  if (lang != Lang_C && lang != Lang_Cplusplus && lang != Lang_Fortran) {
+  if (lang != Lang_C && lang != Lang_Cplusplus && lang != Lang_Fortran &&
+      lang != Lang_unknown) {
     throw std::invalid_argument("unsupported ompparser base language");
   }
   current_lang = lang;
@@ -4140,32 +5150,35 @@ extern "C" void setLang(OpenMPBaseLang lang) {
 extern "C" OpenMPDirective *
 parseOpenMP(const char *input, OpenMPExprParseCallback expression_parser,
             void *expression_parser_data) {
-  if (current_lang == Lang_unknown) {
-    throw std::invalid_argument(
-        "ompparser language must be selected explicitly with setLang");
-  }
-  if (input == nullptr) {
-    throw std::invalid_argument("parseOpenMP input must not be null");
-  }
+  if (input == nullptr)
+    return nullptr;
   const std::size_t length = std::strlen(input);
-  if (length == 0) {
-    throw std::invalid_argument("parseOpenMP input must not be empty");
-  }
+  if (length == 0)
+    return nullptr;
+
+  if (current_lang == Lang_unknown)
+    return nullptr;
 
   openmpSetExprParseCallback(expression_parser, expression_parser_data);
   openmpSetExprParseMode(OMP_EXPR_PARSE_none);
 
+  const RoupParserOptions options = parser_options(std::string(input, length));
   const RoupParserResult parser = require_value(
-      roup_parser_create(parser_options(std::string(input, length))),
-      "creating ROUP parser");
+      roup_parser_create(options), "creating ROUP parser");
   bool parser_live = true;
   RoupDirectiveHandle directive_handle{};
   bool directive_live = false;
   try {
-    const RoupDirectiveResult parsed = require_value(
-        roup_parse(parser.value, reinterpret_cast<const std::uint8_t *>(input),
-                   length),
-        "parsing OpenMP directive");
+    const RoupDirectiveResult parsed =
+        roup_parse(parser.value,
+                   reinterpret_cast<const std::uint8_t *>(input), length);
+    if (parsed.result.status == ROUP_STATUS_PARSE_ERROR) {
+      release_error_without_recursion(parsed.result.error);
+      require_ok(roup_parser_release(parser.value), "releasing ROUP parser");
+      parser_live = false;
+      return nullptr;
+    }
+    require_ok(parsed.result, "parsing OpenMP directive");
     directive_handle = parsed.value;
     directive_live = true;
 
@@ -4184,6 +5197,6 @@ parseOpenMP(const char *input, OpenMPExprParseCallback expression_parser,
     if (parser_live) {
       discard_cleanup_result(roup_parser_release(parser.value));
     }
-    throw;
+    return nullptr;
   }
 }

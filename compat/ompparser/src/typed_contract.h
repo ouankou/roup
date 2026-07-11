@@ -133,14 +133,12 @@
   X(TILE, tile) \
   X(UNROLL, unroll) \
   X(WORKDISTRIBUTE, workdistribute) \
-  X(WORKSHARE, workshare)
+  X(WORKSHARE, workshare) \
+  X(OMPX, ompx)
 
 #define ROUP_OMPPARSER_END_DIRECTIVES(X) \
-  X(END_ASSUME, assume) \
-  X(END_ASSUMES, assumes) \
+  X(END_SECTION, section) \
   X(END_ALLOCATORS, allocators) \
-  X(END_DECLARE_TARGET, declare_target) \
-  X(END_DECLARE_VARIANT, declare_variant) \
   X(END_DISPATCH, dispatch) \
   X(END_PARALLEL, parallel) \
   X(END_DO, do) \
@@ -204,6 +202,12 @@
   X(END_SCOPE, scope) \
   X(END_TARGET, target) \
   X(END_TARGET_DATA, target_data)
+
+#define ROUP_OMPPARSER_DIRECT_END_DIRECTIVES(X) \
+  X(END_ASSUME, end_assume) \
+  X(END_ASSUMES, end_assumes) \
+  X(END_DECLARE_TARGET, end_declare_target) \
+  X(END_DECLARE_VARIANT, end_declare_variant)
 
 #define ROUP_OMPPARSER_CLAUSES(X) \
   X(ABSENT, absent) \

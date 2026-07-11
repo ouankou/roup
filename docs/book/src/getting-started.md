@@ -46,4 +46,7 @@ directive, and error handle.
 
 `./test.sh` is fail-fast. It requires initialized pinned submodules and all
 native toolchains, then checks formatting, lints, Rust tests, documentation,
-the C ABI, both compatibility adapters, and all language examples.
+the C ABI, both compatibility adapters, every test in their pinned upstream
+suites, and all language examples. The current compatibility totals are
+1,537/1,537 for ompparser and 920/920 for accparser, including five local
+contract/audit tests.

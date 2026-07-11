@@ -44,7 +44,7 @@ static_assert(ROUP_ACC_DIRECTIVE_ATOMIC == 0 &&
                   ROUP_ACC_DIRECTIVE_WAIT == 20,
               "OpenACC directive ordinal schema changed");
 
-inline constexpr std::array<OpenACCClauseKind, 44> CLAUSE_KINDS = {
+inline constexpr std::array<OpenACCClauseKind, 45> CLAUSE_KINDS = {
     ACCC_async,           ACCC_attach,       ACCC_auto,
     ACCC_bind,            ACCC_capture,      ACCC_collapse,
     ACCC_copy,            ACCC_copyin,       ACCC_copyout,
@@ -53,13 +53,14 @@ inline constexpr std::array<OpenACCClauseKind, 44> CLAUSE_KINDS = {
     ACCC_device_num,      ACCC_device_resident,
     ACCC_device_type,     ACCC_deviceptr,    ACCC_finalize,
     ACCC_firstprivate,    ACCC_gang,         ACCC_if,
-    ACCC_if_present,      ACCC_independent,  ACCC_link,
-    ACCC_no_create,       ACCC_nohost,       ACCC_num_gangs,
-    ACCC_num_workers,     ACCC_present,      ACCC_private,
-    ACCC_reduction,       ACCC_read,         ACCC_self,
-    ACCC_seq,             ACCC_tile,         ACCC_update,
-    ACCC_use_device,      ACCC_vector,       ACCC_vector_length,
-    ACCC_wait,            ACCC_worker,       ACCC_write,
+    ACCC_if_present,      ACCC_independent,  ACCC_indirect,
+    ACCC_link,            ACCC_no_create,    ACCC_nohost,
+    ACCC_num_gangs,       ACCC_num_workers,  ACCC_present,
+    ACCC_private,         ACCC_reduction,    ACCC_read,
+    ACCC_self,            ACCC_seq,          ACCC_tile,
+    ACCC_update,          ACCC_use_device,   ACCC_vector,
+    ACCC_vector_length,   ACCC_wait,         ACCC_worker,
+    ACCC_write,
 };
 
 static_assert(ROUP_ACC_CLAUSE_ASYNC == 0 &&
@@ -87,25 +88,26 @@ static_assert(ROUP_ACC_CLAUSE_ASYNC == 0 &&
                   ROUP_ACC_CLAUSE_IF == 22 &&
                   ROUP_ACC_CLAUSE_IF_PRESENT == 23 &&
                   ROUP_ACC_CLAUSE_INDEPENDENT == 24 &&
-                  ROUP_ACC_CLAUSE_LINK == 25 &&
-                  ROUP_ACC_CLAUSE_NO_CREATE == 26 &&
-                  ROUP_ACC_CLAUSE_NO_HOST == 27 &&
-                  ROUP_ACC_CLAUSE_NUM_GANGS == 28 &&
-                  ROUP_ACC_CLAUSE_NUM_WORKERS == 29 &&
-                  ROUP_ACC_CLAUSE_PRESENT == 30 &&
-                  ROUP_ACC_CLAUSE_PRIVATE == 31 &&
-                  ROUP_ACC_CLAUSE_REDUCTION == 32 &&
-                  ROUP_ACC_CLAUSE_READ == 33 &&
-                  ROUP_ACC_CLAUSE_SELF_CLAUSE == 34 &&
-                  ROUP_ACC_CLAUSE_SEQ == 35 &&
-                  ROUP_ACC_CLAUSE_TILE == 36 &&
-                  ROUP_ACC_CLAUSE_UPDATE == 37 &&
-                  ROUP_ACC_CLAUSE_USE_DEVICE == 38 &&
-                  ROUP_ACC_CLAUSE_VECTOR == 39 &&
-                  ROUP_ACC_CLAUSE_VECTOR_LENGTH == 40 &&
-                  ROUP_ACC_CLAUSE_WAIT == 41 &&
-                  ROUP_ACC_CLAUSE_WORKER == 42 &&
-                  ROUP_ACC_CLAUSE_WRITE == 43,
+                  ROUP_ACC_CLAUSE_INDIRECT == 25 &&
+                  ROUP_ACC_CLAUSE_LINK == 26 &&
+                  ROUP_ACC_CLAUSE_NO_CREATE == 27 &&
+                  ROUP_ACC_CLAUSE_NO_HOST == 28 &&
+                  ROUP_ACC_CLAUSE_NUM_GANGS == 29 &&
+                  ROUP_ACC_CLAUSE_NUM_WORKERS == 30 &&
+                  ROUP_ACC_CLAUSE_PRESENT == 31 &&
+                  ROUP_ACC_CLAUSE_PRIVATE == 32 &&
+                  ROUP_ACC_CLAUSE_REDUCTION == 33 &&
+                  ROUP_ACC_CLAUSE_READ == 34 &&
+                  ROUP_ACC_CLAUSE_SELF_CLAUSE == 35 &&
+                  ROUP_ACC_CLAUSE_SEQ == 36 &&
+                  ROUP_ACC_CLAUSE_TILE == 37 &&
+                  ROUP_ACC_CLAUSE_UPDATE == 38 &&
+                  ROUP_ACC_CLAUSE_USE_DEVICE == 39 &&
+                  ROUP_ACC_CLAUSE_VECTOR == 40 &&
+                  ROUP_ACC_CLAUSE_VECTOR_LENGTH == 41 &&
+                  ROUP_ACC_CLAUSE_WAIT == 42 &&
+                  ROUP_ACC_CLAUSE_WORKER == 43 &&
+                  ROUP_ACC_CLAUSE_WRITE == 44,
               "OpenACC clause ordinal schema changed");
 
 inline OpenACCDirectiveKind directive_kind(RoupDirectiveKind kind) {
@@ -248,6 +250,8 @@ builtin_reduction_operator(std::uint32_t value) {
   switch (value) {
   case ROUP_ACC_REDUCTION_ADD:
     return ACCC_REDUCTION_add;
+  case ROUP_ACC_REDUCTION_SUB:
+    return ACCC_REDUCTION_sub;
   case ROUP_ACC_REDUCTION_MUL:
     return ACCC_REDUCTION_mul;
   case ROUP_ACC_REDUCTION_MAX:

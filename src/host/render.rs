@@ -38,6 +38,30 @@ impl Renderer {
         match &expression.kind {
             ExprKind::Literal(literal) => self.literal(f, literal)?,
             ExprKind::Name(name) => self.qualified_name(f, name)?,
+            ExprKind::CppTemplateId {
+                template,
+                arguments,
+            } => {
+                self.expression(f, template, 100)?;
+                f.write_str("<")?;
+                for (index, argument) in arguments.iter().enumerate() {
+                    if index != 0 {
+                        f.write_str(", ")?;
+                    }
+                    match argument {
+                        CppTemplateArgument::Type(type_name) => write!(f, "{type_name}")?,
+                        CppTemplateArgument::Expression(expression)
+                        | CppTemplateArgument::Ambiguous { expression, .. } => {
+                            self.expression(f, expression, 0)?;
+                        }
+                    }
+                }
+                f.write_str(">")?;
+            }
+            ExprKind::LegacyQualifiedInteger { qualifier, value } => {
+                write!(f, "{qualifier}::")?;
+                self.integer(f, value)?;
+            }
             ExprKind::Parenthesized(inner) => {
                 f.write_str("(")?;
                 self.expression(f, inner, 0)?;
@@ -46,6 +70,10 @@ impl Renderer {
             ExprKind::Unary { op, operand } => {
                 f.write_str(self.unary_operator(*op))?;
                 self.expression(f, operand, self.unary_precedence(*op))?;
+            }
+            ExprKind::FortranDefinedUnary { operator, operand } => {
+                write!(f, ".{operator}. ")?;
+                self.expression(f, operand, 17)?;
             }
             ExprKind::Binary { op, left, right } => {
                 let precedence = self.binary_precedence(*op);
@@ -58,6 +86,15 @@ impl Renderer {
                     write!(f, " {} ", self.binary_operator(*op))?;
                     self.expression(f, right, precedence + 1)?;
                 }
+            }
+            ExprKind::FortranDefinedBinary {
+                operator,
+                left,
+                right,
+            } => {
+                self.expression(f, left, 1)?;
+                write!(f, " .{operator}. ")?;
+                self.expression(f, right, 2)?;
             }
             ExprKind::Conditional {
                 condition,
@@ -101,6 +138,7 @@ impl Renderer {
                 f.write_str(match access {
                     MemberAccess::Dot => ".",
                     MemberAccess::Arrow => "->",
+                    MemberAccess::Scope => "::",
                     MemberAccess::FortranComponent => "%",
                 })?;
                 write!(f, "{member}")?;
@@ -159,15 +197,19 @@ impl Renderer {
             }
             Literal::String(value) => {
                 if value.encoding == CharacterEncoding::Fortran {
-                    f.write_str("'")?;
+                    let delimiter = match value.delimiter {
+                        crate::host::StringDelimiter::SingleQuote => '\'',
+                        crate::host::StringDelimiter::DoubleQuote => '"',
+                    };
+                    write!(f, "{delimiter}")?;
                     for ch in value.value.chars() {
-                        if ch == '\'' {
-                            f.write_str("''")?;
+                        if ch == delimiter {
+                            write!(f, "{delimiter}{delimiter}")?;
                         } else {
                             write!(f, "{ch}")?;
                         }
                     }
-                    f.write_str("'")
+                    write!(f, "{delimiter}")
                 } else {
                     f.write_str(character_prefix(value.encoding))?;
                     f.write_str("\"")?;
@@ -299,14 +341,20 @@ impl Renderer {
 
     fn precedence(&self, expression: &Expr) -> u8 {
         match &expression.kind {
-            ExprKind::Literal(_) | ExprKind::Name(_) | ExprKind::Parenthesized(_) => 110,
+            ExprKind::Literal(_)
+            | ExprKind::Name(_)
+            | ExprKind::LegacyQualifiedInteger { .. }
+            | ExprKind::Parenthesized(_) => 110,
             ExprKind::Call { .. }
+            | ExprKind::CppTemplateId { .. }
             | ExprKind::Subscript { .. }
             | ExprKind::Member { .. }
             | ExprKind::Postfix { .. }
             | ExprKind::FortranApply { .. } => 100,
             ExprKind::Unary { op, .. } => self.unary_precedence(*op),
+            ExprKind::FortranDefinedUnary { .. } => 17,
             ExprKind::Binary { op, .. } => self.binary_precedence(*op),
+            ExprKind::FortranDefinedBinary { .. } => 1,
             ExprKind::Conditional { .. } => 3,
             ExprKind::Assignment { .. } => 2,
         }

@@ -58,7 +58,10 @@ cargo build --release -p roup-capi
 
 [`compat/ompparser`](compat/ompparser) and
 [`compat/accparser`](compat/accparser) build drop-in C++ compatibility libraries
-against that ABI. Their upstream repositories are pinned git submodules.
+against that ABI. Their upstream repositories are pinned git submodules, and
+the compatibility criterion is their complete test suites registered unchanged:
+currently 1,534 ompparser tests and 918 accparser tests, in addition to five
+repository-owned contract/audit tests.
 
 ## Validation
 
@@ -71,7 +74,9 @@ git submodule update --init --recursive
 
 It checks formatting, safety invariants, the standalone publishable Rust
 package, Clippy, Rust tests and documentation, the C ABI/header,
-C/C++/Fortran examples, and both upstream compatibility test suites.
+C/C++/Fortran examples, and every test in both pinned upstream compatibility
+suites without fixture rewriting, filtering, disabled tests, or allowed
+failures.
 
 ## License
 

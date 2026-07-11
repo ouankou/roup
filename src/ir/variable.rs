@@ -67,6 +67,12 @@ impl LValue {
     pub const fn ast(&self) -> &Expr {
         self.expression.ast()
     }
+
+    /// Whether any subscript in this lvalue is an array section.
+    #[must_use]
+    pub fn has_array_section(&self) -> bool {
+        designator_has_array_section(self.ast())
+    }
 }
 
 impl fmt::Display for LValue {
@@ -115,8 +121,12 @@ fn is_c_or_cpp_lvalue(expression: &Expr) -> bool {
             ..
         } => true,
         ExprKind::Literal(_)
+        | ExprKind::CppTemplateId { .. }
+        | ExprKind::LegacyQualifiedInteger { .. }
         | ExprKind::Unary { .. }
+        | ExprKind::FortranDefinedUnary { .. }
         | ExprKind::Binary { .. }
+        | ExprKind::FortranDefinedBinary { .. }
         | ExprKind::Conditional { .. }
         | ExprKind::Assignment { .. }
         | ExprKind::Call { .. }
@@ -255,8 +265,12 @@ fn is_designator(expression: &Expr) -> bool {
                 })
         }
         ExprKind::Literal(_)
+        | ExprKind::CppTemplateId { .. }
+        | ExprKind::LegacyQualifiedInteger { .. }
         | ExprKind::Unary { .. }
+        | ExprKind::FortranDefinedUnary { .. }
         | ExprKind::Binary { .. }
+        | ExprKind::FortranDefinedBinary { .. }
         | ExprKind::Conditional { .. }
         | ExprKind::Assignment { .. }
         | ExprKind::Call { .. }
@@ -298,8 +312,12 @@ fn designator_has_array_section(expression: &Expr) -> bool {
         }
         ExprKind::Name(_) => false,
         ExprKind::Literal(_)
+        | ExprKind::CppTemplateId { .. }
+        | ExprKind::LegacyQualifiedInteger { .. }
         | ExprKind::Unary { .. }
+        | ExprKind::FortranDefinedUnary { .. }
         | ExprKind::Binary { .. }
+        | ExprKind::FortranDefinedBinary { .. }
         | ExprKind::Conditional { .. }
         | ExprKind::Assignment { .. }
         | ExprKind::Call { .. }

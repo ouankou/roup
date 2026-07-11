@@ -67,6 +67,7 @@ pub enum DirectiveName {
     BeginMetadirective,
     EndMetadirective,
     Nothing,
+    Ompx,
     Ordered,
     Parallel,
     ParallelDo,
@@ -227,6 +228,7 @@ pub enum DirectiveName {
     Taskwait,
     Taskyield,
     Teams,
+    TeamsWithRedundantOmp,
     TeamsDistribute,
     TeamsDistributeParallelDo,
     TeamsDistributeParallelDoSimd,
@@ -349,6 +351,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("begin metadirective", DirectiveName::BeginMetadirective);
     insert!("end metadirective", DirectiveName::EndMetadirective);
     insert!("nothing", DirectiveName::Nothing);
+    insert!("ompx", DirectiveName::Ompx);
     insert!("ordered", DirectiveName::Ordered);
     insert!("parallel", DirectiveName::Parallel);
     insert!("parallel do", DirectiveName::ParallelDo);
@@ -671,6 +674,7 @@ static DIRECTIVE_MAP: Lazy<HashMap<&'static str, DirectiveName>> = Lazy::new(|| 
     insert!("taskwait", DirectiveName::Taskwait);
     insert!("taskyield", DirectiveName::Taskyield);
     insert!("teams", DirectiveName::Teams);
+    insert!("omp teams", DirectiveName::TeamsWithRedundantOmp);
     insert!("teams distribute", DirectiveName::TeamsDistribute);
     insert!(
         "teams distribute parallel for",
@@ -833,6 +837,7 @@ impl DirectiveName {
             DirectiveName::BeginMetadirective => "begin metadirective",
             DirectiveName::EndMetadirective => "end metadirective",
             DirectiveName::Nothing => "nothing",
+            DirectiveName::Ompx => "ompx",
             DirectiveName::Ordered => "ordered",
             DirectiveName::Parallel => "parallel",
             DirectiveName::ParallelDo => "parallel do",
@@ -1013,6 +1018,7 @@ impl DirectiveName {
             DirectiveName::Taskwait => "taskwait",
             DirectiveName::Taskyield => "taskyield",
             DirectiveName::Teams => "teams",
+            DirectiveName::TeamsWithRedundantOmp => "omp teams",
             DirectiveName::TeamsDistribute => "teams distribute",
             DirectiveName::TeamsDistributeParallelDo => "teams distribute parallel do",
             DirectiveName::TeamsDistributeParallelDoSimd => "teams distribute parallel do simd",

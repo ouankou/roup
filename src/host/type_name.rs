@@ -189,6 +189,19 @@ impl TypeName {
         }
         Ok(())
     }
+
+    /// Render compact typed syntax without joining adjacent word tokens.
+    pub(crate) fn compact_source_spelling(&self) -> String {
+        struct Compact<'a>(&'a TypeName);
+
+        impl fmt::Display for Compact<'_> {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                self.0.fmt_compact(formatter)
+            }
+        }
+
+        Compact(self).to_string()
+    }
 }
 
 impl fmt::Display for TypeName {
@@ -1267,6 +1280,7 @@ fn write_token(
 ) -> fmt::Result {
     match token {
         TokenKind::Identifier(identifier) => write!(formatter, "{identifier}"),
+        TokenKind::ReservedKeyword(identifier) => write!(formatter, "{identifier}"),
         TokenKind::Integer(literal) => {
             write_literal(formatter, Literal::Integer(literal.clone()), language)
         }
@@ -1316,6 +1330,7 @@ fn write_token(
         }),
         TokenKind::LogicalEqv => formatter.write_str(".eqv."),
         TokenKind::LogicalNeqv => formatter.write_str(".neqv."),
+        TokenKind::FortranDefinedOperator(identifier) => write!(formatter, ".{identifier}."),
         TokenKind::Equal => formatter.write_str("="),
         TokenKind::EqualEqual => formatter.write_str("=="),
         TokenKind::NotEqual => formatter.write_str(match language {
@@ -1363,6 +1378,7 @@ mod tests {
     fn c_and_cpp_keywords_are_lexed_as_typed_words() {
         let c = TypeName::parse("const unsigned long *", HostLanguage::C).unwrap();
         assert_eq!(c.to_string(), "const unsigned long *");
+        assert_eq!(c.compact_source_spelling(), "const unsigned long*");
 
         let cpp =
             TypeName::parse("std::vector<std::pair<int, 4>> const &", HostLanguage::Cpp).unwrap();
@@ -1374,6 +1390,10 @@ mod tests {
         assert_eq!(
             cpp.to_string(),
             "std :: vector < std :: pair < int , 4 >> const &"
+        );
+        assert_eq!(
+            cpp.compact_source_spelling(),
+            "std::vector<std::pair<int, 4>>const&"
         );
     }
 

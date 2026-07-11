@@ -72,8 +72,12 @@ Every OpenMP clause exposes an optional numeric
 the field is identical on top-level and recursively nested clause nodes.
 `threadset` and `memscope` are numeric closed values, `looprange` exposes
 separate `first` and `count` fields, and map mapper IDs use the tagged mapper
-family. Selector string-literal nodes expose decoded content plus a numeric
-character-encoding field, so adapters never recover an encoding from a prefix.
+family. Selector string-literal nodes expose decoded content plus numeric
+character-encoding and quote-style fields. Standard device-kind and vendor
+properties additionally cross as closed numeric selector nodes; implementation
+properties outside those standardized sets remain explicit open lexical nodes.
+An adapter can therefore reject an unrepresentable open property without
+classifying a string or substituting an `unknown` enum.
 
 OpenACC `bind` is exposed as a tagged name-or-string-literal node, including a
 numeric character-encoding tag for literals. Device types and reduction

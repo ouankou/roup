@@ -14,9 +14,10 @@ use crate::{
 };
 use roup::api::{OpenAccConfig, OpenAccParser, OpenMpConfig, OpenMpParser};
 use roup::ast::{
-    AccBindTarget, AccCacheItem, AccClause, AccClausePayload, AccDataModifier, AccDefaultKind,
-    AccDeviceType, AccDirective, AccEndKind, AccGangArgument, AccReductionOperator,
-    AccSizeExpression, AccVectorModifier, AccWorkerModifier, OmpClause, OmpDirective,
+    AccBindTarget, AccCacheItem, AccClause, AccClausePayload, AccClauseSourceAlias,
+    AccDataModifier, AccDefaultKind, AccDeviceType, AccDirective, AccEndKind, AccGangArgument,
+    AccReductionOperator, AccSizeExpression, AccVectorModifier, AccWorkerModifier, OmpClause,
+    OmpClauseSourceAlias, OmpClauseSourceSeparator, OmpDirective, OmpDirectiveSourceAlias,
     RoupDirective,
 };
 use roup::diagnostic::{Diagnostic, DiagnosticCode};
@@ -42,6 +43,24 @@ impl<T: AbiStringLeaf + ?Sized> AbiStringLeaf for Box<T> {
     }
 }
 
+impl AbiStringLeaf for roup::ir::Expression {
+    fn render_abi_leaf(&self) -> String {
+        self.source_spelling().to_owned()
+    }
+}
+
+impl AbiStringLeaf for roup::ir::Variable {
+    fn render_abi_leaf(&self) -> String {
+        self.expression().compact_source_spelling()
+    }
+}
+
+impl AbiStringLeaf for roup::ir::LValue {
+    fn render_abi_leaf(&self) -> String {
+        self.expression().compact_source_spelling()
+    }
+}
+
 macro_rules! impl_display_abi_leaf {
     ($($ty:ty),+ $(,)?) => {
         $(
@@ -55,10 +74,7 @@ macro_rules! impl_display_abi_leaf {
 }
 
 impl_display_abi_leaf!(
-    roup::ir::Expression,
     roup::ir::Identifier,
-    roup::ir::Variable,
-    roup::ir::LValue,
     roup::host::TypeName,
     roup::ast::OmpCppTemplateId,
 );
@@ -558,6 +574,8 @@ fn omp_directive_kind_ordinal(kind: roup::ast::OmpDirectiveKind) -> u32 {
         roup::ast::OmpDirectiveKind::Unroll => crate::ROUP_OMP_DIRECTIVE_UNROLL,
         roup::ast::OmpDirectiveKind::Workdistribute => crate::ROUP_OMP_DIRECTIVE_WORKDISTRIBUTE,
         roup::ast::OmpDirectiveKind::Workshare => crate::ROUP_OMP_DIRECTIVE_WORKSHARE,
+        roup::ast::OmpDirectiveKind::EndSection => crate::ROUP_OMP_DIRECTIVE_END_SECTION,
+        roup::ast::OmpDirectiveKind::Ompx => crate::ROUP_OMP_DIRECTIVE_OMPX,
     }
 }
 
@@ -704,6 +722,30 @@ fn omp_clause_kind_ordinal(kind: roup::ast::OmpClauseKind) -> u32 {
     }
 }
 
+fn omp_clause_source_alias(alias: OmpClauseSourceAlias) -> u32 {
+    match alias {
+        OmpClauseSourceAlias::DependSource => crate::ROUP_OMP_CLAUSE_ALIAS_DEPEND_SOURCE,
+        OmpClauseSourceAlias::DependSourceCurrent => {
+            crate::ROUP_OMP_CLAUSE_ALIAS_DEPEND_SOURCE_CURRENT
+        }
+        OmpClauseSourceAlias::DependSink => crate::ROUP_OMP_CLAUSE_ALIAS_DEPEND_SINK,
+        OmpClauseSourceAlias::DependSinkPreviousCurrent => {
+            crate::ROUP_OMP_CLAUSE_ALIAS_DEPEND_SINK_PREVIOUS_CURRENT
+        }
+        OmpClauseSourceAlias::MetadirectiveDefault => {
+            crate::ROUP_OMP_CLAUSE_ALIAS_METADIRECTIVE_DEFAULT
+        }
+        OmpClauseSourceAlias::DeclareTargetTo => crate::ROUP_OMP_CLAUSE_ALIAS_DECLARE_TARGET_TO,
+        OmpClauseSourceAlias::ProcBindMaster => crate::ROUP_OMP_CLAUSE_ALIAS_PROC_BIND_MASTER,
+        OmpClauseSourceAlias::DoacrossSourceEmpty => {
+            crate::ROUP_OMP_CLAUSE_ALIAS_DOACROSS_SOURCE_EMPTY
+        }
+        OmpClauseSourceAlias::ReductionOriginalPositional => {
+            crate::ROUP_OMP_CLAUSE_ALIAS_REDUCTION_ORIGINAL_POSITIONAL
+        }
+    }
+}
+
 fn acc_directive_kind_ordinal(kind: roup::ast::AccDirectiveKind) -> u32 {
     match kind {
         roup::ast::AccDirectiveKind::Atomic => crate::ROUP_ACC_DIRECTIVE_ATOMIC,
@@ -757,6 +799,7 @@ fn acc_clause_kind_ordinal(kind: roup::ast::AccClauseKind) -> u32 {
         roup::ast::AccClauseKind::If => crate::ROUP_ACC_CLAUSE_IF,
         roup::ast::AccClauseKind::IfPresent => crate::ROUP_ACC_CLAUSE_IF_PRESENT,
         roup::ast::AccClauseKind::Independent => crate::ROUP_ACC_CLAUSE_INDEPENDENT,
+        roup::ast::AccClauseKind::Indirect => crate::ROUP_ACC_CLAUSE_INDIRECT,
         roup::ast::AccClauseKind::Link => crate::ROUP_ACC_CLAUSE_LINK,
         roup::ast::AccClauseKind::NoCreate => crate::ROUP_ACC_CLAUSE_NO_CREATE,
         roup::ast::AccClauseKind::NoHost => crate::ROUP_ACC_CLAUSE_NO_HOST,
@@ -776,6 +819,20 @@ fn acc_clause_kind_ordinal(kind: roup::ast::AccClauseKind) -> u32 {
         roup::ast::AccClauseKind::Wait => crate::ROUP_ACC_CLAUSE_WAIT,
         roup::ast::AccClauseKind::Worker => crate::ROUP_ACC_CLAUSE_WORKER,
         roup::ast::AccClauseKind::Write => crate::ROUP_ACC_CLAUSE_WRITE,
+    }
+}
+
+fn acc_clause_source_alias(alias: AccClauseSourceAlias) -> u32 {
+    match alias {
+        AccClauseSourceAlias::PCopy => crate::ROUP_ACC_CLAUSE_ALIAS_PCOPY,
+        AccClauseSourceAlias::PresentOrCopy => crate::ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_COPY,
+        AccClauseSourceAlias::PCopyIn => crate::ROUP_ACC_CLAUSE_ALIAS_PCOPYIN,
+        AccClauseSourceAlias::PresentOrCopyIn => crate::ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_COPYIN,
+        AccClauseSourceAlias::PCopyOut => crate::ROUP_ACC_CLAUSE_ALIAS_PCOPYOUT,
+        AccClauseSourceAlias::PresentOrCopyOut => crate::ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_COPYOUT,
+        AccClauseSourceAlias::PCreate => crate::ROUP_ACC_CLAUSE_ALIAS_PCREATE,
+        AccClauseSourceAlias::PresentOrCreate => crate::ROUP_ACC_CLAUSE_ALIAS_PRESENT_OR_CREATE,
+        AccClauseSourceAlias::UpdateHost => crate::ROUP_ACC_CLAUSE_ALIAS_UPDATE_HOST,
     }
 }
 
@@ -1061,6 +1118,24 @@ pub(crate) fn directive_kind(handle: RoupDirectiveHandle) -> ServiceResult<RoupD
             dialect: ROUP_DIALECT_OPENACC,
             ordinal: acc_directive_kind_ordinal(directive.kind()),
         }),
+    })
+}
+
+pub(crate) fn directive_source_alias(handle: RoupDirectiveHandle) -> ServiceResult<u32> {
+    with_directive(handle, |record| match &record.directive {
+        RoupDirective::OpenMp(directive) => Ok(match directive.source_alias() {
+            None => crate::ROUP_OMP_DIRECTIVE_ALIAS_NONE,
+            Some(OmpDirectiveSourceAlias::OpenMp60Underscore) => {
+                crate::ROUP_OMP_DIRECTIVE_ALIAS_OPENMP60_UNDERSCORE
+            }
+            Some(OmpDirectiveSourceAlias::FortranCompact) => {
+                crate::ROUP_OMP_DIRECTIVE_ALIAS_FORTRAN_COMPACT
+            }
+            Some(OmpDirectiveSourceAlias::FortranRedundantOmp) => {
+                crate::ROUP_OMP_DIRECTIVE_ALIAS_FORTRAN_REDUNDANT_OMP
+            }
+        }),
+        RoupDirective::OpenAcc(_) => Ok(crate::ROUP_OMP_DIRECTIVE_ALIAS_NONE),
     })
 }
 
@@ -1511,7 +1586,7 @@ fn with_clause_fields<T>(
                 omp_clause_fields(omp_clause(directive, clause_index)?)?
             }
             RoupDirective::OpenAcc(directive) => {
-                acc_fields(acc_clause(directive, clause_index)?.payload())?
+                acc_clause_fields(acc_clause(directive, clause_index)?)?
             }
         };
         operation(&fields)
@@ -1882,7 +1957,7 @@ fn validate_options(options: RoupParserOptions) -> UnrecordedResult<ParserRecord
         value => return Err(config_error(format!("unknown source form value {value}"))),
     };
 
-    if options.flags != 0 {
+    if options.flags & !crate::ROUP_PARSER_SOURCE_COMPATIBILITY != 0 {
         return Err(config_error(format!(
             "unsupported parser option flags {:#x}",
             options.flags
@@ -1908,6 +1983,11 @@ fn validate_options(options: RoupParserOptions) -> UnrecordedResult<ParserRecord
                 OpenMpConfig::exact(openmp_version(options.version)?, host, source_form)
             }
             .map_err(config_diagnostic)?;
+            let config = if options.flags & crate::ROUP_PARSER_SOURCE_COMPATIBILITY != 0 {
+                config.with_source_compatibility()
+            } else {
+                config
+            };
             Ok(ParserRecord::OpenMp(config.parser()))
         }
         ROUP_DIALECT_OPENACC => {
@@ -1917,6 +1997,11 @@ fn validate_options(options: RoupParserOptions) -> UnrecordedResult<ParserRecord
                 OpenAccConfig::exact(openacc_version(options.version)?, host, source_form)
             }
             .map_err(config_diagnostic)?;
+            let config = if options.flags & crate::ROUP_PARSER_SOURCE_COMPATIBILITY != 0 {
+                config.with_source_compatibility()
+            } else {
+                config
+            };
             Ok(ParserRecord::OpenAcc(config.parser()))
         }
         _ => Err(internal_failure("validated dialect became invalid")),
@@ -1980,6 +2065,28 @@ fn version_bits<V: DirectiveVersion>(versions: VersionSet<V>) -> u64 {
         .fold(0_u64, |bits, version| bits | (1_u64 << version.ordinal()))
 }
 
+fn ompx_payload_item_node(item: &roup::ast::OmpxPayloadItem) -> NodeRecord {
+    match item {
+        roup::ast::OmpxPayloadItem::Identifier(identifier) => semantic_node(
+            crate::ROUP_NODE_FAMILY_OMPX_PAYLOAD_ITEM,
+            crate::ROUP_OMPX_PAYLOAD_IDENTIFIER,
+            vec![ClauseField::string(
+                crate::ROUP_FIELD_NAME,
+                "name",
+                identifier,
+            )],
+        ),
+        roup::ast::OmpxPayloadItem::Invocation { name, arguments } => semantic_node(
+            crate::ROUP_NODE_FAMILY_OMPX_PAYLOAD_ITEM,
+            crate::ROUP_OMPX_PAYLOAD_INVOCATION,
+            vec![
+                ClauseField::string(crate::ROUP_FIELD_NAME, "name", name),
+                ClauseField::strings(crate::ROUP_FIELD_ARGUMENTS, "arguments", arguments),
+            ],
+        ),
+    }
+}
+
 fn parameter_fields(body: &RoupDirective) -> UnrecordedResult<Vec<ClauseField>> {
     let mut fields = Vec::new();
     match body {
@@ -2033,6 +2140,11 @@ fn parameter_fields(body: &RoupDirective) -> UnrecordedResult<Vec<ClauseField>> 
                         "variable",
                         mapper.variable(),
                     ));
+                    fields.push(ClauseField::boolean(
+                        crate::ROUP_FIELD_DECLARATOR_ATTACHED,
+                        "declarator_attached",
+                        mapper.variable_is_attached(),
+                    ));
                 }
                 roup::ast::OmpDirectiveParameter::DeclareVariant(target) => {
                     push_optional_string(
@@ -2066,6 +2178,18 @@ fn parameter_fields(body: &RoupDirective) -> UnrecordedResult<Vec<ClauseField>> 
                     ))
                 }
                 roup::ast::OmpDirectiveParameter::DeclareReduction(reduction) => {
+                    fields.push(ClauseField::u32(
+                        crate::ROUP_FIELD_SOURCE_SYNTAX,
+                        "source_syntax",
+                        match reduction.source_syntax() {
+                            roup::ast::OmpDeclareReductionSyntax::InlineCombiner => {
+                                crate::ROUP_OMP_DECLARE_REDUCTION_INLINE_COMBINER
+                            }
+                            roup::ast::OmpDeclareReductionSyntax::CombinerClause => {
+                                crate::ROUP_OMP_DECLARE_REDUCTION_COMBINER_CLAUSE
+                            }
+                        },
+                    ));
                     fields.push(ClauseField::node(
                         crate::ROUP_FIELD_NAME,
                         "identifier",
@@ -2106,10 +2230,22 @@ fn parameter_fields(body: &RoupDirective) -> UnrecordedResult<Vec<ClauseField>> 
                     ));
                 }
                 roup::ast::OmpDirectiveParameter::DeclareSimd(target) => {
+                    let function = if target.hash_prefixed() {
+                        format!("#{}", target.function())
+                    } else {
+                        target.function().to_string()
+                    };
                     fields.push(ClauseField::string(
                         crate::ROUP_FIELD_FUNCTION,
                         "function",
-                        target.function(),
+                        function.as_str(),
+                    ));
+                }
+                roup::ast::OmpDirectiveParameter::Ompx(payload) => {
+                    fields.push(ClauseField::nodes(
+                        crate::ROUP_FIELD_ITEMS,
+                        "payload_items",
+                        payload.items().iter().map(ompx_payload_item_node).collect(),
                     ));
                 }
             }
@@ -2140,6 +2276,11 @@ fn parameter_fields(body: &RoupDirective) -> UnrecordedResult<Vec<ClauseField>> 
                         crate::ROUP_FIELD_VALUES,
                         "queues",
                         wait.queues(),
+                    ));
+                    fields.push(ClauseField::boolean(
+                        crate::ROUP_FIELD_QUEUES_KEYWORD,
+                        "queues_keyword",
+                        wait.has_queues_keyword(),
                     ));
                 }
                 roup::ast::AccDirectiveParameter::Routine(routine) => fields.push(
@@ -2230,10 +2371,10 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
             "counts",
             counts.iter().map(omp_count_node).collect(),
         )),
-        ClauseData::Uniform { parameters } => fields.push(ClauseField::strings(
+        ClauseData::Uniform { parameters } => fields.push(ClauseField::nodes(
             crate::ROUP_FIELD_ARGUMENTS,
             "parameters",
-            parameters,
+            parameters.iter().map(clause_item_node).collect(),
         )),
         ClauseData::Use { interop_var } => fields.push(ClauseField::string(
             crate::ROUP_FIELD_VARIABLE,
@@ -2468,7 +2609,12 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
                     },
                 ));
             }
-            fields.push(ClauseField::string(crate::ROUP_FIELD_STEP, "step", step));
+            let compact_step = step.compact_source_spelling();
+            fields.push(ClauseField::string(
+                crate::ROUP_FIELD_STEP,
+                "step",
+                compact_step.as_str(),
+            ));
             fields.push(ClauseField::node(
                 crate::ROUP_FIELD_IDENTIFIER,
                 "identifier",
@@ -2551,7 +2697,7 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
         }
         ClauseData::Map {
             map_type,
-            map_type_spelling: _,
+            map_type_spelling,
             modifiers,
             mapper,
             iterators,
@@ -2564,6 +2710,11 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
                     omp_map_type(*map_type),
                 ));
             }
+            fields.push(ClauseField::u32(
+                crate::ROUP_FIELD_MAP_TYPE_SPELLING,
+                "map_type_spelling",
+                omp_map_type_spelling(*map_type_spelling),
+            ));
             fields.push(ClauseField::u32s(
                 crate::ROUP_FIELD_MODIFIERS,
                 "modifiers",
@@ -3053,12 +3204,21 @@ fn acc_fields(payload: &AccClausePayload) -> UnrecordedResult<Vec<ClauseField>> 
             "sizes",
             sizes.iter().map(acc_size_expression_node).collect(),
         )),
-        AccClausePayload::ItemList(items) => fields.push(clause_items_field(items)),
+        AccClausePayload::ItemList(items) => fields.push(acc_clause_items_field(items)),
         AccClausePayload::Bind(target) => fields.push(ClauseField::node(
             crate::ROUP_FIELD_VALUE,
             "target",
             acc_bind_target_node(target),
         )),
+        AccClausePayload::Indirect(target) => {
+            if let Some(target) = target {
+                fields.push(ClauseField::node(
+                    crate::ROUP_FIELD_VALUE,
+                    "target",
+                    acc_bind_target_node(target),
+                ));
+            }
+        }
         AccClausePayload::Collapse(collapse) => {
             fields.push(ClauseField::boolean(
                 crate::ROUP_FIELD_FORCE,
@@ -3094,7 +3254,7 @@ fn acc_fields(payload: &AccClausePayload) -> UnrecordedResult<Vec<ClauseField>> 
                 "modifiers",
                 copy.modifiers().iter().map(acc_data_modifier).collect(),
             ));
-            fields.push(clause_items_field(copy.variables()));
+            fields.push(acc_clause_items_field(copy.variables()));
         }
         AccClausePayload::Create(create) => {
             fields.push(ClauseField::u32(
@@ -3109,7 +3269,7 @@ fn acc_fields(payload: &AccClausePayload) -> UnrecordedResult<Vec<ClauseField>> 
                 "modifiers",
                 create.modifiers().iter().map(acc_data_modifier).collect(),
             ));
-            fields.push(clause_items_field(create.variables()));
+            fields.push(acc_clause_items_field(create.variables()));
         }
         AccClausePayload::Data(data) => {
             fields.push(ClauseField::u32(
@@ -3117,7 +3277,7 @@ fn acc_fields(payload: &AccClausePayload) -> UnrecordedResult<Vec<ClauseField>> 
                 "kind",
                 acc_data_kind(data.kind()),
             ));
-            fields.push(clause_items_field(data.variables()));
+            fields.push(acc_clause_items_field(data.variables()));
         }
         AccClausePayload::DeviceType(values) => fields.push(ClauseField::nodes(
             crate::ROUP_FIELD_VALUES,
@@ -3184,6 +3344,11 @@ fn acc_fields(payload: &AccClausePayload) -> UnrecordedResult<Vec<ClauseField>> 
                 "queues",
                 wait.queues(),
             ));
+            fields.push(ClauseField::boolean(
+                crate::ROUP_FIELD_QUEUES_KEYWORD,
+                "queues_keyword",
+                wait.has_queues_keyword(),
+            ));
         }
         AccClausePayload::Reduction(reduction) => {
             fields.push(ClauseField::node(
@@ -3191,9 +3356,22 @@ fn acc_fields(payload: &AccClausePayload) -> UnrecordedResult<Vec<ClauseField>> 
                 "operator",
                 acc_reduction_operator_node(reduction.operator()),
             ));
-            fields.push(clause_items_field(reduction.variables()));
+            fields.push(acc_clause_items_field(reduction.variables()));
         }
     }
+    Ok(fields)
+}
+
+fn acc_clause_fields(clause: &AccClause) -> UnrecordedResult<Vec<ClauseField>> {
+    let mut fields = Vec::new();
+    if let Some(alias) = clause.source_alias() {
+        fields.push(ClauseField::u32(
+            crate::ROUP_FIELD_SOURCE_ALIAS,
+            "source_alias",
+            acc_clause_source_alias(alias),
+        ));
+    }
+    fields.extend(acc_fields(clause.payload())?);
     Ok(fields)
 }
 
@@ -3288,6 +3466,15 @@ fn omp_map_type(kind: roup::ir::MapType) -> u32 {
         roup::ir::MapType::From => crate::ROUP_OMP_MAP_FROM,
         roup::ir::MapType::ToFrom => crate::ROUP_OMP_MAP_TOFROM,
         roup::ir::MapType::Storage => crate::ROUP_OMP_MAP_STORAGE,
+    }
+}
+
+fn omp_map_type_spelling(spelling: roup::ir::MapTypeSpelling) -> u32 {
+    match spelling {
+        roup::ir::MapTypeSpelling::Canonical => crate::ROUP_OMP_MAP_TYPE_SPELLING_CANONICAL,
+        roup::ir::MapTypeSpelling::Alloc => crate::ROUP_OMP_MAP_TYPE_SPELLING_ALLOC,
+        roup::ir::MapTypeSpelling::Release => crate::ROUP_OMP_MAP_TYPE_SPELLING_RELEASE,
+        roup::ir::MapTypeSpelling::Delete => crate::ROUP_OMP_MAP_TYPE_SPELLING_DELETE,
     }
 }
 
@@ -3551,14 +3738,14 @@ fn omp_append_operation_node(operation: &roup::ir::OmpAppendOperation) -> NodeRe
     }
 }
 
-fn variable_clause_item_node(variable: &roup::ir::Variable) -> NodeRecord {
+fn lvalue_clause_item_node(value: &roup::ir::LValue) -> NodeRecord {
     semantic_node(
         crate::ROUP_NODE_FAMILY_CLAUSE_ITEM,
-        crate::ROUP_CLAUSE_ITEM_VARIABLE,
+        crate::ROUP_CLAUSE_ITEM_LVALUE,
         vec![ClauseField::string(
-            crate::ROUP_FIELD_VARIABLE,
-            "variable",
-            variable,
+            crate::ROUP_FIELD_VALUE,
+            "lvalue",
+            value,
         )],
     )
 }
@@ -3587,7 +3774,7 @@ fn omp_dependence_node(dependence: &roup::ir::OmpDependence) -> NodeRecord {
             vec![ClauseField::nodes(
                 crate::ROUP_FIELD_OBJECTS,
                 "objects",
-                objects.iter().map(variable_clause_item_node).collect(),
+                objects.iter().map(lvalue_clause_item_node).collect(),
             )],
         ),
     }
@@ -3651,23 +3838,56 @@ fn omp_doacross_vector_item_node(item: &roup::ir::OmpDoacrossVectorItem) -> Node
 }
 
 fn clause_items_field(items: &[roup::ir::ClauseItem]) -> ClauseField {
+    clause_items_field_with_spelling(items, ClauseItemSpelling::Compact)
+}
+
+fn acc_clause_items_field(items: &[roup::ir::ClauseItem]) -> ClauseField {
+    clause_items_field_with_spelling(items, ClauseItemSpelling::Source)
+}
+
+#[derive(Clone, Copy)]
+enum ClauseItemSpelling {
+    Source,
+    Compact,
+}
+
+fn clause_items_field_with_spelling(
+    items: &[roup::ir::ClauseItem],
+    spelling: ClauseItemSpelling,
+) -> ClauseField {
     ClauseField::nodes(
         crate::ROUP_FIELD_ITEMS,
         "items",
-        items.iter().map(clause_item_node).collect(),
+        items
+            .iter()
+            .map(|item| clause_item_node_with_spelling(item, spelling))
+            .collect(),
     )
 }
 
 fn clause_item_node(item: &roup::ir::ClauseItem) -> NodeRecord {
+    clause_item_node_with_spelling(item, ClauseItemSpelling::Compact)
+}
+
+fn clause_item_node_with_spelling(
+    item: &roup::ir::ClauseItem,
+    spelling: ClauseItemSpelling,
+) -> NodeRecord {
     let (variant, field) = match item {
         roup::ir::ClauseItem::Identifier(identifier) => (
             crate::ROUP_CLAUSE_ITEM_IDENTIFIER,
             ClauseField::string(crate::ROUP_FIELD_NAME, "name", identifier),
         ),
-        roup::ir::ClauseItem::Variable(variable) => (
-            crate::ROUP_CLAUSE_ITEM_VARIABLE,
-            ClauseField::string(crate::ROUP_FIELD_VARIABLE, "variable", variable),
-        ),
+        roup::ir::ClauseItem::Variable(variable) => {
+            let value = match spelling {
+                ClauseItemSpelling::Source => variable.expression().source_spelling().to_owned(),
+                ClauseItemSpelling::Compact => variable.expression().compact_source_spelling(),
+            };
+            (
+                crate::ROUP_CLAUSE_ITEM_VARIABLE,
+                ClauseField::string(crate::ROUP_FIELD_VARIABLE, "variable", value.as_str()),
+            )
+        }
         roup::ir::ClauseItem::FortranCommonBlock(name) => (
             crate::ROUP_CLAUSE_ITEM_FORTRAN_COMMON_BLOCK,
             ClauseField::string(crate::ROUP_FIELD_NAME, "name", name),
@@ -3675,6 +3895,10 @@ fn clause_item_node(item: &roup::ir::ClauseItem) -> NodeRecord {
         roup::ir::ClauseItem::Expression(expression) => (
             crate::ROUP_CLAUSE_ITEM_EXPRESSION,
             ClauseField::string(crate::ROUP_FIELD_VALUE, "expression", expression),
+        ),
+        roup::ir::ClauseItem::LegacyTrailingSlash(identifier) => (
+            crate::ROUP_CLAUSE_ITEM_LEGACY_TRAILING_SLASH,
+            ClauseField::string(crate::ROUP_FIELD_NAME, "name", identifier),
         ),
     };
     semantic_node(crate::ROUP_NODE_FAMILY_CLAUSE_ITEM, variant, vec![field])
@@ -3724,11 +3948,87 @@ fn omp_locator_node(locator: &roup::ir::OmpLocator) -> NodeRecord {
                 value,
             )],
         ),
+        roup::ir::OmpLocator::Distributed { base, policy } => semantic_node(
+            crate::ROUP_NODE_FAMILY_OMP_LOCATOR,
+            crate::ROUP_OMP_LOCATOR_DISTRIBUTED,
+            vec![
+                ClauseField::string(crate::ROUP_FIELD_VALUE, "base", base),
+                ClauseField::u32(
+                    crate::ROUP_FIELD_KIND,
+                    "policy",
+                    match policy {
+                        roup::ir::OmpDistDataPolicy::Duplicate => {
+                            crate::ROUP_OMP_DIST_DATA_DUPLICATE
+                        }
+                    },
+                ),
+            ],
+        ),
+        roup::ir::OmpLocator::ArrayShaping {
+            dimensions,
+            base,
+            subscripts,
+        } => semantic_node(
+            crate::ROUP_NODE_FAMILY_OMP_LOCATOR,
+            crate::ROUP_OMP_LOCATOR_ARRAY_SHAPING,
+            vec![
+                ClauseField::strings(crate::ROUP_FIELD_VALUES, "dimensions", dimensions),
+                ClauseField::string(crate::ROUP_FIELD_BASE, "base", base),
+                ClauseField::nodes(
+                    crate::ROUP_FIELD_ITEMS,
+                    "subscripts",
+                    subscripts
+                        .iter()
+                        .map(omp_array_shaping_subscript_node)
+                        .collect(),
+                ),
+            ],
+        ),
         roup::ir::OmpLocator::FortranCommonBlock(name) => semantic_node(
             crate::ROUP_NODE_FAMILY_OMP_LOCATOR,
             crate::ROUP_OMP_LOCATOR_FORTRAN_COMMON_BLOCK,
             vec![ClauseField::string(crate::ROUP_FIELD_NAME, "name", name)],
         ),
+    }
+}
+
+fn omp_array_shaping_subscript_node(subscript: &roup::ir::OmpArrayShapingSubscript) -> NodeRecord {
+    match subscript {
+        roup::ir::OmpArrayShapingSubscript::Index(index) => semantic_node(
+            crate::ROUP_NODE_FAMILY_OMP_ARRAY_SHAPING_SUBSCRIPT,
+            crate::ROUP_OMP_ARRAY_SHAPING_INDEX,
+            vec![ClauseField::string(crate::ROUP_FIELD_VALUE, "index", index)],
+        ),
+        roup::ir::OmpArrayShapingSubscript::Section {
+            lower,
+            length,
+            stride,
+        } => {
+            let mut fields = Vec::new();
+            push_optional_string(
+                &mut fields,
+                crate::ROUP_FIELD_LOWER_BOUND,
+                "lower",
+                lower.as_ref(),
+            );
+            push_optional_string(
+                &mut fields,
+                crate::ROUP_FIELD_LENGTH,
+                "length",
+                length.as_ref(),
+            );
+            push_optional_string(
+                &mut fields,
+                crate::ROUP_FIELD_STRIDE,
+                "stride",
+                stride.as_ref(),
+            );
+            semantic_node(
+                crate::ROUP_NODE_FAMILY_OMP_ARRAY_SHAPING_SUBSCRIPT,
+                crate::ROUP_OMP_ARRAY_SHAPING_SECTION,
+                fields,
+            )
+        }
     }
 }
 
@@ -4193,9 +4493,16 @@ fn acc_size_expression_node(size: &AccSizeExpression) -> NodeRecord {
 }
 
 fn acc_cache_item_node(item: &AccCacheItem) -> NodeRecord {
-    let variant = match item {
-        AccCacheItem::ArrayElement(_) => crate::ROUP_ACC_CACHE_ARRAY_ELEMENT,
-        AccCacheItem::ContiguousSubarray(_) => crate::ROUP_ACC_CACHE_CONTIGUOUS_SUBARRAY,
+    let (variant, value) = match item {
+        AccCacheItem::Scalar(identifier) => (crate::ROUP_ACC_CACHE_SCALAR, identifier.as_str()),
+        AccCacheItem::ArrayElement(variable) => (
+            crate::ROUP_ACC_CACHE_ARRAY_ELEMENT,
+            variable.expression().source_spelling(),
+        ),
+        AccCacheItem::ContiguousSubarray(variable) => (
+            crate::ROUP_ACC_CACHE_CONTIGUOUS_SUBARRAY,
+            variable.expression().source_spelling(),
+        ),
     };
     semantic_node(
         crate::ROUP_NODE_FAMILY_ACC_CACHE_ITEM,
@@ -4203,7 +4510,7 @@ fn acc_cache_item_node(item: &AccCacheItem) -> NodeRecord {
         vec![ClauseField::string(
             crate::ROUP_FIELD_VARIABLE,
             "variable",
-            item.variable(),
+            value,
         )],
     )
 }
@@ -4226,6 +4533,11 @@ fn acc_bind_target_node(target: &AccBindTarget) -> NodeRecord {
                     crate::ROUP_FIELD_ENCODING,
                     "encoding",
                     character_encoding(literal.encoding),
+                ),
+                ClauseField::u32(
+                    crate::ROUP_FIELD_QUOTE_STYLE,
+                    "quote_style",
+                    quote_style(literal.delimiter),
                 ),
             ],
         ),
@@ -4394,6 +4706,11 @@ fn string_literal_node(literal: &roup::host::StringLiteral) -> NodeRecord {
                 "encoding",
                 character_encoding(literal.encoding),
             ),
+            ClauseField::u32(
+                crate::ROUP_FIELD_QUOTE_STYLE,
+                "quote_style",
+                quote_style(literal.delimiter),
+            ),
         ],
     )
 }
@@ -4523,6 +4840,18 @@ fn uses_allocator_node(entry: &roup::ir::UsesAllocatorSpec) -> UnrecordedResult<
         "allocator",
         omp_allocator_kind_node(entry.allocator()),
     )];
+    fields.push(ClauseField::u32(
+        crate::ROUP_FIELD_SOURCE_SYNTAX,
+        "source_syntax",
+        match entry.source_syntax() {
+            roup::ir::UsesAllocatorSourceSyntax::Historical => {
+                crate::ROUP_OMP_USES_ALLOCATORS_HISTORICAL
+            }
+            roup::ir::UsesAllocatorSourceSyntax::Modifier => {
+                crate::ROUP_OMP_USES_ALLOCATORS_MODIFIER
+            }
+        },
+    ));
     push_optional_string(
         &mut fields,
         crate::ROUP_FIELD_TRAITS,
@@ -4552,6 +4881,23 @@ fn uses_allocator_node(entry: &roup::ir::UsesAllocatorSpec) -> UnrecordedResult<
 fn omp_directive_node(directive: &OmpDirective) -> UnrecordedResult<NodeRecord> {
     let variant = omp_directive_kind_ordinal(directive.kind());
     let mut fields = Vec::new();
+    if let Some(alias) = directive.source_alias() {
+        fields.push(ClauseField::u32(
+            crate::ROUP_FIELD_SOURCE_ALIAS,
+            "source_alias",
+            match alias {
+                OmpDirectiveSourceAlias::OpenMp60Underscore => {
+                    crate::ROUP_OMP_DIRECTIVE_ALIAS_OPENMP60_UNDERSCORE
+                }
+                OmpDirectiveSourceAlias::FortranCompact => {
+                    crate::ROUP_OMP_DIRECTIVE_ALIAS_FORTRAN_COMPACT
+                }
+                OmpDirectiveSourceAlias::FortranRedundantOmp => {
+                    crate::ROUP_OMP_DIRECTIVE_ALIAS_FORTRAN_REDUNDANT_OMP
+                }
+            },
+        ));
+    }
     if directive.parameter().is_some() {
         fields.push(ClauseField::node(
             crate::ROUP_FIELD_PARAMETER,
@@ -4586,7 +4932,21 @@ fn omp_clause_node(clause: &OmpClause) -> UnrecordedResult<NodeRecord> {
 }
 
 fn omp_clause_fields(clause: &OmpClause) -> UnrecordedResult<Vec<ClauseField>> {
-    let mut fields = Vec::new();
+    let mut fields = vec![ClauseField::u32(
+        crate::ROUP_FIELD_PRECEDING_SEPARATOR,
+        "preceding_separator",
+        match clause.source_separator() {
+            OmpClauseSourceSeparator::Space => crate::ROUP_OMP_CLAUSE_SEPARATOR_SPACE,
+            OmpClauseSourceSeparator::Comma => crate::ROUP_OMP_CLAUSE_SEPARATOR_COMMA,
+        },
+    )];
+    if let Some(alias) = clause.source_alias() {
+        fields.push(ClauseField::u32(
+            crate::ROUP_FIELD_SOURCE_ALIAS,
+            "source_alias",
+            omp_clause_source_alias(alias),
+        ));
+    }
     if let Some(modifier) = clause.directive_name_modifier() {
         fields.push(ClauseField::u32(
             crate::ROUP_FIELD_DIRECTIVE_NAME_MODIFIER,
@@ -4642,6 +5002,7 @@ fn omp_parameter_variant(parameter: &roup::ast::OmpDirectiveParameter) -> u32 {
             crate::ROUP_OMP_PARAMETER_DECLARE_INDUCTION
         }
         roup::ast::OmpDirectiveParameter::DeclareSimd(_) => crate::ROUP_OMP_PARAMETER_DECLARE_SIMD,
+        roup::ast::OmpDirectiveParameter::Ompx(_) => crate::ROUP_OMP_PARAMETER_OMPX,
     }
 }
 
@@ -4744,6 +5105,11 @@ fn selector_trait_value_node(value: &roup::ast::OmpSelectorTraitValue) -> NodeRe
                     "encoding",
                     character_encoding(literal.encoding),
                 ),
+                ClauseField::u32(
+                    crate::ROUP_FIELD_QUOTE_STYLE,
+                    "quote_style",
+                    quote_style(literal.delimiter),
+                ),
             ],
         ),
     };
@@ -4752,6 +5118,57 @@ fn selector_trait_value_node(value: &roup::ast::OmpSelectorTraitValue) -> NodeRe
         variant,
         fields,
     )
+}
+
+fn selector_name_list_property_node(
+    list_kind: roup::ast::OmpSelectorNameListKind,
+    value: &roup::ast::OmpSelectorTraitValue,
+) -> NodeRecord {
+    if list_kind == roup::ast::OmpSelectorNameListKind::Kind
+        && let Some(kind) = value.device_kind()
+    {
+        let kind = match kind {
+            roup::ast::OmpSelectorDeviceKind::Host => crate::ROUP_OMP_DEVICE_KIND_HOST,
+            roup::ast::OmpSelectorDeviceKind::NoHost => crate::ROUP_OMP_DEVICE_KIND_NOHOST,
+            roup::ast::OmpSelectorDeviceKind::Any => crate::ROUP_OMP_DEVICE_KIND_ANY,
+            roup::ast::OmpSelectorDeviceKind::Cpu => crate::ROUP_OMP_DEVICE_KIND_CPU,
+            roup::ast::OmpSelectorDeviceKind::Gpu => crate::ROUP_OMP_DEVICE_KIND_GPU,
+            roup::ast::OmpSelectorDeviceKind::Fpga => crate::ROUP_OMP_DEVICE_KIND_FPGA,
+        };
+        return semantic_node(
+            crate::ROUP_NODE_FAMILY_OMP_SELECTOR_TRAIT_VALUE,
+            crate::ROUP_SELECTOR_TRAIT_PREDEFINED_DEVICE_KIND,
+            vec![ClauseField::u32(
+                crate::ROUP_FIELD_KIND,
+                "device_kind",
+                kind,
+            )],
+        );
+    }
+    if list_kind == roup::ast::OmpSelectorNameListKind::Vendor
+        && let Some(vendor) = value.vendor()
+    {
+        let vendor = match vendor {
+            roup::ast::OmpSelectorVendor::Amd => crate::ROUP_OMP_VENDOR_AMD,
+            roup::ast::OmpSelectorVendor::Arm => crate::ROUP_OMP_VENDOR_ARM,
+            roup::ast::OmpSelectorVendor::Bsc => crate::ROUP_OMP_VENDOR_BSC,
+            roup::ast::OmpSelectorVendor::Cray => crate::ROUP_OMP_VENDOR_CRAY,
+            roup::ast::OmpSelectorVendor::Fujitsu => crate::ROUP_OMP_VENDOR_FUJITSU,
+            roup::ast::OmpSelectorVendor::Gnu => crate::ROUP_OMP_VENDOR_GNU,
+            roup::ast::OmpSelectorVendor::Ibm => crate::ROUP_OMP_VENDOR_IBM,
+            roup::ast::OmpSelectorVendor::Intel => crate::ROUP_OMP_VENDOR_INTEL,
+            roup::ast::OmpSelectorVendor::Llvm => crate::ROUP_OMP_VENDOR_LLVM,
+            roup::ast::OmpSelectorVendor::Nvidia => crate::ROUP_OMP_VENDOR_NVIDIA,
+            roup::ast::OmpSelectorVendor::Pgi => crate::ROUP_OMP_VENDOR_PGI,
+            roup::ast::OmpSelectorVendor::Ti => crate::ROUP_OMP_VENDOR_TI,
+        };
+        return semantic_node(
+            crate::ROUP_NODE_FAMILY_OMP_SELECTOR_TRAIT_VALUE,
+            crate::ROUP_SELECTOR_TRAIT_PREDEFINED_VENDOR,
+            vec![ClauseField::u32(crate::ROUP_FIELD_KIND, "vendor", vendor)],
+        );
+    }
+    selector_trait_value_node(value)
 }
 
 fn selector_device_trait_node(value: &roup::ast::OmpSelectorDeviceTrait) -> NodeRecord {
@@ -4854,25 +5271,28 @@ fn selector_implementation_trait_node(
 }
 
 fn selector_name_list_trait_node(value: &roup::ast::OmpSelectorNameListTrait) -> NodeRecord {
-    let variant = match value.kind() {
+    let list_kind = value.kind();
+    let variant = match list_kind {
         roup::ast::OmpSelectorNameListKind::Kind => crate::ROUP_SELECTOR_NAME_LIST_KIND,
         roup::ast::OmpSelectorNameListKind::Isa => crate::ROUP_SELECTOR_NAME_LIST_ISA,
         roup::ast::OmpSelectorNameListKind::Arch => crate::ROUP_SELECTOR_NAME_LIST_ARCH,
         roup::ast::OmpSelectorNameListKind::Vendor => crate::ROUP_SELECTOR_NAME_LIST_VENDOR,
         roup::ast::OmpSelectorNameListKind::Extension => crate::ROUP_SELECTOR_NAME_LIST_EXTENSION,
     };
+    let mut fields = vec![ClauseField::nodes(
+        crate::ROUP_FIELD_PROPERTIES,
+        "properties",
+        value
+            .properties()
+            .iter()
+            .map(|property| selector_name_list_property_node(list_kind, property))
+            .collect(),
+    )];
+    push_optional_string(&mut fields, crate::ROUP_FIELD_SCORE, "score", value.score());
     semantic_node(
         crate::ROUP_NODE_FAMILY_OMP_SELECTOR_NAME_LIST_TRAIT,
         variant,
-        vec![ClauseField::nodes(
-            crate::ROUP_FIELD_PROPERTIES,
-            "properties",
-            value
-                .properties()
-                .iter()
-                .map(selector_trait_value_node)
-                .collect(),
-        )],
+        fields,
     )
 }
 
@@ -4959,11 +5379,17 @@ fn selector_requirement_node(
 fn selector_construct_node(
     construct: &roup::ast::OmpSelectorConstruct,
 ) -> UnrecordedResult<NodeRecord> {
-    let fields = vec![ClauseField::node(
+    let mut fields = vec![ClauseField::node(
         crate::ROUP_FIELD_NESTED_DIRECTIVE,
         "directive",
         omp_directive_node(construct.directive())?,
     )];
+    push_optional_string(
+        &mut fields,
+        crate::ROUP_FIELD_SCORE,
+        "score",
+        construct.score(),
+    );
     Ok(semantic_node(
         crate::ROUP_NODE_FAMILY_OMP_SELECTOR_CONSTRUCT,
         crate::ROUP_SELECTOR_CONSTRUCT,
@@ -5015,6 +5441,7 @@ fn acc_device_type_node(value: &AccDeviceType) -> NodeRecord {
 fn acc_reduction_operator_node(operator: &AccReductionOperator) -> NodeRecord {
     let (variant, fields) = match operator {
         AccReductionOperator::Add => (crate::ROUP_ACC_REDUCTION_ADD, Vec::new()),
+        AccReductionOperator::Sub => (crate::ROUP_ACC_REDUCTION_SUB, Vec::new()),
         AccReductionOperator::Mul => (crate::ROUP_ACC_REDUCTION_MUL, Vec::new()),
         AccReductionOperator::Max => (crate::ROUP_ACC_REDUCTION_MAX, Vec::new()),
         AccReductionOperator::Min => (crate::ROUP_ACC_REDUCTION_MIN, Vec::new()),
@@ -5046,6 +5473,13 @@ fn character_encoding(encoding: roup::host::CharacterEncoding) -> u32 {
         roup::host::CharacterEncoding::Utf32 => crate::ROUP_CHARACTER_ENCODING_UTF32,
         roup::host::CharacterEncoding::Wide => crate::ROUP_CHARACTER_ENCODING_WIDE,
         roup::host::CharacterEncoding::Fortran => crate::ROUP_CHARACTER_ENCODING_FORTRAN,
+    }
+}
+
+fn quote_style(delimiter: roup::host::StringDelimiter) -> u32 {
+    match delimiter {
+        roup::host::StringDelimiter::SingleQuote => crate::ROUP_QUOTE_SINGLE,
+        roup::host::StringDelimiter::DoubleQuote => crate::ROUP_QUOTE_DOUBLE,
     }
 }
 
@@ -5082,6 +5516,16 @@ mod tests {
         let mut options = openmp_options();
         options.dialect = ROUP_DIALECT_OPENACC;
         options
+    }
+
+    #[test]
+    fn previous_abi_version_is_a_hard_error() {
+        let mut options = openacc_options();
+        options.abi_version = 1;
+        assert!(
+            validate_options(options).is_err(),
+            "ABI v1 must not observe ABI v2 ordinal definitions"
+        );
     }
 
     fn only_field(fields: &[ClauseField], id: u32) -> &FieldValue {
@@ -5126,7 +5570,7 @@ mod tests {
                 .map(|clause| {
                     Ok((
                         acc_clause_kind_ordinal(clause.kind()),
-                        acc_fields(clause.payload())?,
+                        acc_clause_fields(clause)?,
                     ))
                 })
                 .collect::<UnrecordedResult<Vec<_>>>(),
@@ -5319,6 +5763,10 @@ mod tests {
                 let mut parts = definition.split_whitespace();
                 let name = parts.next()?;
                 if !name.starts_with(prefix) {
+                    return None;
+                }
+                let suffix = name.strip_prefix(prefix)?;
+                if suffix.starts_with("ALIAS_") || suffix.starts_with("SEPARATOR_") {
                     return None;
                 }
                 let encoded = parts.next()?;
@@ -5722,9 +6170,19 @@ mod tests {
             panic!("name-list properties must be nodes");
         };
         assert_eq!(kind_properties.len(), 2);
-        assert!(kind_properties.iter().all(|property| {
-            property.kind.family == crate::ROUP_NODE_FAMILY_OMP_SELECTOR_TRAIT_VALUE
-        }));
+        assert!(kind_properties.iter().all(|property| property.kind
+            == RoupNodeKind {
+                family: crate::ROUP_NODE_FAMILY_OMP_SELECTOR_TRAIT_VALUE,
+                variant: crate::ROUP_SELECTOR_TRAIT_PREDEFINED_DEVICE_KIND,
+            }));
+        assert!(matches!(
+            only_field(&kind_properties[0].fields, crate::ROUP_FIELD_KIND),
+            FieldValue::U32(crate::ROUP_OMP_DEVICE_KIND_CPU)
+        ));
+        assert!(matches!(
+            only_field(&kind_properties[1].fields, crate::ROUP_FIELD_KIND),
+            FieldValue::U32(crate::ROUP_OMP_DEVICE_KIND_GPU)
+        ));
 
         let FieldValue::Nodes(target_traits) =
             only_field(&entries[1].fields, crate::ROUP_FIELD_TRAITS)
@@ -5766,6 +6224,30 @@ mod tests {
         assert!(matches!(
             only_field(&implementation_traits[0].fields, crate::ROUP_FIELD_SCORE),
             FieldValue::String(score) if score == "4"
+        ));
+        let FieldValue::Node(vendor_trait) = only_field(
+            &implementation_traits[0].fields,
+            crate::ROUP_FIELD_TRAIT_NAME,
+        ) else {
+            panic!("vendor trait must retain a name-list node");
+        };
+        let FieldValue::Nodes(vendors) =
+            only_field(&vendor_trait.fields, crate::ROUP_FIELD_PROPERTIES)
+        else {
+            panic!("vendors must be typed property nodes");
+        };
+        assert!(vendors.iter().all(|vendor| vendor.kind
+            == RoupNodeKind {
+                family: crate::ROUP_NODE_FAMILY_OMP_SELECTOR_TRAIT_VALUE,
+                variant: crate::ROUP_SELECTOR_TRAIT_PREDEFINED_VENDOR,
+            }));
+        assert!(matches!(
+            only_field(&vendors[0].fields, crate::ROUP_FIELD_KIND),
+            FieldValue::U32(crate::ROUP_OMP_VENDOR_LLVM)
+        ));
+        assert!(matches!(
+            only_field(&vendors[1].fields, crate::ROUP_FIELD_KIND),
+            FieldValue::U32(crate::ROUP_OMP_VENDOR_GNU)
         ));
         assert_eq!(
             implementation_traits[1].kind.variant,

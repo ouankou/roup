@@ -343,12 +343,12 @@ fn strict_facade_rejects_explicitly_nonstandard_clause_vocabulary() {
     let error = acc()
         .parse("#pragma acc routine indirect")
         .expect_err("indirect is not standardized by OpenACC 3.4");
-    assert_eq!(error.code(), DiagnosticCode::UnexpectedToken);
+    assert_eq!(error.code(), DiagnosticCode::InvalidClause);
 
     let error = omp()
         .parse("#pragma omp parallel device_resident(x)")
         .expect_err("device_resident is an OpenACC-only clause");
-    assert_eq!(error.code(), DiagnosticCode::UnexpectedToken);
+    assert_eq!(error.code(), DiagnosticCode::InvalidClause);
 }
 
 #[test]

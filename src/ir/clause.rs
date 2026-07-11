@@ -236,9 +236,10 @@ pub enum OmpDependence {
         kind: DependType,
         locators: Vec<OmpLocator>,
     },
-    /// Initialized depend objects. Array sections and general expressions are
+    /// Initialized depend objects. Dereferenced `omp_depend_t` pointers are
+    /// lvalues as well as named variables; array sections and non-lvalues are
     /// excluded by construction.
-    Depobjs { objects: Vec<Variable> },
+    Depobjs { objects: Vec<LValue> },
 }
 
 /// Depobj update dependence types
@@ -642,7 +643,7 @@ impl fmt::Display for UsesAllocatorKind {
 /// Parser-only provenance for version diagnostics. It is intentionally not
 /// part of the public semantic AST or canonical rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum UsesAllocatorSourceSyntax {
+pub enum UsesAllocatorSourceSyntax {
     /// OpenMP 5.0 comma-list item: `allocator[(traits)]`.
     Historical,
     /// OpenMP 5.2 clause-argument specification: `[modifiers:] allocator`.
@@ -653,7 +654,7 @@ pub(crate) enum UsesAllocatorSourceSyntax {
 #[derive(Debug, Clone)]
 pub struct UsesAllocatorSpec {
     allocator: UsesAllocatorKind,
-    traits: Option<Variable>,
+    traits: Option<Expression>,
     memspace: Option<OmpMemorySpace>,
     source_syntax: UsesAllocatorSourceSyntax,
 }
@@ -661,15 +662,10 @@ pub struct UsesAllocatorSpec {
 impl UsesAllocatorSpec {
     pub(crate) fn new(
         allocator: UsesAllocatorKind,
-        traits: Option<Variable>,
+        traits: Option<Expression>,
         memspace: Option<OmpMemorySpace>,
         source_syntax: UsesAllocatorSourceSyntax,
     ) -> Result<Self, &'static str> {
-        if matches!(allocator, UsesAllocatorKind::Builtin(_))
-            && (traits.is_some() || memspace.is_some())
-        {
-            return Err("predefined allocators cannot have uses_allocators modifiers");
-        }
         if source_syntax == UsesAllocatorSourceSyntax::Historical && memspace.is_some() {
             return Err("historical uses_allocators syntax only supports a traits expression");
         }
@@ -687,7 +683,7 @@ impl UsesAllocatorSpec {
     }
 
     #[must_use]
-    pub const fn traits(&self) -> Option<&Variable> {
+    pub const fn traits(&self) -> Option<&Expression> {
         self.traits.as_ref()
     }
 
@@ -696,7 +692,7 @@ impl UsesAllocatorSpec {
         self.memspace
     }
 
-    pub(crate) const fn source_syntax(&self) -> UsesAllocatorSourceSyntax {
+    pub const fn source_syntax(&self) -> UsesAllocatorSourceSyntax {
         self.source_syntax
     }
 }
@@ -1205,6 +1201,8 @@ pub enum ClauseItem {
     FortranCommonBlock(Identifier),
     /// Expression (e.g., `n > 100` in `if(n > 100)`)
     Expression(Expression),
+    /// Historical ompparser list item with a trailing slash token.
+    LegacyTrailingSlash(Identifier),
 }
 
 impl fmt::Display for ClauseItem {
@@ -1214,6 +1212,7 @@ impl fmt::Display for ClauseItem {
             ClauseItem::Variable(var) => write!(f, "{var}"),
             ClauseItem::FortranCommonBlock(name) => write!(f, "/{name}/"),
             ClauseItem::Expression(expr) => write!(f, "{expr}"),
+            ClauseItem::LegacyTrailingSlash(identifier) => write!(f, "{identifier}/"),
         }
     }
 }
@@ -1425,7 +1424,34 @@ pub enum OmpLocator {
     /// A host expression whose lvalue/glvalue category depends on type and
     /// symbol information unavailable to the standalone parser.
     PotentialLValue(Expression),
+    /// Historical ompparser distribution-data suffix on a map locator.
+    Distributed {
+        base: Expression,
+        policy: OmpDistDataPolicy,
+    },
+    /// OpenMP C/C++ array-shaping cast followed by zero or more locator
+    /// subscripts, for example `(([n][m])ptr)[0:n][1]`.
+    ArrayShaping {
+        dimensions: Vec<Expression>,
+        base: Expression,
+        subscripts: Vec<OmpArrayShapingSubscript>,
+    },
     FortranCommonBlock(Identifier),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum OmpArrayShapingSubscript {
+    Index(Box<Expression>),
+    Section {
+        lower: Option<Box<Expression>>,
+        length: Option<Box<Expression>>,
+        stride: Option<Box<Expression>>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OmpDistDataPolicy {
+    Duplicate,
 }
 
 impl fmt::Display for OmpLocator {
@@ -1434,7 +1460,58 @@ impl fmt::Display for OmpLocator {
             Self::AllMemory => formatter.write_str("omp_all_memory"),
             Self::LValue(value) => value.fmt(formatter),
             Self::PotentialLValue(value) => value.fmt(formatter),
+            Self::Distributed { base, policy } => {
+                write!(formatter, "{base} dist_data({policy})")
+            }
+            Self::ArrayShaping {
+                dimensions,
+                base,
+                subscripts,
+            } => {
+                formatter.write_str("((")?;
+                for dimension in dimensions {
+                    write!(formatter, "[{dimension}]")?;
+                }
+                write!(formatter, "){base})")?;
+                for subscript in subscripts {
+                    write!(formatter, "[{subscript}]")?;
+                }
+                Ok(())
+            }
             Self::FortranCommonBlock(name) => write!(formatter, "/{name}/"),
+        }
+    }
+}
+
+impl fmt::Display for OmpArrayShapingSubscript {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Index(index) => index.fmt(formatter),
+            Self::Section {
+                lower,
+                length,
+                stride,
+            } => {
+                if let Some(lower) = lower {
+                    lower.fmt(formatter)?;
+                }
+                formatter.write_str(":")?;
+                if let Some(length) = length {
+                    length.fmt(formatter)?;
+                }
+                if let Some(stride) = stride {
+                    write!(formatter, ":{stride}")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl fmt::Display for OmpDistDataPolicy {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Duplicate => formatter.write_str("duplicate"),
         }
     }
 }
@@ -1446,7 +1523,7 @@ pub enum OmpCount {
     Fill,
     /// A non-negative constant integer expression. Constant/value checking
     /// that requires host semantic information is performed by validation.
-    Expression(Expression),
+    Expression(Box<Expression>),
 }
 
 // ============================================================================
@@ -1538,8 +1615,10 @@ pub enum ClauseData {
     /// `novariants(do-not-use-variant)`.
     Novariants { condition: Expression },
 
-    /// `uniform(parameter-list)`; every entry is a named parameter.
-    Uniform { parameters: Vec<Identifier> },
+    /// `uniform(parameter-list)`. Strict parsing requires named parameters;
+    /// source-compatible parsing retains older expression-shaped entries as
+    /// typed clause items.
+    Uniform { parameters: Vec<ClauseItem> },
 
     /// `use(interop-var)` with exactly one variable.
     Use { interop_var: Variable },

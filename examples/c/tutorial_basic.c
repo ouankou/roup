@@ -43,16 +43,28 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
-    RoupFieldInfoResult info = roup_clause_field_info(parsed.value, 0U, 0U);
-    require_ok(info.result);
-    if (info.value.id != ROUP_FIELD_LOOP_MODIFIER ||
-        info.value.value_kind != ROUP_FIELD_VALUE_NODE || info.value.count != 1U) {
+    size_t modifier_field = field_count.value;
+    for (size_t index = 0U; index < field_count.value; ++index) {
+        RoupFieldInfoResult info =
+            roup_clause_field_info(parsed.value, 0U, index);
+        require_ok(info.result);
+        if (info.value.id == ROUP_FIELD_LOOP_MODIFIER) {
+            if (info.value.value_kind != ROUP_FIELD_VALUE_NODE ||
+                info.value.count != 1U) {
+                fputs("apply loop modifier has an invalid typed payload\n", stderr);
+                return EXIT_FAILURE;
+            }
+            modifier_field = index;
+            break;
+        }
+    }
+    if (modifier_field == field_count.value) {
         fputs("apply loop modifier is not exposed as a typed child node\n", stderr);
         return EXIT_FAILURE;
     }
 
     RoupNodeResult transform =
-        roup_clause_field_node(parsed.value, 0U, 0U, 0U);
+        roup_clause_field_node(parsed.value, 0U, modifier_field, 0U);
     require_ok(transform.result);
     RoupNodeKindResult transform_kind = roup_node_kind(transform.value);
     require_ok(transform_kind.result);

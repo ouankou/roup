@@ -276,6 +276,9 @@ pub fn openmp_directive_spelling_availability(
     let spelling = match directive.source_alias() {
         Some(OmpDirectiveSourceAlias::OpenMp60Underscore) => base.intersect(omp(V::V6_0)),
         Some(OmpDirectiveSourceAlias::FortranCompact) | None => base,
+        Some(OmpDirectiveSourceAlias::FortranRedundantOmp) => FeatureAvailability::Nonstandard {
+            reason: "a redundant omp token after the Fortran sentinel is nonstandard",
+        },
     };
     match directive.parameter() {
         Some(OmpDirectiveParameter::DeclareReduction(reduction))
@@ -320,6 +323,8 @@ pub const fn openmp_clause_spelling_availability(
         // canonical clause spelling to `enter`.
         Some(OmpClauseSourceAlias::DeclareTargetTo) => omp(V::V4_0),
         Some(OmpClauseSourceAlias::ProcBindMaster) => omp(V::V4_0),
+        Some(OmpClauseSourceAlias::DoacrossSourceEmpty) => omp(V::V5_2),
+        Some(OmpClauseSourceAlias::ReductionOriginalPositional) => omp(V::V6_0),
         None => openmp_clause_availability(clause.kind()),
     }
 }
@@ -950,6 +955,10 @@ pub const fn openacc_clause_availability(
         // OpenACC 2.5 added set/default-async selection and finalize.
         C::DefaultAsync | C::DeviceNum | C::Finalize => acc(V::V2_5),
 
+        C::Indirect => FeatureAvailability::Nonstandard {
+            reason: "indirect is an accparser extension, not standardized OpenACC syntax",
+        },
+
         // OpenACC 2.5 added if_present to update. OpenACC 2.7 then added
         // no_create and attach/detach (and extended if_present to host_data).
         C::IfPresent => acc(V::V2_5),
@@ -1045,6 +1054,7 @@ fn acc_clause_contains_common_block(payload: &AccClausePayload) -> bool {
         | AccClausePayload::NumGangs(_)
         | AccClausePayload::Tile(_)
         | AccClausePayload::Bind(_)
+        | AccClausePayload::Indirect(_)
         | AccClausePayload::Collapse(_)
         | AccClausePayload::Default(_)
         | AccClausePayload::DeviceType(_)
@@ -1133,7 +1143,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        assert!(nonstandard.is_empty());
+        assert_eq!(nonstandard, vec![AccClauseKind::Indirect]);
     }
 
     #[test]

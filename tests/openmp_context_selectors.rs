@@ -1,7 +1,8 @@
 use roup::api::{OpenMpConfig, ParsedOpenMpDirective};
 use roup::ast::{
-    OmpClauseKind, OmpSelectorDeviceTrait, OmpSelectorEntry, OmpSelectorExtensionProperty,
-    OmpSelectorImplementationTraitKind, OmpSelectorNameListKind, OmpSelectorTraitValue,
+    OmpClauseKind, OmpSelectorDeviceKind, OmpSelectorDeviceTrait, OmpSelectorEntry,
+    OmpSelectorExtensionProperty, OmpSelectorImplementationTraitKind, OmpSelectorNameListKind,
+    OmpSelectorTraitValue, OmpSelectorVendor,
 };
 use roup::diagnostic::{Diagnostic, DiagnosticCode};
 use roup::ir::{ClauseData, MemoryOrder, RequireModifier};
@@ -81,6 +82,29 @@ fn name_list_traits_group_properties_and_reject_every_duplicate_form() {
     };
     assert_eq!(kind.kind(), OmpSelectorNameListKind::Kind);
     assert_eq!(kind.properties().len(), 2);
+    assert_eq!(
+        kind.properties()[0].device_kind(),
+        Some(OmpSelectorDeviceKind::Cpu)
+    );
+    assert_eq!(
+        kind.properties()[1].device_kind(),
+        Some(OmpSelectorDeviceKind::Gpu)
+    );
+
+    let OmpSelectorEntry::Implementation { traits } = &selector(&parsed).entries()[1] else {
+        panic!("expected implementation selector");
+    };
+    let OmpSelectorImplementationTraitKind::NameList(vendor) = traits[0].kind() else {
+        panic!("expected vendor name list");
+    };
+    assert_eq!(
+        vendor.properties()[0].vendor(),
+        Some(OmpSelectorVendor::Llvm)
+    );
+    assert_eq!(
+        vendor.properties()[1].vendor(),
+        Some(OmpSelectorVendor::Gnu)
+    );
 
     for source in [
         "#pragma omp metadirective when(device={kind(cpu), kind(gpu)}: parallel)",
