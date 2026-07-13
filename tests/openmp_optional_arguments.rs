@@ -288,6 +288,7 @@ fn every_optional_argument_family_has_a_canonical_option_field() {
         payload("#pragma omp declare simd inbranch(branch_only)"),
         ClauseData::Branch {
             condition: Some(expression),
+            ..
         } if expression.to_string() == "branch_only"
     ));
     assert!(matches!(
@@ -330,6 +331,7 @@ fn every_optional_argument_family_has_a_canonical_option_field() {
         payload("#pragma omp assume no_parallelism(trust_me)"),
         ClauseData::Assumption {
             can_assume: Some(expression),
+            ..
         } if expression.to_string() == "trust_me"
     ));
     assert!(matches!(

@@ -1,7 +1,7 @@
 use roup::api::{OpenMpConfig, OpenMpParser};
 use roup::ast::{
-    OmpClauseKind, OmpDirectiveKind, OmpDirectiveParameter, OmpSelectorDeviceTrait,
-    OmpSelectorEntry, OmpSelectorNameListKind, OmpSelectorTraitValue,
+    OmpClauseKind, OmpDirectiveKind, OmpDirectiveParameter, OmpSelectorDeviceKind,
+    OmpSelectorDeviceTrait, OmpSelectorEntry, OmpSelectorNameListKind, OmpSelectorTraitValue,
 };
 use roup::ir::ClauseData;
 use roup::version::{CStandard, HostLanguageProfile, SourceForm};
@@ -23,7 +23,8 @@ fn context_selectors_and_nested_directive_are_fully_typed() {
 
     assert_eq!(directive.kind(), OmpDirectiveKind::Metadirective);
     assert_eq!(directive.clauses()[0].kind(), OmpClauseKind::When);
-    let ClauseData::MetadirectiveSelector { selector } = directive.clauses()[0].payload() else {
+    let ClauseData::MetadirectiveSelector { selector, .. } = directive.clauses()[0].payload()
+    else {
         panic!("when must have a typed selector");
     };
     assert_eq!(selector.entries().len(), 4);
@@ -35,7 +36,10 @@ fn context_selectors_and_nested_directive_are_fully_typed() {
         &traits[0],
         OmpSelectorDeviceTrait::NameList(value)
             if value.kind() == OmpSelectorNameListKind::Kind
-                && matches!(value.properties(), [OmpSelectorTraitValue::Identifier(name)] if name.as_str() == "cpu")
+                && matches!(value.properties(), [OmpSelectorTraitValue::DeviceKind {
+                    kind: OmpSelectorDeviceKind::Cpu,
+                    ..
+                }])
     ));
     assert!(matches!(
         &traits[1],
@@ -59,7 +63,8 @@ fn context_selectors_and_nested_directive_are_fully_typed() {
     assert_eq!(nested.clauses()[0].kind(), OmpClauseKind::NumThreads);
 
     assert_eq!(directive.clauses()[1].kind(), OmpClauseKind::Otherwise);
-    let ClauseData::MetadirectiveSelector { selector } = directive.clauses()[1].payload() else {
+    let ClauseData::MetadirectiveSelector { selector, .. } = directive.clauses()[1].payload()
+    else {
         panic!("otherwise must have a typed nested directive");
     };
     assert_eq!(
@@ -73,7 +78,8 @@ fn nested_directive_parameters_survive_without_render_and_reparse() {
     let parsed = parser()
         .parse("#pragma omp metadirective when(device={kind(cpu)}: critical(lock))")
         .expect("valid nested critical directive");
-    let ClauseData::MetadirectiveSelector { selector } = parsed.directive().clauses()[0].payload()
+    let ClauseData::MetadirectiveSelector { selector, .. } =
+        parsed.directive().clauses()[0].payload()
     else {
         panic!("expected typed selector");
     };

@@ -34,6 +34,13 @@ OpenMPDirective* parseOpenMP(const char* input,
 /* Set the base language for parsing (C, C++, Fortran) */
 void setLang(OpenMPBaseLang lang);
 
+/* Thread-local diagnostic for the most recent adapter rejection. */
+#ifdef __cplusplus
+const char* roup_ompparser_last_error(void) noexcept;
+#else
+const char* roup_ompparser_last_error(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

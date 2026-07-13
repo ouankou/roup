@@ -1,5 +1,9 @@
 # C ABI architecture
 
+The current interface is ABI version 3. Version 3 is a deliberate clean break:
+version-2 option records are rejected, extension dialect flags are named per
+frontend, and host syntax is no longer flattened into string fields.
+
 ROUP's parser is the safe Rust package at the workspace root. It builds as an
 `rlib`, contains no C-facing layout annotations, and forbids unsafe Rust. The
 optional `roup-capi` package is the only ABI layer; building or using `roup`
@@ -38,11 +42,17 @@ and typed scalar or list element operations. Closed semantic values use `u32`
 or `u32`-list fields with named constants. Structured alternatives use tagged
 child nodes. Boolean fields use explicit `*_field_bool` getters returning only
 zero or one; they are never exposed through a generic integer-width getter.
-Strings are reserved for open lexical leaves such as identifiers,
-type and expression renderings, variable designators, and literal contents;
-consumers never parse a string to recover a closed enum. The service enforces
-this with a private leaf-type whitelist instead of accepting arbitrary
-`Display` or `ToString` values.
+Strings are reserved for genuinely open lexical leaves such as identifiers and
+literal text projections. Host expressions, variables, lvalues, and type names
+are recursive nodes. Expression nodes expose a closed variant, closed operator
+tags with public named constants, typed children, exact host-language and
+standard fields, an exact source span, and an explicit source-spelling
+provenance field. Type names retain their exact validated spelling separately
+from semantic equality and expose their delimiter/template syntax tree as well
+as typed token nodes with named variants. Integer and real suffixes, literal
+escape radices, and array-section semantics are tagged nodes or closed values,
+not positional number bags. Legacy adapters may copy provenance spelling only
+at their final upstream-IR boundary; semantic consumers inspect the tree.
 
 OpenMP directive-parameter tags follow their actual grammar: `allocate`,
 `threadprivate`, `groupprivate`, and historical `declare target` lists have
@@ -86,10 +96,16 @@ values remain closed. `worker` and `vector` expose either no fields for the
 bare form or one numeric modifier plus one scalar expression; a list-shaped or
 partially populated payload cannot cross the ABI.
 
-Directive, clause, and diagnostic span queries return half-open UTF-8 byte
+Directive, clause, host-node, and diagnostic span queries return half-open UTF-8 byte
 ranges plus one-based line and column positions in the original input. Logical
 line parsing retains the physical mapping, including tokens that cross a
-continuation.
+continuation. Diagnostics also expose every related span and related message;
+secondary locations are not collapsed into the primary message.
+
+Directive handles own an immutable projection snapshot created once after
+strict parsing. Repeated field queries read that snapshot rather than
+reconstructing or reparsing payloads on demand. Acquired child-node handles are
+independently owned snapshots and remain valid until explicitly released.
 
 There is intentionally no generic whole-payload string query. A consumer that
 cannot represent a typed field must return a hard conversion error.

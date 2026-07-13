@@ -66,7 +66,7 @@ fn selector_delimiters_inside_string_literals_are_data() {
         ),
     ] {
         let parsed = parse(source);
-        let ClauseData::MetadirectiveSelector { selector } =
+        let ClauseData::MetadirectiveSelector { selector, .. } =
             parsed.directive().clauses()[0].payload()
         else {
             panic!("expected a typed selector");

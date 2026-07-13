@@ -24,7 +24,8 @@ fn parse(version: OpenMpVersion, source: &str) -> Result<ParsedOpenMpDirective, 
 }
 
 fn selector(parsed: &ParsedOpenMpDirective) -> &roup::ast::OmpSelector {
-    let ClauseData::MetadirectiveSelector { selector } = parsed.directive().clauses()[0].payload()
+    let ClauseData::MetadirectiveSelector { selector, .. } =
+        parsed.directive().clauses()[0].payload()
     else {
         panic!("expected a typed selector payload");
     };

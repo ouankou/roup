@@ -103,7 +103,7 @@ fn openacc_common_blocks_have_the_2_0_floor_and_remain_typed() {
         .expect("OpenACC private uses the general var-list grammar");
     assert!(matches!(
         private.directive().clauses()[0].payload(),
-        AccClausePayload::ItemList(items)
+        AccClausePayload::ItemList { items, .. }
             if matches!(items.as_slice(), [ClauseItem::FortranCommonBlock(name)] if name.as_str() == "work")
     ));
 }

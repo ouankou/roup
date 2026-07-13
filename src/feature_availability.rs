@@ -593,7 +593,9 @@ pub fn openmp_clause_syntax_availability(
             | ClauseData::Nogroup {
                 do_not_synchronize: Some(_),
             }
-            | ClauseData::Branch { condition: Some(_) }
+            | ClauseData::Branch {
+                condition: Some(_), ..
+            }
             | ClauseData::Full {
                 fully_unroll: Some(_),
             }
@@ -609,6 +611,7 @@ pub fn openmp_clause_syntax_availability(
             }
             | ClauseData::Assumption {
                 can_assume: Some(_),
+                ..
             } => require(V::V6_0),
             ClauseData::Order {
                 modifier: Some(_), ..
@@ -679,7 +682,7 @@ pub fn openmp_clause_syntax_availability(
                     require(V::V6_0);
                 }
             }
-            ClauseData::MetadirectiveSelector { selector } => {
+            ClauseData::MetadirectiveSelector { selector, .. } => {
                 if let Some(nested) = selector.nested_directive() {
                     nested_requirements
                         .push(openmp_nested_directive_availability(nested, host_language));
@@ -1044,13 +1047,13 @@ pub fn openacc_clause_syntax_availability(
 
 fn acc_clause_contains_common_block(payload: &AccClausePayload) -> bool {
     let items = match payload {
-        AccClausePayload::ItemList(items) => Some(items.as_slice()),
+        AccClausePayload::ItemList { items, .. } => Some(items.as_slice()),
         AccClausePayload::Copy(copy) => Some(copy.variables()),
         AccClausePayload::Create(create) => Some(create.variables()),
         AccClausePayload::Data(data) => Some(data.variables()),
         AccClausePayload::Reduction(reduction) => Some(reduction.variables()),
-        AccClausePayload::Bare
-        | AccClausePayload::Expression(_)
+        AccClausePayload::Bare { .. }
+        | AccClausePayload::Expression { .. }
         | AccClausePayload::NumGangs(_)
         | AccClausePayload::Tile(_)
         | AccClausePayload::Bind(_)

@@ -105,8 +105,13 @@ void test_invalid_input() {
         throw std::runtime_error(
             "parseOpenMP accepted input without an OpenMP sentinel");
     }
+    const char* detail = roup_ompparser_last_error();
+    if (detail == nullptr || *detail == '\0') {
+        throw std::runtime_error(
+            "parseOpenMP rejected invalid input without a diagnostic");
+    }
 
-    std::cout << "  ✓ PASS (hard error)" << std::endl;
+    std::cout << "  ✓ PASS (hard error with diagnostic)" << std::endl;
 }
 
 int main() {

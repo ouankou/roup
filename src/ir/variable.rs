@@ -114,15 +114,22 @@ impl From<ExpressionError> for LValueError {
 
 fn is_c_or_cpp_lvalue(expression: &Expr) -> bool {
     match &expression.kind {
-        ExprKind::Name(_) | ExprKind::Member { .. } | ExprKind::Subscript { .. } => true,
+        ExprKind::Name(_)
+        | ExprKind::LegacyQualifiedName { .. }
+        | ExprKind::Member { .. }
+        | ExprKind::Subscript { .. } => true,
         ExprKind::Parenthesized(inner) => is_c_or_cpp_lvalue(inner),
         ExprKind::Unary {
             op: UnaryOp::Dereference,
             ..
         } => true,
         ExprKind::Literal(_)
+        | ExprKind::This
+        | ExprKind::Sizeof(_)
         | ExprKind::CppTemplateId { .. }
         | ExprKind::LegacyQualifiedInteger { .. }
+        | ExprKind::LegacyFortranSubscript { .. }
+        | ExprKind::LegacyFortranUnaryDesignator { .. }
         | ExprKind::Unary { .. }
         | ExprKind::FortranDefinedUnary { .. }
         | ExprKind::Binary { .. }
@@ -249,9 +256,12 @@ impl From<ExpressionError> for VariableError {
 
 fn is_designator(expression: &Expr) -> bool {
     match &expression.kind {
-        ExprKind::Name(_) => true,
+        ExprKind::Name(_) | ExprKind::LegacyQualifiedName { .. } => true,
         ExprKind::Parenthesized(inner) => is_designator(inner),
-        ExprKind::Member { base, .. } | ExprKind::Subscript { base, .. } => is_designator(base),
+        ExprKind::Member { base, .. }
+        | ExprKind::Subscript { base, .. }
+        | ExprKind::LegacyFortranSubscript { base, .. } => is_designator(base),
+        ExprKind::LegacyFortranUnaryDesignator { operand, .. } => is_designator(operand),
         ExprKind::FortranApply {
             designator,
             arguments,
@@ -265,6 +275,8 @@ fn is_designator(expression: &Expr) -> bool {
                 })
         }
         ExprKind::Literal(_)
+        | ExprKind::This
+        | ExprKind::Sizeof(_)
         | ExprKind::CppTemplateId { .. }
         | ExprKind::LegacyQualifiedInteger { .. }
         | ExprKind::Unary { .. }
@@ -283,7 +295,10 @@ fn designator_rank(expression: &Expr) -> usize {
         ExprKind::Parenthesized(inner) | ExprKind::Member { base: inner, .. } => {
             designator_rank(inner)
         }
-        ExprKind::Subscript { base, .. } => designator_rank(base) + 1,
+        ExprKind::Subscript { base, .. } | ExprKind::LegacyFortranSubscript { base, .. } => {
+            designator_rank(base) + 1
+        }
+        ExprKind::LegacyFortranUnaryDesignator { operand, .. } => designator_rank(operand),
         ExprKind::FortranApply {
             designator,
             arguments,
@@ -301,6 +316,13 @@ fn designator_has_array_section(expression: &Expr) -> bool {
             matches!(subscript, crate::host::Subscript::Section(_))
                 || designator_has_array_section(base)
         }
+        ExprKind::LegacyFortranSubscript { base, subscript } => {
+            matches!(subscript, crate::host::Subscript::Section(_))
+                || designator_has_array_section(base)
+        }
+        ExprKind::LegacyFortranUnaryDesignator { operand, .. } => {
+            designator_has_array_section(operand)
+        }
         ExprKind::FortranApply {
             designator,
             arguments,
@@ -310,8 +332,9 @@ fn designator_has_array_section(expression: &Expr) -> bool {
                     .iter()
                     .any(|argument| matches!(argument, FortranArgument::Section(_)))
         }
-        ExprKind::Name(_) => false,
+        ExprKind::Name(_) | ExprKind::LegacyQualifiedName { .. } | ExprKind::This => false,
         ExprKind::Literal(_)
+        | ExprKind::Sizeof(_)
         | ExprKind::CppTemplateId { .. }
         | ExprKind::LegacyQualifiedInteger { .. }
         | ExprKind::Unary { .. }
@@ -334,6 +357,8 @@ fn designator_root(expression: &Expr) -> Option<&Identifier> {
         ExprKind::Parenthesized(inner)
         | ExprKind::Member { base: inner, .. }
         | ExprKind::Subscript { base: inner, .. }
+        | ExprKind::LegacyFortranSubscript { base: inner, .. }
+        | ExprKind::LegacyFortranUnaryDesignator { operand: inner, .. }
         | ExprKind::FortranApply {
             designator: inner, ..
         } => designator_root(inner),

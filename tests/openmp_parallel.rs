@@ -16,7 +16,7 @@ fn item_name(item: &ClauseItem) -> &str {
         ClauseItem::Variable(variable) => variable.expression().source(),
         ClauseItem::FortranCommonBlock(name) => name.as_str(),
         ClauseItem::Expression(expression) => expression.source(),
-        ClauseItem::LegacyTrailingSlash(identifier) => identifier.as_str(),
+        ClauseItem::OmpparserTrailingSlash(identifier) => identifier.as_str(),
     }
 }
 
@@ -92,6 +92,7 @@ fn combined_parallel_loop_preserves_typed_modifier_payloads() {
         modifiers,
         operator,
         items,
+        ..
     } = directive.clauses()[3].payload()
     else {
         panic!("reduction must be typed");

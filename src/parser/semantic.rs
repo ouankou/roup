@@ -7,7 +7,7 @@
 use std::{borrow::Cow, collections::HashSet};
 
 use crate::ast::{
-    OmpDirective, OmpDirectiveKind, OmpFortranReductionIntrinsic, OmpIdExpression,
+    OmpClauseKind, OmpDirective, OmpDirectiveKind, OmpFortranReductionIntrinsic, OmpIdExpression,
     OmpInductionIdentifier, OmpReductionIdentifier, OmpSelector, OmpSelectorConstruct,
     OmpSelectorDeviceTrait, OmpSelectorEntry, OmpSelectorExtensionProperty,
     OmpSelectorExtensionTrait, OmpSelectorImplementationTrait, OmpSelectorImplementationTraitKind,
@@ -95,8 +95,8 @@ pub(crate) fn parse_identifier_list(
             ClauseItem::Identifier(_)
             | ClauseItem::Variable(_)
             | ClauseItem::FortranCommonBlock(_)
-            | ClauseItem::LegacyTrailingSlash(_) => Ok(item),
-            ClauseItem::Expression(expression) if config.source_compatibility() => {
+            | ClauseItem::OmpparserTrailingSlash(_) => Ok(item),
+            ClauseItem::Expression(expression) if config.source_extensions() => {
                 Ok(ClauseItem::Expression(expression))
             }
             ClauseItem::Expression(expression) => Err(ConversionError::InvalidClauseSyntax(
@@ -115,9 +115,13 @@ pub(crate) fn parse_acc_identifier_list(
         .map(|item| match item {
             ClauseItem::Identifier(_)
             | ClauseItem::Variable(_)
-            | ClauseItem::FortranCommonBlock(_)
-            | ClauseItem::LegacyTrailingSlash(_) => Ok(item),
-            ClauseItem::Expression(expression) if config.source_compatibility() => {
+            | ClauseItem::FortranCommonBlock(_) => Ok(item),
+            ClauseItem::OmpparserTrailingSlash(identifier) => {
+                Err(ConversionError::InvalidClauseSyntax(format!(
+                    "OpenACC variable or locator lists do not accept the ompparser trailing-slash extension: `{identifier}/`"
+                )))
+            }
+            ClauseItem::Expression(expression) if config.source_extensions() => {
                 Ok(ClauseItem::Expression(expression))
             }
             ClauseItem::Expression(expression) => Err(ConversionError::InvalidClauseSyntax(
@@ -342,7 +346,7 @@ fn parse_original_reduction_modifier(
             ));
         }
         value
-    } else if config.source_compatibility() {
+    } else if config.source_extensions() {
         argument.as_ref()
     } else {
         return Err(ConversionError::InvalidClauseSyntax(
@@ -480,7 +484,7 @@ pub fn parse_schedule_clause(
 
     if chunk_size.is_some()
         && matches!(kind, ScheduleKind::Auto | ScheduleKind::Runtime)
-        && !config.source_compatibility()
+        && !config.source_extensions()
     {
         return Err(ConversionError::InvalidClauseSyntax(
             "schedule(auto) and schedule(runtime) do not accept a chunk expression".to_string(),
@@ -819,6 +823,7 @@ fn parse_omp_locator_list_with_reserved(
             ExprKind::FortranApply { .. } => true,
             ExprKind::Parenthesized(inner)
             | ExprKind::Unary { operand: inner, .. }
+            | ExprKind::LegacyFortranUnaryDesignator { operand: inner, .. }
             | ExprKind::FortranDefinedUnary { operand: inner, .. }
             | ExprKind::Postfix { operand: inner, .. } => contains_fortran_apply(inner),
             ExprKind::CppTemplateId {
@@ -852,7 +857,8 @@ fn parse_omp_locator_list_with_reserved(
             ExprKind::Call { callee, arguments } => {
                 contains_fortran_apply(callee) || arguments.iter().any(contains_fortran_apply)
             }
-            ExprKind::Subscript { base, subscript } => {
+            ExprKind::Subscript { base, subscript }
+            | ExprKind::LegacyFortranSubscript { base, subscript } => {
                 contains_fortran_apply(base)
                     || match subscript {
                         crate::host::Subscript::Index(index) => contains_fortran_apply(index),
@@ -865,9 +871,12 @@ fn parse_omp_locator_list_with_reserved(
                     }
             }
             ExprKind::Member { base, .. } => contains_fortran_apply(base),
-            ExprKind::Literal(_) | ExprKind::Name(_) | ExprKind::LegacyQualifiedInteger { .. } => {
-                false
-            }
+            ExprKind::Literal(_)
+            | ExprKind::Name(_)
+            | ExprKind::This
+            | ExprKind::Sizeof(_)
+            | ExprKind::LegacyQualifiedInteger { .. }
+            | ExprKind::LegacyQualifiedName { .. } => false,
         }
     }
 
@@ -898,16 +907,14 @@ fn parse_omp_locator_list_with_reserved(
         expression: Expression,
         config: &ParserConfig,
     ) -> Result<OmpLocator, ConversionError> {
-        if config.source_compatibility() {
-            return Ok(LValue::from_expression(expression.clone()).map_or_else(
-                |_| OmpLocator::PotentialLValue(expression),
-                OmpLocator::LValue,
-            ));
-        }
         if is_potential_lvalue(&expression) {
             return Ok(OmpLocator::PotentialLValue(expression));
         }
-        Ok(OmpLocator::LValue(LValue::from_expression(expression)?))
+        match LValue::from_expression(expression.clone()) {
+            Ok(value) => Ok(OmpLocator::LValue(value)),
+            Err(_) if config.source_extensions() => Ok(OmpLocator::PotentialLValue(expression)),
+            Err(error) => Err(error.into()),
+        }
     }
 
     items
@@ -930,8 +937,8 @@ fn parse_omp_locator_list_with_reserved(
                 }
                 ClauseItem::Variable(variable) => classify(variable.expression().clone(), config),
                 ClauseItem::Expression(expression) => classify(expression, config),
-                ClauseItem::LegacyTrailingSlash(_) => Err(ConversionError::InvalidClauseSyntax(
-                    "a legacy trailing-slash item is not a locator".to_string(),
+                ClauseItem::OmpparserTrailingSlash(_) => Err(ConversionError::InvalidClauseSyntax(
+                    "an ompparser trailing-slash item is not a locator".to_string(),
                 )),
             },
         })
@@ -942,7 +949,7 @@ fn parse_array_shaping_locator(
     source: &str,
     config: &ParserConfig,
 ) -> Result<Option<OmpLocator>, ConversionError> {
-    if !config.source_compatibility()
+    if !config.source_extensions()
         || !matches!(config.host_language(), HostLanguage::C | HostLanguage::Cpp)
     {
         return Ok(None);
@@ -1064,7 +1071,7 @@ fn parse_distributed_locator(
     source: &str,
     config: &ParserConfig,
 ) -> Result<Option<OmpLocator>, ConversionError> {
-    if !config.source_compatibility() {
+    if !config.source_extensions() {
         return Ok(None);
     }
     let source = source.trim();
@@ -1399,6 +1406,11 @@ fn parse_iterator_definition(
     let type_source = lhs[..name_start].trim();
     let type_name = if type_source.is_empty() {
         None
+    } else if config.source_extensions() {
+        Some(crate::host::TypeName::parse_extension_with_profile(
+            type_source,
+            config.profile(),
+        )?)
     } else {
         Some(crate::host::TypeName::parse_with_profile(
             type_source,
@@ -2174,8 +2186,14 @@ pub(crate) fn parse_metadirective_selector(
                 )));
             }
         };
+        let kind = match mode {
+            SelectorClauseMode::When => OmpClauseKind::When,
+            SelectorClauseMode::Match => OmpClauseKind::Match,
+            SelectorClauseMode::Otherwise => OmpClauseKind::Otherwise,
+        };
         let selector = parse_selector_content(raw, config, mode, source)?;
         Ok(ClauseData::MetadirectiveSelector {
+            kind,
             selector: Box::new(selector),
         })
     } else {
@@ -2219,7 +2237,7 @@ fn parse_selector_content(
     match mode {
         SelectorClauseMode::When
             if nested_directive_part.is_none_or(|directive| directive.trim().is_empty())
-                && !config.source_compatibility() =>
+                && !config.source_extensions() =>
         {
             return Err(ConversionError::InvalidClauseSyntax(
                 "when clause requires a directive variant after ':'".to_string(),
@@ -2436,7 +2454,7 @@ fn parse_device_selector(
             let (score, mut name_list) = parse_name_list_selector_trait(
                 args,
                 OmpSelectorNameListKind::Kind,
-                config.source_compatibility(),
+                config.source_extensions(),
                 config,
             )?;
             name_list.set_score(score);
@@ -2446,7 +2464,7 @@ fn parse_device_selector(
             let (score, mut name_list) = parse_name_list_selector_trait(
                 args,
                 OmpSelectorNameListKind::Isa,
-                config.source_compatibility(),
+                config.source_extensions(),
                 config,
             )?;
             name_list.set_score(score);
@@ -2456,7 +2474,7 @@ fn parse_device_selector(
             let (score, mut name_list) = parse_name_list_selector_trait(
                 args,
                 OmpSelectorNameListKind::Arch,
-                config.source_compatibility(),
+                config.source_extensions(),
                 config,
             )?;
             name_list.set_score(score);
@@ -3184,7 +3202,7 @@ fn parse_historical_uses_allocator_spec(
 
     if traits.is_some()
         && matches!(allocator, UsesAllocatorKind::Builtin(_))
-        && !config.source_compatibility()
+        && !config.source_extensions()
     {
         return Err(ConversionError::InvalidClauseSyntax(
             "predefined allocators cannot specify allocator traits".to_string(),
@@ -3258,7 +3276,7 @@ fn parse_uses_allocator_modifier_spec(
 
     if matches!(allocator, UsesAllocatorKind::Builtin(_))
         && (traits.is_some() || memspace.is_some())
-        && !config.source_compatibility()
+        && !config.source_extensions()
     {
         return Err(ConversionError::InvalidClauseSyntax(
             "predefined allocators cannot have uses_allocators modifiers".to_string(),
@@ -3279,7 +3297,7 @@ fn parse_uses_allocator_traits(
     config: &ParserConfig,
 ) -> Result<Expression, ConversionError> {
     let expression = Expression::new(source, config)?;
-    if !config.source_compatibility() {
+    if !config.source_extensions() {
         Variable::from_expression(expression.clone())?;
     }
     Ok(expression)
@@ -3511,7 +3529,7 @@ fn parse_allocate_clause(
                 ObviousIntegerValue::NonNegative(value)
                     if value != 0 && value.is_power_of_two() => {}
                 ObviousIntegerValue::Unknown => {}
-                _ if config.source_compatibility() => {}
+                _ if config.source_extensions() => {}
                 _ => {
                     return Err(ConversionError::InvalidClauseSyntax(
                         "allocate align modifier requires a positive integer power-of-two expression"
@@ -3720,6 +3738,11 @@ fn parse_parameter_list_item(
                 "adjust_args parameter position exceeds the supported u64 range".to_string(),
             )
         })?;
+        let position = std::num::NonZeroU64::new(position).ok_or_else(|| {
+            ConversionError::InvalidClauseSyntax(
+                "adjust_args parameter positions are one based".to_string(),
+            )
+        })?;
         return Ok(OmpParameterListItem::Position(position));
     }
 
@@ -3739,7 +3762,7 @@ fn parse_parameter_list_item(
         ClauseItem::Variable(_)
         | ClauseItem::FortranCommonBlock(_)
         | ClauseItem::Expression(_)
-        | ClauseItem::LegacyTrailingSlash(_) => Err(ConversionError::InvalidClauseSyntax(
+        | ClauseItem::OmpparserTrailingSlash(_) => Err(ConversionError::InvalidClauseSyntax(
             "adjust_args parameter item must be a parameter name, position, or range".to_string(),
         )),
     }
@@ -3829,7 +3852,7 @@ fn parse_depend_objects(
                 }
                 ClauseItem::Variable(variable) => variable.expression().clone(),
                 ClauseItem::Expression(expression) => expression,
-                ClauseItem::FortranCommonBlock(_) | ClauseItem::LegacyTrailingSlash(_) => {
+                ClauseItem::FortranCommonBlock(_) | ClauseItem::OmpparserTrailingSlash(_) => {
                     return Err(ConversionError::InvalidClauseSyntax(
                         "depend(depobj: ...) accepts only depend-object lvalues".to_string(),
                     ));
@@ -3944,7 +3967,7 @@ fn parse_doacross_iteration(
     };
     let source = source.trim();
     if source.is_empty() {
-        if kind == DoacrossType::Source && config.source_compatibility() {
+        if kind == DoacrossType::Source && config.source_extensions() {
             return Ok(OmpDoacrossIteration::Current);
         }
         return Err(ConversionError::InvalidClauseSyntax(
@@ -4191,6 +4214,7 @@ fn parse_default_clause_data(
     let selector = OmpSelector::new(Vec::new(), Some(Box::new(directive)))
         .map_err(|error| ConversionError::InvalidClauseSyntax(error.to_string()))?;
     Ok(ClauseData::MetadirectiveSelector {
+        kind: OmpClauseKind::Otherwise,
         selector: Box::new(selector),
     })
 }
@@ -4363,7 +4387,10 @@ fn parse_nonrecursive_clause_data<'a>(
                         "link clause requires a non-empty variable list".to_string(),
                     ))
                 } else {
-                    Ok(ClauseData::ItemList(items))
+                    Ok(ClauseData::ItemList {
+                        kind: OmpClauseKind::Link,
+                        items,
+                    })
                 }
             } else {
                 Err(ConversionError::InvalidClauseSyntax(
@@ -4385,7 +4412,14 @@ fn parse_nonrecursive_clause_data<'a>(
         ClauseName::Interop | ClauseName::Local => match &clause.kind {
             ClauseKind::Parenthesized(content) => {
                 let items = parse_identifier_list(content.as_ref(), config)?;
-                Ok(ClauseData::ItemList(items))
+                Ok(ClauseData::ItemList {
+                    kind: if matches!(lookup_clause_name(clause_name), ClauseName::Interop) {
+                        OmpClauseKind::Interop
+                    } else {
+                        OmpClauseKind::Local
+                    },
+                    items,
+                })
             }
             _ => Err(ConversionError::InvalidClauseSyntax(format!(
                 "{clause_name} clause requires a variable list"
@@ -4535,6 +4569,7 @@ fn parse_nonrecursive_clause_data<'a>(
                     .collect::<Result<Vec<_>, _>>()?;
 
                 Ok(ClauseData::Reduction {
+                    kind: OmpClauseKind::Reduction,
                     modifiers: mapped_modifiers,
                     operator,
                     items,
@@ -4800,11 +4835,24 @@ fn parse_nonrecursive_clause_data<'a>(
                 let alignment =
                     match alignment_part {
                         Some(value) if !value.trim().is_empty() => {
-                            Some(parse_single_clause_expression(
+                            let expression = parse_single_clause_expression(
                                 value.trim(),
                                 config,
                                 "aligned alignment",
-                            )?)
+                            )?;
+                            match obvious_integer_value(&expression) {
+                                ObviousIntegerValue::NonNegative(value)
+                                    if value != 0 && value.is_power_of_two() => {}
+                                ObviousIntegerValue::Unknown => {}
+                                _ if config.source_extensions() => {}
+                                _ => {
+                                    return Err(ConversionError::InvalidClauseSyntax(
+                                        "aligned requires a positive integer power-of-two alignment"
+                                            .to_string(),
+                                    ));
+                                }
+                            }
+                            Some(expression)
                         }
                         Some(_) => return Err(ConversionError::InvalidClauseSyntax(
                             "aligned clause requires a non-empty alignment expression after ':'"
@@ -4881,6 +4929,11 @@ fn parse_nonrecursive_clause_data<'a>(
                 )?;
                 let items = parse_identifier_list(variables_source.as_ref(), config)?;
                 Ok(ClauseData::Reduction {
+                    kind: if matches!(lookup_clause_name(clause_name), ClauseName::InReduction) {
+                        OmpClauseKind::InReduction
+                    } else {
+                        OmpClauseKind::TaskReduction
+                    },
                     modifiers: modifiers
                         .iter()
                         .copied()
@@ -5086,7 +5139,7 @@ fn parse_nonrecursive_clause_data<'a>(
                         ));
                     }
                     let rest = rest.trim_start();
-                    let separator = if config.source_compatibility() {
+                    let separator = if config.source_extensions() {
                         rest.strip_prefix(',').or_else(|| rest.strip_prefix(':'))
                     } else {
                         rest.strip_prefix(',')
@@ -5438,7 +5491,10 @@ fn parse_nonrecursive_clause_data<'a>(
         ClauseName::Nontemporal => match &clause.kind {
             ClauseKind::Parenthesized(content) => {
                 let items = parse_identifier_list(content.as_ref(), config)?;
-                Ok(ClauseData::ItemList(items))
+                Ok(ClauseData::ItemList {
+                    kind: OmpClauseKind::Nontemporal,
+                    items,
+                })
             }
             ClauseKind::Bare => Err(ConversionError::InvalidClauseSyntax(format!(
                 "{clause_name} clause requires a non-empty variable list"
@@ -5454,7 +5510,7 @@ fn parse_nonrecursive_clause_data<'a>(
                     .into_iter()
                     .map(|item| match item {
                         ClauseItem::Identifier(_) => Ok(item),
-                        _ if config.source_compatibility() => Ok(item),
+                        _ if config.source_extensions() => Ok(item),
                         other => Err(ConversionError::InvalidClauseSyntax(format!(
                             "uniform accepts only named parameters, not `{other}`"
                         ))),
@@ -5472,6 +5528,11 @@ fn parse_nonrecursive_clause_data<'a>(
             )),
         },
         ClauseName::Inbranch | ClauseName::Notinbranch => Ok(ClauseData::Branch {
+            kind: if matches!(lookup_clause_name(clause_name), ClauseName::Inbranch) {
+                OmpClauseKind::Inbranch
+            } else {
+                OmpClauseKind::Notinbranch
+            },
             condition: parse_optional_clause_expression(clause, config, clause_name)?,
         }),
         ClauseName::Inclusive => parse_scan_clause(ScanClauseMode::Inclusive, clause, config),
@@ -5611,6 +5672,7 @@ fn parse_nonrecursive_clause_data<'a>(
             apply_to_simd: parse_optional_clause_expression(clause, config, "apply_to_simd")?,
         }),
         ClauseName::NoParallelism => Ok(ClauseData::Assumption {
+            kind: OmpClauseKind::NoParallelism,
             can_assume: parse_optional_clause_expression(clause, config, "can_assume")?,
         }),
 
@@ -5664,6 +5726,11 @@ fn parse_nonrecursive_clause_data<'a>(
         ClauseName::NoOpenmp
         | ClauseName::NoOpenmpConstructs
         | ClauseName::NoOpenmpRoutines => Ok(ClauseData::Assumption {
+            kind: match lookup_clause_name(clause_name) {
+                ClauseName::NoOpenmp => OmpClauseKind::NoOpenmp,
+                ClauseName::NoOpenmpConstructs => OmpClauseKind::NoOpenmpConstructs,
+                _ => OmpClauseKind::NoOpenmpRoutines,
+            },
             can_assume: parse_optional_clause_expression(clause, config, "can_assume")?,
         }),
 
@@ -5754,7 +5821,7 @@ fn parse_nonrecursive_clause_data<'a>(
                     ObviousIntegerValue::NonNegative(value)
                         if value.is_power_of_two() && value != 0 => {}
                     ObviousIntegerValue::Unknown => {}
-                    _ if config.source_compatibility() => {}
+                    _ if config.source_extensions() => {}
                     _ => {
                         return Err(ConversionError::InvalidClauseSyntax(
                             "align requires a positive integer power-of-two expression"

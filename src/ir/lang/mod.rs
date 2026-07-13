@@ -31,12 +31,12 @@ pub fn parse_clause_item_list(
             continue;
         }
 
-        if config.source_compatibility()
+        if config.source_extensions()
             && let Some(identifier) = trimmed.strip_suffix('/')
             && !identifier.is_empty()
             && !identifier.contains('/')
         {
-            items.push(ClauseItem::LegacyTrailingSlash(Identifier::new(
+            items.push(ClauseItem::OmpparserTrailingSlash(Identifier::new(
                 identifier,
             )?));
             continue;

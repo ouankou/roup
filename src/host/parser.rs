@@ -1,9 +1,10 @@
 use crate::host::ast::{
     ArraySection, AssignmentOp, BinaryOp, CppTemplateArgument, Expr, ExprKind, FortranArgument,
-    HostLanguage, Literal, MemberAccess, PostfixOp, QualifiedName, SectionSemantics, Subscript,
-    UnaryOp,
+    HostLanguage, Literal, MemberAccess, PostfixOp, QualifiedName, SectionSemantics, SizeofOperand,
+    Subscript, UnaryOp,
 };
 use crate::host::lexer::{LexError, LexErrorKind, Lexer, Token, TokenKind};
+use crate::host::type_name::TypeName;
 use crate::source::{SourceError, Span};
 use crate::version::{FortranStandard, HostLanguageProfile};
 use std::fmt;
@@ -95,14 +96,14 @@ pub fn parse_expression_with_profile(
     Parser::with_profile(source, profile)?.parse()
 }
 
-pub(crate) fn parse_expression_source_compatible_with_profile(
+pub(crate) fn parse_extension_expression_with_profile(
     source: &str,
     profile: HostLanguageProfile,
 ) -> Result<Expr, ParseError> {
     Parser::with_tokens(
         source,
         profile,
-        Lexer::for_source_compatibility_with_profile(source, profile).tokenize()?,
+        Lexer::for_extension_expression_with_profile(source, profile).tokenize()?,
     )
     .parse()
 }
@@ -281,6 +282,17 @@ impl<'a> Parser<'a> {
 
     fn parse_prefix(&mut self) -> Result<Expr, ParseError> {
         let token = self.current().clone();
+        if let TokenKind::ReservedKeyword(keyword) = &token.kind {
+            if self.language == HostLanguage::Cpp && keyword.as_str() == "this" {
+                self.advance();
+                return Ok(Expr::new(token.span, ExprKind::This));
+            }
+            if matches!(self.language, HostLanguage::C | HostLanguage::Cpp)
+                && keyword.as_str() == "sizeof"
+            {
+                return self.parse_sizeof(token);
+            }
+        }
         if self.language == HostLanguage::Fortran
             && let TokenKind::FortranDefinedOperator(operator) = token.kind.clone()
         {
@@ -402,6 +414,88 @@ impl<'a> Parser<'a> {
                 },
             }),
         }
+    }
+
+    fn parse_sizeof(&mut self, keyword: Token) -> Result<Expr, ParseError> {
+        self.advance();
+        if !matches!(self.current().kind, TokenKind::LeftParen) {
+            let operand = self.parse_binding_power(self.prefix_binding_power(false))?;
+            let span = self.join(keyword.span, operand.span)?;
+            return Ok(Expr::new(
+                span,
+                ExprKind::Sizeof(SizeofOperand::Expression(Box::new(operand))),
+            ));
+        }
+
+        let open_index = self.cursor;
+        let open = self.current().span;
+        let mut depth = 0usize;
+        let mut close_index = None;
+        for index in open_index..self.tokens.len() {
+            match self.tokens[index].kind {
+                TokenKind::LeftParen => depth += 1,
+                TokenKind::RightParen => {
+                    depth = depth.checked_sub(1).ok_or(ParseError {
+                        span: self.tokens[index].span,
+                        kind: ParseErrorKind::InternalInvariant(
+                            "sizeof parenthesis depth underflowed",
+                        ),
+                    })?;
+                    if depth == 0 {
+                        close_index = Some(index);
+                        break;
+                    }
+                }
+                TokenKind::End => break,
+                _ => {}
+            }
+        }
+        let Some(close_index) = close_index else {
+            return Err(ParseError {
+                span: open,
+                kind: ParseErrorKind::UnexpectedToken {
+                    expected: "`)`",
+                    found: "end of input",
+                },
+            });
+        };
+        let close = self.tokens[close_index].span;
+        let operand_span =
+            Span::new(self.source, open.end_byte(), close.start_byte()).map_err(|error| {
+                ParseError {
+                    span: open,
+                    kind: ParseErrorKind::InvalidSpan(error),
+                }
+            })?;
+        let operand_source = operand_span
+            .slice(self.source)
+            .map_err(|error| ParseError {
+                span: operand_span,
+                kind: ParseErrorKind::InvalidSpan(error),
+            })?;
+        let type_name = TypeName::parse_with_profile(operand_source, self.profile).ok();
+        self.advance();
+        let expression = self.parse_binding_power(0).and_then(|operand| {
+            let close =
+                self.consume_expected(|kind| matches!(kind, TokenKind::RightParen), "`)`")?;
+            Ok((operand, close))
+        });
+        let kind = match (type_name, expression) {
+            (Some(type_name), Ok((expression, _))) => SizeofOperand::Ambiguous {
+                type_name,
+                expression: Box::new(expression),
+            },
+            (Some(type_name), Err(_)) => {
+                self.cursor = close_index + 1;
+                SizeofOperand::Type(type_name)
+            }
+            (None, Ok((expression, _))) => SizeofOperand::Expression(Box::new(expression)),
+            (None, Err(error)) => return Err(error),
+        };
+        Ok(Expr::new(
+            self.join(keyword.span, close)?,
+            ExprKind::Sizeof(kind),
+        ))
     }
 
     fn parse_name(&mut self) -> Result<Expr, ParseError> {
@@ -1278,7 +1372,10 @@ impl<'a> Parser<'a> {
 
 fn is_assignable(expression: &Expr) -> bool {
     match &expression.kind {
-        ExprKind::Name(_) | ExprKind::Member { .. } | ExprKind::Subscript { .. } => true,
+        ExprKind::Name(_)
+        | ExprKind::LegacyQualifiedName { .. }
+        | ExprKind::Member { .. }
+        | ExprKind::Subscript { .. } => true,
         ExprKind::Parenthesized(inner) => is_assignable(inner),
         ExprKind::Unary {
             op: UnaryOp::Dereference,

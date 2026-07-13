@@ -14,10 +14,18 @@ use crate::version::{CStandard, CppStandard, FortranStandard, HostLanguageProfil
 use super::{Expr, ExprKind, HostLanguage, LexError, Lexer, Literal, TokenKind};
 
 /// A non-empty, lexed, delimiter-balanced host-language type-name.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct TypeName {
     profile: HostLanguageProfile,
+    source_spelling: Box<str>,
     tokens: Vec<TokenKind>,
+    syntax: Vec<TypeSyntax>,
+}
+
+impl PartialEq for TypeName {
+    fn eq(&self, other: &Self) -> bool {
+        self.profile == other.profile && self.tokens == other.tokens && self.syntax == other.syntax
+    }
 }
 
 impl TypeName {
@@ -30,6 +38,23 @@ impl TypeName {
     pub fn parse_with_profile(
         source: &str,
         profile: HostLanguageProfile,
+    ) -> Result<Self, TypeNameError> {
+        Self::parse_with_profile_mode(source, profile, true)
+    }
+
+    /// Parse a compatibility-front-end type slot into typed lexical syntax
+    /// while deferring declaration-specifier completeness to that frontend.
+    pub(crate) fn parse_extension_with_profile(
+        source: &str,
+        profile: HostLanguageProfile,
+    ) -> Result<Self, TypeNameError> {
+        Self::parse_with_profile_mode(source, profile, false)
+    }
+
+    fn parse_with_profile_mode(
+        source: &str,
+        profile: HostLanguageProfile,
+        validate_structure: bool,
     ) -> Result<Self, TypeNameError> {
         let language = profile.language();
         if source.trim().is_empty() {
@@ -150,12 +175,17 @@ impl TypeName {
             return Err(TypeNameError::InvalidBoundaryToken);
         }
 
-        validate_structured_syntax(&kinds, language)?;
+        let syntax = TypeSyntaxParser::new(&kinds).parse(language)?;
+        if validate_structure {
+            validate_structured_syntax(&syntax, language)?;
+        }
         validate_profile_features(&kinds, profile)?;
 
         Ok(Self {
             profile,
+            source_spelling: source.into(),
             tokens: kinds,
+            syntax,
         })
     }
 
@@ -169,11 +199,24 @@ impl TypeName {
         self.profile
     }
 
+    /// Exact validated source spelling retained as non-semantic provenance.
+    #[must_use]
+    pub fn source_spelling(&self) -> &str {
+        &self.source_spelling
+    }
+
     /// Typed lexical components in source order. Delimiters are retained as
     /// tokens after their balance has been validated.
     #[must_use]
     pub fn tokens(&self) -> &[TokenKind] {
         &self.tokens
+    }
+
+    /// Delimiter- and template-aware type syntax retained from the original
+    /// parse. Semantic consumers never need to reparse the flat token stream.
+    #[must_use]
+    pub fn syntax(&self) -> &[TypeSyntax] {
+        &self.syntax
     }
 
     /// Render a name-like token sequence without inserting whitespace around
@@ -364,12 +407,12 @@ impl From<LexError> for TypeNameError {
 /// A private syntax tree built directly from lexer tokens. Parentheses,
 /// brackets, and template argument lists are represented explicitly so that
 /// validation never has to render and reparse a type spelling.
-#[derive(Debug)]
-enum TypeSyntax<'a> {
-    Token(&'a TokenKind),
-    Parenthesized(Vec<TypeSyntax<'a>>),
-    Bracketed(Vec<TypeSyntax<'a>>),
-    TemplateArguments(Vec<Vec<TypeSyntax<'a>>>),
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypeSyntax {
+    Token(TokenKind),
+    Parenthesized(Vec<TypeSyntax>),
+    Bracketed(Vec<TypeSyntax>),
+    TemplateArguments(Vec<Vec<TypeSyntax>>),
 }
 
 #[derive(Clone, Copy)]
@@ -396,7 +439,7 @@ impl<'a> TypeSyntaxParser<'a> {
         }
     }
 
-    fn parse(mut self, language: HostLanguage) -> Result<Vec<TypeSyntax<'a>>, TypeNameError> {
+    fn parse(mut self, language: HostLanguage) -> Result<Vec<TypeSyntax>, TypeNameError> {
         let syntax = self.parse_group(None, 0, 0, language)?;
         if self.cursor != self.tokens.len() || self.pending_greater != 0 {
             return Err(TypeNameError::InvalidSyntax(
@@ -412,7 +455,7 @@ impl<'a> TypeSyntaxParser<'a> {
         template_depth: usize,
         nesting_depth: usize,
         language: HostLanguage,
-    ) -> Result<Vec<TypeSyntax<'a>>, TypeNameError> {
+    ) -> Result<Vec<TypeSyntax>, TypeNameError> {
         if nesting_depth > Self::MAX_NESTING_DEPTH {
             return Err(TypeNameError::InvalidSyntax(
                 "type-name nesting limit exceeded",
@@ -452,11 +495,11 @@ impl<'a> TypeSyntaxParser<'a> {
 
     fn parse_node(
         &mut self,
-        previous: &[TypeSyntax<'a>],
+        previous: &[TypeSyntax],
         template_depth: usize,
         nesting_depth: usize,
         language: HostLanguage,
-    ) -> Result<TypeSyntax<'a>, TypeNameError> {
+    ) -> Result<TypeSyntax, TypeNameError> {
         let token = self
             .tokens
             .get(self.cursor)
@@ -499,13 +542,13 @@ impl<'a> TypeSyntaxParser<'a> {
                     Err(_) => {
                         *self = checkpoint;
                         self.cursor += 1;
-                        Ok(TypeSyntax::Token(token))
+                        Ok(TypeSyntax::Token(token.clone()))
                     }
                 }
             }
             _ => {
                 self.cursor += 1;
-                Ok(TypeSyntax::Token(token))
+                Ok(TypeSyntax::Token(token.clone()))
             }
         }
     }
@@ -515,7 +558,7 @@ impl<'a> TypeSyntaxParser<'a> {
         template_depth: usize,
         nesting_depth: usize,
         language: HostLanguage,
-    ) -> Result<Vec<Vec<TypeSyntax<'a>>>, TypeNameError> {
+    ) -> Result<Vec<Vec<TypeSyntax>>, TypeNameError> {
         if nesting_depth > Self::MAX_NESTING_DEPTH {
             return Err(TypeNameError::InvalidSyntax(
                 "type-name nesting limit exceeded",
@@ -604,13 +647,12 @@ impl<'a> TypeSyntaxParser<'a> {
 }
 
 fn validate_structured_syntax(
-    tokens: &[TokenKind],
+    syntax: &[TypeSyntax],
     language: HostLanguage,
 ) -> Result<(), TypeNameError> {
-    let syntax = TypeSyntaxParser::new(tokens).parse(language)?;
     let valid = match language {
-        HostLanguage::C | HostLanguage::Cpp => validate_c_family_type(&syntax, language),
-        HostLanguage::Fortran => validate_fortran_type(&syntax),
+        HostLanguage::C | HostLanguage::Cpp => validate_c_family_type(syntax, language),
+        HostLanguage::Fortran => validate_fortran_type(syntax),
     };
     if valid {
         Ok(())
@@ -621,8 +663,11 @@ fn validate_structured_syntax(
     }
 }
 
-fn validate_c_family_type(nodes: &[TypeSyntax<'_>], language: HostLanguage) -> bool {
+fn validate_c_family_type(nodes: &[TypeSyntax], language: HostLanguage) -> bool {
     if nodes.is_empty() {
+        return false;
+    }
+    if !validate_c_decl_specifiers(nodes, language) {
         return false;
     }
 
@@ -699,7 +744,9 @@ fn validate_c_family_type(nodes: &[TypeSyntax<'_>], language: HostLanguage) -> b
                 if !valid {
                     return false;
                 }
-                declarator_started = true;
+                if preceding_identifier != Some("_BitInt") {
+                    declarator_started = true;
+                }
             }
             TypeSyntax::Bracketed(inner) => {
                 if !saw_type_word
@@ -718,13 +765,276 @@ fn validate_c_family_type(nodes: &[TypeSyntax<'_>], language: HostLanguage) -> b
     saw_type_word
 }
 
-fn validate_cpp_template_argument(nodes: &[TypeSyntax<'_>]) -> bool {
+fn validate_c_decl_specifiers(nodes: &[TypeSyntax], language: HostLanguage) -> bool {
+    let mut qualifiers = std::collections::HashSet::new();
+    let mut builtin_words = std::collections::HashMap::<&str, usize>::new();
+    let mut saw_named_type = false;
+    let mut saw_elaborated = false;
+    let mut saw_bit_int = false;
+    let mut previous_was_scope = false;
+    let mut index = 0usize;
+
+    while index < nodes.len() {
+        match &nodes[index] {
+            TypeSyntax::Token(TokenKind::Star | TokenKind::Ampersand | TokenKind::LogicalAnd)
+            | TypeSyntax::Bracketed(_) => break,
+            TypeSyntax::Parenthesized(_) => {
+                let special = index
+                    .checked_sub(1)
+                    .and_then(|previous| nodes.get(previous))
+                    .and_then(node_identifier)
+                    .is_some_and(|name| {
+                        matches!(
+                            name,
+                            "decltype"
+                                | "typeof"
+                                | "typeof_unqual"
+                                | "__typeof"
+                                | "__typeof__"
+                                | "_Atomic"
+                                | "_BitInt"
+                        )
+                    });
+                if !special {
+                    break;
+                }
+            }
+            TypeSyntax::Token(TokenKind::Identifier(identifier)) => {
+                let word = identifier.as_str();
+                if matches!(
+                    word,
+                    "decltype"
+                        | "typeof"
+                        | "typeof_unqual"
+                        | "__typeof"
+                        | "__typeof__"
+                        | "_Atomic"
+                        | "_BitInt"
+                ) && matches!(nodes.get(index + 1), Some(TypeSyntax::Parenthesized(_)))
+                {
+                    let builtin_words_are_valid = if word == "_BitInt" {
+                        validate_c_bit_int_sign(&builtin_words)
+                    } else {
+                        builtin_words.is_empty()
+                    };
+                    if saw_named_type || saw_elaborated || !builtin_words_are_valid {
+                        return false;
+                    }
+                    saw_named_type = true;
+                    saw_bit_int = word == "_BitInt";
+                    index += 1;
+                    continue;
+                }
+                if is_c_family_declarator_qualifier(word) {
+                    if !qualifiers.insert(word) {
+                        return false;
+                    }
+                    index += 1;
+                    continue;
+                }
+                if matches!(word, "struct" | "union" | "enum" | "class" | "typename") {
+                    if language == HostLanguage::C && matches!(word, "class" | "typename") {
+                        return false;
+                    }
+                    if saw_named_type || !builtin_words.is_empty() || saw_elaborated {
+                        return false;
+                    }
+                    if !matches!(
+                        nodes.get(index + 1),
+                        Some(TypeSyntax::Token(TokenKind::Identifier(_)))
+                    ) {
+                        return false;
+                    }
+                    saw_elaborated = true;
+                    index += 1;
+                    continue;
+                }
+                if is_c_builtin_type_word(word) {
+                    let bit_int_sign = saw_bit_int && matches!(word, "signed" | "unsigned");
+                    if saw_elaborated || (saw_named_type && !bit_int_sign) {
+                        return false;
+                    }
+                    *builtin_words.entry(word).or_default() += 1;
+                    previous_was_scope = false;
+                } else {
+                    if !builtin_words.is_empty() {
+                        return false;
+                    }
+                    if saw_named_type && !previous_was_scope && !saw_elaborated {
+                        return false;
+                    }
+                    saw_named_type = true;
+                    previous_was_scope = false;
+                }
+            }
+            TypeSyntax::Token(TokenKind::Scope) => {
+                let leading_global_scope = !saw_named_type
+                    && !saw_elaborated
+                    && builtin_words.is_empty()
+                    && !previous_was_scope;
+                if language != HostLanguage::Cpp
+                    || previous_was_scope
+                    || (!saw_named_type && !leading_global_scope)
+                {
+                    return false;
+                }
+                if leading_global_scope {
+                    let Some(TypeSyntax::Token(TokenKind::Identifier(identifier))) =
+                        nodes.get(index + 1)
+                    else {
+                        return false;
+                    };
+                    let word = identifier.as_str();
+                    // A leading `::` must introduce a qualified type name, not
+                    // turn a keyword-based decl-specifier into a name.
+                    if is_c_builtin_type_word(word)
+                        || is_c_family_declarator_qualifier(word)
+                        || matches!(
+                            word,
+                            "struct"
+                                | "union"
+                                | "enum"
+                                | "class"
+                                | "typename"
+                                | "decltype"
+                                | "typeof"
+                                | "typeof_unqual"
+                                | "__typeof"
+                                | "__typeof__"
+                                | "_Atomic"
+                                | "_BitInt"
+                        )
+                    {
+                        return false;
+                    }
+                }
+                previous_was_scope = true;
+            }
+            TypeSyntax::TemplateArguments(_) => {
+                if language != HostLanguage::Cpp || !saw_named_type || previous_was_scope {
+                    return false;
+                }
+            }
+            _ => break,
+        }
+        index += 1;
+    }
+
+    if previous_was_scope {
+        return false;
+    }
+    if saw_bit_int {
+        return validate_c_bit_int_sign(&builtin_words);
+    }
+    if !builtin_words.is_empty() {
+        return validate_c_builtin_combination(&builtin_words);
+    }
+    saw_named_type || saw_elaborated
+}
+
+fn is_c_builtin_type_word(word: &str) -> bool {
+    matches!(
+        word,
+        "void"
+            | "bool"
+            | "_Bool"
+            | "char"
+            | "wchar_t"
+            | "char8_t"
+            | "char16_t"
+            | "char32_t"
+            | "short"
+            | "int"
+            | "long"
+            | "signed"
+            | "unsigned"
+            | "float"
+            | "double"
+            | "_Complex"
+            | "_Imaginary"
+            | "_Decimal32"
+            | "_Decimal64"
+            | "_Decimal128"
+    )
+}
+
+fn validate_c_bit_int_sign(words: &std::collections::HashMap<&str, usize>) -> bool {
+    words.is_empty()
+        || (words.len() == 1
+            && ["signed", "unsigned"]
+                .iter()
+                .any(|sign| words.get(sign).is_some_and(|count| *count == 1)))
+}
+
+fn validate_c_builtin_combination(words: &std::collections::HashMap<&str, usize>) -> bool {
+    if words
+        .iter()
+        .any(|(word, count)| *count > if *word == "long" { 2 } else { 1 })
+    {
+        return false;
+    }
+    if words.contains_key("signed") && words.contains_key("unsigned") {
+        return false;
+    }
+    if words.contains_key("short") && words.contains_key("long") {
+        return false;
+    }
+
+    let scalar_bases = [
+        "void",
+        "bool",
+        "_Bool",
+        "char",
+        "wchar_t",
+        "char8_t",
+        "char16_t",
+        "char32_t",
+        "int",
+        "float",
+        "double",
+        "_Decimal32",
+        "_Decimal64",
+        "_Decimal128",
+    ];
+    let base_count = scalar_bases
+        .iter()
+        .filter(|word| words.contains_key(**word))
+        .count();
+    if base_count > 1 {
+        return false;
+    }
+    if words.contains_key("void") && words.len() != 1 {
+        return false;
+    }
+    if words.contains_key("float")
+        && (words.contains_key("short")
+            || words.contains_key("long")
+            || words.contains_key("signed")
+            || words.contains_key("unsigned"))
+    {
+        return false;
+    }
+    if words.contains_key("double")
+        && (words.contains_key("short")
+            || words.contains_key("signed")
+            || words.contains_key("unsigned")
+            || words.get("long").copied().unwrap_or_default() > 1)
+    {
+        return false;
+    }
+    if words.contains_key("char") && (words.contains_key("short") || words.contains_key("long")) {
+        return false;
+    }
+    true
+}
+
+fn validate_cpp_template_argument(nodes: &[TypeSyntax]) -> bool {
     !nodes.is_empty()
         && (validate_c_family_type(nodes, HostLanguage::Cpp)
             || validate_expression(nodes, HostLanguage::Cpp))
 }
 
-fn validate_parameter_type_list(nodes: &[TypeSyntax<'_>], language: HostLanguage) -> bool {
+fn validate_parameter_type_list(nodes: &[TypeSyntax], language: HostLanguage) -> bool {
     if nodes.is_empty() {
         return true;
     }
@@ -735,7 +1045,7 @@ fn validate_parameter_type_list(nodes: &[TypeSyntax<'_>], language: HostLanguage
     })
 }
 
-fn looks_like_abstract_declarator(nodes: &[TypeSyntax<'_>]) -> bool {
+fn looks_like_abstract_declarator(nodes: &[TypeSyntax]) -> bool {
     matches!(
         nodes.first(),
         Some(
@@ -752,7 +1062,7 @@ fn looks_like_abstract_declarator(nodes: &[TypeSyntax<'_>]) -> bool {
             .any(|node| matches!(node, TypeSyntax::Token(TokenKind::Star))))
 }
 
-fn validate_abstract_declarator(nodes: &[TypeSyntax<'_>], language: HostLanguage) -> bool {
+fn validate_abstract_declarator(nodes: &[TypeSyntax], language: HostLanguage) -> bool {
     if nodes.is_empty() {
         return false;
     }
@@ -836,8 +1146,11 @@ fn validate_abstract_declarator(nodes: &[TypeSyntax<'_>], language: HostLanguage
     saw_operator
 }
 
-fn validate_fortran_type(nodes: &[TypeSyntax<'_>]) -> bool {
+fn validate_fortran_type(nodes: &[TypeSyntax]) -> bool {
     if nodes.is_empty() {
+        return false;
+    }
+    if !validate_fortran_type_head(nodes) {
         return false;
     }
     let mut saw_word = false;
@@ -869,7 +1182,28 @@ fn validate_fortran_type(nodes: &[TypeSyntax<'_>]) -> bool {
     saw_word
 }
 
-fn validate_fortran_selector_list(nodes: &[TypeSyntax<'_>]) -> bool {
+fn validate_fortran_type_head(nodes: &[TypeSyntax]) -> bool {
+    let Some(TypeSyntax::Token(TokenKind::Identifier(first))) = nodes.first() else {
+        return false;
+    };
+    let first = first.as_str().to_ascii_lowercase();
+    let second = nodes
+        .get(1)
+        .and_then(node_identifier)
+        .map(str::to_ascii_lowercase);
+    if matches!(first.as_str(), "type" | "class") {
+        return matches!(nodes.get(1), Some(TypeSyntax::Parenthesized(_)));
+    }
+    if first == "double" {
+        return matches!(second.as_deref(), Some("precision" | "complex"));
+    }
+    if second.is_some() {
+        return false;
+    }
+    true
+}
+
+fn validate_fortran_selector_list(nodes: &[TypeSyntax]) -> bool {
     if nodes.is_empty() {
         return false;
     }
@@ -889,13 +1223,13 @@ fn validate_fortran_selector_list(nodes: &[TypeSyntax<'_>]) -> bool {
     })
 }
 
-fn validate_fortran_selector_value(nodes: &[TypeSyntax<'_>]) -> bool {
+fn validate_fortran_selector_value(nodes: &[TypeSyntax]) -> bool {
     is_single_token(nodes, |token| {
         matches!(token, TokenKind::Star | TokenKind::Colon)
     }) || validate_expression(nodes, HostLanguage::Fortran)
 }
 
-fn validate_expression(nodes: &[TypeSyntax<'_>], language: HostLanguage) -> bool {
+fn validate_expression(nodes: &[TypeSyntax], language: HostLanguage) -> bool {
     if nodes.is_empty() {
         return false;
     }
@@ -1075,7 +1409,7 @@ fn is_binary_or_assignment_operator(token: &TokenKind, language: HostLanguage) -
     }
 }
 
-fn split_on_commas<'a>(nodes: &'a [TypeSyntax<'a>]) -> Option<Vec<&'a [TypeSyntax<'a>]>> {
+fn split_on_commas(nodes: &[TypeSyntax]) -> Option<Vec<&[TypeSyntax]>> {
     let mut result = Vec::new();
     let mut start = 0usize;
     for (index, node) in nodes.iter().enumerate() {
@@ -1094,7 +1428,7 @@ fn split_on_commas<'a>(nodes: &'a [TypeSyntax<'a>]) -> Option<Vec<&'a [TypeSynta
     Some(result)
 }
 
-fn scope_has_valid_neighbors(nodes: &[TypeSyntax<'_>], index: usize) -> bool {
+fn scope_has_valid_neighbors(nodes: &[TypeSyntax], index: usize) -> bool {
     let left_is_valid = index == 0
         || matches!(
             nodes.get(index - 1),
@@ -1110,7 +1444,7 @@ fn scope_has_valid_neighbors(nodes: &[TypeSyntax<'_>], index: usize) -> bool {
     left_is_valid && right_is_valid
 }
 
-fn node_identifier<'a>(node: &'a TypeSyntax<'a>) -> Option<&'a str> {
+fn node_identifier(node: &TypeSyntax) -> Option<&str> {
     let TypeSyntax::Token(TokenKind::Identifier(identifier)) = node else {
         return None;
     };
@@ -1131,7 +1465,7 @@ fn is_c_family_declarator_qualifier(name: &str) -> bool {
     )
 }
 
-fn is_ellipsis(nodes: &[TypeSyntax<'_>]) -> bool {
+fn is_ellipsis(nodes: &[TypeSyntax]) -> bool {
     matches!(
         nodes,
         [
@@ -1142,7 +1476,7 @@ fn is_ellipsis(nodes: &[TypeSyntax<'_>]) -> bool {
     )
 }
 
-fn is_single_token(nodes: &[TypeSyntax<'_>], predicate: impl FnOnce(&TokenKind) -> bool) -> bool {
+fn is_single_token(nodes: &[TypeSyntax], predicate: impl FnOnce(&TokenKind) -> bool) -> bool {
     let [TypeSyntax::Token(token)] = nodes else {
         return false;
     };
@@ -1375,6 +1709,104 @@ mod tests {
     use super::*;
 
     #[test]
+    fn rejects_contradictory_or_incomplete_type_specifiers() {
+        for source in [
+            "int int",
+            "int float",
+            "const const int",
+            "unsigned signed",
+            "void int",
+            "foo bar baz",
+            "typename",
+            "struct",
+        ] {
+            assert!(
+                TypeName::parse(source, HostLanguage::Cpp).is_err(),
+                "accepted malformed C++ type: {source}"
+            );
+        }
+        for source in [
+            "integer real",
+            "integer integer",
+            "foo bar",
+            "type",
+            "class",
+        ] {
+            assert!(
+                TypeName::parse(source, HostLanguage::Fortran).is_err(),
+                "accepted malformed Fortran type: {source}"
+            );
+        }
+    }
+
+    #[test]
+    fn retains_valid_structured_type_specifiers() {
+        for source in [
+            "unsigned long int",
+            "const ns::T<U>*",
+            "::std::size_t",
+            "const ::ns::T*",
+            "struct item",
+            "decltype(value)",
+        ] {
+            TypeName::parse(source, HostLanguage::Cpp)
+                .unwrap_or_else(|error| panic!("rejected valid C++ type {source}: {error}"));
+        }
+        for source in [
+            "type(foo)",
+            "class(*)",
+            "integer(kind=8)",
+            "double precision",
+        ] {
+            TypeName::parse(source, HostLanguage::Fortran)
+                .unwrap_or_else(|error| panic!("rejected valid Fortran type {source}: {error}"));
+        }
+    }
+
+    #[test]
+    fn c23_bit_precise_integer_specifiers_accept_only_one_sign_specifier() {
+        let c23 = HostLanguageProfile::C(CStandard::C23);
+        for source in [
+            "_BitInt(32)",
+            "signed _BitInt(64)",
+            "unsigned _BitInt(16)",
+            "const unsigned _BitInt(8) *",
+            "_BitInt(32) unsigned",
+            "_BitInt(16) const signed *",
+        ] {
+            TypeName::parse_with_profile(source, c23)
+                .unwrap_or_else(|error| panic!("rejected valid C23 type {source}: {error}"));
+        }
+
+        for source in [
+            "signed unsigned _BitInt(32)",
+            "signed signed _BitInt(32)",
+            "long _BitInt(32)",
+            "int _BitInt(32)",
+            "_BitInt(32) unsigned unsigned",
+            "_BitInt(32) signed unsigned",
+        ] {
+            assert!(
+                TypeName::parse_with_profile(source, c23).is_err(),
+                "accepted invalid C23 type {source}"
+            );
+        }
+
+        assert!(
+            TypeName::parse_with_profile(
+                "signed _BitInt(32)",
+                HostLanguageProfile::C(CStandard::C18),
+            )
+            .is_err(),
+            "accepted a C23 type specifier under C18"
+        );
+        assert!(
+            TypeName::parse("signed _BitInt(32)", HostLanguage::Cpp).is_err(),
+            "accepted a C-only type specifier under C++"
+        );
+    }
+
+    #[test]
     fn c_and_cpp_keywords_are_lexed_as_typed_words() {
         let c = TypeName::parse("const unsigned long *", HostLanguage::C).unwrap();
         assert_eq!(c.to_string(), "const unsigned long *");
@@ -1398,6 +1830,15 @@ mod tests {
     }
 
     #[test]
+    fn source_spelling_is_provenance_not_semantic_identity() {
+        let compact = TypeName::parse("std::vector<int>", HostLanguage::Cpp).unwrap();
+        let spaced = TypeName::parse("std :: vector < int >", HostLanguage::Cpp).unwrap();
+        assert_eq!(compact, spaced);
+        assert_eq!(compact.source_spelling(), "std::vector<int>");
+        assert_eq!(spaced.source_spelling(), "std :: vector < int >");
+    }
+
+    #[test]
     fn fortran_type_selector_is_balanced_and_typed() {
         let name = TypeName::parse("integer(kind=8)", HostLanguage::Fortran).unwrap();
         assert_eq!(name.to_string(), "integer ( kind = 8 )");
@@ -1416,6 +1857,10 @@ mod tests {
             "vector<int",
             "int, long",
             "int +",
+            "::",
+            "::::ns::T",
+            "::unsigned long",
+            "::struct item",
         ] {
             assert!(
                 TypeName::parse(source, HostLanguage::Cpp).is_err(),

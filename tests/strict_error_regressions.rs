@@ -156,7 +156,7 @@ fn declare_induction_rejects_unparsed_suffix() {
 #[test]
 fn nested_directive_preserves_parameter_and_rejects_suffix() {
     let parsed = omp("#pragma omp metadirective when(device={kind(cpu)}: critical(lock))").unwrap();
-    let OmpClausePayload::MetadirectiveSelector { selector } =
+    let OmpClausePayload::MetadirectiveSelector { selector, .. } =
         parsed.directive().clauses()[0].payload()
     else {
         panic!("expected metadirective selector");
@@ -254,7 +254,7 @@ fn historical_metadirective_default_has_the_canonical_otherwise_payload() {
     assert_eq!(historical_clause.kind(), OmpClauseKind::Otherwise);
     assert_eq!(canonical_clause.kind(), OmpClauseKind::Otherwise);
     for clause in [historical_clause, canonical_clause] {
-        let OmpClausePayload::MetadirectiveSelector { selector } = clause.payload() else {
+        let OmpClausePayload::MetadirectiveSelector { selector, .. } = clause.payload() else {
             panic!("expected one canonical selector payload");
         };
         assert!(selector.entries().is_empty());

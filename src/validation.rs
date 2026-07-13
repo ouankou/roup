@@ -21,6 +21,57 @@ use crate::ir::{
 use crate::source::Span;
 use crate::version::{OpenAccVersion, OpenMpVersion, VersionPolicy};
 
+/// Stable structural path from the parsed root to a nested OpenMP directive.
+///
+/// The fixed representation keeps semantic-fact keys copyable while avoiding
+/// the old collision between equal clause kinds in sibling nested directives.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct OmpDirectivePath {
+    segments: [u32; crate::ir::MAX_STRUCTURAL_NESTING_DEPTH as usize],
+    len: u8,
+}
+
+impl Default for OmpDirectivePath {
+    fn default() -> Self {
+        Self::root()
+    }
+}
+
+impl OmpDirectivePath {
+    #[must_use]
+    pub const fn root() -> Self {
+        Self {
+            segments: [0; crate::ir::MAX_STRUCTURAL_NESTING_DEPTH as usize],
+            len: 0,
+        }
+    }
+
+    #[must_use]
+    pub fn child(self, role: OmpNestedDirectiveRole, index: u32) -> Option<Self> {
+        let mut child = self;
+        let slot = usize::from(child.len);
+        if slot == child.segments.len() || index > 0x00ff_ffff {
+            return None;
+        }
+        child.segments[slot] = ((role as u32) << 24) | index;
+        child.len += 1;
+        Some(child)
+    }
+
+    #[must_use]
+    pub const fn depth(self) -> u8 {
+        self.len
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[repr(u8)]
+pub enum OmpNestedDirectiveRole {
+    MetadirectiveVariant = 1,
+    ConstructSelector = 2,
+    AppliedDirective = 3,
+}
+
 /// Association whose truth must be supplied by a compiler or enclosing parser.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum AssociationKind {
@@ -40,6 +91,7 @@ pub enum AssociationKind {
 /// reused for a different clause.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct OmpClauseSite {
+    path: OmpDirectivePath,
     kind: OmpClauseKind,
     occurrence: usize,
 }
@@ -47,7 +99,25 @@ pub struct OmpClauseSite {
 impl OmpClauseSite {
     #[must_use]
     pub const fn new(kind: OmpClauseKind, occurrence: usize) -> Self {
-        Self { kind, occurrence }
+        Self {
+            path: OmpDirectivePath::root(),
+            kind,
+            occurrence,
+        }
+    }
+
+    #[must_use]
+    pub const fn at(path: OmpDirectivePath, kind: OmpClauseKind, occurrence: usize) -> Self {
+        Self {
+            path,
+            kind,
+            occurrence,
+        }
+    }
+
+    #[must_use]
+    pub const fn path(self) -> OmpDirectivePath {
+        self.path
     }
 
     #[must_use]
@@ -910,6 +980,85 @@ impl SemanticFacts {
     }
 }
 
+macro_rules! define_semantic_fact_provider {
+    ($(fn $name:ident($($argument:ident: $argument_type:ty),*) -> $result:ty;)+) => {
+        /// Query interface implemented by embedding compilers.
+        ///
+        /// Every query defaults to unknown. Implementations can therefore
+        /// supply only facts they own; required missing facts remain hard
+        /// validation errors. [`SemanticFacts`] is the convenient owned map
+        /// implementation used by standalone callers and tests.
+        pub trait SemanticFactProvider {
+            $(
+                fn $name(&self, $($argument: $argument_type),*) -> Option<$result> {
+                    $(let _ = $argument;)*
+                    None
+                }
+            )+
+
+            #[doc(hidden)]
+            fn validate_consistency(&self, _span: Span) -> Result<(), Diagnostic> {
+                Ok(())
+            }
+        }
+
+        impl SemanticFactProvider for SemanticFacts {
+            $(
+                fn $name(&self, $($argument: $argument_type),*) -> Option<$result> {
+                    SemanticFacts::$name(self, $($argument),*)
+                }
+            )+
+
+            fn validate_consistency(&self, span: Span) -> Result<(), Diagnostic> {
+                validate_omp_expression_fact_consistency(self, span)
+            }
+        }
+    };
+}
+
+define_semantic_fact_provider! {
+    fn declaration_position() -> bool;
+    fn inside_target_region() -> bool;
+    fn dynamic_allocators_requirement() -> bool;
+    fn encountering_final_task() -> bool;
+    fn association(association: AssociationKind) -> bool;
+    fn constant_expression(site: OmpExpressionSite) -> bool;
+    fn integer_evaluation(site: OmpExpressionSite) -> IntegerEvaluation;
+    fn acc_integer_evaluation(site: AccExpressionSite) -> IntegerEvaluation;
+    fn integer_expression(site: OmpExpressionSite) -> bool;
+    fn conforming_device_number(site: OmpExpressionSite) -> bool;
+    fn nonnegative_integer_expression(site: OmpExpressionSite) -> bool;
+    fn positive_integer_expression(site: OmpExpressionSite) -> bool;
+    fn string_expression(site: OmpExpressionSite) -> bool;
+    fn logical_expression(site: OmpExpressionSite) -> bool;
+    fn logical_evaluation(site: OmpExpressionSite) -> LogicalEvaluation;
+    fn region_invariant_expression(site: OmpExpressionSite) -> bool;
+    fn ultimate_expression(site: OmpExpressionSite) -> bool;
+    fn linear_step(site: OmpExpressionSite) -> bool;
+    fn induction_step(site: OmpExpressionSite) -> bool;
+    fn collector_expression(site: OmpExpressionSite) -> bool;
+    fn inductor_expression(site: OmpExpressionSite) -> bool;
+    fn synchronization_hint(site: OmpExpressionSite) -> bool;
+    fn safesync_compatible(site: OmpExpressionSite) -> bool;
+    fn impex_expression(site: OmpExpressionSite) -> bool;
+    fn allocator_handle_expression(site: OmpExpressionSite) -> bool;
+    fn binding_set_invariant_expression(site: OmpExpressionSite) -> bool;
+    fn allocatable_item(site: OmpClauseItemSite) -> bool;
+    fn procedure_parameter(site: OmpClauseItemSite) -> bool;
+    fn linear_item(site: OmpClauseItemSite) -> bool;
+    fn induction_item(site: OmpClauseItemSite) -> bool;
+    fn allocator_traits(site: OmpClauseItemSite) -> bool;
+    fn depend_object(site: OmpClauseItemSite) -> DependObjectState;
+    fn interop_object(site: OmpClauseItemSite) -> InteropObjectState;
+    fn detach_event(site: OmpClauseItemSite) -> DetachEventStatus;
+    fn modifiable_item(site: OmpClauseItemSite) -> bool;
+    fn interop_targetsync(site: OmpClauseSite) -> bool;
+    fn lvalue_locator(site: OmpLocatorSite) -> bool;
+    fn ordered_bounds(site: OmpClauseSite) -> bool;
+    fn atomic_update_form() -> AtomicUpdateForm;
+    fn associated_ordered_parameter() -> usize;
+}
+
 /// Validate all context-independent rules for one typed OpenMP directive.
 ///
 /// This is the validation level available to standalone parsers. It does not
@@ -1026,7 +1175,7 @@ pub fn validate_openmp(
             }
         }
 
-        if let ClauseData::MetadirectiveSelector { selector } = clause.payload() {
+        if let ClauseData::MetadirectiveSelector { selector, .. } = clause.payload() {
             if let Some(nested) = selector.nested_directive() {
                 validate_openmp(nested, _policy, nested.span())?;
             }
@@ -1237,7 +1386,7 @@ fn validate_adjust_args_obvious_overlaps(
                 }
             }
             OmpParameterListItem::Position(position) => {
-                if !positions.insert(u128::from(*position)) {
+                if !positions.insert(u128::from(position.get())) {
                     return Err(Diagnostic::new(
                         DiagnosticCode::DuplicateClause,
                         span,
@@ -1612,7 +1761,7 @@ pub fn validate_openmp_with_facts(
     directive: &OmpDirective,
     policy: VersionPolicy<OpenMpVersion>,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     validate_openmp(directive, policy, span)?;
     require_openmp_semantic_facts(directive, policy, span, facts)
@@ -1689,7 +1838,7 @@ pub fn validate_openacc_with_facts(
     directive: &AccDirective,
     policy: VersionPolicy<OpenAccVersion>,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     validate_openacc(directive, policy, span)?;
     require_openacc_semantic_facts(directive, span, facts)
@@ -1699,9 +1848,19 @@ pub(crate) fn require_openmp_semantic_facts(
     directive: &OmpDirective,
     policy: VersionPolicy<OpenMpVersion>,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
-    validate_omp_expression_fact_consistency(facts, span)?;
+    require_openmp_semantic_facts_at(directive, policy, span, facts, OmpDirectivePath::root())
+}
+
+fn require_openmp_semantic_facts_at(
+    directive: &OmpDirective,
+    policy: VersionPolicy<OpenMpVersion>,
+    span: Span,
+    facts: &impl SemanticFactProvider,
+    path: OmpDirectivePath,
+) -> Result<(), Diagnostic> {
+    facts.validate_consistency(span)?;
 
     if openmp_requires_declaration_position(directive.kind()) {
         require_declaration_position(facts, span, "OpenMP declaration directive")?;
@@ -1738,22 +1897,24 @@ pub(crate) fn require_openmp_semantic_facts(
     let mut occurrences = HashMap::new();
     for clause in directive.clauses() {
         let occurrence = occurrences.entry(clause.kind()).or_insert(0usize);
-        let site = OmpClauseSite::new(clause.kind(), *occurrence);
+        let site = OmpClauseSite::at(path, clause.kind(), *occurrence);
         *occurrence += 1;
         require_openmp_clause_semantic_facts(directive, clause, site, policy, span, facts)?;
     }
-    validate_interop_depend_semantic_context(directive, span, facts)?;
-    validate_openmp_atomic_semantic_facts(directive, span, facts)?;
-    validate_openmp_apply_semantic_facts(directive, span, facts)?;
-    validate_adjust_args_semantic_overlaps(directive, span, facts)?;
+    validate_interop_depend_semantic_context(directive, span, facts, path)?;
+    validate_openmp_atomic_semantic_facts(directive, span, facts, path)?;
+    validate_openmp_apply_semantic_facts(directive, span, facts, path)?;
+    validate_adjust_args_semantic_overlaps(directive, span, facts, path)?;
     validate_allocate_semantic_context(directive, span, facts)?;
-    validate_openmp_integer_relations(directive, span, facts)
+    validate_openmp_integer_relations(directive, span, facts, path)?;
+    require_nested_openmp_semantic_facts(directive, policy, facts, path)
 }
 
 fn validate_interop_depend_semantic_context(
     directive: &OmpDirective,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
+    path: OmpDirectivePath,
 ) -> Result<(), Diagnostic> {
     if directive.kind() != OmpDirectiveKind::Interop
         || !has_omp_clause(directive, OmpClauseKind::Depend)
@@ -1764,7 +1925,7 @@ fn validate_interop_depend_semantic_context(
     let mut includes_targetsync = false;
     for clause in directive.clauses() {
         let occurrence = occurrences.entry(clause.kind()).or_insert(0usize);
-        let site = OmpClauseSite::new(clause.kind(), *occurrence);
+        let site = OmpClauseSite::at(path, clause.kind(), *occurrence);
         *occurrence += 1;
         match clause.payload() {
             ClauseData::InitInterop { interop_types, .. } => {
@@ -1796,10 +1957,114 @@ fn validate_interop_depend_semantic_context(
     }
 }
 
+fn require_nested_openmp_semantic_facts(
+    directive: &OmpDirective,
+    policy: VersionPolicy<OpenMpVersion>,
+    facts: &impl SemanticFactProvider,
+    path: OmpDirectivePath,
+) -> Result<(), Diagnostic> {
+    for (clause_index, clause) in directive.clauses().iter().enumerate() {
+        let index = u32::try_from(clause_index).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticCode::InvalidConfiguration,
+                clause.span(),
+                "nested directive clause index exceeds the semantic path domain",
+            )
+        })?;
+        match clause.payload() {
+            ClauseData::MetadirectiveSelector { selector, .. } => {
+                if let Some(nested) = selector.nested_directive() {
+                    let child = path
+                        .child(OmpNestedDirectiveRole::MetadirectiveVariant, index)
+                        .ok_or_else(|| {
+                            Diagnostic::new(
+                                DiagnosticCode::InvalidConfiguration,
+                                nested.span(),
+                                "nested directive semantic path exceeds the supported depth",
+                            )
+                        })?;
+                    require_openmp_semantic_facts_at(nested, policy, nested.span(), facts, child)?;
+                }
+                let mut construct_index = 0u32;
+                for entry in selector.entries() {
+                    let OmpSelectorEntry::Construct { constructs } = entry else {
+                        continue;
+                    };
+                    for construct in constructs {
+                        let nested = construct.directive();
+                        let child_index = index
+                            .checked_mul(4096)
+                            .and_then(|base| base.checked_add(construct_index))
+                            .ok_or_else(|| {
+                                Diagnostic::new(
+                                    DiagnosticCode::InvalidConfiguration,
+                                    nested.span(),
+                                    "construct selector index exceeds the semantic path domain",
+                                )
+                            })?;
+                        let child = path
+                            .child(OmpNestedDirectiveRole::ConstructSelector, child_index)
+                            .ok_or_else(|| {
+                                Diagnostic::new(
+                                    DiagnosticCode::InvalidConfiguration,
+                                    nested.span(),
+                                    "nested directive semantic path exceeds the supported depth",
+                                )
+                            })?;
+                        require_openmp_semantic_facts_at(
+                            nested,
+                            policy,
+                            nested.span(),
+                            facts,
+                            child,
+                        )?;
+                        construct_index += 1;
+                    }
+                }
+            }
+            ClauseData::Apply {
+                applied_directives, ..
+            } => {
+                for (applied_index, nested) in applied_directives.iter().enumerate() {
+                    let applied_index = u32::try_from(applied_index).map_err(|_| {
+                        Diagnostic::new(
+                            DiagnosticCode::InvalidConfiguration,
+                            nested.span(),
+                            "applied directive index exceeds the semantic path domain",
+                        )
+                    })?;
+                    let child_index = index
+                        .checked_mul(4096)
+                        .and_then(|base| base.checked_add(applied_index))
+                        .ok_or_else(|| {
+                            Diagnostic::new(
+                                DiagnosticCode::InvalidConfiguration,
+                                nested.span(),
+                                "applied directive index exceeds the semantic path domain",
+                            )
+                        })?;
+                    let child = path
+                        .child(OmpNestedDirectiveRole::AppliedDirective, child_index)
+                        .ok_or_else(|| {
+                            Diagnostic::new(
+                                DiagnosticCode::InvalidConfiguration,
+                                nested.span(),
+                                "nested directive semantic path exceeds the supported depth",
+                            )
+                        })?;
+                    require_openmp_semantic_facts_at(nested, policy, nested.span(), facts, child)?;
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 fn validate_allocate_semantic_context(
     directive: &OmpDirective,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     let has_unqualified_allocate = directive.clauses().iter().any(|clause| {
         matches!(
@@ -1845,14 +2110,15 @@ fn validate_allocate_semantic_context(
 fn validate_adjust_args_semantic_overlaps(
     directive: &OmpDirective,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
+    path: OmpDirectivePath,
 ) -> Result<(), Diagnostic> {
     let mut occurrence = 0usize;
     for clause in directive.clauses() {
         let ClauseData::AdjustArgs { parameters, .. } = clause.payload() else {
             continue;
         };
-        let clause_site = OmpClauseSite::new(OmpClauseKind::AdjustArgs, occurrence);
+        let clause_site = OmpClauseSite::at(path, OmpClauseKind::AdjustArgs, occurrence);
         occurrence += 1;
         let mut expression_index = 0usize;
         let mut positions = HashSet::new();
@@ -1861,7 +2127,7 @@ fn validate_adjust_args_semantic_overlaps(
             match parameter {
                 OmpParameterListItem::Named(_) => {}
                 OmpParameterListItem::Position(position) => {
-                    positions.insert(u128::from(*position));
+                    positions.insert(u128::from(position.get()));
                 }
                 OmpParameterListItem::Range(range) => {
                     let lower = match range.lower() {
@@ -1900,7 +2166,7 @@ fn require_foreign_runtime_preference_facts(
     preferences: &[crate::ir::OmpPreferenceSpecification],
     clause_site: OmpClauseSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     let mut expression_index = 0usize;
     require_foreign_runtime_preference_facts_at(
@@ -1917,7 +2183,7 @@ fn require_foreign_runtime_preference_facts_at(
     clause_site: OmpClauseSite,
     expression_index: &mut usize,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     let mut require_identifier =
         |identifier: &crate::ir::OmpForeignRuntimeIdentifier| -> Result<(), Diagnostic> {
@@ -1958,7 +2224,7 @@ fn require_selector_semantic_facts(
     clause_site: OmpClauseSite,
     policy: VersionPolicy<OpenMpVersion>,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     let mut expression_index = 0usize;
     for entry in selector.entries() {
@@ -2039,7 +2305,15 @@ fn require_selector_semantic_facts(
                     require_constant_expression(condition, site, span, facts)?;
                 }
             }
-            OmpSelectorEntry::Construct { .. } => {}
+            OmpSelectorEntry::Construct { constructs } => {
+                for construct in constructs {
+                    if let Some(score) = construct.score() {
+                        let site = OmpExpressionSite::new(clause_site, expression_index);
+                        expression_index += 1;
+                        require_nonnegative_constant_integer(score, site, span, facts)?;
+                    }
+                }
+            }
         }
     }
     Ok(())
@@ -2050,7 +2324,7 @@ fn require_selector_extension_property_facts(
     clause_site: OmpClauseSite,
     expression_index: &mut usize,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     match property {
         OmpSelectorExtensionProperty::Name(_) => Ok(()),
@@ -2079,7 +2353,7 @@ fn require_potential_locator_fact(
     clause_site: OmpClauseSite,
     locator_index: usize,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     if !matches!(locator, OmpLocator::PotentialLValue(_)) {
         return Ok(());
@@ -2103,7 +2377,8 @@ fn require_potential_locator_fact(
 fn validate_openmp_apply_semantic_facts(
     directive: &OmpDirective,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
+    path: OmpDirectivePath,
 ) -> Result<(), Diagnostic> {
     let Some(generated_loops) = openmp_apply_generated_loop_count(directive) else {
         return Ok(());
@@ -2127,7 +2402,7 @@ fn validate_openmp_apply_semantic_facts(
             if modifier.indices.is_empty() {
                 (1..=generated_loops as u128).collect::<Vec<_>>()
             } else {
-                let clause_site = OmpClauseSite::new(OmpClauseKind::Apply, occurrences);
+                let clause_site = OmpClauseSite::at(path, OmpClauseKind::Apply, occurrences);
                 let mut values = Vec::with_capacity(modifier.indices.len());
                 for (index, expression) in modifier.indices.iter().enumerate() {
                     values.push(require_positive_constant_integer(
@@ -2162,7 +2437,8 @@ fn validate_openmp_apply_semantic_facts(
 fn validate_openmp_atomic_semantic_facts(
     directive: &OmpDirective,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
+    path: OmpDirectivePath,
 ) -> Result<(), Diagnostic> {
     if directive.kind() != OmpDirectiveKind::Atomic {
         return Ok(());
@@ -2227,7 +2503,7 @@ fn validate_openmp_atomic_semantic_facts(
             .map(|condition| {
                 require_constant_logical(
                     condition,
-                    OmpExpressionSite::new(OmpClauseSite::new(kind, 0), 0),
+                    OmpExpressionSite::new(OmpClauseSite::at(path, kind, 0), 0),
                     span,
                     facts,
                 )
@@ -2318,7 +2594,8 @@ fn validate_omp_expression_fact_consistency(
 fn validate_openmp_integer_relations(
     directive: &OmpDirective,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
+    path: OmpDirectivePath,
 ) -> Result<(), Diagnostic> {
     let payload = |kind| {
         directive
@@ -2337,13 +2614,13 @@ fn validate_openmp_integer_relations(
     ) {
         let safe = require_positive_constant_integer(
             safe,
-            OmpExpressionSite::new(OmpClauseSite::new(OmpClauseKind::Safelen, 0), 0),
+            OmpExpressionSite::new(OmpClauseSite::at(path, OmpClauseKind::Safelen, 0), 0),
             span,
             facts,
         )?;
         let simd = require_positive_constant_integer(
             simd,
-            OmpExpressionSite::new(OmpClauseSite::new(OmpClauseKind::Simdlen, 0), 0),
+            OmpExpressionSite::new(OmpClauseSite::at(path, OmpClauseKind::Simdlen, 0), 0),
             span,
             facts,
         )?;
@@ -2365,13 +2642,13 @@ fn validate_openmp_integer_relations(
     ) {
         let collapsed = require_positive_constant_integer(
             collapsed,
-            OmpExpressionSite::new(OmpClauseSite::new(OmpClauseKind::Collapse, 0), 0),
+            OmpExpressionSite::new(OmpClauseSite::at(path, OmpClauseKind::Collapse, 0), 0),
             span,
             facts,
         )?;
         let ordered = require_positive_constant_integer(
             ordered,
-            OmpExpressionSite::new(OmpClauseSite::new(OmpClauseKind::Ordered, 0), 0),
+            OmpExpressionSite::new(OmpClauseSite::at(path, OmpClauseKind::Ordered, 0), 0),
             span,
             facts,
         )?;
@@ -2388,7 +2665,7 @@ fn validate_openmp_integer_relations(
 }
 
 fn require_declaration_position(
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
     span: Span,
     subject: &str,
 ) -> Result<(), Diagnostic> {
@@ -2522,6 +2799,7 @@ fn validate_openmp_obvious_scalar_constraints(
         }
         | ClauseData::Branch {
             condition: Some(condition),
+            ..
         }
         | ClauseData::Full {
             fully_unroll: Some(condition),
@@ -2540,6 +2818,7 @@ fn validate_openmp_obvious_scalar_constraints(
         }
         | ClauseData::Assumption {
             can_assume: Some(condition),
+            ..
         }
         | ClauseData::Indirect {
             invoked_by_fptr: Some(condition),
@@ -2664,7 +2943,7 @@ fn validate_openmp_obvious_scalar_constraints(
                 }
             }
         }
-        ClauseData::MetadirectiveSelector { selector } => {
+        ClauseData::MetadirectiveSelector { selector, .. } => {
             validate_selector_obvious_constraints(selector, span)?;
         }
         _ => {}
@@ -2906,7 +3185,7 @@ fn require_openmp_clause_semantic_facts(
     clause_site: OmpClauseSite,
     policy: VersionPolicy<OpenMpVersion>,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     let directive_kind = directive.kind();
     let expression_site = |index| OmpExpressionSite::new(clause_site, index);
@@ -3090,7 +3369,7 @@ fn require_openmp_clause_semantic_facts(
                 )?;
             }
         }
-        ClauseData::MetadirectiveSelector { selector } => {
+        ClauseData::MetadirectiveSelector { selector, .. } => {
             require_selector_semantic_facts(selector, clause_site, policy, span, facts)?;
         }
         ClauseData::InitDepobj { locator, .. } => {
@@ -3344,6 +3623,7 @@ fn require_openmp_clause_semantic_facts(
         }
         | ClauseData::Branch {
             condition: Some(condition),
+            ..
         }
         | ClauseData::Full {
             fully_unroll: Some(condition),
@@ -3362,6 +3642,7 @@ fn require_openmp_clause_semantic_facts(
         }
         | ClauseData::Assumption {
             can_assume: Some(condition),
+            ..
         }
         | ClauseData::Replayable {
             replayable_expression: Some(condition),
@@ -3651,7 +3932,7 @@ fn require_expression_property_unless_constant(
     expression: &Expression,
     site: OmpExpressionSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
     property: Option<bool>,
     description: &str,
 ) -> Result<(), Diagnostic> {
@@ -3738,7 +4019,7 @@ fn require_depend_object(
     site: OmpClauseItemSite,
     required: DependObjectState,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     match facts.depend_object(site) {
         None => Err(Diagnostic::new(
@@ -3764,7 +4045,7 @@ fn require_interop_object(
     site: OmpClauseItemSite,
     must_be_initialized: bool,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     match facts.interop_object(site) {
         None => Err(Diagnostic::new(
@@ -3789,7 +4070,7 @@ fn require_interop_object(
 fn require_detach_event(
     site: OmpClauseItemSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     match facts.detach_event(site) {
         None => Err(Diagnostic::new(
@@ -3814,7 +4095,7 @@ fn require_detach_event(
 fn require_modifiable_item(
     site: OmpClauseItemSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
     subject: &str,
 ) -> Result<(), Diagnostic> {
     match facts.modifiable_item(site) {
@@ -3836,7 +4117,7 @@ fn require_procedure_parameter_items(
     clause_site: OmpClauseSite,
     item_count: usize,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     for index in 0..item_count {
         let item_site = OmpClauseItemSite::new(clause_site, index);
@@ -3848,7 +4129,7 @@ fn require_procedure_parameter_items(
 fn require_procedure_parameter_item(
     item_site: OmpClauseItemSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     match facts.procedure_parameter(item_site) {
         None => Err(Diagnostic::new(
@@ -3869,7 +4150,7 @@ fn require_constant_logical(
     expression: &Expression,
     site: OmpExpressionSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<bool, Diagnostic> {
     if matches!(facts.constant_expression(site), Some(false)) {
         return Err(Diagnostic::new(
@@ -3902,7 +4183,7 @@ fn require_logical_expression(
     expression: &Expression,
     site: OmpExpressionSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     match obvious_logical_evaluation(expression) {
         Some(LogicalEvaluation::NotLogical) => Err(Diagnostic::new(
@@ -3931,7 +4212,7 @@ fn require_constant_expression(
     expression: &Expression,
     site: OmpExpressionSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     let syntactic_literal = matches!(expression.ast().kind, crate::host::ExprKind::Literal(_));
     if syntactic_literal || facts.constant_expression(site) == Some(true) {
@@ -3956,7 +4237,7 @@ fn require_positive_constant_integer(
     expression: &Expression,
     site: OmpExpressionSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<u128, Diagnostic> {
     let value = require_constant_integer(expression, site, span, facts)?;
     match value {
@@ -3979,7 +4260,7 @@ fn require_nonnegative_constant_integer(
     expression: &Expression,
     site: OmpExpressionSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<u128, Diagnostic> {
     match require_constant_integer(expression, site, span, facts)? {
         IntegerEvaluation::NonNegative(value) => Ok(value),
@@ -4000,7 +4281,7 @@ fn require_constant_integer(
     expression: &Expression,
     site: OmpExpressionSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<IntegerEvaluation, Diagnostic> {
     if matches!(facts.constant_expression(site), Some(false)) {
         return Err(Diagnostic::new(
@@ -4025,7 +4306,7 @@ fn require_positive_integer_expression(
     expression: &Expression,
     site: OmpExpressionSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     if let Some(evaluation) =
         obvious_integer_evaluation(expression).or_else(|| facts.integer_evaluation(site))
@@ -4066,7 +4347,7 @@ fn require_integer_expression(
     expression: &Expression,
     site: OmpExpressionSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     if let Some(evaluation) =
         obvious_integer_evaluation(expression).or_else(|| facts.integer_evaluation(site))
@@ -4196,7 +4477,7 @@ fn expression_is_string_literal(expression: &Expression) -> bool {
 pub(crate) fn require_openacc_semantic_facts(
     directive: &AccDirective,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<(), Diagnostic> {
     if matches!(
         directive.kind(),
@@ -4226,7 +4507,7 @@ fn require_acc_positive_constant_integer(
     expression: &Expression,
     site: AccExpressionSite,
     span: Span,
-    facts: &SemanticFacts,
+    facts: &impl SemanticFactProvider,
 ) -> Result<u128, Diagnostic> {
     let evaluation = obvious_integer_evaluation(expression)
         .or_else(|| facts.acc_integer_evaluation(site))
@@ -4871,7 +5152,7 @@ fn clause_item_names_variable(
         crate::ir::ClauseItem::Variable(item_variable) => item_variable == variable,
         crate::ir::ClauseItem::Expression(expression) => expression == variable.expression(),
         crate::ir::ClauseItem::FortranCommonBlock(_)
-        | crate::ir::ClauseItem::LegacyTrailingSlash(_) => false,
+        | crate::ir::ClauseItem::OmpparserTrailingSlash(_) => false,
     }
 }
 
@@ -5946,6 +6227,7 @@ fn is_loop(kind: OmpDirectiveKind) -> bool {
             | D::TargetTeamsDistributeParallelLoopSimd
             | D::TargetTeamsLoop
             | D::TargetTeamsLoopSimd
+            | D::TargetTeamsWorkdistribute
             | D::Workdistribute
     )
 }
