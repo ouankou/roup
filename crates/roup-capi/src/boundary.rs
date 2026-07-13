@@ -608,6 +608,16 @@ pub extern "C" fn roup_node_kind(node: RoupNodeHandle) -> RoupNodeKindResult {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn roup_node_has_span(node: RoupNodeHandle) -> RoupU32Result {
+    invoke(|| service::node_has_span(node))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn roup_node_span(node: RoupNodeHandle) -> RoupSpanResult {
+    invoke(|| service::node_span(node))
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn roup_node_field_count(node: RoupNodeHandle) -> RoupSizeResult {
     invoke(|| service::node_field_count(node))
 }
@@ -739,6 +749,46 @@ pub extern "C" fn roup_error_message_length(error: RoupErrorHandle) -> RoupSizeR
     string_length(|| service::error_message(error))
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn roup_error_related_count(error: RoupErrorHandle) -> RoupSizeResult {
+    invoke(|| service::error_related_count(error))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn roup_error_related_span(error: RoupErrorHandle, index: usize) -> RoupSpanResult {
+    invoke(|| service::error_related_span(error, index))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn roup_error_related_message_length(
+    error: RoupErrorHandle,
+    index: usize,
+) -> RoupSizeResult {
+    string_length(|| service::error_related_message(error, index))
+}
+
+/// Copy one related diagnostic message without a trailing NUL byte.
+///
+/// # Safety
+///
+/// `output` must satisfy [`copy_utf8_output`]'s safety contract.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn roup_error_related_message_copy(
+    error: RoupErrorHandle,
+    index: usize,
+    output: *mut u8,
+    capacity: usize,
+) -> RoupSizeResult {
+    // SAFETY: The exported function forwards its documented buffer contract.
+    unsafe {
+        string_copy(
+            || service::error_related_message(error, index),
+            output,
+            capacity,
+        )
+    }
+}
+
 /// Copy an error message without a trailing NUL byte.
 ///
 /// # Safety
@@ -846,6 +896,18 @@ mod tests {
         field_index: usize,
         value_index: usize,
     ) -> String {
+        let info = roup_directive_parameter_field_info(directive, field_index);
+        assert!(info.result.status.is_ok());
+        if matches!(
+            info.value.value_kind,
+            crate::ROUP_FIELD_VALUE_NODE | crate::ROUP_FIELD_VALUE_NODE_LIST
+        ) {
+            let node = roup_directive_parameter_field_node(directive, field_index, value_index);
+            assert!(node.result.status.is_ok());
+            let value = host_node_source(node.value);
+            assert!(roup_node_release(node.value).status.is_ok());
+            return value;
+        }
         // SAFETY: the queried length sizes the owned destination exactly.
         unsafe {
             copied_string(
@@ -869,6 +931,18 @@ mod tests {
         field_index: usize,
         value_index: usize,
     ) -> String {
+        let info = roup_clause_field_info(directive, clause_index, field_index);
+        assert!(info.result.status.is_ok());
+        if matches!(
+            info.value.value_kind,
+            crate::ROUP_FIELD_VALUE_NODE | crate::ROUP_FIELD_VALUE_NODE_LIST
+        ) {
+            let node = roup_clause_field_node(directive, clause_index, field_index, value_index);
+            assert!(node.result.status.is_ok());
+            let value = host_node_source(node.value);
+            assert!(roup_node_release(node.value).status.is_ok());
+            return value;
+        }
         // SAFETY: the queried length sizes the owned destination exactly.
         unsafe {
             copied_string(
@@ -888,12 +962,51 @@ mod tests {
     }
 
     fn node_string(node: RoupNodeHandle, field_index: usize, value_index: usize) -> String {
+        let info = roup_node_field_info(node, field_index);
+        assert!(info.result.status.is_ok());
+        if matches!(
+            info.value.value_kind,
+            crate::ROUP_FIELD_VALUE_NODE | crate::ROUP_FIELD_VALUE_NODE_LIST
+        ) {
+            let child = roup_node_field_node(node, field_index, value_index);
+            assert!(child.result.status.is_ok());
+            let value = host_node_source(child.value);
+            assert!(roup_node_release(child.value).status.is_ok());
+            return value;
+        }
         // SAFETY: the queried length sizes the owned destination exactly.
         unsafe {
             copied_string(
                 roup_node_field_string_length(node, field_index, value_index),
                 |out, len| roup_node_field_string_copy(node, field_index, value_index, out, len),
             )
+        }
+    }
+
+    fn host_node_source(node: RoupNodeHandle) -> String {
+        let kind = roup_node_kind(node);
+        assert!(kind.result.status.is_ok());
+        assert!(matches!(
+            kind.value.family,
+            crate::ROUP_NODE_FAMILY_HOST_EXPRESSION
+                | crate::ROUP_NODE_FAMILY_HOST_TYPE_NAME
+                | crate::ROUP_NODE_FAMILY_HOST_VARIABLE
+                | crate::ROUP_NODE_FAMILY_HOST_LVALUE
+        ));
+        let count = roup_node_field_count(node);
+        assert!(count.result.status.is_ok());
+        let index = (0..count.value)
+            .find(|index| {
+                let info = roup_node_field_info(node, *index);
+                assert!(info.result.status.is_ok());
+                info.value.id == crate::ROUP_FIELD_SOURCE_SPELLING
+            })
+            .expect("host node source spelling field");
+        // SAFETY: the queried length sizes the owned destination exactly.
+        unsafe {
+            copied_string(roup_node_field_string_length(node, index, 0), |out, len| {
+                roup_node_field_string_copy(node, index, 0, out, len)
+            })
         }
     }
 
@@ -1134,15 +1247,8 @@ mod tests {
         let values_index = clause_field_index(directive.value, 0, crate::ROUP_FIELD_VALUES);
         let field = roup_clause_field_info(directive.value, 0, values_index);
         assert_eq!(field.value.id, crate::ROUP_FIELD_VALUES);
-        assert_eq!(field.value.value_kind, crate::ROUP_FIELD_VALUE_STRING_LIST);
-        let typed_value = unsafe {
-            copied_string(
-                roup_clause_field_string_length(directive.value, 0, values_index, 0),
-                |out, len| {
-                    roup_clause_field_string_copy(directive.value, 0, values_index, 0, out, len)
-                },
-            )
-        };
+        assert_eq!(field.value.value_kind, crate::ROUP_FIELD_VALUE_NODE_LIST);
+        let typed_value = clause_string(directive.value, 0, values_index, 0);
         assert_eq!(typed_value, "4");
 
         assert!(roup_directive_release(directive.value).status.is_ok());
@@ -1281,15 +1387,8 @@ mod tests {
         let required = roup_clause_field_info(directive.value, 0, required_index);
         assert!(required.result.status.is_ok());
         assert_eq!(required.value.id, crate::ROUP_FIELD_REQUIRED);
-        assert_eq!(required.value.value_kind, crate::ROUP_FIELD_VALUE_STRING);
-        let required_value = unsafe {
-            copied_string(
-                roup_clause_field_string_length(directive.value, 0, required_index, 0),
-                |out, len| {
-                    roup_clause_field_string_copy(directive.value, 0, required_index, 0, out, len)
-                },
-            )
-        };
+        assert_eq!(required.value.value_kind, crate::ROUP_FIELD_VALUE_NODE);
+        let required_value = clause_string(directive.value, 0, required_index, 0);
         assert_eq!(required_value, "required_flag");
         assert!(roup_directive_release(directive.value).status.is_ok());
 
@@ -1302,14 +1401,7 @@ mod tests {
         let semantics = roup_clause_field_info(directive.value, 0, semantics_index);
         assert!(semantics.result.status.is_ok());
         assert_eq!(semantics.value.id, crate::ROUP_FIELD_USE_SEMANTICS);
-        let semantics_value = unsafe {
-            copied_string(
-                roup_clause_field_string_length(directive.value, 0, semantics_index, 0),
-                |out, len| {
-                    roup_clause_field_string_copy(directive.value, 0, semantics_index, 0, out, len)
-                },
-            )
-        };
+        let semantics_value = clause_string(directive.value, 0, semantics_index, 0);
         assert_eq!(semantics_value, "use_it");
         assert!(roup_directive_release(directive.value).status.is_ok());
 
@@ -1609,18 +1701,8 @@ mod tests {
                 variant: crate::ROUP_ACC_CACHE_CONTIGUOUS_SUBARRAY,
             }
         );
-        let element_text = unsafe {
-            copied_string(
-                roup_node_field_string_length(element.value, 0, 0),
-                |out, len| roup_node_field_string_copy(element.value, 0, 0, out, len),
-            )
-        };
-        let subarray_text = unsafe {
-            copied_string(
-                roup_node_field_string_length(subarray.value, 0, 0),
-                |out, len| roup_node_field_string_copy(subarray.value, 0, 0, out, len),
-            )
-        };
+        let element_text = node_string(element.value, 0, 0);
+        let subarray_text = node_string(subarray.value, 0, 0);
         assert_eq!(element_text, "values[index]");
         assert_eq!(subarray_text, "tile[0:n]");
 
@@ -1695,7 +1777,7 @@ mod tests {
                     crate::ROUP_SOURCE_PRAGMA,
                 ),
                 source: "#pragma omp declare_reduction(ns::merge<int> : std::vector<int>) combiner(omp_out += omp_in) initializer(omp_priv(omp_orig))",
-                type_name: "std :: vector < int >",
+                type_name: "std::vector<int>",
                 source_syntax: crate::ROUP_OMP_DECLARE_REDUCTION_COMBINER_CLAUSE,
             },
             Case {
@@ -1758,7 +1840,7 @@ mod tests {
                 (
                     2,
                     crate::ROUP_FIELD_VALUES,
-                    crate::ROUP_FIELD_VALUE_STRING_LIST,
+                    crate::ROUP_FIELD_VALUE_NODE_LIST,
                     1,
                 ),
                 (
@@ -1972,20 +2054,10 @@ mod tests {
         let values = roup_clause_field_info(list.value, 0, values_index);
         assert!(values.result.status.is_ok());
         assert_eq!(values.value.id, crate::ROUP_FIELD_VALUES);
-        assert_eq!(values.value.value_kind, crate::ROUP_FIELD_VALUE_STRING_LIST);
+        assert_eq!(values.value.value_kind, crate::ROUP_FIELD_VALUE_NODE_LIST);
         assert_eq!(values.value.count, 2);
-        let first = unsafe {
-            copied_string(
-                roup_clause_field_string_length(list.value, 0, values_index, 0),
-                |out, len| roup_clause_field_string_copy(list.value, 0, values_index, 0, out, len),
-            )
-        };
-        let second = unsafe {
-            copied_string(
-                roup_clause_field_string_length(list.value, 0, values_index, 1),
-                |out, len| roup_clause_field_string_copy(list.value, 0, values_index, 1, out, len),
-            )
-        };
+        let first = clause_string(list.value, 0, values_index, 0);
+        let second = clause_string(list.value, 0, values_index, 1);
         assert_eq!(first, "f(1, 2)");
         assert_eq!(second, "n + 1");
         assert!(roup_directive_release(list.value).status.is_ok());
@@ -1998,13 +2070,8 @@ mod tests {
         let event = roup_clause_field_info(detach.value, 0, event_index);
         assert!(event.result.status.is_ok());
         assert_eq!(event.value.id, crate::ROUP_FIELD_EVENT);
-        assert_eq!(event.value.value_kind, crate::ROUP_FIELD_VALUE_STRING);
-        let event_name = unsafe {
-            copied_string(
-                roup_clause_field_string_length(detach.value, 0, event_index, 0),
-                |out, len| roup_clause_field_string_copy(detach.value, 0, event_index, 0, out, len),
-            )
-        };
+        assert_eq!(event.value.value_kind, crate::ROUP_FIELD_VALUE_NODE);
+        let event_name = clause_string(detach.value, 0, event_index, 0);
         assert_eq!(event_name, "event_handle");
         assert!(roup_directive_release(detach.value).status.is_ok());
         assert!(roup_parser_release(parser.value).status.is_ok());
@@ -2093,7 +2160,7 @@ mod tests {
         assert!(!wrong.result.status.is_ok());
         assert!(roup_error_release(wrong.result.error).status.is_ok());
         assert_eq!(value.value.id, crate::ROUP_FIELD_VALUE);
-        assert_eq!(value.value.value_kind, crate::ROUP_FIELD_VALUE_STRING);
+        assert_eq!(value.value.value_kind, crate::ROUP_FIELD_VALUE_NODE);
         assert_eq!(value.value.count, 1);
 
         assert_eq!(roup_clause_field_count(directive.value, 1).value, 0);
@@ -2185,12 +2252,7 @@ mod tests {
                 variant: crate::ROUP_ACC_SIZE_EXPRESSION,
             }
         );
-        let value = unsafe {
-            copied_string(
-                roup_node_field_string_length(expression.value, 0, 0),
-                |out, len| roup_node_field_string_copy(expression.value, 0, 0, out, len),
-            )
-        };
+        let value = node_string(expression.value, 0, 0);
         assert_eq!(value, "8");
 
         assert!(roup_node_release(automatic.value).status.is_ok());
@@ -2291,6 +2353,193 @@ mod tests {
         let stale = roup_node_kind(modifier.value);
         assert_eq!(stale.result.status, RoupStatus::STALE_HANDLE);
         assert!(roup_error_release(stale.result.error).status.is_ok());
+        assert!(roup_parser_release(parser.value).status.is_ok());
+    }
+
+    #[test]
+    fn host_expressions_cross_the_abi_as_spanned_recursive_nodes() {
+        let parser = roup_parser_create(openmp_options());
+        assert!(parser.result.status.is_ok());
+        let directive = parse_success(parser.value, "#pragma omp parallel num_threads(a + 2)");
+        let values = clause_field_index(directive, 0, crate::ROUP_FIELD_VALUES);
+        let info = roup_clause_field_info(directive, 0, values);
+        assert_eq!(info.value.value_kind, crate::ROUP_FIELD_VALUE_NODE_LIST);
+        let expression = roup_clause_field_node(directive, 0, values, 0);
+        assert!(expression.result.status.is_ok());
+        assert_eq!(
+            roup_node_kind(expression.value).value,
+            RoupNodeKind {
+                family: crate::ROUP_NODE_FAMILY_HOST_EXPRESSION,
+                variant: crate::ROUP_HOST_EXPR_BINARY,
+            }
+        );
+        assert_eq!(roup_node_has_span(expression.value).value, 1);
+        let span = roup_node_span(expression.value);
+        assert!(span.result.status.is_ok());
+        assert_eq!(span.value.start_byte, 0);
+        assert_eq!(host_node_source(expression.value), "a + 2");
+
+        let operator_index = (0..roup_node_field_count(expression.value).value)
+            .find(|index| {
+                roup_node_field_info(expression.value, *index).value.id
+                    == crate::ROUP_FIELD_OPERATOR
+            })
+            .unwrap();
+        assert_eq!(
+            roup_node_field_u32(expression.value, operator_index, 0).value,
+            crate::ROUP_HOST_BINARY_ADD
+        );
+        let language_index = (0..roup_node_field_count(expression.value).value)
+            .find(|index| {
+                roup_node_field_info(expression.value, *index).value.id
+                    == crate::ROUP_FIELD_LANGUAGE
+            })
+            .unwrap();
+        assert_eq!(
+            roup_node_field_u32(expression.value, language_index, 0).value,
+            crate::ROUP_HOST_C
+        );
+
+        let left_index = (0..roup_node_field_count(expression.value).value)
+            .find(|index| {
+                roup_node_field_info(expression.value, *index).value.id == crate::ROUP_FIELD_LEFT
+            })
+            .unwrap();
+        let left = roup_node_field_node(expression.value, left_index, 0);
+        assert!(left.result.status.is_ok());
+        assert_eq!(
+            roup_node_kind(left.value).value.variant,
+            crate::ROUP_HOST_EXPR_NAME
+        );
+        assert_eq!(host_node_source(left.value), "a");
+
+        let right_index = (0..roup_node_field_count(expression.value).value)
+            .find(|index| {
+                roup_node_field_info(expression.value, *index).value.id == crate::ROUP_FIELD_RIGHT
+            })
+            .unwrap();
+        let right = roup_node_field_node(expression.value, right_index, 0);
+        assert_eq!(
+            roup_node_kind(right.value).value.variant,
+            crate::ROUP_HOST_EXPR_LITERAL
+        );
+        let literal_index = (0..roup_node_field_count(right.value).value)
+            .find(|index| {
+                roup_node_field_info(right.value, *index).value.id == crate::ROUP_FIELD_VALUE
+            })
+            .unwrap();
+        let literal = roup_node_field_node(right.value, literal_index, 0);
+        assert_eq!(
+            roup_node_kind(literal.value).value.variant,
+            crate::ROUP_HOST_LITERAL_INTEGER
+        );
+        let suffix_index = (0..roup_node_field_count(literal.value).value)
+            .find(|index| {
+                roup_node_field_info(literal.value, *index).value.id == crate::ROUP_FIELD_MODIFIERS
+            })
+            .unwrap();
+        assert_eq!(
+            roup_node_field_info(literal.value, suffix_index)
+                .value
+                .value_kind,
+            crate::ROUP_FIELD_VALUE_NODE
+        );
+        let suffix = roup_node_field_node(literal.value, suffix_index, 0);
+        assert_eq!(
+            roup_node_kind(suffix.value).value,
+            RoupNodeKind {
+                family: crate::ROUP_NODE_FAMILY_HOST_INTEGER_SUFFIX,
+                variant: crate::ROUP_HOST_INTEGER_SUFFIX_NONE,
+            }
+        );
+
+        assert!(roup_node_release(left.value).status.is_ok());
+        assert!(roup_node_release(suffix.value).status.is_ok());
+        assert!(roup_node_release(literal.value).status.is_ok());
+        assert!(roup_node_release(right.value).status.is_ok());
+        assert!(roup_node_release(expression.value).status.is_ok());
+        assert!(roup_directive_release(directive).status.is_ok());
+        assert!(roup_parser_release(parser.value).status.is_ok());
+    }
+
+    #[test]
+    fn ambiguous_sizeof_operand_exposes_both_typed_interpretations() {
+        let parser = roup_parser_create(openmp_options());
+        assert!(parser.result.status.is_ok());
+        let directive = parse_success(parser.value, "#pragma omp parallel num_threads(sizeof(n))");
+        let values = clause_field_index(directive, 0, crate::ROUP_FIELD_VALUES);
+        let expression = roup_clause_field_node(directive, 0, values, 0);
+        assert!(expression.result.status.is_ok());
+        assert_eq!(
+            roup_node_kind(expression.value).value,
+            RoupNodeKind {
+                family: crate::ROUP_NODE_FAMILY_HOST_EXPRESSION,
+                variant: crate::ROUP_HOST_EXPR_SIZEOF_AMBIGUOUS,
+            }
+        );
+
+        let type_name_index = (0..roup_node_field_count(expression.value).value)
+            .find(|index| {
+                roup_node_field_info(expression.value, *index).value.id
+                    == crate::ROUP_FIELD_TYPE_NAME
+            })
+            .expect("ambiguous sizeof type-name field");
+        let operand_index = (0..roup_node_field_count(expression.value).value)
+            .find(|index| {
+                roup_node_field_info(expression.value, *index).value.id == crate::ROUP_FIELD_OPERAND
+            })
+            .expect("ambiguous sizeof expression field");
+        let type_name = roup_node_field_node(expression.value, type_name_index, 0);
+        let operand = roup_node_field_node(expression.value, operand_index, 0);
+        assert_eq!(
+            roup_node_kind(type_name.value).value.family,
+            crate::ROUP_NODE_FAMILY_HOST_TYPE_NAME
+        );
+        assert_eq!(
+            roup_node_kind(operand.value).value,
+            RoupNodeKind {
+                family: crate::ROUP_NODE_FAMILY_HOST_EXPRESSION,
+                variant: crate::ROUP_HOST_EXPR_NAME,
+            }
+        );
+        assert_eq!(host_node_source(type_name.value), "n");
+        assert_eq!(host_node_source(operand.value), "n");
+
+        assert!(roup_node_release(type_name.value).status.is_ok());
+        assert!(roup_node_release(operand.value).status.is_ok());
+        assert!(roup_node_release(expression.value).status.is_ok());
+        assert!(roup_directive_release(directive).status.is_ok());
+        assert!(roup_parser_release(parser.value).status.is_ok());
+    }
+
+    #[test]
+    fn sizeof_type_compact_spelling_keeps_required_token_separators() {
+        let parser = roup_parser_create(openmp_options());
+        assert!(parser.result.status.is_ok());
+        let directive = parse_success(
+            parser.value,
+            "#pragma omp parallel num_threads(sizeof(unsigned long))",
+        );
+        let values = clause_field_index(directive, 0, crate::ROUP_FIELD_VALUES);
+        let expression = roup_clause_field_node(directive, 0, values, 0);
+        assert!(expression.result.status.is_ok());
+        assert_eq!(
+            roup_node_kind(expression.value).value.variant,
+            crate::ROUP_HOST_EXPR_SIZEOF_TYPE
+        );
+        let compact_index = (0..roup_node_field_count(expression.value).value)
+            .find(|index| {
+                roup_node_field_info(expression.value, *index).value.id
+                    == crate::ROUP_FIELD_COMPACT_SPELLING
+            })
+            .expect("sizeof compact-spelling field");
+        assert_eq!(
+            node_string(expression.value, compact_index, 0),
+            "sizeof(unsigned long)"
+        );
+
+        assert!(roup_node_release(expression.value).status.is_ok());
+        assert!(roup_directive_release(directive).status.is_ok());
         assert!(roup_parser_release(parser.value).status.is_ok());
     }
 

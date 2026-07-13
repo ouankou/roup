@@ -38,6 +38,20 @@ impl Renderer {
         match &expression.kind {
             ExprKind::Literal(literal) => self.literal(f, literal)?,
             ExprKind::Name(name) => self.qualified_name(f, name)?,
+            ExprKind::This => f.write_str("this")?,
+            ExprKind::Sizeof(operand) => {
+                f.write_str("sizeof(")?;
+                match operand {
+                    SizeofOperand::Type(type_name) => write!(f, "{type_name}")?,
+                    SizeofOperand::Expression(expression) => {
+                        self.expression(f, expression, 0)?;
+                    }
+                    SizeofOperand::Ambiguous { expression, .. } => {
+                        self.expression(f, expression, 0)?;
+                    }
+                }
+                f.write_str(")")?;
+            }
             ExprKind::CppTemplateId {
                 template,
                 arguments,
@@ -61,6 +75,27 @@ impl Renderer {
             ExprKind::LegacyQualifiedInteger { qualifier, value } => {
                 write!(f, "{qualifier}::")?;
                 self.integer(f, value)?;
+            }
+            ExprKind::LegacyQualifiedName { segments } => {
+                for (index, segment) in segments.iter().enumerate() {
+                    if index != 0 {
+                        f.write_str("::")?;
+                    }
+                    write!(f, "{segment}")?;
+                }
+            }
+            ExprKind::LegacyFortranSubscript { base, subscript } => {
+                self.expression(f, base, 100)?;
+                f.write_str("[")?;
+                self.subscript(f, subscript)?;
+                f.write_str("]")?;
+            }
+            ExprKind::LegacyFortranUnaryDesignator { op, operand } => {
+                f.write_str(match op {
+                    LegacyFortranUnaryOp::Dereference => "*",
+                    LegacyFortranUnaryOp::AddressOf => "&",
+                })?;
+                self.expression(f, operand, 90)?;
             }
             ExprKind::Parenthesized(inner) => {
                 f.write_str("(")?;
@@ -192,7 +227,7 @@ impl Renderer {
             Literal::Character(value) => {
                 f.write_str(character_prefix(value.encoding))?;
                 f.write_str("'")?;
-                write_escaped_c_char(f, value.value, '\'')?;
+                write_literal_code_unit(f, &value.code_unit, '\'')?;
                 f.write_str("'")
             }
             Literal::String(value) => {
@@ -202,8 +237,11 @@ impl Renderer {
                         crate::host::StringDelimiter::DoubleQuote => '"',
                     };
                     write!(f, "{delimiter}")?;
-                    for ch in value.value.chars() {
-                        if ch == delimiter {
+                    for unit in &value.code_units {
+                        let LiteralCodeUnit::Scalar(ch) = unit else {
+                            return Err(fmt::Error);
+                        };
+                        if *ch == delimiter {
                             write!(f, "{delimiter}{delimiter}")?;
                         } else {
                             write!(f, "{ch}")?;
@@ -213,8 +251,18 @@ impl Renderer {
                 } else {
                     f.write_str(character_prefix(value.encoding))?;
                     f.write_str("\"")?;
-                    for ch in value.value.chars() {
-                        write_escaped_c_char(f, ch, '"')?;
+                    for (index, unit) in value.code_units.iter().enumerate() {
+                        write_literal_code_unit(f, unit, '"')?;
+                        if matches!(
+                            unit,
+                            LiteralCodeUnit::NumericEscape {
+                                radix: LiteralEscapeRadix::Hexadecimal,
+                                ..
+                            }
+                        ) && matches!(value.code_units.get(index + 1), Some(LiteralCodeUnit::Scalar(next)) if next.is_ascii_hexdigit())
+                        {
+                            f.write_str("\"\"")?;
+                        }
                     }
                     f.write_str("\"")
                 }
@@ -343,15 +391,20 @@ impl Renderer {
         match &expression.kind {
             ExprKind::Literal(_)
             | ExprKind::Name(_)
+            | ExprKind::This
+            | ExprKind::Sizeof(_)
             | ExprKind::LegacyQualifiedInteger { .. }
+            | ExprKind::LegacyQualifiedName { .. }
             | ExprKind::Parenthesized(_) => 110,
             ExprKind::Call { .. }
             | ExprKind::CppTemplateId { .. }
             | ExprKind::Subscript { .. }
+            | ExprKind::LegacyFortranSubscript { .. }
             | ExprKind::Member { .. }
             | ExprKind::Postfix { .. }
             | ExprKind::FortranApply { .. } => 100,
             ExprKind::Unary { op, .. } => self.unary_precedence(*op),
+            ExprKind::LegacyFortranUnaryDesignator { .. } => 90,
             ExprKind::FortranDefinedUnary { .. } => 17,
             ExprKind::Binary { op, .. } => self.binary_precedence(*op),
             ExprKind::FortranDefinedBinary { .. } => 1,
@@ -506,6 +559,24 @@ fn write_escaped_c_char(f: &mut fmt::Formatter<'_>, value: char, delimiter: char
     }
 }
 
+fn write_literal_code_unit(
+    f: &mut fmt::Formatter<'_>,
+    unit: &LiteralCodeUnit,
+    delimiter: char,
+) -> fmt::Result {
+    match unit {
+        LiteralCodeUnit::Scalar(value) => write_escaped_c_char(f, *value, delimiter),
+        LiteralCodeUnit::NumericEscape {
+            radix: LiteralEscapeRadix::Octal,
+            value,
+        } => write!(f, "\\{value:03o}"),
+        LiteralCodeUnit::NumericEscape {
+            radix: LiteralEscapeRadix::Hexadecimal,
+            value,
+        } => write!(f, "\\x{value:x}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::host::{HostLanguage, parse_expression};
@@ -576,5 +647,14 @@ mod tests {
         assert_eq!(canonical, "\"\\0001\"");
         let second = parse_expression(&canonical, HostLanguage::C).unwrap();
         assert_eq!(first.kind, second.kind);
+    }
+
+    #[test]
+    fn canonical_render_preserves_non_unicode_numeric_code_units() {
+        let parsed = parse_expression("'\\x110000'", HostLanguage::C).unwrap();
+        let canonical = parsed.canonical(HostLanguage::C).to_string();
+        assert_eq!(canonical, "'\\x110000'");
+        let reparsed = parse_expression(&canonical, HostLanguage::C).unwrap();
+        assert_eq!(parsed.kind, reparsed.kind);
     }
 }

@@ -34,7 +34,10 @@ g++ app.cpp \
 The adapter traverses only the opaque, typed ROUP C ABI. It does not depend on
 Rust layouts, serialized clause payloads, or a second parser. Malformed input
 and unrepresentable target-IR shapes fail through ompparser's established
-`parseOpenMP` contract: no partial or fallback AST is returned.
+`parseOpenMP` contract: no partial or fallback AST is returned. Parser
+rejections return `nullptr`; invalid pre-parse source-form or language input
+remains a hard error. `roup_ompparser_last_error()` returns the thread-local
+diagnostic for the most recent call in either case.
 
 Call `setLang(Lang_C)`, `setLang(Lang_Cplusplus)`, or
 `setLang(Lang_Fortran)` before parsing. `Lang_unknown` is rejected because a

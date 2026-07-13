@@ -251,11 +251,9 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    /// Create a lexer for a compatibility expression grammar in which host
-    /// keywords may occupy identifier positions. The expression parser still
-    /// classifies the complete token stream and rejects malformed syntax; this
-    /// only mirrors the historical directive parsers' lack of keyword lookup.
-    pub(crate) fn for_source_compatibility_with_profile(
+    /// Create a compatibility lexer in which host keywords may occupy name
+    /// positions after the strict expression grammar has declined the input.
+    pub(crate) fn for_extension_expression_with_profile(
         source: &'a str,
         profile: HostLanguageProfile,
     ) -> Self {
@@ -1093,6 +1091,7 @@ impl<'a> Lexer<'a> {
         }
         self.advance_char();
         let mut value = String::new();
+        let mut code_units = Vec::new();
         loop {
             let Some(ch) = self.peek_char() else {
                 return Err(self.error(start, self.offset, LexErrorKind::UnterminatedLiteral));
@@ -1101,6 +1100,7 @@ impl<'a> Lexer<'a> {
                 self.advance_char();
                 if self.language == HostLanguage::Fortran && self.peek_char() == Some(quote) {
                     value.push(quote);
+                    code_units.push(crate::host::LiteralCodeUnit::Scalar(quote));
                     self.advance_char();
                     continue;
                 }
@@ -1111,23 +1111,29 @@ impl<'a> Lexer<'a> {
             }
             if ch == '\\' && self.language != HostLanguage::Fortran {
                 self.advance_char();
-                value.push(self.lex_escape(start)?);
+                let (character, code_unit) = self.lex_escape(start)?;
+                value.push(character);
+                code_units.push(code_unit);
             } else {
                 value.push(ch);
+                code_units.push(crate::host::LiteralCodeUnit::Scalar(ch));
                 self.advance_char();
             }
         }
 
         let kind = if quote == '\'' && self.language != HostLanguage::Fortran {
-            let mut chars = value.chars();
-            let Some(character) = chars.next() else {
+            let Some(code_unit) = code_units.pop() else {
                 return Err(self.error(start, self.offset, LexErrorKind::InvalidCharacterLiteral));
             };
-            if chars.next().is_some() {
+            if !code_units.is_empty() {
                 return Err(self.error(start, self.offset, LexErrorKind::InvalidCharacterLiteral));
             }
+            let character = value.chars().next().ok_or_else(|| {
+                self.error(start, self.offset, LexErrorKind::InvalidCharacterLiteral)
+            })?;
             TokenKind::Character(CharacterLiteral {
                 encoding,
+                code_unit,
                 value: character,
             })
         } else {
@@ -1138,6 +1144,7 @@ impl<'a> Lexer<'a> {
                 } else {
                     crate::host::StringDelimiter::DoubleQuote
                 },
+                code_units,
                 value,
             })
         };
@@ -1147,7 +1154,10 @@ impl<'a> Lexer<'a> {
         })
     }
 
-    fn lex_escape(&mut self, literal_start: usize) -> Result<char, LexError> {
+    fn lex_escape(
+        &mut self,
+        literal_start: usize,
+    ) -> Result<(char, crate::host::LiteralCodeUnit), LexError> {
         let escape_start = self.offset.saturating_sub(1);
         let Some(ch) = self.peek_char() else {
             return Err(self.error(
@@ -1171,7 +1181,7 @@ impl<'a> Lexer<'a> {
             _ => None,
         };
         if let Some(value) = simple {
-            return Ok(value);
+            return Ok((value, crate::host::LiteralCodeUnit::Scalar(value)));
         }
 
         let (radix, digits) = match ch {
@@ -1192,13 +1202,13 @@ impl<'a> Lexer<'a> {
                     value = value * 8 + digit;
                     self.advance_char();
                 }
-                return char::from_u32(value).ok_or_else(|| {
-                    self.error(
-                        escape_start,
-                        self.offset,
-                        LexErrorKind::InvalidEscape(self.source[escape_start..self.offset].into()),
-                    )
-                });
+                return Ok((
+                    char::from_u32(value).unwrap_or(char::REPLACEMENT_CHARACTER),
+                    crate::host::LiteralCodeUnit::NumericEscape {
+                        radix: crate::host::LiteralEscapeRadix::Octal,
+                        value,
+                    },
+                ));
             }
             _ => {
                 return Err(self.error(
@@ -1218,7 +1228,16 @@ impl<'a> Lexer<'a> {
             if digits.is_some_and(|limit| count == limit) {
                 break;
             }
-            value = value.saturating_mul(radix).saturating_add(digit);
+            value = value
+                .checked_mul(radix)
+                .and_then(|value| value.checked_add(digit))
+                .ok_or_else(|| {
+                    self.error(
+                        escape_start,
+                        self.offset,
+                        LexErrorKind::InvalidEscape(self.source[escape_start..self.offset].into()),
+                    )
+                })?;
             count += 1;
             self.advance_char();
         }
@@ -1229,13 +1248,23 @@ impl<'a> Lexer<'a> {
                 LexErrorKind::InvalidEscape(self.source[escape_start..self.offset].into()),
             ));
         }
-        char::from_u32(value).ok_or_else(|| {
-            self.error(
-                escape_start,
-                self.offset,
-                LexErrorKind::InvalidEscape(self.source[escape_start..self.offset].into()),
-            )
-        })
+        if digits.is_some() {
+            let character = char::from_u32(value).ok_or_else(|| {
+                self.error(
+                    escape_start,
+                    self.offset,
+                    LexErrorKind::InvalidEscape(self.source[escape_start..self.offset].into()),
+                )
+            })?;
+            return Ok((character, crate::host::LiteralCodeUnit::Scalar(character)));
+        }
+        Ok((
+            char::from_u32(value).unwrap_or(char::REPLACEMENT_CHARACTER),
+            crate::host::LiteralCodeUnit::NumericEscape {
+                radix: crate::host::LiteralEscapeRadix::Hexadecimal,
+                value,
+            },
+        ))
     }
 
     fn lex_symbol(&mut self) -> Result<Token, LexError> {
@@ -1586,6 +1615,39 @@ mod tests {
     fn rejects_unterminated_comment() {
         let error = Lexer::new("a /*", HostLanguage::C).tokenize().unwrap_err();
         assert_eq!(error.kind, LexErrorKind::UnterminatedBlockComment);
+    }
+
+    #[test]
+    fn numeric_literal_escapes_remain_typed_code_units() {
+        let tokens = Lexer::new("'\\x110000' \"a\\377f\"", HostLanguage::C)
+            .tokenize()
+            .unwrap();
+        let TokenKind::Character(character) = &tokens[0].kind else {
+            panic!("expected character literal");
+        };
+        assert_eq!(character.value, char::REPLACEMENT_CHARACTER);
+        assert_eq!(
+            character.code_unit,
+            crate::host::LiteralCodeUnit::NumericEscape {
+                radix: crate::host::LiteralEscapeRadix::Hexadecimal,
+                value: 0x11_0000,
+            }
+        );
+
+        let TokenKind::String(string) = &tokens[1].kind else {
+            panic!("expected string literal");
+        };
+        assert_eq!(
+            string.code_units,
+            [
+                crate::host::LiteralCodeUnit::Scalar('a'),
+                crate::host::LiteralCodeUnit::NumericEscape {
+                    radix: crate::host::LiteralEscapeRadix::Octal,
+                    value: 0o377,
+                },
+                crate::host::LiteralCodeUnit::Scalar('f'),
+            ]
+        );
     }
 
     #[test]

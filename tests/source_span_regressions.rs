@@ -89,7 +89,7 @@ fn metadirective_nested_spans_keep_the_outer_physical_source() {
         .parse(source)
         .unwrap();
 
-    let OmpClausePayload::MetadirectiveSelector { selector } =
+    let OmpClausePayload::MetadirectiveSelector { selector, .. } =
         parsed.directive().clauses()[0].payload()
     else {
         panic!("expected when selector payload");
@@ -98,7 +98,7 @@ fn metadirective_nested_spans_keep_the_outer_physical_source() {
     assert_eq!(nested.span().slice(source), Ok("paral\\\nlel"));
     assert_eq!(nested.clauses()[0].span().slice(source), Ok("private"));
 
-    let OmpClausePayload::MetadirectiveSelector { selector } =
+    let OmpClausePayload::MetadirectiveSelector { selector, .. } =
         parsed.directive().clauses()[1].payload()
     else {
         panic!("expected otherwise selector payload");
@@ -120,7 +120,7 @@ fn construct_selector_parses_properties_without_reconstructed_source() {
         .parser()
         .parse(source)
         .unwrap();
-    let OmpClausePayload::MetadirectiveSelector { selector } =
+    let OmpClausePayload::MetadirectiveSelector { selector, .. } =
         parsed.directive().clauses()[0].payload()
     else {
         panic!("expected selector payload");

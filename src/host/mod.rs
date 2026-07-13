@@ -13,11 +13,10 @@ mod render;
 mod type_name;
 
 pub use ast::*;
-pub(crate) use lexer::is_reserved_keyword;
 pub use lexer::{LexError, LexErrorKind, Lexer, Token, TokenKind};
-pub(crate) use parser::parse_expression_source_compatible_with_profile;
+pub(crate) use parser::parse_extension_expression_with_profile;
 pub use parser::{
     ParseError, ParseErrorKind, Parser, parse_expression, parse_expression_with_profile,
 };
 pub use render::CanonicalDisplay;
-pub use type_name::{Delimiter as TypeNameDelimiter, TypeName, TypeNameError};
+pub use type_name::{Delimiter as TypeNameDelimiter, TypeName, TypeNameError, TypeSyntax};

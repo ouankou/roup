@@ -29,7 +29,7 @@ pub use crate::host::{
 pub struct ParserConfig {
     profile: HostLanguageProfile,
     openmp_version_policy: VersionPolicy<OpenMpVersion>,
-    source_compatibility: bool,
+    source_extensions: bool,
     structural_nesting_depth: u16,
 }
 
@@ -46,7 +46,7 @@ impl ParserConfig {
         Self {
             profile,
             openmp_version_policy: VersionPolicy::Any,
-            source_compatibility: false,
+            source_extensions: false,
             structural_nesting_depth: 0,
         }
     }
@@ -66,14 +66,14 @@ impl ParserConfig {
     }
 
     #[must_use]
-    pub(crate) const fn with_source_compatibility(mut self, enabled: bool) -> Self {
-        self.source_compatibility = enabled;
+    pub(crate) const fn with_source_extensions(mut self, enabled: bool) -> Self {
+        self.source_extensions = enabled;
         self
     }
 
     #[must_use]
-    pub(crate) const fn source_compatibility(self) -> bool {
-        self.source_compatibility
+    pub(crate) const fn source_extensions(self) -> bool {
+        self.source_extensions
     }
 
     /// Enter one recursively nested typed structure.
@@ -150,7 +150,7 @@ impl Expression {
     }
 
     fn parse_legacy_qualified_value(source: &str, config: &ParserConfig) -> Option<Self> {
-        if !config.source_compatibility() {
+        if !config.source_extensions() {
             return None;
         }
         let components = source.split("::").collect::<Vec<_>>();
@@ -168,14 +168,13 @@ impl Expression {
                     },
                 }
             } else {
-                host::ExprKind::Name(host::QualifiedName {
-                    global: false,
+                host::ExprKind::LegacyQualifiedName {
                     segments: components
                         .into_iter()
                         .map(host::Identifier::new)
                         .collect::<Result<Vec<_>, _>>()
                         .ok()?,
-                })
+                }
             };
         let source = source.to_owned().into_boxed_str();
         let ast = host::Expr::new(Span::entire(&source), kind);
@@ -190,6 +189,12 @@ impl Expression {
         source: &str,
         config: &ParserConfig,
     ) -> Result<Self, ExpressionError> {
+        if config.source_extensions()
+            && config.host_language() == HostLanguage::Cpp
+            && let Ok(expression) = Self::parse_with_profile(source, config.profile())
+        {
+            return Ok(expression);
+        }
         if let Some(expression) = Self::parse_legacy_qualified_value(source, config) {
             return Ok(expression);
         }
@@ -200,7 +205,7 @@ impl Expression {
         source: &str,
         config: &ParserConfig,
     ) -> Result<Option<Self>, ExpressionError> {
-        if !config.source_compatibility()
+        if !config.source_extensions()
             || config.host_language() != HostLanguage::Fortran
             || !source.contains('[')
         {
@@ -216,10 +221,14 @@ impl Expression {
             return Ok(None);
         }
         let source = source.to_owned().into_boxed_str();
-        let ast = host::parse_expression_with_profile(
+        let parsed = host::parse_expression_with_profile(
             &source,
             HostLanguageProfile::Cpp(CppStandard::Cpp23),
         )?;
+        let ast = lower_cpp_extension_to_fortran(parsed)?;
+        if !matches!(ast.kind, ExprKind::LegacyFortranSubscript { .. }) {
+            return Ok(None);
+        }
         Ok(Some(Self {
             source,
             profile: config.profile(),
@@ -231,17 +240,40 @@ impl Expression {
         source: &str,
         config: &ParserConfig,
     ) -> Result<Option<Self>, ExpressionError> {
-        if !config.source_compatibility()
+        if !config.source_extensions()
             || config.host_language() != HostLanguage::Fortran
             || !matches!(source.trim_start().chars().next(), Some('*' | '&'))
         {
             return Ok(None);
         }
         let source = source.to_owned().into_boxed_str();
-        let ast = host::parse_expression_with_profile(
+        let parsed = host::parse_expression_with_profile(
             &source,
             HostLanguageProfile::Cpp(CppStandard::Cpp23),
         )?;
+        let ast = match parsed.kind {
+            ExprKind::Unary {
+                op: UnaryOp::Dereference,
+                operand,
+            } => host::Expr::new(
+                parsed.span,
+                ExprKind::LegacyFortranUnaryDesignator {
+                    op: host::LegacyFortranUnaryOp::Dereference,
+                    operand: Box::new(lower_cpp_extension_to_fortran(*operand)?),
+                },
+            ),
+            ExprKind::Unary {
+                op: UnaryOp::AddressOf,
+                operand,
+            } => host::Expr::new(
+                parsed.span,
+                ExprKind::LegacyFortranUnaryDesignator {
+                    op: host::LegacyFortranUnaryOp::AddressOf,
+                    operand: Box::new(lower_cpp_extension_to_fortran(*operand)?),
+                },
+            ),
+            _ => return Ok(None),
+        };
         Ok(Some(Self {
             source,
             profile: config.profile(),
@@ -251,38 +283,22 @@ impl Expression {
 
     fn parse_configured(source: String, config: &ParserConfig) -> Result<Self, ExpressionError> {
         if let Some(expression) =
-            Self::parse_legacy_fortran_bracket_designator(source.as_str(), config)?
-        {
-            return Ok(expression);
-        }
-        if let Some(expression) =
             Self::parse_legacy_fortran_c_unary_designator(source.as_str(), config)?
         {
             return Ok(expression);
         }
-        if config.source_compatibility()
-            && host::is_reserved_keyword(config.profile(), source.as_str())
-            && let Ok(identifier) = host::Identifier::new(source.as_str())
+        if let Some(expression) =
+            Self::parse_legacy_fortran_bracket_designator(source.as_str(), config)?
         {
-            let source = source.into_boxed_str();
-            let ast = host::Expr::new(
-                Span::entire(&source),
-                host::ExprKind::Name(host::QualifiedName {
-                    global: false,
-                    segments: vec![identifier],
-                }),
-            );
-            return Ok(Self {
-                source,
-                profile: config.profile(),
-                ast,
-            });
+            return Ok(expression);
         }
         let source = source.into_boxed_str();
-        let ast = if config.source_compatibility() {
-            host::parse_expression_source_compatible_with_profile(&source, config.profile())?
-        } else {
-            host::parse_expression_with_profile(&source, config.profile())?
+        let ast = match host::parse_expression_with_profile(&source, config.profile()) {
+            Ok(ast) => ast,
+            Err(_) if config.source_extensions() => {
+                host::parse_extension_expression_with_profile(&source, config.profile())?
+            }
+            Err(error) => return Err(error.into()),
         };
         Ok(Self {
             source,
@@ -381,6 +397,97 @@ impl Expression {
     }
 }
 
+fn lower_cpp_extension_to_fortran(expression: Expr) -> Result<Expr, host::ParseError> {
+    let span = expression.span;
+    let kind = match expression.kind {
+        ExprKind::Literal(
+            literal @ (host::Literal::Integer(_)
+            | host::Literal::Real(_)
+            | host::Literal::Character(_)
+            | host::Literal::String(_)),
+        ) => ExprKind::Literal(literal),
+        ExprKind::Name(name) if !name.global && name.segments.len() == 1 => ExprKind::Name(name),
+        ExprKind::Parenthesized(inner) => {
+            ExprKind::Parenthesized(Box::new(lower_cpp_extension_to_fortran(*inner)?))
+        }
+        ExprKind::Unary { op, operand }
+            if matches!(op, UnaryOp::Plus | UnaryOp::Minus | UnaryOp::LogicalNot) =>
+        {
+            ExprKind::Unary {
+                op,
+                operand: Box::new(lower_cpp_extension_to_fortran(*operand)?),
+            }
+        }
+        ExprKind::Binary { op, left, right }
+            if matches!(
+                op,
+                BinaryOp::Multiply
+                    | BinaryOp::Divide
+                    | BinaryOp::Add
+                    | BinaryOp::Subtract
+                    | BinaryOp::Less
+                    | BinaryOp::LessEqual
+                    | BinaryOp::Greater
+                    | BinaryOp::GreaterEqual
+                    | BinaryOp::Equal
+                    | BinaryOp::NotEqual
+                    | BinaryOp::LogicalAnd
+                    | BinaryOp::LogicalOr
+            ) =>
+        {
+            ExprKind::Binary {
+                op,
+                left: Box::new(lower_cpp_extension_to_fortran(*left)?),
+                right: Box::new(lower_cpp_extension_to_fortran(*right)?),
+            }
+        }
+        ExprKind::Call { callee, arguments } => ExprKind::FortranApply {
+            designator: Box::new(lower_cpp_extension_to_fortran(*callee)?),
+            arguments: arguments
+                .into_iter()
+                .map(lower_cpp_extension_to_fortran)
+                .map(|result| result.map(FortranArgument::Positional))
+                .collect::<Result<Vec<_>, _>>()?,
+        },
+        ExprKind::Subscript { base, subscript } => ExprKind::LegacyFortranSubscript {
+            base: Box::new(lower_cpp_extension_to_fortran(*base)?),
+            subscript: lower_cpp_extension_subscript(subscript)?,
+        },
+        _ => {
+            return Err(host::ParseError {
+                span,
+                kind: host::ParseErrorKind::UnsupportedConstruct(
+                    "unsupported ompparser Fortran extension expression",
+                ),
+            });
+        }
+    };
+    Ok(Expr::new(span, kind))
+}
+
+fn lower_cpp_extension_subscript(subscript: Subscript) -> Result<Subscript, host::ParseError> {
+    Ok(match subscript {
+        Subscript::Index(index) => {
+            Subscript::Index(Box::new(lower_cpp_extension_to_fortran(*index)?))
+        }
+        Subscript::Section(section) => Subscript::Section(ArraySection {
+            semantics: section.semantics,
+            lower: section
+                .lower
+                .map(|value| lower_cpp_extension_to_fortran(*value).map(Box::new))
+                .transpose()?,
+            upper_or_length: section
+                .upper_or_length
+                .map(|value| lower_cpp_extension_to_fortran(*value).map(Box::new))
+                .transpose()?,
+            stride: section
+                .stride
+                .map(|value| lower_cpp_extension_to_fortran(*value).map(Box::new))
+                .transpose()?,
+        }),
+    })
+}
+
 fn render_compact_expression(
     output: &mut String,
     source: &str,
@@ -405,6 +512,20 @@ fn render_compact_expression(
                 output.push_str(segment.as_str());
             }
         }
+        ExprKind::This => output.push_str("this"),
+        ExprKind::Sizeof(operand) => {
+            output.push_str("sizeof(");
+            match operand {
+                host::SizeofOperand::Type(type_name) => {
+                    output.push_str(&type_name.compact_source_spelling());
+                }
+                host::SizeofOperand::Expression(expression)
+                | host::SizeofOperand::Ambiguous { expression, .. } => {
+                    render_compact_expression(output, source, language, expression);
+                }
+            }
+            output.push(')');
+        }
         ExprKind::CppTemplateId {
             template,
             arguments,
@@ -427,14 +548,35 @@ fn render_compact_expression(
             }
             output.push('>');
         }
-        ExprKind::LegacyQualifiedInteger { .. } => output.extend(
-            expression
-                .span
-                .slice(source)
-                .expect("typed legacy expression span must match its source backing")
-                .chars()
-                .filter(|character| !character.is_whitespace()),
-        ),
+        ExprKind::LegacyQualifiedInteger { .. } | ExprKind::LegacyQualifiedName { .. } => output
+            .extend(
+                expression
+                    .span
+                    .slice(source)
+                    .expect("typed legacy expression span must match its source backing")
+                    .chars()
+                    .filter(|character| !character.is_whitespace()),
+            ),
+        ExprKind::LegacyFortranSubscript { base, subscript } => {
+            render_compact_expression(output, source, language, base);
+            output.push('[');
+            match subscript {
+                Subscript::Index(index) => {
+                    render_compact_expression(output, source, language, index);
+                }
+                Subscript::Section(section) => {
+                    render_compact_section(output, source, language, section);
+                }
+            }
+            output.push(']');
+        }
+        ExprKind::LegacyFortranUnaryDesignator { op, operand } => {
+            output.push_str(match op {
+                host::LegacyFortranUnaryOp::Dereference => "*",
+                host::LegacyFortranUnaryOp::AddressOf => "&",
+            });
+            render_compact_expression(output, source, language, operand);
+        }
         ExprKind::Parenthesized(inner) => {
             output.push('(');
             render_compact_expression(output, source, language, inner);
@@ -726,13 +868,10 @@ mod tests {
     }
 
     #[test]
-    fn configured_constructor_cannot_bypass_source_compatibility() {
+    fn standard_cpp_keyword_expressions_do_not_require_source_extensions() {
         let source = "this->ready";
-        assert!(Expression::new(source, &ParserConfig::cpp()).is_err());
-
-        let config = ParserConfig::cpp().with_source_compatibility(true);
-        let expression = Expression::new(source, &config)
-            .expect("the configured constructor must honor source compatibility");
+        let expression = Expression::new(source, &ParserConfig::cpp())
+            .expect("standard C++ this expressions must parse strictly");
         let ExprKind::Member {
             base,
             access: MemberAccess::Arrow,
@@ -742,12 +881,54 @@ mod tests {
             panic!("expected a typed C++ member expression");
         };
         assert_eq!(member.as_str(), "ready");
+        assert!(matches!(&base.kind, ExprKind::This));
+
+        let sizeof = Expression::new("sizeof(int)", &ParserConfig::cpp()).unwrap();
         assert!(matches!(
-            &base.kind,
-            ExprKind::Name(name)
-                if !name.global
-                    && name.segments.len() == 1
-                    && name.segments[0].as_str() == "this"
+            sizeof.ast().kind,
+            ExprKind::Sizeof(crate::host::SizeofOperand::Type(_))
+        ));
+
+        let ambiguous = Expression::new("sizeof(n)", &ParserConfig::cpp()).unwrap();
+        assert!(matches!(
+            ambiguous.ast().kind,
+            ExprKind::Sizeof(crate::host::SizeofOperand::Ambiguous { .. })
+        ));
+
+        let expression = Expression::new("sizeof(n + 1)", &ParserConfig::cpp()).unwrap();
+        assert!(matches!(
+            expression.ast().kind,
+            ExprKind::Sizeof(crate::host::SizeofOperand::Expression(_))
+        ));
+
+        let global = Expression::new("sizeof(::std::size_t)", &ParserConfig::cpp()).unwrap();
+        assert!(matches!(
+            global.ast().kind,
+            ExprKind::Sizeof(crate::host::SizeofOperand::Ambiguous { .. })
+        ));
+        assert_eq!(global.compact_source_spelling(), "sizeof(::std::size_t)");
+    }
+
+    #[test]
+    fn cpp_extensions_do_not_reclassify_standard_qualified_names_as_legacy() {
+        let config = ParserConfig::cpp().with_source_extensions(true);
+        let standard = Expression::new_with_legacy_qualified_value("ns::x", &config).unwrap();
+        let ExprKind::Name(name) = &standard.ast().kind else {
+            panic!("standard C++ qualification must remain a qualified-name node");
+        };
+        assert!(!name.global);
+        assert!(
+            name.segments
+                .iter()
+                .map(|segment| segment.as_str())
+                .eq(["ns", "x"])
+        );
+
+        let legacy = Expression::new_with_legacy_qualified_value("zero::12", &config).unwrap();
+        assert!(matches!(
+            &legacy.ast().kind,
+            ExprKind::LegacyQualifiedInteger { qualifier, value }
+                if qualifier.as_str() == "zero" && value.value == 12
         ));
     }
 
@@ -758,6 +939,19 @@ mod tests {
             expression.compact_source_spelling(),
             "factory<unsigned long>()"
         );
+    }
+
+    #[test]
+    fn compact_sizeof_preserves_required_type_token_separators() {
+        for (source, expected) in [
+            ("sizeof(unsigned long)", "sizeof(unsigned long)"),
+            ("sizeof(struct item)", "sizeof(struct item)"),
+            ("sizeof(n + 1)", "sizeof(n+1)"),
+            ("sizeof n", "sizeof(n)"),
+        ] {
+            let expression = Expression::new(source, &ParserConfig::c()).unwrap();
+            assert_eq!(expression.compact_source_spelling(), expected);
+        }
     }
 
     #[test]
@@ -777,8 +971,10 @@ mod tests {
     }
 
     #[test]
-    fn formerly_opaque_or_complex_inputs_are_hard_errors() {
-        for source in ["sizeof(struct item)", "a @ b", "call(", "a ? b"] {
+    fn unsupported_or_malformed_inputs_are_hard_errors() {
+        Expression::new("sizeof(struct item)", &ParserConfig::c())
+            .expect("standard C sizeof(type) must be typed");
+        for source in ["a @ b", "call(", "a ? b"] {
             assert!(Expression::new(source, &ParserConfig::c()).is_err());
         }
     }

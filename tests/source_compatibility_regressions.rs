@@ -5,7 +5,9 @@ use roup::ast::{
     OmpxPayloadItem,
 };
 use roup::diagnostic::DiagnosticCode;
-use roup::host::{BinaryOp, ExprKind, Literal, MemberAccess, UnaryOp};
+use roup::host::{
+    BinaryOp, ExprKind, LegacyFortranUnaryOp, Literal, MemberAccess, SizeofOperand, UnaryOp,
+};
 use roup::ir::{
     ClauseData, ClauseItem, Expression, OmpArrayShapingSubscript, OmpDependence, OmpDistDataPolicy,
     OmpLocator, OriginalSharing, ReductionModifier,
@@ -22,7 +24,7 @@ use roup::version::{
 fn c() -> roup::api::OpenMpParser {
     OpenMpConfig::new(HostLanguageProfile::C(CStandard::C23), SourceForm::Pragma)
         .expect("valid C parser configuration")
-        .with_source_compatibility()
+        .with_ompparser_extensions()
         .parser()
 }
 
@@ -32,7 +34,7 @@ fn cpp() -> roup::api::OpenMpParser {
         SourceForm::Pragma,
     )
     .expect("valid C++ parser configuration")
-    .with_source_compatibility()
+    .with_ompparser_extensions()
     .parser()
 }
 
@@ -56,12 +58,7 @@ fn assert_cpp_this_member(expression: &Expression, expected_member: &str) {
     };
     assert_eq!(*access, MemberAccess::Arrow);
     assert_eq!(member.as_str(), expected_member);
-    let ExprKind::Name(name) = &base.kind else {
-        panic!("expected `this` to remain a typed name expression");
-    };
-    assert!(!name.global);
-    assert_eq!(name.segments.len(), 1);
-    assert_eq!(name.segments[0].as_str(), "this");
+    assert!(matches!(base.kind, ExprKind::This));
 }
 
 fn fortran() -> roup::api::OpenMpParser {
@@ -70,14 +67,14 @@ fn fortran() -> roup::api::OpenMpParser {
         SourceForm::FortranFree,
     )
     .expect("valid Fortran parser configuration")
-    .with_source_compatibility()
+    .with_ompparser_extensions()
     .parser()
 }
 
 fn acc() -> roup::api::OpenAccParser {
     OpenAccConfig::new(HostLanguageProfile::C(CStandard::C23), SourceForm::Pragma)
         .expect("valid OpenACC parser configuration")
-        .with_source_compatibility()
+        .with_accparser_extensions()
         .parser()
 }
 
@@ -87,7 +84,7 @@ fn acc_cpp() -> roup::api::OpenAccParser {
         SourceForm::Pragma,
     )
     .expect("valid C++ OpenACC parser configuration")
-    .with_source_compatibility()
+    .with_accparser_extensions()
     .parser()
 }
 
@@ -107,7 +104,7 @@ fn c_exact(version: OpenMpVersion) -> roup::api::OpenMpParser {
         SourceForm::Pragma,
     )
     .expect("valid exact OpenMP compatibility configuration")
-    .with_source_compatibility()
+    .with_ompparser_extensions()
     .parser()
 }
 
@@ -118,7 +115,7 @@ fn acc_exact(version: OpenAccVersion) -> roup::api::OpenAccParser {
         SourceForm::Pragma,
     )
     .expect("valid exact OpenACC compatibility configuration")
-    .with_source_compatibility()
+    .with_accparser_extensions()
     .parser()
 }
 
@@ -165,7 +162,7 @@ fn source_compatibility_preserves_explicit_semantic_fact_validation() {
 }
 
 #[test]
-fn source_compatibility_applies_to_scalar_clause_expressions() {
+fn standard_cpp_scalar_expressions_use_real_this_nodes() {
     for source in [
         "#pragma omp parallel if(this->ready)",
         "#pragma omp parallel num_threads(this->n)",
@@ -174,7 +171,7 @@ fn source_compatibility_applies_to_scalar_clause_expressions() {
     ] {
         strict_cpp()
             .parse(source)
-            .expect_err("strict parsing must retain strict host-expression token rules");
+            .expect("standard C++ keyword expressions must parse without extensions");
     }
 
     let parallel = cpp()
@@ -215,6 +212,38 @@ fn source_compatibility_applies_to_scalar_clause_expressions() {
 }
 
 #[test]
+fn cpp_compatibility_preserves_standard_qualified_clause_items() {
+    let parsed = cpp()
+        .parse("#pragma omp parallel private(ns::x, zero::12)")
+        .expect("C++ compatibility parsing must retain standard and legacy qualification");
+    let ClauseData::Private { items } = parsed.directive().clauses()[0].payload() else {
+        panic!("expected a typed private clause");
+    };
+    let [
+        ClauseItem::Variable(standard),
+        ClauseItem::Expression(legacy),
+    ] = items.as_slice()
+    else {
+        panic!("expected one standard variable and one legacy expression");
+    };
+    let ExprKind::Name(name) = &standard.ast().kind else {
+        panic!("standard C++ qualification must remain a qualified-name node");
+    };
+    assert!(!name.global);
+    assert!(
+        name.segments
+            .iter()
+            .map(|segment| segment.as_str())
+            .eq(["ns", "x"])
+    );
+    assert!(matches!(
+        &legacy.ast().kind,
+        ExprKind::LegacyQualifiedInteger { qualifier, value }
+            if qualifier.as_str() == "zero" && value.value == 12
+    ));
+}
+
+#[test]
 fn openacc_source_compatibility_applies_to_expression_payloads() {
     acc()
         .parse("#pragma acc parallel if(ns::ready)")
@@ -231,8 +260,8 @@ fn openacc_source_compatibility_applies_to_expression_payloads() {
         [ClauseItem::Variable(variable)]
             if matches!(
                 &variable.ast().kind,
-                ExprKind::Name(name)
-                    if name.segments.iter().map(|segment| segment.as_str()).eq(["readonly", "m"])
+                ExprKind::LegacyQualifiedName { segments }
+                    if segments.iter().map(|segment| segment.as_str()).eq(["readonly", "m"])
             )
     ));
     let AccClausePayload::Copy(copyout) = data.directive().clauses()[1].payload() else {
@@ -259,8 +288,8 @@ fn openacc_source_compatibility_applies_to_expression_payloads() {
         Some(expression)
             if matches!(
                 &expression.ast().kind,
-                ExprKind::Name(name)
-                    if name.segments.iter().map(|segment| segment.as_str()).eq(["devnum", "devnum", "z"])
+                ExprKind::LegacyQualifiedName { segments }
+                    if segments.iter().map(|segment| segment.as_str()).eq(["devnum", "devnum", "z"])
             )
     ));
     assert!(matches!(
@@ -268,8 +297,8 @@ fn openacc_source_compatibility_applies_to_expression_payloads() {
         [expression]
             if matches!(
                 &expression.ast().kind,
-                ExprKind::Name(name)
-                    if name.segments.iter().map(|segment| segment.as_str()).eq(["queues", "a"])
+                ExprKind::LegacyQualifiedName { segments }
+                    if segments.iter().map(|segment| segment.as_str()).eq(["queues", "a"])
             )
     ));
 
@@ -281,13 +310,15 @@ fn openacc_source_compatibility_applies_to_expression_payloads() {
     ] {
         strict_acc_cpp()
             .parse(source)
-            .expect_err("strict OpenACC parsing must retain strict host-expression token rules");
+            .expect("standard C++ keyword expressions must parse without extensions");
     }
 
     let parallel = acc_cpp()
         .parse("#pragma acc parallel if(this->ready) num_gangs(this->gangs)")
         .expect("source-compatible OpenACC scalar and expression-list clauses must parse");
-    let AccClausePayload::Expression(condition) = parallel.directive().clauses()[0].payload()
+    let AccClausePayload::Expression {
+        value: condition, ..
+    } = parallel.directive().clauses()[0].payload()
     else {
         panic!("expected a typed OpenACC if expression");
     };
@@ -324,20 +355,21 @@ fn openacc_source_compatibility_applies_to_expression_payloads() {
 }
 
 #[test]
-fn source_compatibility_applies_to_selector_expressions() {
+fn standard_cpp_selector_expressions_use_typed_keyword_nodes() {
     for source in [
         "#pragma omp metadirective when(implementation={vendor(score(sizeof(int)): llvm)}: parallel)",
         "#pragma omp metadirective when(target_device={device_num(this->dev)}: parallel)",
     ] {
         strict_cpp()
             .parse(source)
-            .expect_err("strict selectors must retain strict host-expression token rules");
+            .expect("standard C++ selector expressions must parse without extensions");
     }
 
     let parsed = cpp()
         .parse("#pragma omp metadirective when(device={kind(score(sizeof(int)): gpu)}: parallel)")
         .expect("source-compatible selector scores must accept C++ host keywords");
-    let ClauseData::MetadirectiveSelector { selector } = parsed.directive().clauses()[0].payload()
+    let ClauseData::MetadirectiveSelector { selector, .. } =
+        parsed.directive().clauses()[0].payload()
     else {
         panic!("expected a typed metadirective selector");
     };
@@ -348,30 +380,16 @@ fn source_compatibility_applies_to_selector_expressions() {
         panic!("expected a typed kind name-list selector");
     };
     let score = kind.score().expect("expected a typed selector score");
-    let ExprKind::Call { callee, arguments } = &score.ast().kind else {
-        panic!("expected the score to remain a typed call expression");
-    };
     assert!(matches!(
-        &callee.kind,
-        ExprKind::Name(name)
-            if !name.global
-                && name.segments.len() == 1
-                && name.segments[0].as_str() == "sizeof"
-    ));
-    assert!(matches!(
-        arguments.as_slice(),
-        [argument]
-            if matches!(&argument.kind,
-                ExprKind::Name(name)
-                    if !name.global
-                        && name.segments.len() == 1
-                        && name.segments[0].as_str() == "int")
+        &score.ast().kind,
+        ExprKind::Sizeof(SizeofOperand::Type(_))
     ));
 
     let target = cpp()
         .parse("#pragma omp metadirective when(target_device={device_num(this->dev)}: parallel)")
         .expect("source-compatible target-device expressions must accept C++ host keywords");
-    let ClauseData::MetadirectiveSelector { selector } = target.directive().clauses()[0].payload()
+    let ClauseData::MetadirectiveSelector { selector, .. } =
+        target.directive().clauses()[0].payload()
     else {
         panic!("expected a typed target-device selector");
     };
@@ -434,7 +452,56 @@ fn fortran_literal_brackets_do_not_select_legacy_designator_grammar() {
         [OmpLocator::PotentialLValue(expression)] => expression,
         _ => panic!("expected one typed legacy bracket locator"),
     };
-    assert!(matches!(expression.ast().kind, ExprKind::Subscript { .. }));
+    assert!(matches!(
+        expression.ast().kind,
+        ExprKind::LegacyFortranSubscript { .. }
+    ));
+
+    let pointer = fortran()
+        .parse("!$omp target map(to: *ptr)")
+        .expect("the named extension dialect retains typed pointer designators");
+    let ClauseData::Map { locators, .. } = pointer.directive().clauses()[0].payload() else {
+        panic!("expected a typed map clause");
+    };
+    assert!(matches!(
+        locators.as_slice(),
+        [OmpLocator::LValue(value)]
+            if matches!(value.ast().kind, ExprKind::LegacyFortranUnaryDesignator { .. })
+    ));
+}
+
+#[test]
+fn fortran_pointer_and_bracket_designator_extensions_compose() {
+    for (source, expected_op) in [
+        (
+            "!$omp target map(to: *values[0])",
+            LegacyFortranUnaryOp::Dereference,
+        ),
+        (
+            "!$omp target map(to: &values[1:count])",
+            LegacyFortranUnaryOp::AddressOf,
+        ),
+    ] {
+        let parsed = fortran()
+            .parse(source)
+            .expect("legacy pointer and bracket designators must compose");
+        let ClauseData::Map { locators, .. } = parsed.directive().clauses()[0].payload() else {
+            panic!("expected a typed map clause");
+        };
+        let expression = match locators.as_slice() {
+            [OmpLocator::LValue(value)] => value.expression(),
+            [OmpLocator::PotentialLValue(expression)] => expression,
+            _ => panic!("expected one typed legacy pointer-subscript locator"),
+        };
+        let ExprKind::LegacyFortranUnaryDesignator { op, operand } = &expression.ast().kind else {
+            panic!("expected a typed legacy pointer designator");
+        };
+        assert_eq!(*op, expected_op);
+        assert!(matches!(
+            operand.kind,
+            ExprKind::LegacyFortranSubscript { .. }
+        ));
+    }
 }
 
 #[test]
@@ -542,7 +609,7 @@ fn exact_version_policy_rejects_nonstandard_compatibility_extensions() {
         SourceForm::FortranFree,
     )
     .expect("valid exact OpenMP compatibility configuration")
-    .with_source_compatibility()
+    .with_ompparser_extensions()
     .parser();
     for source in ["!$ompx vendor payload", "!$omp end section"] {
         let error = omp_one
@@ -667,4 +734,47 @@ fn compatibility_keyword_locator_and_redundant_fortran_omp_remain_typed() {
         .parse("!$omp omp teams num_teams(4)")
         .expect("historical redundant omp token must parse");
     assert_eq!(teams.directive().kind(), OmpDirectiveKind::Teams);
+}
+
+#[test]
+fn ompparser_map_expression_extensions_remain_typed_and_fact_checked() {
+    for source in [
+        "#pragma omp target map(to: obj.dist_data(x))",
+        "#pragma omp target map(to: foo(a, dist_data(b)))",
+        "#pragma omp target map(to: foo + dist_data(duplicate))",
+    ] {
+        let parsed = c()
+            .parse(source)
+            .expect("ompparser map-expression extensions must remain typed");
+        let ClauseData::Map { locators, .. } = parsed.directive().clauses()[0].payload() else {
+            panic!("expected a typed map clause");
+        };
+        assert!(matches!(
+            locators.as_slice(),
+            [OmpLocator::PotentialLValue(_)]
+        ));
+        assert_eq!(
+            c().parse_with_facts(source, &SemanticFacts::new())
+                .unwrap_err()
+                .code(),
+            DiagnosticCode::MissingSemanticFact
+        );
+    }
+
+    let strict = OpenMpConfig::new(HostLanguageProfile::C(CStandard::C23), SourceForm::Pragma)
+        .expect("valid strict OpenMP configuration")
+        .parser();
+    assert!(
+        strict
+            .parse("#pragma omp target map(to: foo + dist_data(duplicate))")
+            .is_err()
+    );
+}
+
+#[test]
+fn ompparser_firstprivate_modifier_order_is_typed() {
+    c().parse(
+        "#pragma omp target teams distribute firstprivate(target, saved: e) firstprivate(saved, teams: f) firstprivate(target data: g)",
+    )
+    .expect("ompparser firstprivate modifier order must parse into typed clauses");
 }

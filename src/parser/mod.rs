@@ -154,7 +154,7 @@ impl Parser {
         parser_config: &ParserConfig,
     ) -> Result<RoupDirective, AstBuildError> {
         if self.dialect == Dialect::OpenMp
-            && parser_config.source_compatibility()
+            && parser_config.source_extensions()
             && matches!(
                 self.language,
                 Language::FortranFree | Language::FortranFixed
@@ -314,7 +314,7 @@ impl Parser {
                     "construct selector property list must not be empty".to_string(),
                 ));
             }
-            let (score, property_source) = if parser_config.source_compatibility() {
+            let (score, property_source) = if parser_config.source_extensions() {
                 semantic::parse_scored_value(property_source, parser_config)
                     .map_err(|error| AstBuildError::ParseFailure(error.to_string()))?
             } else {
@@ -346,7 +346,7 @@ impl Parser {
                 "construct selector produced a non-OpenMP directive".to_string(),
             ));
         };
-        if !parser_config.source_compatibility()
+        if !parser_config.source_extensions()
             && directive.kind() != OmpDirectiveKind::Simd
             && !directive.clauses().is_empty()
         {

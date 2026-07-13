@@ -136,6 +136,10 @@ impl CppTemplateArgument {
 pub enum ExprKind {
     Literal(Literal),
     Name(QualifiedName),
+    /// The C++ `this` expression. It is never represented as an identifier.
+    This,
+    /// C/C++ `sizeof`, retaining whether its operand is a type-id or expression.
+    Sizeof(SizeofOperand),
     /// A C++ template-id used as an expression designator.
     CppTemplateId {
         template: Box<Expr>,
@@ -146,6 +150,22 @@ pub enum ExprKind {
     LegacyQualifiedInteger {
         qualifier: Identifier,
         value: IntegerLiteral,
+    },
+    /// A qualified value accepted only by a named directive-parser extension.
+    /// It is distinct from a C++ qualified name and therefore cannot be
+    /// mistaken for standard syntax under a C or Fortran profile.
+    LegacyQualifiedName {
+        segments: Vec<Identifier>,
+    },
+    /// A bracket subscript in the ompparser Fortran extension dialect.
+    LegacyFortranSubscript {
+        base: Box<Expr>,
+        subscript: Subscript,
+    },
+    /// A C-style pointer designator in the ompparser Fortran extension dialect.
+    LegacyFortranUnaryDesignator {
+        op: LegacyFortranUnaryOp,
+        operand: Box<Expr>,
     },
     Parenthesized(Box<Expr>),
     Unary {
@@ -202,6 +222,24 @@ pub enum ExprKind {
         designator: Box<Expr>,
         arguments: Vec<FortranArgument>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SizeofOperand {
+    Type(TypeName),
+    Expression(Box<Expr>),
+    /// Parenthesized spelling that is valid as both a type-name and an
+    /// expression until embedding-compiler name lookup classifies it.
+    Ambiguous {
+        type_name: TypeName,
+        expression: Box<Expr>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LegacyFortranUnaryOp {
+    Dereference,
+    AddressOf,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -307,6 +345,12 @@ pub enum CharacterEncoding {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CharacterLiteral {
     pub encoding: CharacterEncoding,
+    /// Authoritative source-language code unit. Numeric C/C++ escapes are
+    /// not Unicode scalar values and therefore remain distinct from text.
+    pub code_unit: LiteralCodeUnit,
+    /// Unicode projection for callers that only accept text. Numeric escapes
+    /// outside Unicode use the replacement character; semantic consumers
+    /// must inspect `code_unit`.
     pub value: char,
 }
 
@@ -314,7 +358,25 @@ pub struct CharacterLiteral {
 pub struct StringLiteral {
     pub encoding: CharacterEncoding,
     pub delimiter: StringDelimiter,
+    /// Authoritative ordered source-language code units.
+    pub code_units: Vec<LiteralCodeUnit>,
+    /// Convenience Unicode projection. See [`CharacterLiteral::value`].
     pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum LiteralCodeUnit {
+    Scalar(char),
+    NumericEscape {
+        radix: LiteralEscapeRadix,
+        value: u32,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LiteralEscapeRadix {
+    Octal,
+    Hexadecimal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

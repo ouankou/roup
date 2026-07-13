@@ -27,58 +27,6 @@ use roup::version::{
 };
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-trait AbiStringLeaf {
-    fn render_abi_leaf(&self) -> String;
-}
-
-impl AbiStringLeaf for str {
-    fn render_abi_leaf(&self) -> String {
-        self.to_owned()
-    }
-}
-
-impl<T: AbiStringLeaf + ?Sized> AbiStringLeaf for Box<T> {
-    fn render_abi_leaf(&self) -> String {
-        self.as_ref().render_abi_leaf()
-    }
-}
-
-impl AbiStringLeaf for roup::ir::Expression {
-    fn render_abi_leaf(&self) -> String {
-        self.source_spelling().to_owned()
-    }
-}
-
-impl AbiStringLeaf for roup::ir::Variable {
-    fn render_abi_leaf(&self) -> String {
-        self.expression().compact_source_spelling()
-    }
-}
-
-impl AbiStringLeaf for roup::ir::LValue {
-    fn render_abi_leaf(&self) -> String {
-        self.expression().compact_source_spelling()
-    }
-}
-
-macro_rules! impl_display_abi_leaf {
-    ($($ty:ty),+ $(,)?) => {
-        $(
-            impl AbiStringLeaf for $ty {
-                fn render_abi_leaf(&self) -> String {
-                    self.to_string()
-                }
-            }
-        )+
-    };
-}
-
-impl_display_abi_leaf!(
-    roup::ir::Identifier,
-    roup::host::TypeName,
-    roup::ast::OmpCppTemplateId,
-);
-
 fn qualified_name_leaf(name: &roup::host::QualifiedName) -> String {
     let mut result = if name.global {
         "::".to_string()
@@ -104,6 +52,8 @@ enum ParserRecord {
 struct DirectiveRecord {
     directive: RoupDirective,
     compatible_versions: u64,
+    parameter_fields: Option<Vec<ClauseField>>,
+    clause_fields: Vec<Vec<ClauseField>>,
 }
 
 #[derive(Clone, Debug)]
@@ -111,11 +61,19 @@ struct ErrorRecord {
     code: u32,
     span: RoupSpan,
     message: String,
+    related: Vec<RelatedErrorRecord>,
+}
+
+#[derive(Clone, Debug)]
+struct RelatedErrorRecord {
+    span: RoupSpan,
+    message: String,
 }
 
 #[derive(Clone, Debug)]
 struct NodeRecord {
     kind: RoupNodeKind,
+    span: Option<RoupSpan>,
     fields: Vec<ClauseField>,
 }
 
@@ -129,6 +87,86 @@ enum FieldValue {
     U32s(Vec<u32>),
     Node(NodeRecord),
     Nodes(Vec<NodeRecord>),
+}
+
+trait AbiStringLeaf {
+    const IS_NODE: bool;
+
+    fn render_string(&self) -> String {
+        unreachable!("node-valued ABI leaf cannot be rendered as a string")
+    }
+
+    fn render_node(&self) -> NodeRecord {
+        unreachable!("string-valued ABI leaf cannot be rendered as a node")
+    }
+}
+
+impl AbiStringLeaf for str {
+    const IS_NODE: bool = false;
+
+    fn render_string(&self) -> String {
+        self.to_owned()
+    }
+}
+
+impl<T: AbiStringLeaf + ?Sized> AbiStringLeaf for Box<T> {
+    const IS_NODE: bool = T::IS_NODE;
+
+    fn render_string(&self) -> String {
+        self.as_ref().render_string()
+    }
+
+    fn render_node(&self) -> NodeRecord {
+        self.as_ref().render_node()
+    }
+}
+
+macro_rules! impl_display_abi_leaf {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl AbiStringLeaf for $ty {
+                const IS_NODE: bool = false;
+
+                fn render_string(&self) -> String {
+                    self.to_string()
+                }
+            }
+        )+
+    };
+}
+
+impl_display_abi_leaf!(roup::ir::Identifier, roup::ast::OmpCppTemplateId,);
+
+impl AbiStringLeaf for roup::ir::Expression {
+    const IS_NODE: bool = true;
+
+    fn render_node(&self) -> NodeRecord {
+        host_expression_node(self)
+    }
+}
+
+impl AbiStringLeaf for roup::ir::Variable {
+    const IS_NODE: bool = true;
+
+    fn render_node(&self) -> NodeRecord {
+        host_variable_node(self)
+    }
+}
+
+impl AbiStringLeaf for roup::ir::LValue {
+    const IS_NODE: bool = true;
+
+    fn render_node(&self) -> NodeRecord {
+        host_lvalue_node(self)
+    }
+}
+
+impl AbiStringLeaf for roup::host::TypeName {
+    const IS_NODE: bool = true;
+
+    fn render_node(&self) -> NodeRecord {
+        host_type_name_node(self)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -167,7 +205,11 @@ impl ClauseField {
         Self {
             id,
             name,
-            value: FieldValue::String(value.render_abi_leaf()),
+            value: if T::IS_NODE {
+                FieldValue::Node(value.render_node())
+            } else {
+                FieldValue::String(value.render_string())
+            },
         }
     }
 
@@ -175,7 +217,11 @@ impl ClauseField {
         Self {
             id,
             name,
-            value: FieldValue::Strings(values.iter().map(AbiStringLeaf::render_abi_leaf).collect()),
+            value: if T::IS_NODE {
+                FieldValue::Nodes(values.iter().map(AbiStringLeaf::render_node).collect())
+            } else {
+                FieldValue::Strings(values.iter().map(AbiStringLeaf::render_string).collect())
+            },
         }
     }
 
@@ -201,6 +247,18 @@ impl ClauseField {
             name,
             value: FieldValue::Nodes(values),
         }
+    }
+
+    fn expression(id: u32, name: &'static str, value: &roup::ir::Expression) -> Self {
+        Self::node(id, name, host_expression_node(value))
+    }
+
+    fn variable(id: u32, name: &'static str, value: &roup::ir::Variable) -> Self {
+        Self::node(id, name, host_variable_node(value))
+    }
+
+    fn type_name(id: u32, name: &'static str, value: &roup::host::TypeName) -> Self {
+        Self::node(id, name, host_type_name_node(value))
     }
 
     fn info(&self) -> RoupFieldInfo {
@@ -850,10 +908,19 @@ fn abi_span(span: roup::source::Span) -> RoupSpan {
 impl ErrorRecord {
     fn from_diagnostic(diagnostic: Diagnostic) -> Self {
         let span = diagnostic.primary_span();
+        let related = diagnostic
+            .related_spans()
+            .iter()
+            .map(|related| RelatedErrorRecord {
+                span: abi_span(related.span()),
+                message: related.message().to_owned(),
+            })
+            .collect();
         Self {
             code: u32::from(diagnostic.code().number()),
             span: abi_span(span),
             message: diagnostic.message().to_owned(),
+            related,
         }
     }
 
@@ -862,6 +929,7 @@ impl ErrorRecord {
             code,
             span,
             message: message.into(),
+            related: Vec::new(),
         }
     }
 }
@@ -1055,22 +1123,24 @@ pub(crate) fn parse(
         }
     })?;
 
-    let directive = match parser {
-        ParserRecord::OpenMp(parser) => parser
-            .parse(&source)
-            .map(|parsed| DirectiveRecord {
-                compatible_versions: version_bits(parsed.compatible_versions()),
-                directive: RoupDirective::OpenMp(Box::new(parsed.into_directive())),
-            })
-            .map_err(parse_failure)?,
-        ParserRecord::OpenAcc(parser) => parser
-            .parse(&source)
-            .map(|parsed| DirectiveRecord {
-                compatible_versions: version_bits(parsed.compatible_versions()),
-                directive: RoupDirective::OpenAcc(Box::new(parsed.into_directive())),
-            })
-            .map_err(parse_failure)?,
+    let (directive, compatible_versions) = match parser {
+        ParserRecord::OpenMp(parser) => {
+            let parsed = parser.parse(&source).map_err(parse_failure)?;
+            (
+                RoupDirective::OpenMp(Box::new(parsed.directive().clone())),
+                version_bits(parsed.compatible_versions()),
+            )
+        }
+        ParserRecord::OpenAcc(parser) => {
+            let parsed = parser.parse(&source).map_err(parse_failure)?;
+            (
+                RoupDirective::OpenAcc(Box::new(parsed.directive().clone())),
+                version_bits(parsed.compatible_versions()),
+            )
+        }
     };
+    let directive =
+        build_directive_record(directive, compatible_versions).map_err(record_unrecorded)?;
 
     with_state(|state| {
         let handle = state
@@ -1081,6 +1151,37 @@ pub(crate) fn parse(
             handle.index(),
             handle.generation(),
         ))
+    })
+}
+
+fn build_directive_record(
+    directive: RoupDirective,
+    compatible_versions: u64,
+) -> UnrecordedResult<DirectiveRecord> {
+    let has_parameter = match &directive {
+        RoupDirective::OpenMp(directive) => directive.parameter().is_some(),
+        RoupDirective::OpenAcc(directive) => directive.parameter().is_some(),
+    };
+    let parameter_fields = has_parameter
+        .then(|| parameter_fields(&directive))
+        .transpose()?;
+    let clause_fields = match &directive {
+        RoupDirective::OpenMp(directive) => directive
+            .clauses()
+            .iter()
+            .map(omp_clause_fields)
+            .collect::<UnrecordedResult<Vec<_>>>()?,
+        RoupDirective::OpenAcc(directive) => directive
+            .clauses()
+            .iter()
+            .map(acc_clause_fields)
+            .collect::<UnrecordedResult<Vec<_>>>()?,
+    };
+    Ok(DirectiveRecord {
+        directive,
+        compatible_versions,
+        parameter_fields,
+        clause_fields,
     })
 }
 
@@ -1397,6 +1498,22 @@ pub(crate) fn node_kind(handle: RoupNodeHandle) -> ServiceResult<RoupNodeKind> {
     with_node(handle, |node| Ok(node.kind))
 }
 
+pub(crate) fn node_has_span(handle: RoupNodeHandle) -> ServiceResult<u32> {
+    with_node(handle, |node| Ok(u32::from(node.span.is_some())))
+}
+
+pub(crate) fn node_span(handle: RoupNodeHandle) -> ServiceResult<RoupSpan> {
+    with_node(handle, |node| {
+        node.span.ok_or_else(|| {
+            UnrecordedFailure::abi(
+                RoupStatus::INVALID_ARGUMENT,
+                ROUP_DIAGNOSTIC_INDEX_OUT_OF_RANGE,
+                "semantic node has no source span",
+            )
+        })
+    })
+}
+
 pub(crate) fn node_field_count(handle: RoupNodeHandle) -> ServiceResult<usize> {
     with_node(handle, |node| Ok(node.fields.len()))
 }
@@ -1494,6 +1611,50 @@ pub(crate) fn error_message(handle: RoupErrorHandle) -> ServiceResult<String> {
     with_error(handle, |error| Ok(error.message.clone()))
 }
 
+pub(crate) fn error_related_count(handle: RoupErrorHandle) -> ServiceResult<usize> {
+    if handle == EMERGENCY_ERROR_HANDLE {
+        return Ok(0);
+    }
+    with_error(handle, |error| Ok(error.related.len()))
+}
+
+pub(crate) fn error_related_span(handle: RoupErrorHandle, index: usize) -> ServiceResult<RoupSpan> {
+    if handle == EMERGENCY_ERROR_HANDLE {
+        return Err(record_unrecorded(UnrecordedFailure::abi(
+            RoupStatus::INVALID_ARGUMENT,
+            ROUP_DIAGNOSTIC_INDEX_OUT_OF_RANGE,
+            "emergency diagnostic has no related spans",
+        )));
+    }
+    with_error(handle, |error| {
+        error
+            .related
+            .get(index)
+            .map(|related| related.span)
+            .ok_or_else(|| value_index_failure("related diagnostic", index, error.related.len()))
+    })
+}
+
+pub(crate) fn error_related_message(
+    handle: RoupErrorHandle,
+    index: usize,
+) -> ServiceResult<String> {
+    if handle == EMERGENCY_ERROR_HANDLE {
+        return Err(record_unrecorded(UnrecordedFailure::abi(
+            RoupStatus::INVALID_ARGUMENT,
+            ROUP_DIAGNOSTIC_INDEX_OUT_OF_RANGE,
+            "emergency diagnostic has no related spans",
+        )));
+    }
+    with_error(handle, |error| {
+        error
+            .related
+            .get(index)
+            .map(|related| related.message.clone())
+            .ok_or_else(|| value_index_failure("related diagnostic", index, error.related.len()))
+    })
+}
+
 pub(crate) fn release_error(handle: RoupErrorHandle) -> ServiceResult<()> {
     if handle == EMERGENCY_ERROR_HANDLE {
         return Ok(());
@@ -1568,6 +1729,7 @@ pub(crate) fn store_test_u32_node() -> ServiceResult<RoupNodeHandle> {
             family: u32::MAX,
             variant: 0,
         },
+        span: None,
         fields: vec![
             ClauseField::u32(crate::ROUP_FIELD_VALUE, "scalar", 17),
             ClauseField::u32s(crate::ROUP_FIELD_VALUES, "values", vec![3, 5, 8]),
@@ -1581,15 +1743,10 @@ fn with_clause_fields<T>(
     operation: impl FnOnce(&[ClauseField]) -> UnrecordedResult<T>,
 ) -> ServiceResult<T> {
     with_directive(handle, |record| {
-        let fields = match &record.directive {
-            RoupDirective::OpenMp(directive) => {
-                omp_clause_fields(omp_clause(directive, clause_index)?)?
-            }
-            RoupDirective::OpenAcc(directive) => {
-                acc_clause_fields(acc_clause(directive, clause_index)?)?
-            }
-        };
-        operation(&fields)
+        let fields = record.clause_fields.get(clause_index).ok_or_else(|| {
+            value_index_failure("directive clause", clause_index, record.clause_fields.len())
+        })?;
+        operation(fields)
     })
 }
 
@@ -1598,8 +1755,12 @@ fn with_parameter_fields<T>(
     operation: impl FnOnce(&[ClauseField]) -> UnrecordedResult<T>,
 ) -> ServiceResult<T> {
     with_directive(handle, |record| {
-        let fields = parameter_fields(&record.directive)?;
-        operation(&fields)
+        operation(
+            record
+                .parameter_fields
+                .as_deref()
+                .ok_or_else(no_parameter_failure)?,
+        )
     })
 }
 
@@ -1957,7 +2118,9 @@ fn validate_options(options: RoupParserOptions) -> UnrecordedResult<ParserRecord
         value => return Err(config_error(format!("unknown source form value {value}"))),
     };
 
-    if options.flags & !crate::ROUP_PARSER_SOURCE_COMPATIBILITY != 0 {
+    let known_flags =
+        crate::ROUP_PARSER_OMPPARSER_EXTENSIONS | crate::ROUP_PARSER_ACCPARSER_EXTENSIONS;
+    if options.flags & !known_flags != 0 {
         return Err(config_error(format!(
             "unsupported parser option flags {:#x}",
             options.flags
@@ -1977,28 +2140,38 @@ fn validate_options(options: RoupParserOptions) -> UnrecordedResult<ParserRecord
 
     match dialect {
         ROUP_DIALECT_OPENMP => {
+            if options.flags & crate::ROUP_PARSER_ACCPARSER_EXTENSIONS != 0 {
+                return Err(config_error(
+                    "accparser extensions cannot be enabled for an OpenMP parser",
+                ));
+            }
             let config = if options.version_policy == ROUP_VERSION_ANY {
                 OpenMpConfig::new(host, source_form)
             } else {
                 OpenMpConfig::exact(openmp_version(options.version)?, host, source_form)
             }
             .map_err(config_diagnostic)?;
-            let config = if options.flags & crate::ROUP_PARSER_SOURCE_COMPATIBILITY != 0 {
-                config.with_source_compatibility()
+            let config = if options.flags & crate::ROUP_PARSER_OMPPARSER_EXTENSIONS != 0 {
+                config.with_ompparser_extensions()
             } else {
                 config
             };
             Ok(ParserRecord::OpenMp(config.parser()))
         }
         ROUP_DIALECT_OPENACC => {
+            if options.flags & crate::ROUP_PARSER_OMPPARSER_EXTENSIONS != 0 {
+                return Err(config_error(
+                    "ompparser extensions cannot be enabled for an OpenACC parser",
+                ));
+            }
             let config = if options.version_policy == ROUP_VERSION_ANY {
                 OpenAccConfig::new(host, source_form)
             } else {
                 OpenAccConfig::exact(openacc_version(options.version)?, host, source_form)
             }
             .map_err(config_diagnostic)?;
-            let config = if options.flags & crate::ROUP_PARSER_SOURCE_COMPATIBILITY != 0 {
-                config.with_source_compatibility()
+            let config = if options.flags & crate::ROUP_PARSER_ACCPARSER_EXTENSIONS != 0 {
+                config.with_accparser_extensions()
             } else {
                 config
             };
@@ -2302,7 +2475,7 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
 
     let mut fields = Vec::new();
     match payload {
-        ClauseData::Bare => {}
+        ClauseData::Bare { .. } => {}
         ClauseData::Nowait { do_not_synchronize } | ClauseData::Nogroup { do_not_synchronize } => {
             push_optional_string(
                 &mut fields,
@@ -2311,7 +2484,7 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
                 do_not_synchronize.as_ref(),
             )
         }
-        ClauseData::Align { alignment } => fields.push(ClauseField::string(
+        ClauseData::Align { alignment } => fields.push(ClauseField::expression(
             crate::ROUP_FIELD_ALIGNMENT,
             "alignment",
             alignment,
@@ -2355,7 +2528,7 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
             "condition",
             condition.as_ref(),
         ),
-        ClauseData::ItemList(items) => fields.push(clause_items_field(items)),
+        ClauseData::ItemList { items, .. } => fields.push(clause_items_field(items)),
         ClauseData::Sizes { sizes } => fields.push(ClauseField::strings(
             crate::ROUP_FIELD_VALUES,
             "sizes",
@@ -2446,7 +2619,7 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
             "create_init_phase",
             create_init_phase.as_ref(),
         ),
-        ClauseData::Branch { condition } => push_optional_string(
+        ClauseData::Branch { condition, .. } => push_optional_string(
             &mut fields,
             crate::ROUP_FIELD_CONDITION,
             "condition",
@@ -2488,7 +2661,7 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
             "apply_to_threads",
             apply_to_threads.as_ref(),
         ),
-        ClauseData::Assumption { can_assume } => push_optional_string(
+        ClauseData::Assumption { can_assume, .. } => push_optional_string(
             &mut fields,
             crate::ROUP_FIELD_CAN_ASSUME,
             "can_assume",
@@ -2609,11 +2782,10 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
                     },
                 ));
             }
-            let compact_step = step.compact_source_spelling();
-            fields.push(ClauseField::string(
+            fields.push(ClauseField::expression(
                 crate::ROUP_FIELD_STEP,
                 "step",
-                compact_step.as_str(),
+                step,
             ));
             fields.push(ClauseField::node(
                 crate::ROUP_FIELD_IDENTIFIER,
@@ -2682,6 +2854,7 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
             modifiers,
             operator,
             items,
+            ..
         } => {
             fields.push(ClauseField::nodes(
                 crate::ROUP_FIELD_MODIFIERS,
@@ -3180,7 +3353,7 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
                 variable.as_ref(),
             );
         }
-        ClauseData::MetadirectiveSelector { selector } => {
+        ClauseData::MetadirectiveSelector { selector, .. } => {
             fields.extend(selector_fields(selector)?);
         }
     }
@@ -3190,8 +3363,8 @@ fn omp_fields(payload: &roup::ir::ClauseData) -> UnrecordedResult<Vec<ClauseFiel
 fn acc_fields(payload: &AccClausePayload) -> UnrecordedResult<Vec<ClauseField>> {
     let mut fields = Vec::new();
     match payload {
-        AccClausePayload::Bare => {}
-        AccClausePayload::Expression(value) => {
+        AccClausePayload::Bare { .. } => {}
+        AccClausePayload::Expression { value, .. } => {
             fields.push(ClauseField::string(crate::ROUP_FIELD_VALUE, "value", value))
         }
         AccClausePayload::NumGangs(values) => fields.push(ClauseField::strings(
@@ -3204,7 +3377,7 @@ fn acc_fields(payload: &AccClausePayload) -> UnrecordedResult<Vec<ClauseField>> 
             "sizes",
             sizes.iter().map(acc_size_expression_node).collect(),
         )),
-        AccClausePayload::ItemList(items) => fields.push(acc_clause_items_field(items)),
+        AccClausePayload::ItemList { items, .. } => fields.push(acc_clause_items_field(items)),
         AccClausePayload::Bind(target) => fields.push(ClauseField::node(
             crate::ROUP_FIELD_VALUE,
             "target",
@@ -3657,8 +3830,1099 @@ fn omp_depobj_update(dependence: roup::ir::DepobjUpdateDependence) -> u32 {
 fn semantic_node(family: u32, variant: u32, fields: Vec<ClauseField>) -> NodeRecord {
     NodeRecord {
         kind: RoupNodeKind { family, variant },
+        span: None,
         fields,
     }
+}
+
+fn host_node(
+    family: u32,
+    variant: u32,
+    span: roup::source::Span,
+    fields: Vec<ClauseField>,
+) -> NodeRecord {
+    NodeRecord {
+        kind: RoupNodeKind { family, variant },
+        span: Some(abi_span(span)),
+        fields,
+    }
+}
+
+fn host_expression_node(expression: &roup::ir::Expression) -> NodeRecord {
+    let mut node = host_expr_node(expression.ast(), expression.source(), expression.profile());
+    node.fields.push(ClauseField::string(
+        crate::ROUP_FIELD_COMPACT_SPELLING,
+        "compact_spelling",
+        expression.compact_source_spelling().as_str(),
+    ));
+    node
+}
+
+fn host_variable_node(variable: &roup::ir::Variable) -> NodeRecord {
+    host_designator_node(crate::ROUP_NODE_FAMILY_HOST_VARIABLE, variable.expression())
+}
+
+fn host_lvalue_node(value: &roup::ir::LValue) -> NodeRecord {
+    host_designator_node(crate::ROUP_NODE_FAMILY_HOST_LVALUE, value.expression())
+}
+
+fn host_designator_node(family: u32, expression: &roup::ir::Expression) -> NodeRecord {
+    host_node(
+        family,
+        1,
+        expression.ast().span,
+        vec![
+            ClauseField::string(
+                crate::ROUP_FIELD_SOURCE_SPELLING,
+                "source_spelling",
+                expression.source_spelling(),
+            ),
+            ClauseField::string(
+                crate::ROUP_FIELD_COMPACT_SPELLING,
+                "compact_spelling",
+                expression.compact_source_spelling().as_str(),
+            ),
+            ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "expression",
+                host_expression_node(expression),
+            ),
+        ],
+    )
+}
+
+fn host_expr_node(
+    expression: &roup::host::Expr,
+    source: &str,
+    profile: HostLanguageProfile,
+) -> NodeRecord {
+    use roup::host::{CppTemplateArgument as T, ExprKind as E, SizeofOperand};
+
+    let child = |expression: &roup::host::Expr| host_expr_node(expression, source, profile);
+    let mut fields = vec![
+        ClauseField::string(
+            crate::ROUP_FIELD_SOURCE_SPELLING,
+            "source_spelling",
+            expression
+                .span
+                .slice(source)
+                .expect("host expression span must match its source backing"),
+        ),
+        ClauseField::u32(
+            crate::ROUP_FIELD_PROFILE,
+            "host_profile",
+            host_profile_standard(profile),
+        ),
+        ClauseField::u32(
+            crate::ROUP_FIELD_LANGUAGE,
+            "host_language",
+            host_profile_language(profile),
+        ),
+    ];
+    let variant = match &expression.kind {
+        E::Literal(literal) => {
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "literal",
+                host_literal_node(literal),
+            ));
+            crate::ROUP_HOST_EXPR_LITERAL
+        }
+        E::Name(name) => {
+            fields.push(ClauseField::boolean(
+                crate::ROUP_FIELD_GLOBAL,
+                "global",
+                name.global,
+            ));
+            fields.push(ClauseField::strings(
+                crate::ROUP_FIELD_VALUES,
+                "segments",
+                &name.segments,
+            ));
+            crate::ROUP_HOST_EXPR_NAME
+        }
+        E::This => crate::ROUP_HOST_EXPR_THIS,
+        E::Sizeof(SizeofOperand::Type(type_name)) => {
+            fields.push(ClauseField::type_name(
+                crate::ROUP_FIELD_TYPE_NAME,
+                "type_name",
+                type_name,
+            ));
+            crate::ROUP_HOST_EXPR_SIZEOF_TYPE
+        }
+        E::Sizeof(SizeofOperand::Expression(operand)) => {
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_OPERAND,
+                "operand",
+                child(operand),
+            ));
+            crate::ROUP_HOST_EXPR_SIZEOF_EXPRESSION
+        }
+        E::Sizeof(SizeofOperand::Ambiguous {
+            type_name,
+            expression,
+        }) => {
+            fields.push(ClauseField::type_name(
+                crate::ROUP_FIELD_TYPE_NAME,
+                "type_name",
+                type_name,
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_OPERAND,
+                "expression",
+                child(expression),
+            ));
+            crate::ROUP_HOST_EXPR_SIZEOF_AMBIGUOUS
+        }
+        E::CppTemplateId {
+            template,
+            arguments,
+        } => {
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_BASE,
+                "template",
+                child(template),
+            ));
+            fields.push(ClauseField::nodes(
+                crate::ROUP_FIELD_ARGUMENTS,
+                "arguments",
+                arguments
+                    .iter()
+                    .map(|argument| match argument {
+                        T::Type(type_name) => semantic_node(
+                            crate::ROUP_NODE_FAMILY_HOST_TEMPLATE_ARGUMENT,
+                            crate::ROUP_HOST_TEMPLATE_ARGUMENT_TYPE,
+                            vec![ClauseField::type_name(
+                                crate::ROUP_FIELD_TYPE_NAME,
+                                "type_name",
+                                type_name,
+                            )],
+                        ),
+                        T::Expression(expression) => semantic_node(
+                            crate::ROUP_NODE_FAMILY_HOST_TEMPLATE_ARGUMENT,
+                            crate::ROUP_HOST_TEMPLATE_ARGUMENT_EXPRESSION,
+                            vec![ClauseField::node(
+                                crate::ROUP_FIELD_VALUE,
+                                "expression",
+                                child(expression),
+                            )],
+                        ),
+                        T::Ambiguous {
+                            type_name,
+                            expression,
+                        } => semantic_node(
+                            crate::ROUP_NODE_FAMILY_HOST_TEMPLATE_ARGUMENT,
+                            crate::ROUP_HOST_TEMPLATE_ARGUMENT_AMBIGUOUS,
+                            vec![
+                                ClauseField::type_name(
+                                    crate::ROUP_FIELD_TYPE_NAME,
+                                    "type_name",
+                                    type_name,
+                                ),
+                                ClauseField::node(
+                                    crate::ROUP_FIELD_VALUE,
+                                    "expression",
+                                    child(expression),
+                                ),
+                            ],
+                        ),
+                    })
+                    .collect(),
+            ));
+            crate::ROUP_HOST_EXPR_CPP_TEMPLATE_ID
+        }
+        E::LegacyQualifiedInteger { qualifier, value } => {
+            fields.push(ClauseField::string(
+                crate::ROUP_FIELD_QUALIFIER,
+                "qualifier",
+                qualifier,
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "value",
+                host_literal_node(&roup::host::Literal::Integer(value.clone())),
+            ));
+            crate::ROUP_HOST_EXPR_LEGACY_QUALIFIED_INTEGER
+        }
+        E::LegacyQualifiedName { segments } => {
+            fields.push(ClauseField::strings(
+                crate::ROUP_FIELD_VALUES,
+                "segments",
+                segments,
+            ));
+            crate::ROUP_HOST_EXPR_LEGACY_QUALIFIED_NAME
+        }
+        E::LegacyFortranSubscript { base, subscript } => {
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_BASE,
+                "base",
+                child(base),
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "subscript",
+                host_subscript_node(subscript, source, profile),
+            ));
+            crate::ROUP_HOST_EXPR_LEGACY_FORTRAN_SUBSCRIPT
+        }
+        E::LegacyFortranUnaryDesignator { op, operand } => {
+            fields.push(ClauseField::u32(
+                crate::ROUP_FIELD_OPERATOR,
+                "operator",
+                match op {
+                    roup::host::LegacyFortranUnaryOp::Dereference => {
+                        crate::ROUP_HOST_LEGACY_FORTRAN_UNARY_DEREFERENCE
+                    }
+                    roup::host::LegacyFortranUnaryOp::AddressOf => {
+                        crate::ROUP_HOST_LEGACY_FORTRAN_UNARY_ADDRESS_OF
+                    }
+                },
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_OPERAND,
+                "operand",
+                child(operand),
+            ));
+            crate::ROUP_HOST_EXPR_LEGACY_FORTRAN_UNARY_DESIGNATOR
+        }
+        E::Parenthesized(operand) => {
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_OPERAND,
+                "operand",
+                child(operand),
+            ));
+            crate::ROUP_HOST_EXPR_PARENTHESIZED
+        }
+        E::Unary { op, operand } => {
+            fields.push(ClauseField::u32(
+                crate::ROUP_FIELD_OPERATOR,
+                "operator",
+                host_unary_operator(*op),
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_OPERAND,
+                "operand",
+                child(operand),
+            ));
+            crate::ROUP_HOST_EXPR_UNARY
+        }
+        E::FortranDefinedUnary { operator, operand } => {
+            fields.push(ClauseField::string(
+                crate::ROUP_FIELD_USER_IDENTIFIER,
+                "operator",
+                operator,
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_OPERAND,
+                "operand",
+                child(operand),
+            ));
+            crate::ROUP_HOST_EXPR_FORTRAN_DEFINED_UNARY
+        }
+        E::Binary { op, left, right } => {
+            fields.push(ClauseField::u32(
+                crate::ROUP_FIELD_OPERATOR,
+                "operator",
+                host_binary_operator(*op),
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_LEFT,
+                "left",
+                child(left),
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_RIGHT,
+                "right",
+                child(right),
+            ));
+            crate::ROUP_HOST_EXPR_BINARY
+        }
+        E::FortranDefinedBinary {
+            operator,
+            left,
+            right,
+        } => {
+            fields.push(ClauseField::string(
+                crate::ROUP_FIELD_USER_IDENTIFIER,
+                "operator",
+                operator,
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_LEFT,
+                "left",
+                child(left),
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_RIGHT,
+                "right",
+                child(right),
+            ));
+            crate::ROUP_HOST_EXPR_FORTRAN_DEFINED_BINARY
+        }
+        E::Conditional {
+            condition,
+            then_expr,
+            else_expr,
+        } => {
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_CONDITION,
+                "condition",
+                child(condition),
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_THEN_EXPRESSION,
+                "then_expression",
+                child(then_expr),
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_ELSE_EXPRESSION,
+                "else_expression",
+                child(else_expr),
+            ));
+            crate::ROUP_HOST_EXPR_CONDITIONAL
+        }
+        E::Assignment { op, target, value } => {
+            fields.push(ClauseField::u32(
+                crate::ROUP_FIELD_OPERATOR,
+                "operator",
+                host_assignment_operator(*op),
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_TARGET,
+                "target",
+                child(target),
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "value",
+                child(value),
+            ));
+            crate::ROUP_HOST_EXPR_ASSIGNMENT
+        }
+        E::Call { callee, arguments } => {
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_CALLEE,
+                "callee",
+                child(callee),
+            ));
+            fields.push(ClauseField::nodes(
+                crate::ROUP_FIELD_ARGUMENTS,
+                "arguments",
+                arguments.iter().map(&child).collect(),
+            ));
+            crate::ROUP_HOST_EXPR_CALL
+        }
+        E::Subscript { base, subscript } => {
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_BASE,
+                "base",
+                child(base),
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "subscript",
+                host_subscript_node(subscript, source, profile),
+            ));
+            crate::ROUP_HOST_EXPR_SUBSCRIPT
+        }
+        E::Member {
+            base,
+            access,
+            member,
+        } => {
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_BASE,
+                "base",
+                child(base),
+            ));
+            fields.push(ClauseField::u32(
+                crate::ROUP_FIELD_ACCESS,
+                "access",
+                match access {
+                    roup::host::MemberAccess::Dot => crate::ROUP_HOST_MEMBER_DOT,
+                    roup::host::MemberAccess::Arrow => crate::ROUP_HOST_MEMBER_ARROW,
+                    roup::host::MemberAccess::Scope => crate::ROUP_HOST_MEMBER_SCOPE,
+                    roup::host::MemberAccess::FortranComponent => {
+                        crate::ROUP_HOST_MEMBER_FORTRAN_COMPONENT
+                    }
+                },
+            ));
+            fields.push(ClauseField::string(
+                crate::ROUP_FIELD_MEMBER,
+                "member",
+                member,
+            ));
+            crate::ROUP_HOST_EXPR_MEMBER
+        }
+        E::Postfix { op, operand } => {
+            fields.push(ClauseField::u32(
+                crate::ROUP_FIELD_OPERATOR,
+                "operator",
+                match op {
+                    roup::host::PostfixOp::Increment => crate::ROUP_HOST_POSTFIX_INCREMENT,
+                    roup::host::PostfixOp::Decrement => crate::ROUP_HOST_POSTFIX_DECREMENT,
+                },
+            ));
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_OPERAND,
+                "operand",
+                child(operand),
+            ));
+            crate::ROUP_HOST_EXPR_POSTFIX
+        }
+        E::FortranApply {
+            designator,
+            arguments,
+        } => {
+            fields.push(ClauseField::node(
+                crate::ROUP_FIELD_CALLEE,
+                "designator",
+                child(designator),
+            ));
+            fields.push(ClauseField::nodes(
+                crate::ROUP_FIELD_ARGUMENTS,
+                "arguments",
+                arguments
+                    .iter()
+                    .map(|argument| host_fortran_argument_node(argument, source, profile))
+                    .collect(),
+            ));
+            crate::ROUP_HOST_EXPR_FORTRAN_APPLY
+        }
+    };
+    host_node(
+        crate::ROUP_NODE_FAMILY_HOST_EXPRESSION,
+        variant,
+        expression.span,
+        fields,
+    )
+}
+
+fn host_literal_node(literal: &roup::host::Literal) -> NodeRecord {
+    use roup::host::Literal as L;
+    let (variant, fields) = match literal {
+        L::Boolean(value) => (
+            crate::ROUP_HOST_LITERAL_BOOLEAN,
+            vec![ClauseField::boolean(
+                crate::ROUP_FIELD_VALUE,
+                "value",
+                *value,
+            )],
+        ),
+        L::NullPointer => (crate::ROUP_HOST_LITERAL_NULL_POINTER, Vec::new()),
+        L::Integer(value) => {
+            let fields = vec![
+                ClauseField::u32(
+                    crate::ROUP_FIELD_KIND,
+                    "base",
+                    match value.base {
+                        roup::host::IntegerBase::Binary => crate::ROUP_HOST_INTEGER_BASE_BINARY,
+                        roup::host::IntegerBase::Octal => crate::ROUP_HOST_INTEGER_BASE_OCTAL,
+                        roup::host::IntegerBase::Decimal => crate::ROUP_HOST_INTEGER_BASE_DECIMAL,
+                        roup::host::IntegerBase::Hexadecimal => {
+                            crate::ROUP_HOST_INTEGER_BASE_HEXADECIMAL
+                        }
+                    },
+                ),
+                ClauseField::u64(crate::ROUP_FIELD_LOW, "low", value.value as u64),
+                ClauseField::u64(crate::ROUP_FIELD_HIGH, "high", (value.value >> 64) as u64),
+                ClauseField::node(
+                    crate::ROUP_FIELD_MODIFIERS,
+                    "suffix",
+                    host_integer_suffix_node(&value.suffix),
+                ),
+            ];
+            (crate::ROUP_HOST_LITERAL_INTEGER, fields)
+        }
+        L::Real(value) => {
+            let mut fields = vec![
+                ClauseField::u64(crate::ROUP_FIELD_LOW, "low", value.coefficient as u64),
+                ClauseField::u64(
+                    crate::ROUP_FIELD_HIGH,
+                    "high",
+                    (value.coefficient >> 64) as u64,
+                ),
+                ClauseField::u32(
+                    crate::ROUP_FIELD_FRACTIONAL_DIGITS,
+                    "fractional_digits",
+                    value.fractional_digits,
+                ),
+                ClauseField::node(
+                    crate::ROUP_FIELD_KIND,
+                    "suffix",
+                    host_real_suffix_node(&value.suffix),
+                ),
+            ];
+            if let Some(exponent) = &value.exponent {
+                fields.push(ClauseField::u32(
+                    crate::ROUP_FIELD_EXPONENT,
+                    "exponent_magnitude",
+                    exponent.magnitude,
+                ));
+                fields.push(ClauseField::boolean(
+                    crate::ROUP_FIELD_NEGATIVE,
+                    "exponent_negative",
+                    exponent.negative,
+                ));
+                fields.push(ClauseField::u32(
+                    crate::ROUP_FIELD_MODIFIER,
+                    "exponent_kind",
+                    match exponent.kind {
+                        roup::host::RealExponentKind::E => crate::ROUP_HOST_REAL_EXPONENT_E,
+                        roup::host::RealExponentKind::D => crate::ROUP_HOST_REAL_EXPONENT_D,
+                    },
+                ));
+            }
+            (crate::ROUP_HOST_LITERAL_REAL, fields)
+        }
+        L::Character(value) => (
+            crate::ROUP_HOST_LITERAL_CHARACTER,
+            vec![
+                ClauseField::u32(
+                    crate::ROUP_FIELD_ENCODING,
+                    "encoding",
+                    character_encoding(value.encoding),
+                ),
+                ClauseField::node(
+                    crate::ROUP_FIELD_VALUE,
+                    "code_unit",
+                    host_literal_code_unit_node(&value.code_unit),
+                ),
+            ],
+        ),
+        L::String(value) => (
+            crate::ROUP_HOST_LITERAL_STRING,
+            vec![
+                ClauseField::string(crate::ROUP_FIELD_VALUE, "value", value.value.as_str()),
+                ClauseField::u32(
+                    crate::ROUP_FIELD_ENCODING,
+                    "encoding",
+                    character_encoding(value.encoding),
+                ),
+                ClauseField::nodes(
+                    crate::ROUP_FIELD_ITEMS,
+                    "code_units",
+                    value
+                        .code_units
+                        .iter()
+                        .map(host_literal_code_unit_node)
+                        .collect(),
+                ),
+                ClauseField::u32(
+                    crate::ROUP_FIELD_QUOTE_STYLE,
+                    "quote_style",
+                    quote_style(value.delimiter),
+                ),
+            ],
+        ),
+    };
+    semantic_node(crate::ROUP_NODE_FAMILY_HOST_LITERAL, variant, fields)
+}
+
+fn host_literal_code_unit_node(unit: &roup::host::LiteralCodeUnit) -> NodeRecord {
+    match unit {
+        roup::host::LiteralCodeUnit::Scalar(value) => semantic_node(
+            crate::ROUP_NODE_FAMILY_HOST_LITERAL_CODE_UNIT,
+            crate::ROUP_HOST_LITERAL_CODE_UNIT_SCALAR,
+            vec![ClauseField::u32(
+                crate::ROUP_FIELD_VALUE,
+                "code_point",
+                *value as u32,
+            )],
+        ),
+        roup::host::LiteralCodeUnit::NumericEscape { radix, value } => semantic_node(
+            crate::ROUP_NODE_FAMILY_HOST_LITERAL_CODE_UNIT,
+            crate::ROUP_HOST_LITERAL_CODE_UNIT_NUMERIC_ESCAPE,
+            vec![
+                ClauseField::u32(
+                    crate::ROUP_FIELD_KIND,
+                    "radix",
+                    match radix {
+                        roup::host::LiteralEscapeRadix::Octal => {
+                            crate::ROUP_HOST_LITERAL_ESCAPE_OCTAL
+                        }
+                        roup::host::LiteralEscapeRadix::Hexadecimal => {
+                            crate::ROUP_HOST_LITERAL_ESCAPE_HEXADECIMAL
+                        }
+                    },
+                ),
+                ClauseField::u32(crate::ROUP_FIELD_VALUE, "value", *value),
+            ],
+        ),
+    }
+}
+
+fn host_subscript_node(
+    subscript: &roup::host::Subscript,
+    source: &str,
+    profile: HostLanguageProfile,
+) -> NodeRecord {
+    match subscript {
+        roup::host::Subscript::Index(index) => semantic_node(
+            crate::ROUP_NODE_FAMILY_HOST_SUBSCRIPT,
+            crate::ROUP_HOST_SUBSCRIPT_INDEX,
+            vec![ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "index",
+                host_expr_node(index, source, profile),
+            )],
+        ),
+        roup::host::Subscript::Section(section) => semantic_node(
+            crate::ROUP_NODE_FAMILY_HOST_SUBSCRIPT,
+            crate::ROUP_HOST_SUBSCRIPT_SECTION,
+            vec![ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "section",
+                host_array_section_node(section, source, profile),
+            )],
+        ),
+    }
+}
+
+fn host_array_section_node(
+    section: &roup::host::ArraySection,
+    source: &str,
+    profile: HostLanguageProfile,
+) -> NodeRecord {
+    let mut fields = vec![ClauseField::u32(
+        crate::ROUP_FIELD_SEMANTICS,
+        "semantics",
+        match section.semantics {
+            roup::host::SectionSemantics::CLength => crate::ROUP_HOST_SECTION_C_LENGTH,
+            roup::host::SectionSemantics::FortranUpperBound => {
+                crate::ROUP_HOST_SECTION_FORTRAN_UPPER_BOUND
+            }
+        },
+    )];
+    for (id, name, value) in [
+        (crate::ROUP_FIELD_LOWER_BOUND, "lower_bound", &section.lower),
+        (
+            crate::ROUP_FIELD_UPPER_BOUND,
+            "upper_or_length",
+            &section.upper_or_length,
+        ),
+        (crate::ROUP_FIELD_STRIDE, "stride", &section.stride),
+    ] {
+        if let Some(value) = value {
+            fields.push(ClauseField::node(
+                id,
+                name,
+                host_expr_node(value, source, profile),
+            ));
+        }
+    }
+    semantic_node(
+        crate::ROUP_NODE_FAMILY_HOST_ARRAY_SECTION,
+        crate::ROUP_HOST_ARRAY_SECTION,
+        fields,
+    )
+}
+
+fn host_fortran_argument_node(
+    argument: &roup::host::FortranArgument,
+    source: &str,
+    profile: HostLanguageProfile,
+) -> NodeRecord {
+    let (variant, fields) = match argument {
+        roup::host::FortranArgument::Positional(value) => (
+            crate::ROUP_HOST_FORTRAN_ARGUMENT_POSITIONAL,
+            vec![ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "value",
+                host_expr_node(value, source, profile),
+            )],
+        ),
+        roup::host::FortranArgument::Keyword { name, value } => (
+            crate::ROUP_HOST_FORTRAN_ARGUMENT_KEYWORD,
+            vec![
+                ClauseField::string(crate::ROUP_FIELD_NAME, "name", name),
+                ClauseField::node(
+                    crate::ROUP_FIELD_VALUE,
+                    "value",
+                    host_expr_node(value, source, profile),
+                ),
+            ],
+        ),
+        roup::host::FortranArgument::Section(section) => (
+            crate::ROUP_HOST_FORTRAN_ARGUMENT_SECTION,
+            vec![ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "section",
+                host_array_section_node(section, source, profile),
+            )],
+        ),
+    };
+    semantic_node(
+        crate::ROUP_NODE_FAMILY_HOST_FORTRAN_ARGUMENT,
+        variant,
+        fields,
+    )
+}
+
+fn host_type_name_node(type_name: &roup::host::TypeName) -> NodeRecord {
+    semantic_node(
+        crate::ROUP_NODE_FAMILY_HOST_TYPE_NAME,
+        1,
+        vec![
+            ClauseField::u32(
+                crate::ROUP_FIELD_PROFILE,
+                "host_profile",
+                host_profile_standard(type_name.profile()),
+            ),
+            ClauseField::u32(
+                crate::ROUP_FIELD_LANGUAGE,
+                "host_language",
+                host_profile_language(type_name.profile()),
+            ),
+            ClauseField::string(
+                crate::ROUP_FIELD_SOURCE_SPELLING,
+                "source_spelling",
+                type_name.source_spelling(),
+            ),
+            ClauseField::string(
+                crate::ROUP_FIELD_CANONICAL_SPELLING,
+                "canonical_spelling",
+                type_name.to_string().as_str(),
+            ),
+            ClauseField::nodes(
+                crate::ROUP_FIELD_TOKENS,
+                "tokens",
+                type_name
+                    .tokens()
+                    .iter()
+                    .map(host_type_token_node)
+                    .collect(),
+            ),
+            ClauseField::nodes(
+                crate::ROUP_FIELD_SYNTAX,
+                "syntax",
+                type_name
+                    .syntax()
+                    .iter()
+                    .map(host_type_syntax_node)
+                    .collect(),
+            ),
+        ],
+    )
+}
+
+fn host_type_syntax_node(syntax: &roup::host::TypeSyntax) -> NodeRecord {
+    use roup::host::TypeSyntax as S;
+    let (variant, fields) = match syntax {
+        S::Token(token) => (
+            crate::ROUP_HOST_TYPE_SYNTAX_TOKEN,
+            vec![ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "token",
+                host_type_token_node(token),
+            )],
+        ),
+        S::Parenthesized(items) => (
+            crate::ROUP_HOST_TYPE_SYNTAX_PARENTHESIZED,
+            vec![ClauseField::nodes(
+                crate::ROUP_FIELD_ITEMS,
+                "items",
+                items.iter().map(host_type_syntax_node).collect(),
+            )],
+        ),
+        S::Bracketed(items) => (
+            crate::ROUP_HOST_TYPE_SYNTAX_BRACKETED,
+            vec![ClauseField::nodes(
+                crate::ROUP_FIELD_ITEMS,
+                "items",
+                items.iter().map(host_type_syntax_node).collect(),
+            )],
+        ),
+        S::TemplateArguments(arguments) => (
+            crate::ROUP_HOST_TYPE_SYNTAX_TEMPLATE_ARGUMENTS,
+            vec![ClauseField::nodes(
+                crate::ROUP_FIELD_ARGUMENTS,
+                "arguments",
+                arguments
+                    .iter()
+                    .map(|argument| {
+                        semantic_node(
+                            crate::ROUP_NODE_FAMILY_HOST_TYPE_SYNTAX,
+                            crate::ROUP_HOST_TYPE_SYNTAX_TEMPLATE_ARGUMENT,
+                            vec![ClauseField::nodes(
+                                crate::ROUP_FIELD_ITEMS,
+                                "items",
+                                argument.iter().map(host_type_syntax_node).collect(),
+                            )],
+                        )
+                    })
+                    .collect(),
+            )],
+        ),
+    };
+    semantic_node(crate::ROUP_NODE_FAMILY_HOST_TYPE_SYNTAX, variant, fields)
+}
+
+fn host_type_token_node(token: &roup::host::TokenKind) -> NodeRecord {
+    use roup::host::TokenKind as T;
+    let (variant, fields) = match token {
+        T::Identifier(value) => (
+            crate::ROUP_HOST_TYPE_TOKEN_IDENTIFIER,
+            vec![ClauseField::string(crate::ROUP_FIELD_VALUE, "value", value)],
+        ),
+        T::ReservedKeyword(value) => (
+            crate::ROUP_HOST_TYPE_TOKEN_RESERVED_KEYWORD,
+            vec![ClauseField::string(crate::ROUP_FIELD_VALUE, "value", value)],
+        ),
+        T::Integer(value) => (
+            crate::ROUP_HOST_TYPE_TOKEN_INTEGER,
+            vec![ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "value",
+                host_literal_node(&roup::host::Literal::Integer(value.clone())),
+            )],
+        ),
+        T::Real(value) => (
+            crate::ROUP_HOST_TYPE_TOKEN_REAL,
+            vec![ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "value",
+                host_literal_node(&roup::host::Literal::Real(value.clone())),
+            )],
+        ),
+        T::Character(value) => (
+            crate::ROUP_HOST_TYPE_TOKEN_CHARACTER,
+            vec![ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "value",
+                host_literal_node(&roup::host::Literal::Character(value.clone())),
+            )],
+        ),
+        T::String(value) => (
+            crate::ROUP_HOST_TYPE_TOKEN_STRING,
+            vec![ClauseField::node(
+                crate::ROUP_FIELD_VALUE,
+                "value",
+                host_literal_node(&roup::host::Literal::String(value.clone())),
+            )],
+        ),
+        T::Boolean(value) => (
+            crate::ROUP_HOST_TYPE_TOKEN_BOOLEAN,
+            vec![ClauseField::boolean(
+                crate::ROUP_FIELD_VALUE,
+                "value",
+                *value,
+            )],
+        ),
+        T::NullPointer => (crate::ROUP_HOST_TYPE_TOKEN_NULL_POINTER, Vec::new()),
+        T::LeftParen => (crate::ROUP_HOST_TYPE_TOKEN_LEFT_PAREN, Vec::new()),
+        T::RightParen => (crate::ROUP_HOST_TYPE_TOKEN_RIGHT_PAREN, Vec::new()),
+        T::LeftBracket => (crate::ROUP_HOST_TYPE_TOKEN_LEFT_BRACKET, Vec::new()),
+        T::RightBracket => (crate::ROUP_HOST_TYPE_TOKEN_RIGHT_BRACKET, Vec::new()),
+        T::Comma => (crate::ROUP_HOST_TYPE_TOKEN_COMMA, Vec::new()),
+        T::Question => (crate::ROUP_HOST_TYPE_TOKEN_QUESTION, Vec::new()),
+        T::Colon => (crate::ROUP_HOST_TYPE_TOKEN_COLON, Vec::new()),
+        T::Scope => (crate::ROUP_HOST_TYPE_TOKEN_SCOPE, Vec::new()),
+        T::Dot => (crate::ROUP_HOST_TYPE_TOKEN_DOT, Vec::new()),
+        T::Percent => (crate::ROUP_HOST_TYPE_TOKEN_PERCENT, Vec::new()),
+        T::Arrow => (crate::ROUP_HOST_TYPE_TOKEN_ARROW, Vec::new()),
+        T::Plus => (crate::ROUP_HOST_TYPE_TOKEN_PLUS, Vec::new()),
+        T::Minus => (crate::ROUP_HOST_TYPE_TOKEN_MINUS, Vec::new()),
+        T::Star => (crate::ROUP_HOST_TYPE_TOKEN_STAR, Vec::new()),
+        T::Slash => (crate::ROUP_HOST_TYPE_TOKEN_SLASH, Vec::new()),
+        T::Power => (crate::ROUP_HOST_TYPE_TOKEN_POWER, Vec::new()),
+        T::Concat => (crate::ROUP_HOST_TYPE_TOKEN_CONCAT, Vec::new()),
+        T::Remainder => (crate::ROUP_HOST_TYPE_TOKEN_REMAINDER, Vec::new()),
+        T::LogicalNot => (crate::ROUP_HOST_TYPE_TOKEN_LOGICAL_NOT, Vec::new()),
+        T::BitwiseNot => (crate::ROUP_HOST_TYPE_TOKEN_BITWISE_NOT, Vec::new()),
+        T::Ampersand => (crate::ROUP_HOST_TYPE_TOKEN_AMPERSAND, Vec::new()),
+        T::Pipe => (crate::ROUP_HOST_TYPE_TOKEN_PIPE, Vec::new()),
+        T::Caret => (crate::ROUP_HOST_TYPE_TOKEN_CARET, Vec::new()),
+        T::LogicalAnd => (crate::ROUP_HOST_TYPE_TOKEN_LOGICAL_AND, Vec::new()),
+        T::LogicalOr => (crate::ROUP_HOST_TYPE_TOKEN_LOGICAL_OR, Vec::new()),
+        T::LogicalEqv => (crate::ROUP_HOST_TYPE_TOKEN_LOGICAL_EQV, Vec::new()),
+        T::LogicalNeqv => (crate::ROUP_HOST_TYPE_TOKEN_LOGICAL_NEQV, Vec::new()),
+        T::FortranDefinedOperator(value) => (
+            crate::ROUP_HOST_TYPE_TOKEN_FORTRAN_DEFINED_OPERATOR,
+            vec![ClauseField::string(crate::ROUP_FIELD_VALUE, "value", value)],
+        ),
+        T::Equal => (crate::ROUP_HOST_TYPE_TOKEN_EQUAL, Vec::new()),
+        T::EqualEqual => (crate::ROUP_HOST_TYPE_TOKEN_EQUAL_EQUAL, Vec::new()),
+        T::NotEqual => (crate::ROUP_HOST_TYPE_TOKEN_NOT_EQUAL, Vec::new()),
+        T::Less => (crate::ROUP_HOST_TYPE_TOKEN_LESS, Vec::new()),
+        T::LessEqual => (crate::ROUP_HOST_TYPE_TOKEN_LESS_EQUAL, Vec::new()),
+        T::Greater => (crate::ROUP_HOST_TYPE_TOKEN_GREATER, Vec::new()),
+        T::GreaterEqual => (crate::ROUP_HOST_TYPE_TOKEN_GREATER_EQUAL, Vec::new()),
+        T::ShiftLeft => (crate::ROUP_HOST_TYPE_TOKEN_SHIFT_LEFT, Vec::new()),
+        T::ShiftRight => (crate::ROUP_HOST_TYPE_TOKEN_SHIFT_RIGHT, Vec::new()),
+        T::PlusPlus => (crate::ROUP_HOST_TYPE_TOKEN_PLUS_PLUS, Vec::new()),
+        T::MinusMinus => (crate::ROUP_HOST_TYPE_TOKEN_MINUS_MINUS, Vec::new()),
+        T::PlusEqual => (crate::ROUP_HOST_TYPE_TOKEN_PLUS_EQUAL, Vec::new()),
+        T::MinusEqual => (crate::ROUP_HOST_TYPE_TOKEN_MINUS_EQUAL, Vec::new()),
+        T::StarEqual => (crate::ROUP_HOST_TYPE_TOKEN_STAR_EQUAL, Vec::new()),
+        T::SlashEqual => (crate::ROUP_HOST_TYPE_TOKEN_SLASH_EQUAL, Vec::new()),
+        T::RemainderEqual => (crate::ROUP_HOST_TYPE_TOKEN_REMAINDER_EQUAL, Vec::new()),
+        T::AmpersandEqual => (crate::ROUP_HOST_TYPE_TOKEN_AMPERSAND_EQUAL, Vec::new()),
+        T::PipeEqual => (crate::ROUP_HOST_TYPE_TOKEN_PIPE_EQUAL, Vec::new()),
+        T::CaretEqual => (crate::ROUP_HOST_TYPE_TOKEN_CARET_EQUAL, Vec::new()),
+        T::ShiftLeftEqual => (crate::ROUP_HOST_TYPE_TOKEN_SHIFT_LEFT_EQUAL, Vec::new()),
+        T::ShiftRightEqual => (crate::ROUP_HOST_TYPE_TOKEN_SHIFT_RIGHT_EQUAL, Vec::new()),
+        T::End => (crate::ROUP_HOST_TYPE_TOKEN_END, Vec::new()),
+    };
+    semantic_node(crate::ROUP_NODE_FAMILY_HOST_TYPE_TOKEN, variant, fields)
+}
+
+fn host_profile_standard(profile: HostLanguageProfile) -> u32 {
+    match profile {
+        HostLanguageProfile::C(value) => match value {
+            CStandard::C89 => crate::ROUP_C_89,
+            CStandard::C99 => crate::ROUP_C_99,
+            CStandard::C11 => crate::ROUP_C_11,
+            CStandard::C18 => crate::ROUP_C_18,
+            CStandard::C23 => crate::ROUP_C_23,
+        },
+        HostLanguageProfile::Cpp(value) => match value {
+            CppStandard::Cpp98 => crate::ROUP_CPP_98,
+            CppStandard::Cpp11 => crate::ROUP_CPP_11,
+            CppStandard::Cpp14 => crate::ROUP_CPP_14,
+            CppStandard::Cpp17 => crate::ROUP_CPP_17,
+            CppStandard::Cpp20 => crate::ROUP_CPP_20,
+            CppStandard::Cpp23 => crate::ROUP_CPP_23,
+        },
+        HostLanguageProfile::Fortran(value) => match value {
+            FortranStandard::Fortran77 => crate::ROUP_FORTRAN_77,
+            FortranStandard::Fortran90 => crate::ROUP_FORTRAN_90,
+            FortranStandard::Fortran95 => crate::ROUP_FORTRAN_95,
+            FortranStandard::Fortran2003 => crate::ROUP_FORTRAN_2003,
+            FortranStandard::Fortran2008 => crate::ROUP_FORTRAN_2008,
+            FortranStandard::Fortran2018 => crate::ROUP_FORTRAN_2018,
+            FortranStandard::Fortran2023 => crate::ROUP_FORTRAN_2023,
+        },
+    }
+}
+
+fn host_profile_language(profile: HostLanguageProfile) -> u32 {
+    match profile {
+        HostLanguageProfile::C(_) => crate::ROUP_HOST_C,
+        HostLanguageProfile::Cpp(_) => crate::ROUP_HOST_CPP,
+        HostLanguageProfile::Fortran(_) => crate::ROUP_HOST_FORTRAN,
+    }
+}
+
+fn host_unary_operator(operator: roup::host::UnaryOp) -> u32 {
+    use roup::host::UnaryOp as O;
+    match operator {
+        O::Plus => crate::ROUP_HOST_UNARY_PLUS,
+        O::Minus => crate::ROUP_HOST_UNARY_MINUS,
+        O::LogicalNot => crate::ROUP_HOST_UNARY_LOGICAL_NOT,
+        O::BitwiseNot => crate::ROUP_HOST_UNARY_BITWISE_NOT,
+        O::Dereference => crate::ROUP_HOST_UNARY_DEREFERENCE,
+        O::AddressOf => crate::ROUP_HOST_UNARY_ADDRESS_OF,
+        O::PreIncrement => crate::ROUP_HOST_UNARY_PRE_INCREMENT,
+        O::PreDecrement => crate::ROUP_HOST_UNARY_PRE_DECREMENT,
+    }
+}
+
+fn host_binary_operator(operator: roup::host::BinaryOp) -> u32 {
+    use roup::host::BinaryOp as O;
+    match operator {
+        O::Power => crate::ROUP_HOST_BINARY_POWER,
+        O::Multiply => crate::ROUP_HOST_BINARY_MULTIPLY,
+        O::Divide => crate::ROUP_HOST_BINARY_DIVIDE,
+        O::Remainder => crate::ROUP_HOST_BINARY_REMAINDER,
+        O::Add => crate::ROUP_HOST_BINARY_ADD,
+        O::Subtract => crate::ROUP_HOST_BINARY_SUBTRACT,
+        O::Concatenate => crate::ROUP_HOST_BINARY_CONCATENATE,
+        O::ShiftLeft => crate::ROUP_HOST_BINARY_SHIFT_LEFT,
+        O::ShiftRight => crate::ROUP_HOST_BINARY_SHIFT_RIGHT,
+        O::Less => crate::ROUP_HOST_BINARY_LESS,
+        O::LessEqual => crate::ROUP_HOST_BINARY_LESS_EQUAL,
+        O::Greater => crate::ROUP_HOST_BINARY_GREATER,
+        O::GreaterEqual => crate::ROUP_HOST_BINARY_GREATER_EQUAL,
+        O::Equal => crate::ROUP_HOST_BINARY_EQUAL,
+        O::NotEqual => crate::ROUP_HOST_BINARY_NOT_EQUAL,
+        O::BitwiseAnd => crate::ROUP_HOST_BINARY_BITWISE_AND,
+        O::BitwiseXor => crate::ROUP_HOST_BINARY_BITWISE_XOR,
+        O::BitwiseOr => crate::ROUP_HOST_BINARY_BITWISE_OR,
+        O::LogicalAnd => crate::ROUP_HOST_BINARY_LOGICAL_AND,
+        O::LogicalOr => crate::ROUP_HOST_BINARY_LOGICAL_OR,
+        O::LogicalEqv => crate::ROUP_HOST_BINARY_LOGICAL_EQV,
+        O::LogicalNeqv => crate::ROUP_HOST_BINARY_LOGICAL_NEQV,
+        O::Comma => crate::ROUP_HOST_BINARY_COMMA,
+    }
+}
+
+fn host_assignment_operator(operator: roup::host::AssignmentOp) -> u32 {
+    use roup::host::AssignmentOp as O;
+    match operator {
+        O::Assign => crate::ROUP_HOST_ASSIGNMENT_ASSIGN,
+        O::AddAssign => crate::ROUP_HOST_ASSIGNMENT_ADD,
+        O::SubtractAssign => crate::ROUP_HOST_ASSIGNMENT_SUBTRACT,
+        O::MultiplyAssign => crate::ROUP_HOST_ASSIGNMENT_MULTIPLY,
+        O::DivideAssign => crate::ROUP_HOST_ASSIGNMENT_DIVIDE,
+        O::RemainderAssign => crate::ROUP_HOST_ASSIGNMENT_REMAINDER,
+        O::ShiftLeftAssign => crate::ROUP_HOST_ASSIGNMENT_SHIFT_LEFT,
+        O::ShiftRightAssign => crate::ROUP_HOST_ASSIGNMENT_SHIFT_RIGHT,
+        O::BitwiseAndAssign => crate::ROUP_HOST_ASSIGNMENT_BITWISE_AND,
+        O::BitwiseXorAssign => crate::ROUP_HOST_ASSIGNMENT_BITWISE_XOR,
+        O::BitwiseOrAssign => crate::ROUP_HOST_ASSIGNMENT_BITWISE_OR,
+    }
+}
+
+fn host_integer_suffix_node(suffix: &roup::host::IntegerSuffix) -> NodeRecord {
+    let (variant, fields) = match suffix {
+        roup::host::IntegerSuffix::None => (crate::ROUP_HOST_INTEGER_SUFFIX_NONE, Vec::new()),
+        roup::host::IntegerSuffix::C(suffix) => (
+            crate::ROUP_HOST_INTEGER_SUFFIX_C,
+            vec![
+                ClauseField::boolean(crate::ROUP_FIELD_UNSIGNED, "unsigned", suffix.unsigned),
+                ClauseField::u32(
+                    crate::ROUP_FIELD_WIDTH,
+                    "width",
+                    match suffix.width {
+                        roup::host::CIntegerWidth::Default => {
+                            crate::ROUP_HOST_C_INTEGER_WIDTH_DEFAULT
+                        }
+                        roup::host::CIntegerWidth::Long => crate::ROUP_HOST_C_INTEGER_WIDTH_LONG,
+                        roup::host::CIntegerWidth::LongLong => {
+                            crate::ROUP_HOST_C_INTEGER_WIDTH_LONG_LONG
+                        }
+                    },
+                ),
+                ClauseField::boolean(crate::ROUP_FIELD_SIZE_T, "size_t", suffix.size_t),
+            ],
+        ),
+        roup::host::IntegerSuffix::Fortran(roup::host::FortranKind::Numeric(value)) => (
+            crate::ROUP_HOST_INTEGER_SUFFIX_FORTRAN_NUMERIC,
+            vec![ClauseField::u32(crate::ROUP_FIELD_VALUE, "kind", *value)],
+        ),
+        roup::host::IntegerSuffix::Fortran(roup::host::FortranKind::Named(name)) => (
+            crate::ROUP_HOST_INTEGER_SUFFIX_FORTRAN_NAMED,
+            vec![ClauseField::string(crate::ROUP_FIELD_NAME, "kind", name)],
+        ),
+    };
+    semantic_node(crate::ROUP_NODE_FAMILY_HOST_INTEGER_SUFFIX, variant, fields)
+}
+
+fn host_real_suffix_node(suffix: &roup::host::RealSuffix) -> NodeRecord {
+    let (variant, fields) = match suffix {
+        roup::host::RealSuffix::C(roup::host::CRealSuffix::Float) => {
+            (crate::ROUP_HOST_REAL_SUFFIX_C_FLOAT, Vec::new())
+        }
+        roup::host::RealSuffix::C(roup::host::CRealSuffix::Double) => {
+            (crate::ROUP_HOST_REAL_SUFFIX_C_DOUBLE, Vec::new())
+        }
+        roup::host::RealSuffix::C(roup::host::CRealSuffix::LongDouble) => {
+            (crate::ROUP_HOST_REAL_SUFFIX_C_LONG_DOUBLE, Vec::new())
+        }
+        roup::host::RealSuffix::Fortran(None) => {
+            (crate::ROUP_HOST_REAL_SUFFIX_FORTRAN_DEFAULT, Vec::new())
+        }
+        roup::host::RealSuffix::Fortran(Some(roup::host::FortranKind::Numeric(value))) => (
+            crate::ROUP_HOST_REAL_SUFFIX_FORTRAN_NUMERIC,
+            vec![ClauseField::u32(crate::ROUP_FIELD_VALUE, "kind", *value)],
+        ),
+        roup::host::RealSuffix::Fortran(Some(roup::host::FortranKind::Named(name))) => (
+            crate::ROUP_HOST_REAL_SUFFIX_FORTRAN_NAMED,
+            vec![ClauseField::string(crate::ROUP_FIELD_NAME, "kind", name)],
+        ),
+    };
+    semantic_node(crate::ROUP_NODE_FAMILY_HOST_REAL_SUFFIX, variant, fields)
 }
 
 fn omp_parameter_list_item_node(item: &roup::ir::OmpParameterListItem) -> NodeRecord {
@@ -3675,7 +4939,7 @@ fn omp_parameter_list_item_node(item: &roup::ir::OmpParameterListItem) -> NodeRe
             vec![ClauseField::u64(
                 crate::ROUP_FIELD_VALUE,
                 "position",
-                *position,
+                position.get(),
             )],
         ),
         I::Range(range) => {
@@ -3838,66 +5102,37 @@ fn omp_doacross_vector_item_node(item: &roup::ir::OmpDoacrossVectorItem) -> Node
 }
 
 fn clause_items_field(items: &[roup::ir::ClauseItem]) -> ClauseField {
-    clause_items_field_with_spelling(items, ClauseItemSpelling::Compact)
-}
-
-fn acc_clause_items_field(items: &[roup::ir::ClauseItem]) -> ClauseField {
-    clause_items_field_with_spelling(items, ClauseItemSpelling::Source)
-}
-
-#[derive(Clone, Copy)]
-enum ClauseItemSpelling {
-    Source,
-    Compact,
-}
-
-fn clause_items_field_with_spelling(
-    items: &[roup::ir::ClauseItem],
-    spelling: ClauseItemSpelling,
-) -> ClauseField {
     ClauseField::nodes(
         crate::ROUP_FIELD_ITEMS,
         "items",
-        items
-            .iter()
-            .map(|item| clause_item_node_with_spelling(item, spelling))
-            .collect(),
+        items.iter().map(clause_item_node).collect(),
     )
 }
 
-fn clause_item_node(item: &roup::ir::ClauseItem) -> NodeRecord {
-    clause_item_node_with_spelling(item, ClauseItemSpelling::Compact)
+fn acc_clause_items_field(items: &[roup::ir::ClauseItem]) -> ClauseField {
+    clause_items_field(items)
 }
 
-fn clause_item_node_with_spelling(
-    item: &roup::ir::ClauseItem,
-    spelling: ClauseItemSpelling,
-) -> NodeRecord {
+fn clause_item_node(item: &roup::ir::ClauseItem) -> NodeRecord {
     let (variant, field) = match item {
         roup::ir::ClauseItem::Identifier(identifier) => (
             crate::ROUP_CLAUSE_ITEM_IDENTIFIER,
             ClauseField::string(crate::ROUP_FIELD_NAME, "name", identifier),
         ),
-        roup::ir::ClauseItem::Variable(variable) => {
-            let value = match spelling {
-                ClauseItemSpelling::Source => variable.expression().source_spelling().to_owned(),
-                ClauseItemSpelling::Compact => variable.expression().compact_source_spelling(),
-            };
-            (
-                crate::ROUP_CLAUSE_ITEM_VARIABLE,
-                ClauseField::string(crate::ROUP_FIELD_VARIABLE, "variable", value.as_str()),
-            )
-        }
+        roup::ir::ClauseItem::Variable(variable) => (
+            crate::ROUP_CLAUSE_ITEM_VARIABLE,
+            ClauseField::variable(crate::ROUP_FIELD_VARIABLE, "variable", variable),
+        ),
         roup::ir::ClauseItem::FortranCommonBlock(name) => (
             crate::ROUP_CLAUSE_ITEM_FORTRAN_COMMON_BLOCK,
             ClauseField::string(crate::ROUP_FIELD_NAME, "name", name),
         ),
         roup::ir::ClauseItem::Expression(expression) => (
             crate::ROUP_CLAUSE_ITEM_EXPRESSION,
-            ClauseField::string(crate::ROUP_FIELD_VALUE, "expression", expression),
+            ClauseField::expression(crate::ROUP_FIELD_VALUE, "expression", expression),
         ),
-        roup::ir::ClauseItem::LegacyTrailingSlash(identifier) => (
-            crate::ROUP_CLAUSE_ITEM_LEGACY_TRAILING_SLASH,
+        roup::ir::ClauseItem::OmpparserTrailingSlash(identifier) => (
+            crate::ROUP_CLAUSE_ITEM_OMPPARSER_TRAILING_SLASH,
             ClauseField::string(crate::ROUP_FIELD_NAME, "name", identifier),
         ),
     };
@@ -4117,7 +5352,7 @@ fn omp_function_name_node(name: &roup::ast::OmpFunctionName) -> NodeRecord {
         ),
         roup::ast::OmpFunctionName::CppTemplateId(template_id) => (
             crate::ROUP_OMP_ID_EXPRESSION_CPP_TEMPLATE_ID,
-            template_id.render_abi_leaf(),
+            template_id.render_string(),
         ),
     };
     semantic_node(
@@ -4184,7 +5419,7 @@ fn omp_cpp_operator_qualifier_node(qualifier: &roup::ast::OmpCppOperatorQualifie
         ),
         roup::ast::OmpCppOperatorQualifier::TemplateId(template_id) => (
             crate::ROUP_OMP_CPP_OPERATOR_QUALIFIER_TEMPLATE_ID,
-            template_id.render_abi_leaf(),
+            template_id.render_string(),
         ),
     };
     semantic_node(
@@ -4493,26 +5728,21 @@ fn acc_size_expression_node(size: &AccSizeExpression) -> NodeRecord {
 }
 
 fn acc_cache_item_node(item: &AccCacheItem) -> NodeRecord {
-    let (variant, value) = match item {
-        AccCacheItem::Scalar(identifier) => (crate::ROUP_ACC_CACHE_SCALAR, identifier.as_str()),
+    let (variant, field) = match item {
+        AccCacheItem::Scalar(identifier) => (
+            crate::ROUP_ACC_CACHE_SCALAR,
+            ClauseField::string(crate::ROUP_FIELD_VARIABLE, "variable", identifier),
+        ),
         AccCacheItem::ArrayElement(variable) => (
             crate::ROUP_ACC_CACHE_ARRAY_ELEMENT,
-            variable.expression().source_spelling(),
+            ClauseField::variable(crate::ROUP_FIELD_VARIABLE, "variable", variable),
         ),
         AccCacheItem::ContiguousSubarray(variable) => (
             crate::ROUP_ACC_CACHE_CONTIGUOUS_SUBARRAY,
-            variable.expression().source_spelling(),
+            ClauseField::variable(crate::ROUP_FIELD_VARIABLE, "variable", variable),
         ),
     };
-    semantic_node(
-        crate::ROUP_NODE_FAMILY_ACC_CACHE_ITEM,
-        variant,
-        vec![ClauseField::string(
-            crate::ROUP_FIELD_VARIABLE,
-            "variable",
-            value,
-        )],
-    )
+    semantic_node(crate::ROUP_NODE_FAMILY_ACC_CACHE_ITEM, variant, vec![field])
 }
 
 fn acc_bind_target_node(target: &AccBindTarget) -> NodeRecord {
@@ -5112,6 +6342,42 @@ fn selector_trait_value_node(value: &roup::ast::OmpSelectorTraitValue) -> NodeRe
                 ),
             ],
         ),
+        roup::ast::OmpSelectorTraitValue::DeviceKind { kind, .. } => (
+            crate::ROUP_SELECTOR_TRAIT_PREDEFINED_DEVICE_KIND,
+            vec![ClauseField::u32(
+                crate::ROUP_FIELD_KIND,
+                "device_kind",
+                match kind {
+                    roup::ast::OmpSelectorDeviceKind::Host => crate::ROUP_OMP_DEVICE_KIND_HOST,
+                    roup::ast::OmpSelectorDeviceKind::NoHost => crate::ROUP_OMP_DEVICE_KIND_NOHOST,
+                    roup::ast::OmpSelectorDeviceKind::Any => crate::ROUP_OMP_DEVICE_KIND_ANY,
+                    roup::ast::OmpSelectorDeviceKind::Cpu => crate::ROUP_OMP_DEVICE_KIND_CPU,
+                    roup::ast::OmpSelectorDeviceKind::Gpu => crate::ROUP_OMP_DEVICE_KIND_GPU,
+                    roup::ast::OmpSelectorDeviceKind::Fpga => crate::ROUP_OMP_DEVICE_KIND_FPGA,
+                },
+            )],
+        ),
+        roup::ast::OmpSelectorTraitValue::Vendor { vendor, .. } => (
+            crate::ROUP_SELECTOR_TRAIT_PREDEFINED_VENDOR,
+            vec![ClauseField::u32(
+                crate::ROUP_FIELD_KIND,
+                "vendor",
+                match vendor {
+                    roup::ast::OmpSelectorVendor::Amd => crate::ROUP_OMP_VENDOR_AMD,
+                    roup::ast::OmpSelectorVendor::Arm => crate::ROUP_OMP_VENDOR_ARM,
+                    roup::ast::OmpSelectorVendor::Bsc => crate::ROUP_OMP_VENDOR_BSC,
+                    roup::ast::OmpSelectorVendor::Cray => crate::ROUP_OMP_VENDOR_CRAY,
+                    roup::ast::OmpSelectorVendor::Fujitsu => crate::ROUP_OMP_VENDOR_FUJITSU,
+                    roup::ast::OmpSelectorVendor::Gnu => crate::ROUP_OMP_VENDOR_GNU,
+                    roup::ast::OmpSelectorVendor::Ibm => crate::ROUP_OMP_VENDOR_IBM,
+                    roup::ast::OmpSelectorVendor::Intel => crate::ROUP_OMP_VENDOR_INTEL,
+                    roup::ast::OmpSelectorVendor::Llvm => crate::ROUP_OMP_VENDOR_LLVM,
+                    roup::ast::OmpSelectorVendor::Nvidia => crate::ROUP_OMP_VENDOR_NVIDIA,
+                    roup::ast::OmpSelectorVendor::Pgi => crate::ROUP_OMP_VENDOR_PGI,
+                    roup::ast::OmpSelectorVendor::Ti => crate::ROUP_OMP_VENDOR_TI,
+                },
+            )],
+        ),
     };
     semantic_node(
         crate::ROUP_NODE_FAMILY_OMP_SELECTOR_TRAIT_VALUE,
@@ -5521,10 +6787,10 @@ mod tests {
     #[test]
     fn previous_abi_version_is_a_hard_error() {
         let mut options = openacc_options();
-        options.abi_version = 1;
+        options.abi_version = 2;
         assert!(
             validate_options(options).is_err(),
-            "ABI v1 must not observe ABI v2 ordinal definitions"
+            "ABI v2 must not observe ABI v3 ordinal definitions"
         );
     }
 
@@ -5535,6 +6801,27 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(matches.len(), 1, "expected one field with id {id}");
         &matches[0].value
+    }
+
+    fn host_node_source(node: &NodeRecord) -> &str {
+        assert!(matches!(
+            node.kind.family,
+            crate::ROUP_NODE_FAMILY_HOST_EXPRESSION
+                | crate::ROUP_NODE_FAMILY_HOST_TYPE_NAME
+                | crate::ROUP_NODE_FAMILY_HOST_VARIABLE
+                | crate::ROUP_NODE_FAMILY_HOST_LVALUE
+        ));
+        match only_field(&node.fields, crate::ROUP_FIELD_SOURCE_SPELLING) {
+            FieldValue::String(value) => value,
+            other => panic!("host source spelling must be a string, got {other:?}"),
+        }
+    }
+
+    fn host_leaf_source(value: &FieldValue) -> &str {
+        match value {
+            FieldValue::Node(node) => host_node_source(node),
+            other => panic!("host leaf must be a typed node, got {other:?}"),
+        }
     }
 
     fn openmp_parameter_projection(options: RoupParserOptions, source: &str) -> Vec<ClauseField> {
@@ -5593,6 +6880,31 @@ mod tests {
             error_message(failure.error)
                 .unwrap()
                 .contains("unknown C language standard")
+        );
+        release_error(failure.error).unwrap();
+    }
+
+    #[test]
+    fn related_diagnostics_are_not_dropped_at_the_abi_boundary() {
+        let source = "first second";
+        let diagnostic = Diagnostic::new(
+            DiagnosticCode::ConflictingClauses,
+            roup::source::Span::new(source, 6, 12).unwrap(),
+            "conflict",
+        )
+        .with_related(
+            roup::source::Span::new(source, 0, 5).unwrap(),
+            "first occurrence",
+        );
+        let failure = record_unrecorded(UnrecordedFailure::diagnostic(
+            RoupStatus::PARSE_ERROR,
+            diagnostic,
+        ));
+        assert_eq!(error_related_count(failure.error).unwrap(), 1);
+        assert_eq!(error_related_span(failure.error, 0).unwrap().start_byte, 0);
+        assert_eq!(
+            error_related_message(failure.error, 0).unwrap(),
+            "first occurrence"
         );
         release_error(failure.error).unwrap();
     }
@@ -5899,6 +7211,57 @@ mod tests {
     }
 
     #[test]
+    fn cpp_qualified_clause_items_keep_the_standard_host_name_tag() {
+        let mut options = openmp_options();
+        options.host_language = crate::ROUP_HOST_CPP;
+        options.host_standard = 23;
+        options.flags = crate::ROUP_PARSER_OMPPARSER_EXTENSIONS;
+        let clauses = projected_clause_fields(options, "#pragma omp parallel private(ns::x)");
+        let private = clauses
+            .iter()
+            .find(|(kind, _)| *kind == crate::ROUP_OMP_CLAUSE_PRIVATE)
+            .map(|(_, fields)| fields)
+            .expect("private clause");
+        let FieldValue::Nodes(items) = only_field(private, crate::ROUP_FIELD_ITEMS) else {
+            panic!("private items must be typed nodes");
+        };
+        let [item] = items.as_slice() else {
+            panic!("expected one private item");
+        };
+        assert_eq!(
+            item.kind,
+            RoupNodeKind {
+                family: crate::ROUP_NODE_FAMILY_CLAUSE_ITEM,
+                variant: crate::ROUP_CLAUSE_ITEM_VARIABLE,
+            }
+        );
+        let FieldValue::Node(variable) = only_field(&item.fields, crate::ROUP_FIELD_VARIABLE)
+        else {
+            panic!("private variable must be a typed host-variable node");
+        };
+        let FieldValue::Node(expression) = only_field(&variable.fields, crate::ROUP_FIELD_VALUE)
+        else {
+            panic!("host variable must expose its typed expression");
+        };
+        assert_eq!(
+            expression.kind,
+            RoupNodeKind {
+                family: crate::ROUP_NODE_FAMILY_HOST_EXPRESSION,
+                variant: crate::ROUP_HOST_EXPR_NAME,
+            }
+        );
+        assert!(matches!(
+            only_field(&expression.fields, crate::ROUP_FIELD_GLOBAL),
+            FieldValue::Bool(false)
+        ));
+        assert!(matches!(
+            only_field(&expression.fields, crate::ROUP_FIELD_VALUES),
+            FieldValue::Strings(segments)
+                if segments.iter().map(String::as_str).eq(["ns", "x"])
+        ));
+    }
+
+    #[test]
     fn closed_clause_values_and_allocator_classes_use_numeric_tags() {
         let clauses = projected_clause_fields(
             openmp_options(),
@@ -5969,10 +7332,14 @@ mod tests {
                 variant: crate::ROUP_OMP_APPLY_GRID,
             }
         );
-        assert!(matches!(
-            only_field(&modifier.fields, crate::ROUP_FIELD_INDICES),
-            FieldValue::Strings(indices) if indices.as_slice() == ["1"]
-        ));
+        let FieldValue::Nodes(indices) = only_field(&modifier.fields, crate::ROUP_FIELD_INDICES)
+        else {
+            panic!("grid indices must be typed expressions");
+        };
+        assert_eq!(
+            indices.iter().map(host_node_source).collect::<Vec<_>>(),
+            ["1"]
+        );
         let FieldValue::Nodes(applied) = only_field(apply, crate::ROUP_FIELD_APPLIED_DIRECTIVES)
         else {
             panic!("applied directives must be semantic nodes");
@@ -6038,10 +7405,10 @@ mod tests {
             only_field(update, crate::ROUP_FIELD_DEPEND_TYPE),
             FieldValue::U32(crate::ROUP_OMP_DEPOBJ_UPDATE_INOUT)
         ));
-        assert!(matches!(
-            only_field(update, crate::ROUP_FIELD_VARIABLE),
-            FieldValue::String(variable) if variable == "dependence_object"
-        ));
+        assert_eq!(
+            host_leaf_source(only_field(update, crate::ROUP_FIELD_VARIABLE)),
+            "dependence_object"
+        );
     }
 
     #[test]
@@ -6076,14 +7443,20 @@ mod tests {
             FieldValue::U64(1)
         ));
         assert_eq!(parameters[1].kind.variant, crate::ROUP_OMP_PARAMETER_RANGE);
-        assert!(matches!(
-            only_field(&parameters[1].fields, crate::ROUP_FIELD_LOWER_BOUND),
-            FieldValue::String(lower) if lower == "3"
-        ));
-        assert!(matches!(
-            only_field(&parameters[1].fields, crate::ROUP_FIELD_UPPER_BOUND),
-            FieldValue::String(upper) if upper == "5"
-        ));
+        assert_eq!(
+            host_leaf_source(only_field(
+                &parameters[1].fields,
+                crate::ROUP_FIELD_LOWER_BOUND
+            )),
+            "3"
+        );
+        assert_eq!(
+            host_leaf_source(only_field(
+                &parameters[1].fields,
+                crate::ROUP_FIELD_UPPER_BOUND
+            )),
+            "5"
+        );
         assert_eq!(parameters[2].kind.variant, crate::ROUP_OMP_PARAMETER_NAMED);
 
         let append = clauses
@@ -6193,10 +7566,13 @@ mod tests {
             target_traits[0].kind.variant,
             crate::ROUP_SELECTOR_DEVICE_NUM
         );
-        assert!(matches!(
-            only_field(&target_traits[0].fields, crate::ROUP_FIELD_VALUE),
-            FieldValue::String(value) if value == "dev"
-        ));
+        assert_eq!(
+            host_leaf_source(only_field(
+                &target_traits[0].fields,
+                crate::ROUP_FIELD_VALUE
+            )),
+            "dev"
+        );
         assert_eq!(
             target_traits[1].kind.variant,
             crate::ROUP_SELECTOR_DEVICE_UID
@@ -6221,10 +7597,13 @@ mod tests {
             implementation_traits[0].kind.variant,
             crate::ROUP_SELECTOR_IMPLEMENTATION_NAME_LIST
         );
-        assert!(matches!(
-            only_field(&implementation_traits[0].fields, crate::ROUP_FIELD_SCORE),
-            FieldValue::String(score) if score == "4"
-        ));
+        assert_eq!(
+            host_leaf_source(only_field(
+                &implementation_traits[0].fields,
+                crate::ROUP_FIELD_SCORE
+            )),
+            "4"
+        );
         let FieldValue::Node(vendor_trait) = only_field(
             &implementation_traits[0].fields,
             crate::ROUP_FIELD_TRAIT_NAME,
@@ -6288,10 +7667,13 @@ mod tests {
             requirement.kind.variant,
             crate::ROUP_REQUIRE_UNIFIED_ADDRESS
         );
-        assert!(matches!(
-            only_field(&requirements[0].fields, crate::ROUP_FIELD_REQUIRED),
-            FieldValue::String(required) if required == "flag"
-        ));
+        assert_eq!(
+            host_leaf_source(only_field(
+                &requirements[0].fields,
+                crate::ROUP_FIELD_REQUIRED
+            )),
+            "flag"
+        );
 
         assert_eq!(
             implementation_traits[3].kind.variant,
@@ -6320,14 +7702,14 @@ mod tests {
             }
         );
         assert_eq!(entries[3].kind.variant, crate::ROUP_SELECTOR_ENTRY_USER);
-        assert!(matches!(
-            only_field(&entries[3].fields, crate::ROUP_FIELD_SCORE),
-            FieldValue::String(score) if score == "5"
-        ));
-        assert!(matches!(
-            only_field(&entries[3].fields, crate::ROUP_FIELD_CONDITION),
-            FieldValue::String(condition) if condition == "runtime_flag"
-        ));
+        assert_eq!(
+            host_leaf_source(only_field(&entries[3].fields, crate::ROUP_FIELD_SCORE)),
+            "5"
+        );
+        assert_eq!(
+            host_leaf_source(only_field(&entries[3].fields, crate::ROUP_FIELD_CONDITION)),
+            "runtime_flag"
+        );
     }
 
     #[test]
@@ -6341,10 +7723,10 @@ mod tests {
             .find(|(kind, _)| *kind == crate::ROUP_OMP_CLAUSE_ALLOCATE)
             .map(|(_, fields)| fields)
             .expect("allocate clause");
-        assert!(matches!(
-            only_field(fields, crate::ROUP_FIELD_ALLOCATOR_EXPRESSION),
-            FieldValue::String(expression) if expression == "select_allocator(device)"
-        ));
+        assert_eq!(
+            host_leaf_source(only_field(fields, crate::ROUP_FIELD_ALLOCATOR_EXPRESSION)),
+            "select_allocator(device)"
+        );
         assert!(
             fields
                 .iter()
@@ -6364,14 +7746,14 @@ mod tests {
             .find(|(kind, _)| *kind == crate::ROUP_OMP_CLAUSE_ALLOCATE)
             .map(|(_, fields)| fields)
             .expect("allocate clause");
-        assert!(matches!(
-            only_field(fields, crate::ROUP_FIELD_ALLOCATOR_EXPRESSION),
-            FieldValue::String(expression) if expression == "select_allocator(device)"
-        ));
-        assert!(matches!(
-            only_field(fields, crate::ROUP_FIELD_ALIGNMENT_EXPRESSION),
-            FieldValue::String(expression) if expression == "64"
-        ));
+        assert_eq!(
+            host_leaf_source(only_field(fields, crate::ROUP_FIELD_ALLOCATOR_EXPRESSION)),
+            "select_allocator(device)"
+        );
+        assert_eq!(
+            host_leaf_source(only_field(fields, crate::ROUP_FIELD_ALIGNMENT_EXPRESSION)),
+            "64"
+        );
         assert!(matches!(
             only_field(fields, crate::ROUP_FIELD_ALLOCATE_SOURCE_SYNTAX),
             FieldValue::U32(crate::ROUP_OMP_ALLOCATE_SOURCE_MODIFIERS)
@@ -6386,10 +7768,10 @@ mod tests {
             .find(|(kind, _)| *kind == crate::ROUP_OMP_CLAUSE_ALLOCATOR)
             .map(|(_, fields)| fields)
             .expect("allocator clause");
-        assert!(matches!(
-            only_field(fields, crate::ROUP_FIELD_ALLOCATOR_EXPRESSION),
-            FieldValue::String(expression) if expression == "select_allocator(device)"
-        ));
+        assert_eq!(
+            host_leaf_source(only_field(fields, crate::ROUP_FIELD_ALLOCATOR_EXPRESSION)),
+            "select_allocator(device)"
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@ module roup_capi
     implicit none
     private
 
-    integer(c_int32_t), parameter, public :: ROUP_ABI_VERSION = 2
+    integer(c_int32_t), parameter, public :: ROUP_ABI_VERSION = 3
     integer(c_int32_t), parameter, public :: ROUP_STATUS_OK = 0
     integer(c_int32_t), parameter, public :: ROUP_DIALECT_OPENMP = 1
     integer(c_int32_t), parameter, public :: ROUP_DIALECT_OPENACC = 2

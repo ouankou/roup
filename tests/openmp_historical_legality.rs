@@ -86,6 +86,14 @@ fn declare_mapper_has_a_typed_declarator_and_map_clauses() {
         mapper.type_name().tokens().last(),
         Some(TokenKind::Star)
     ));
+
+    let parsed = c("#pragma omp declare mapper(unsigned _BitInt(32) value) map(value)")
+        .expect("a C23 bit-precise mapper type must parse");
+    let Some(OmpDirectiveParameter::DeclareMapper(mapper)) = parsed.directive().parameter() else {
+        panic!("declare mapper must retain its typed signature");
+    };
+    assert_eq!(mapper.type_name().source_spelling(), "unsigned _BitInt(32)");
+    assert_eq!(mapper.variable().as_str(), "value");
 }
 
 #[test]

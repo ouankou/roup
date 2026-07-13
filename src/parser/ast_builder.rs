@@ -32,6 +32,17 @@ use crate::lexer::{LogicalSource, LogicalSourceError};
 use crate::version::{HostLanguage, OpenMpVersion, VersionPolicy};
 use std::borrow::Cow;
 
+fn parse_type_name(
+    source: &str,
+    parser_config: &ParserConfig,
+) -> Result<TypeName, crate::host::TypeNameError> {
+    if parser_config.source_extensions() {
+        TypeName::parse_extension_with_profile(source, parser_config.profile())
+    } else {
+        TypeName::parse_with_profile(source, parser_config.profile())
+    }
+}
+
 /// Error raised during AST materialization from parser structures.
 #[derive(Debug)]
 pub enum AstBuildError {
@@ -210,7 +221,7 @@ fn build_omp_directive(
         .clauses
         .last()
         .is_some_and(LocatedClause::followed_by_trailing_comma)
-        && !parser_config.source_compatibility()
+        && !parser_config.source_extensions()
     {
         return Err(AstBuildError::ClauseConversion(
             "a directive clause sequence must not end with a comma".to_string(),
@@ -238,7 +249,7 @@ fn build_omp_directive(
 
     validate_omp_directive(kind, &clauses, host_language)?;
 
-    let parameter = if has_flush_memory_order_argument && parser_config.source_compatibility() {
+    let parameter = if has_flush_memory_order_argument && parser_config.source_extensions() {
         let content = directive
             .clauses
             .iter()
@@ -491,7 +502,7 @@ fn parse_depobj_parameter(
         ));
     }
     let expression = Expression::new(items[0], parser_config)?;
-    if !parser_config.source_compatibility() {
+    if !parser_config.source_extensions() {
         LValue::from_expression(expression.clone()).map_err(|error| {
             AstBuildError::ParseFailure(format!("invalid depobj target: {error}"))
         })?;
@@ -619,9 +630,11 @@ fn parse_flush_list_item(
         ClauseItem::Expression(expression) => Err(AstBuildError::ParseFailure(format!(
             "flush variable list contains a general expression: `{expression}`"
         ))),
-        ClauseItem::LegacyTrailingSlash(identifier) => Err(AstBuildError::ParseFailure(format!(
-            "flush variable list contains a legacy trailing-slash item: `{identifier}/`"
-        ))),
+        ClauseItem::OmpparserTrailingSlash(identifier) => {
+            Err(AstBuildError::ParseFailure(format!(
+                "flush variable list contains an ompparser trailing-slash item: `{identifier}/`"
+            )))
+        }
     }
 }
 
@@ -635,7 +648,7 @@ fn parse_declare_simd_target(
         ));
     }
     let function_source = require_exact_parenthesized(raw, "declare simd procedure name")?;
-    let (function_source, hash_prefixed) = if parser_config.source_compatibility() {
+    let (function_source, hash_prefixed) = if parser_config.source_extensions() {
         function_source
             .strip_prefix('#')
             .map_or((function_source, false), |function| (function, true))
@@ -687,7 +700,7 @@ fn parse_omp_function_name(
     }
 
     if matches!(parser_config.host_language(), HostLanguage::Cpp) {
-        let template_id = TypeName::parse_with_profile(source, parser_config.profile())?;
+        let template_id = parse_type_name(source, parser_config)?;
         if is_cpp_qualified_template_id(template_id.tokens()) {
             return Ok(OmpFunctionName::CppTemplateId(OmpCppTemplateId::new(
                 template_id,
@@ -875,7 +888,7 @@ fn parse_declare_mapper_param(
 
     Ok(OmpDeclareMapper::new(
         identifier,
-        crate::host::TypeName::parse_with_profile(type_part, parser_config.profile())?,
+        parse_type_name(type_part, parser_config)?,
         Identifier::new(variable_part)?,
         declarator_separator,
     ))
@@ -1008,7 +1021,7 @@ fn parse_openmp_id_expression(
             return Ok(OmpIdExpression::CppOperatorFunction(operator_function));
         }
 
-        let syntax = TypeName::parse_with_profile(source, parser_config.profile())?;
+        let syntax = parse_type_name(source, parser_config)?;
         if is_cpp_qualified_template_id(syntax.tokens()) {
             return Ok(OmpIdExpression::CppTemplateId(OmpCppTemplateId::new(
                 syntax,
@@ -1088,7 +1101,7 @@ fn parse_cpp_operator_qualifier(
         return Ok(OmpCppOperatorQualifier::Name(name.clone()));
     }
 
-    let syntax = TypeName::parse_with_profile(source, parser_config.profile())?;
+    let syntax = parse_type_name(source, parser_config)?;
     if is_cpp_qualified_template_id(syntax.tokens())
         && !matches!(syntax.tokens().first(), Some(TokenKind::Scope))
     {
@@ -1167,20 +1180,15 @@ fn parse_induction_type_specifier(
             ));
         }
         return Ok(OmpInductionTypeSpecifier::Pair {
-            variable: crate::host::TypeName::parse_with_profile(
-                parts[0].trim(),
-                parser_config.profile(),
-            )?,
-            step: crate::host::TypeName::parse_with_profile(
-                parts[1].trim(),
-                parser_config.profile(),
-            )?,
+            variable: parse_type_name(parts[0].trim(), parser_config)?,
+            step: parse_type_name(parts[1].trim(), parser_config)?,
         });
     }
 
-    Ok(OmpInductionTypeSpecifier::Same(
-        crate::host::TypeName::parse_with_profile(source, parser_config.profile())?,
-    ))
+    Ok(OmpInductionTypeSpecifier::Same(parse_type_name(
+        source,
+        parser_config,
+    )?))
 }
 
 fn parse_declare_reduction_param(
@@ -1251,8 +1259,7 @@ fn parse_declare_reduction_param(
                         "declare reduction type list contains an empty entry".to_string(),
                     ));
                 }
-                crate::host::TypeName::parse_with_profile(type_name, parser_config.profile())
-                    .map_err(AstBuildError::from)
+                parse_type_name(type_name, parser_config).map_err(AstBuildError::from)
             })
             .collect::<Result<Vec<_>, _>>()?;
     let combiner = parse_reduction_combiner(combiner_source, parser_config)?;
@@ -1672,8 +1679,13 @@ fn is_fortran_component_chain(expression: &crate::host::Expr, expected_root: &st
             ..
         } => is_fortran_component_chain(base, expected_root),
         ExprKind::Literal(_)
+        | ExprKind::This
+        | ExprKind::Sizeof(_)
         | ExprKind::CppTemplateId { .. }
         | ExprKind::LegacyQualifiedInteger { .. }
+        | ExprKind::LegacyQualifiedName { .. }
+        | ExprKind::LegacyFortranSubscript { .. }
+        | ExprKind::LegacyFortranUnaryDesignator { .. }
         | ExprKind::Parenthesized(_)
         | ExprKind::Unary { .. }
         | ExprKind::FortranDefinedUnary { .. }
@@ -1811,7 +1823,7 @@ fn build_acc_directive(
         .clauses
         .last()
         .is_some_and(LocatedClause::followed_by_trailing_comma)
-        && !parser_config.source_compatibility()
+        && !parser_config.source_extensions()
     {
         return Err(AstBuildError::ClauseConversion(
             "a directive clause sequence must not end with a comma".to_string(),
@@ -1859,7 +1871,7 @@ fn build_acc_directive_parameter(
                 ClauseItem::Variable(variable) => {
                     AccCacheItem::new(variable).map_err(AstBuildError::from)
                 }
-                ClauseItem::Identifier(identifier) if parser_config.source_compatibility() => {
+                ClauseItem::Identifier(identifier) if parser_config.source_extensions() => {
                     Ok(AccCacheItem::Scalar(identifier))
                 }
                 ClauseItem::Identifier(identifier) => Err(AstBuildError::ParseFailure(format!(
@@ -1873,9 +1885,9 @@ fn build_acc_directive_parameter(
                         "OpenACC cache item cannot be a Fortran common block `/{common_block}/`"
                     )))
                 }
-                ClauseItem::LegacyTrailingSlash(identifier) => {
+                ClauseItem::OmpparserTrailingSlash(identifier) => {
                     Err(AstBuildError::ParseFailure(format!(
-                        "OpenACC cache item cannot end in a legacy slash: `{identifier}/`"
+                        "OpenACC cache item cannot end in an ompparser slash: `{identifier}/`"
                     )))
                 }
             })
@@ -2130,7 +2142,7 @@ fn parse_firstprivate_with_universal_modifier(
         let Ok(parsed) = parse_directive_name_modifier(entry, parser_config) else {
             return Ok(None);
         };
-        if !parser_config.source_compatibility()
+        if !parser_config.source_extensions()
             && !crate::validation::omp_modifier_names_directive_or_constituent(
                 directive_kind,
                 parsed,
@@ -2251,7 +2263,7 @@ fn parse_omp_clause_semantics(
             ClauseData::MemoryOrder {
                 order: parse_memory_order(clause.name.as_ref(), parser_config)
                     .map_err(|error| AstBuildError::ClauseConversion(error.to_string()))?,
-                use_semantics: if parser_config.source_compatibility() {
+                use_semantics: if parser_config.source_extensions() {
                     None
                 } else {
                     Some(Expression::new(content, parser_config)?)
@@ -2394,7 +2406,7 @@ fn convert_clause_to_omp(
     };
     let kind = OmpClauseKind::try_from(canonical_name)
         .map_err(|_| AstBuildError::UnsupportedClause(clause.name.as_ref().to_string()))?;
-    if !parser_config.source_compatibility()
+    if !parser_config.source_extensions()
         && let Some(modifier) = directive_name_modifier
         && !crate::validation::omp_clause_applies_to_named_constituent(
             directive_kind,
@@ -2433,32 +2445,37 @@ fn convert_clause_to_acc(
 ) -> Result<AccClause, AstBuildError> {
     reject_case_variant_clause_keyword(clause, parser_config)?;
     let parsed_name = lookup_clause_name(clause.name.as_ref());
-    let (clause_name, source_alias) = match (directive_kind, &parsed_name, clause.name.as_ref()) {
-        (AccDirectiveKind::Update, ClauseName::Host, _) => (
+    let (clause_name, source_alias) = if directive_kind == AccDirectiveKind::Update
+        && acc_keyword_eq(clause.name.as_ref(), "host", parser_config)
+    {
+        (
             ClauseName::SelfClause,
             Some(AccClauseSourceAlias::UpdateHost),
-        ),
-        (_, _, "pcopy") => (parsed_name.clone(), Some(AccClauseSourceAlias::PCopy)),
-        (_, _, "present_or_copy") => (
-            parsed_name.clone(),
-            Some(AccClauseSourceAlias::PresentOrCopy),
-        ),
-        (_, _, "pcopyin") => (parsed_name.clone(), Some(AccClauseSourceAlias::PCopyIn)),
-        (_, _, "present_or_copyin") => (
-            parsed_name.clone(),
-            Some(AccClauseSourceAlias::PresentOrCopyIn),
-        ),
-        (_, _, "pcopyout") => (parsed_name.clone(), Some(AccClauseSourceAlias::PCopyOut)),
-        (_, _, "present_or_copyout") => (
-            parsed_name.clone(),
-            Some(AccClauseSourceAlias::PresentOrCopyOut),
-        ),
-        (_, _, "pcreate") => (parsed_name.clone(), Some(AccClauseSourceAlias::PCreate)),
-        (_, _, "present_or_create") => (
-            parsed_name.clone(),
-            Some(AccClauseSourceAlias::PresentOrCreate),
-        ),
-        _ => (parsed_name.clone(), None),
+        )
+    } else {
+        match clause.name.as_ref() {
+            "pcopy" => (parsed_name.clone(), Some(AccClauseSourceAlias::PCopy)),
+            "present_or_copy" => (
+                parsed_name.clone(),
+                Some(AccClauseSourceAlias::PresentOrCopy),
+            ),
+            "pcopyin" => (parsed_name.clone(), Some(AccClauseSourceAlias::PCopyIn)),
+            "present_or_copyin" => (
+                parsed_name.clone(),
+                Some(AccClauseSourceAlias::PresentOrCopyIn),
+            ),
+            "pcopyout" => (parsed_name.clone(), Some(AccClauseSourceAlias::PCopyOut)),
+            "present_or_copyout" => (
+                parsed_name.clone(),
+                Some(AccClauseSourceAlias::PresentOrCopyOut),
+            ),
+            "pcreate" => (parsed_name.clone(), Some(AccClauseSourceAlias::PCreate)),
+            "present_or_create" => (
+                parsed_name.clone(),
+                Some(AccClauseSourceAlias::PresentOrCreate),
+            ),
+            _ => (parsed_name.clone(), None),
+        }
     };
     let kind = AccClauseKind::try_from(clause_name.clone())
         .map_err(|_| AstBuildError::UnsupportedClause(clause.name.as_ref().to_string()))?;
@@ -2476,7 +2493,7 @@ fn reject_case_variant_clause_keyword(
     parser_config: &ParserConfig,
 ) -> Result<(), AstBuildError> {
     let name = clause.name.as_ref();
-    if !parser_config.source_compatibility()
+    if !parser_config.source_extensions()
         && parser_config.host_language() != HostLanguage::Fortran
         && name.bytes().any(|byte| byte.is_ascii_uppercase())
     {
@@ -2513,7 +2530,10 @@ fn build_acc_clause_payload(
         Delete => build_acc_data_clause(clause, AccDataKind::Delete, parser_config),
         DeviceType => build_acc_device_type_clause(clause, parser_config),
         SelfClause if directive_kind == AccDirectiveKind::Update => {
-            build_acc_item_list_clause(clause, parser_config)
+            Ok(AccClausePayload::ItemList {
+                kind: AccClauseKind::SelfClause,
+                items: require_acc_item_list(clause, parser_config)?,
+            })
         }
         SelfClause => build_acc_optional_expression_clause(clause, parser_config),
         Async => build_acc_optional_expression_clause(clause, parser_config),
@@ -2846,12 +2866,12 @@ fn parse_acc_data_clause_content(
                     }
                 }
             };
-            if !allowed.contains(&modifier) && !parser_config.source_compatibility() {
+            if !allowed.contains(&modifier) && !parser_config.source_extensions() {
                 return Err(AstBuildError::ClauseConversion(format!(
                     "OpenACC data modifier {modifier:?} is not allowed on this clause"
                 )));
             }
-            if modifiers.contains(&modifier) && !parser_config.source_compatibility() {
+            if modifiers.contains(&modifier) && !parser_config.source_extensions() {
                 return Err(AstBuildError::ClauseConversion(format!(
                     "duplicate OpenACC data modifier: {modifier:?}"
                 )));
@@ -2888,7 +2908,7 @@ fn build_acc_reduction_clause(
     let op = match parser_config.host_language() {
         HostLanguage::C | HostLanguage::Cpp => match operator_source {
             "+" => Some(AccReductionOperator::Add),
-            "-" if parser_config.source_compatibility() => Some(AccReductionOperator::Sub),
+            "-" if parser_config.source_extensions() => Some(AccReductionOperator::Sub),
             "*" => Some(AccReductionOperator::Mul),
             "&" => Some(AccReductionOperator::BitAnd),
             "|" => Some(AccReductionOperator::BitOr),
@@ -2901,13 +2921,13 @@ fn build_acc_reduction_clause(
         },
         HostLanguage::Fortran => match operator_source {
             "+" => Some(AccReductionOperator::Add),
-            "-" if parser_config.source_compatibility() => Some(AccReductionOperator::Sub),
+            "-" if parser_config.source_extensions() => Some(AccReductionOperator::Sub),
             "*" => Some(AccReductionOperator::Mul),
-            "&" if parser_config.source_compatibility() => Some(AccReductionOperator::BitAnd),
-            "|" if parser_config.source_compatibility() => Some(AccReductionOperator::BitOr),
-            "^" if parser_config.source_compatibility() => Some(AccReductionOperator::BitXor),
-            "&&" if parser_config.source_compatibility() => Some(AccReductionOperator::LogAnd),
-            "||" if parser_config.source_compatibility() => Some(AccReductionOperator::LogOr),
+            "&" if parser_config.source_extensions() => Some(AccReductionOperator::BitAnd),
+            "|" if parser_config.source_extensions() => Some(AccReductionOperator::BitOr),
+            "^" if parser_config.source_extensions() => Some(AccReductionOperator::BitXor),
+            "&&" if parser_config.source_extensions() => Some(AccReductionOperator::LogAnd),
+            "||" if parser_config.source_extensions() => Some(AccReductionOperator::LogOr),
             value if acc_keyword_eq(value, "max", parser_config) => Some(AccReductionOperator::Max),
             value if acc_keyword_eq(value, "min", parser_config) => Some(AccReductionOperator::Min),
             value if acc_keyword_eq(value, ".and.", parser_config) => {
@@ -3124,7 +3144,7 @@ fn build_acc_indirect_clause(
     clause: &Clause<'_>,
     parser_config: &ParserConfig,
 ) -> Result<AccClausePayload, AstBuildError> {
-    if !parser_config.source_compatibility() {
+    if !parser_config.source_extensions() {
         return Err(AstBuildError::UnsupportedClause("indirect".to_string()));
     }
     if matches!(clause.kind, ClauseKind::Bare) {
@@ -3219,7 +3239,7 @@ fn build_acc_gang_clause(
             ));
         }
     };
-    if !parser_config.source_compatibility() {
+    if !parser_config.source_extensions() {
         let mut saw_num = false;
         let mut saw_dim = false;
         let mut saw_static = false;
@@ -3233,12 +3253,12 @@ fn build_acc_gang_clause(
             };
             if duplicate {
                 return Err(AstBuildError::ClauseConversion(
-                    "OpenACC gang clause contains a duplicate argument kind".to_string(),
+                    "OpenACC gang clause must not repeat an argument kind".to_string(),
                 ));
             }
         }
     }
-    Ok(AccClausePayload::Gang(AccGangClause::new(arguments)?))
+    Ok(AccClausePayload::Gang(AccGangClause::new(arguments)))
 }
 
 fn build_acc_data_clause(
@@ -3310,8 +3330,10 @@ fn build_acc_optional_expression_clause(
     clause: &Clause<'_>,
     parser_config: &ParserConfig,
 ) -> Result<AccClausePayload, AstBuildError> {
+    let kind = AccClauseKind::try_from(lookup_clause_name(clause.name.as_ref()))
+        .map_err(|_| AstBuildError::UnsupportedClause(clause.name.as_ref().to_string()))?;
     match &clause.kind {
-        ClauseKind::Bare => Ok(AccClausePayload::Bare),
+        ClauseKind::Bare => Ok(AccClausePayload::Bare { kind }),
         ClauseKind::Parenthesized(content) => {
             let content = content.as_ref().trim();
             if content.is_empty() {
@@ -3320,11 +3342,14 @@ fn build_acc_optional_expression_clause(
                     clause.name.as_ref()
                 )));
             }
-            Ok(AccClausePayload::Expression(parse_acc_single_expression(
-                content,
-                parser_config,
-                &format!("OpenACC {} clause", clause.name.as_ref()),
-            )?))
+            Ok(AccClausePayload::Expression {
+                kind,
+                value: parse_acc_single_expression(
+                    content,
+                    parser_config,
+                    &format!("OpenACC {} clause", clause.name.as_ref()),
+                )?,
+            })
         }
         _ => Err(AstBuildError::ClauseConversion(format!(
             "OpenACC {} clause has an invalid payload shape",
@@ -3338,7 +3363,7 @@ fn build_acc_required_expression_clause(
     parser_config: &ParserConfig,
 ) -> Result<AccClausePayload, AstBuildError> {
     match build_acc_optional_expression_clause(clause, parser_config)? {
-        AccClausePayload::Bare => Err(AstBuildError::ClauseConversion(format!(
+        AccClausePayload::Bare { .. } => Err(AstBuildError::ClauseConversion(format!(
             "OpenACC {} clause requires a parenthesized expression",
             clause.name.as_ref()
         ))),
@@ -3363,7 +3388,9 @@ fn build_acc_item_list_clause(
             clause.name.as_ref()
         )));
     }
-    Ok(AccClausePayload::ItemList(items))
+    let kind = AccClauseKind::try_from(lookup_clause_name(clause.name.as_ref()))
+        .map_err(|_| AstBuildError::UnsupportedClause(clause.name.as_ref().to_string()))?;
+    Ok(AccClausePayload::ItemList { kind, items })
 }
 
 fn require_acc_item_list(
@@ -3391,8 +3418,10 @@ fn require_acc_item_list(
 }
 
 fn build_acc_bare_clause(clause: &Clause<'_>) -> Result<AccClausePayload, AstBuildError> {
+    let kind = AccClauseKind::try_from(lookup_clause_name(clause.name.as_ref()))
+        .map_err(|_| AstBuildError::UnsupportedClause(clause.name.as_ref().to_string()))?;
     match clause.kind {
-        ClauseKind::Bare => Ok(AccClausePayload::Bare),
+        ClauseKind::Bare => Ok(AccClausePayload::Bare { kind }),
         _ => Err(AstBuildError::ClauseConversion(format!(
             "OpenACC {} clause does not accept arguments",
             clause.name.as_ref()

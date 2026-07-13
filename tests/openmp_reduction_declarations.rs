@@ -88,6 +88,20 @@ fn historical_and_openmp_60_declare_reduction_forms_share_typed_semantics() {
 }
 
 #[test]
+fn c23_signed_bit_precise_reduction_types_remain_typed() {
+    for type_name in ["signed _BitInt(64)", "unsigned _BitInt(32)"] {
+        let source =
+            format!("#pragma omp declare reduction(sum : {type_name} : omp_out += omp_in)");
+        let parsed = c(OpenMpVersion::V6_0, &source)
+            .unwrap_or_else(|error| panic!("rejected {source:?}: {error}"));
+        assert_eq!(
+            reduction(&parsed).type_names()[0].source_spelling(),
+            type_name
+        );
+    }
+}
+
+#[test]
 fn cpp_reduction_ids_and_initializer_forms_are_structural() {
     let parsed = cpp(
         "#pragma omp declare_reduction(ns::merge<int> : std::vector<int>) combiner(omp_out += omp_in) initializer(omp_priv(omp_orig))",
@@ -118,6 +132,18 @@ fn cpp_reduction_ids_and_initializer_forms_are_structural() {
     assert!(matches!(
         reduction(&standard_library).combiner(),
         OmpReductionCombiner::COrCppExpression(_)
+    ));
+
+    let global_type =
+        cpp("#pragma omp declare reduction(copy : ::ns::T) combiner(omp_out = omp_in)")
+            .expect("a leading global qualifier in a directive type slot must parse");
+    assert_eq!(
+        reduction(&global_type).type_names()[0].source_spelling(),
+        "::ns::T"
+    );
+    assert!(matches!(
+        reduction(&global_type).type_names()[0].tokens().first(),
+        Some(roup::host::TokenKind::Scope)
     ));
 
     for (source, expected) in [

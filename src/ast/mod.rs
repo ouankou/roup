@@ -229,12 +229,29 @@ impl PartialEq for AccDirective {
 /// Typed OpenMP clause record.
 #[derive(Debug, Clone)]
 pub struct OmpClause {
-    kind: OmpClauseKind,
     payload: OmpClausePayload,
     directive_name_modifier: Option<OmpDirectiveKind>,
-    source_alias: Option<OmpClauseSourceAlias>,
-    source_separator: OmpClauseSourceSeparator,
+    syntax: OmpClauseSyntax,
     span: Span,
+}
+
+/// Lossless source provenance kept outside the semantic clause payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OmpClauseSyntax {
+    source_alias: Option<OmpClauseSourceAlias>,
+    preceding_separator: OmpClauseSourceSeparator,
+}
+
+impl OmpClauseSyntax {
+    #[must_use]
+    pub const fn source_alias(self) -> Option<OmpClauseSourceAlias> {
+        self.source_alias
+    }
+
+    #[must_use]
+    pub const fn preceding_separator(self) -> OmpClauseSourceSeparator {
+        self.preceding_separator
+    }
 }
 
 /// Exact separator that preceded a clause in the directive source.
@@ -267,7 +284,7 @@ impl OmpClause {
         source_separator: OmpClauseSourceSeparator,
         span: Span,
     ) -> Result<Self, AstInvariantError> {
-        if !omp_payload_matches_kind(kind, &payload) {
+        if omp_payload_kind(&payload) != kind {
             return Err(AstInvariantError::new(
                 "OpenMP clause kind does not match its typed payload",
             ));
@@ -288,18 +305,19 @@ impl OmpClause {
             ));
         }
         Ok(Self {
-            kind,
             payload,
             directive_name_modifier,
-            source_alias,
-            source_separator,
+            syntax: OmpClauseSyntax {
+                source_alias,
+                preceding_separator: source_separator,
+            },
             span,
         })
     }
 
     #[must_use]
     pub const fn kind(&self) -> OmpClauseKind {
-        self.kind
+        omp_payload_kind(&self.payload)
     }
 
     #[must_use]
@@ -318,12 +336,17 @@ impl OmpClause {
 
     #[must_use]
     pub const fn source_alias(&self) -> Option<OmpClauseSourceAlias> {
-        self.source_alias
+        self.syntax.source_alias()
     }
 
     #[must_use]
     pub const fn source_separator(&self) -> OmpClauseSourceSeparator {
-        self.source_separator
+        self.syntax.preceding_separator()
+    }
+
+    #[must_use]
+    pub const fn syntax(&self) -> OmpClauseSyntax {
+        self.syntax
     }
 
     #[must_use]
@@ -334,8 +357,7 @@ impl OmpClause {
 
 impl PartialEq for OmpClause {
     fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind
-            && self.payload == other.payload
+        self.payload == other.payload
             && self.directive_name_modifier == other.directive_name_modifier
     }
 }
@@ -343,10 +365,22 @@ impl PartialEq for OmpClause {
 /// Typed OpenACC clause record.
 #[derive(Debug, Clone)]
 pub struct AccClause {
-    kind: AccClauseKind,
     payload: AccClausePayload,
-    source_alias: Option<AccClauseSourceAlias>,
+    syntax: AccClauseSyntax,
     span: Span,
+}
+
+/// Lossless OpenACC clause spelling provenance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AccClauseSyntax {
+    source_alias: Option<AccClauseSourceAlias>,
+}
+
+impl AccClauseSyntax {
+    #[must_use]
+    pub const fn source_alias(self) -> Option<AccClauseSourceAlias> {
+        self.source_alias
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -369,7 +403,7 @@ impl AccClause {
         source_alias: Option<AccClauseSourceAlias>,
         span: Span,
     ) -> Result<Self, AstInvariantError> {
-        if !acc_payload_matches_kind(kind, &payload) {
+        if acc_payload_kind(&payload) != kind {
             return Err(AstInvariantError::new(
                 "OpenACC clause kind does not match its typed payload",
             ));
@@ -377,7 +411,7 @@ impl AccClause {
         if matches!(kind, AccClauseKind::DevicePtr | AccClauseKind::Present)
             && matches!(
                 &payload,
-                AccClausePayload::ItemList(items)
+                AccClausePayload::ItemList { items, .. }
                     if items.iter().any(|item| matches!(
                         item,
                         ClauseItem::FortranCommonBlock(_)
@@ -393,6 +427,26 @@ impl AccClause {
                 "OpenACC clause payload is missing required typed data",
             ));
         }
+        if let AccClausePayload::DeviceType(device_types) = &payload {
+            if device_types.len() > 1
+                && device_types
+                    .iter()
+                    .any(|device_type| matches!(device_type, AccDeviceType::Wildcard))
+            {
+                return Err(AstInvariantError::new(
+                    "OpenACC device_type wildcard must be the only list entry",
+                ));
+            }
+            if device_types
+                .iter()
+                .enumerate()
+                .any(|(index, device_type)| device_types[..index].contains(device_type))
+            {
+                return Err(AstInvariantError::new(
+                    "OpenACC device_type list must not contain duplicates",
+                ));
+            }
+        }
         if !acc_alias_matches_kind(source_alias, kind) {
             return Err(AstInvariantError::new(
                 "OpenACC clause alias provenance does not match its canonical kind",
@@ -404,16 +458,15 @@ impl AccClause {
             ));
         }
         Ok(Self {
-            kind,
             payload,
-            source_alias,
+            syntax: AccClauseSyntax { source_alias },
             span,
         })
     }
 
     #[must_use]
     pub const fn kind(&self) -> AccClauseKind {
-        self.kind
+        acc_payload_kind(&self.payload)
     }
 
     #[must_use]
@@ -423,7 +476,12 @@ impl AccClause {
 
     #[must_use]
     pub const fn source_alias(&self) -> Option<AccClauseSourceAlias> {
-        self.source_alias
+        self.syntax.source_alias()
+    }
+
+    #[must_use]
+    pub const fn syntax(&self) -> AccClauseSyntax {
+        self.syntax
     }
 
     #[must_use]
@@ -434,7 +492,7 @@ impl AccClause {
 
 impl PartialEq for AccClause {
     fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind && self.payload == other.payload
+        self.payload == other.payload
     }
 }
 
@@ -580,6 +638,10 @@ impl OmpSelectorNameListTrait {
         kind: OmpSelectorNameListKind,
         properties: Vec<OmpSelectorTraitValue>,
     ) -> Result<Self, AstInvariantError> {
+        let properties = properties
+            .into_iter()
+            .map(|property| classify_selector_name_list_property(kind, property))
+            .collect::<Vec<_>>();
         if properties.is_empty() {
             return Err(AstInvariantError::new(
                 "a name-list selector trait requires at least one property",
@@ -618,6 +680,69 @@ impl OmpSelectorNameListTrait {
     #[must_use]
     pub const fn score(&self) -> Option<&Expression> {
         self.score.as_ref()
+    }
+}
+
+fn classify_selector_name_list_property(
+    list_kind: OmpSelectorNameListKind,
+    property: OmpSelectorTraitValue,
+) -> OmpSelectorTraitValue {
+    let name = property.semantic_name();
+    let device_kind = match name {
+        "host" => Some(OmpSelectorDeviceKind::Host),
+        "nohost" => Some(OmpSelectorDeviceKind::NoHost),
+        "any" => Some(OmpSelectorDeviceKind::Any),
+        "cpu" => Some(OmpSelectorDeviceKind::Cpu),
+        "gpu" => Some(OmpSelectorDeviceKind::Gpu),
+        "fpga" => Some(OmpSelectorDeviceKind::Fpga),
+        _ => None,
+    };
+    let vendor = match name {
+        "amd" => Some(OmpSelectorVendor::Amd),
+        "arm" => Some(OmpSelectorVendor::Arm),
+        "bsc" => Some(OmpSelectorVendor::Bsc),
+        "cray" => Some(OmpSelectorVendor::Cray),
+        "fujitsu" => Some(OmpSelectorVendor::Fujitsu),
+        "gnu" => Some(OmpSelectorVendor::Gnu),
+        "ibm" => Some(OmpSelectorVendor::Ibm),
+        "intel" => Some(OmpSelectorVendor::Intel),
+        "llvm" => Some(OmpSelectorVendor::Llvm),
+        "nvidia" => Some(OmpSelectorVendor::Nvidia),
+        "pgi" => Some(OmpSelectorVendor::Pgi),
+        "ti" => Some(OmpSelectorVendor::Ti),
+        _ => None,
+    };
+    let spelling = match property {
+        OmpSelectorTraitValue::Identifier(identifier) => {
+            OmpSelectorTraitSpelling::Identifier(identifier)
+        }
+        OmpSelectorTraitValue::StringLiteral(literal) => {
+            OmpSelectorTraitSpelling::StringLiteral(literal)
+        }
+        property @ (OmpSelectorTraitValue::DeviceKind { .. }
+        | OmpSelectorTraitValue::Vendor { .. }) => return property,
+    };
+    match list_kind {
+        OmpSelectorNameListKind::Kind => match device_kind {
+            Some(kind) => OmpSelectorTraitValue::DeviceKind { kind, spelling },
+            None => selector_spelling_value(spelling),
+        },
+        OmpSelectorNameListKind::Vendor => match vendor {
+            Some(vendor) => OmpSelectorTraitValue::Vendor { vendor, spelling },
+            None => selector_spelling_value(spelling),
+        },
+        _ => selector_spelling_value(spelling),
+    }
+}
+
+fn selector_spelling_value(spelling: OmpSelectorTraitSpelling) -> OmpSelectorTraitValue {
+    match spelling {
+        OmpSelectorTraitSpelling::Identifier(identifier) => {
+            OmpSelectorTraitValue::Identifier(identifier)
+        }
+        OmpSelectorTraitSpelling::StringLiteral(literal) => {
+            OmpSelectorTraitValue::StringLiteral(literal)
+        }
     }
 }
 
@@ -888,6 +1013,20 @@ fn validate_selector_extension_property(
 pub enum OmpSelectorTraitValue {
     Identifier(Identifier),
     StringLiteral(crate::host::StringLiteral),
+    DeviceKind {
+        kind: OmpSelectorDeviceKind,
+        spelling: OmpSelectorTraitSpelling,
+    },
+    Vendor {
+        vendor: OmpSelectorVendor,
+        spelling: OmpSelectorTraitSpelling,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum OmpSelectorTraitSpelling {
+    Identifier(Identifier),
+    StringLiteral(crate::host::StringLiteral),
 }
 
 /// A standardized device-kind selector property with a closed semantic value.
@@ -923,6 +1062,9 @@ impl OmpSelectorTraitValue {
         match self {
             Self::Identifier(identifier) => identifier.as_str(),
             Self::StringLiteral(literal) => literal.value.as_str(),
+            Self::DeviceKind { spelling, .. } | Self::Vendor { spelling, .. } => {
+                spelling.semantic_name()
+            }
         }
     }
 
@@ -930,13 +1072,8 @@ impl OmpSelectorTraitValue {
     /// standardized kind understood by the compatibility schema.
     #[must_use]
     pub fn device_kind(&self) -> Option<OmpSelectorDeviceKind> {
-        match self.semantic_name() {
-            "host" => Some(OmpSelectorDeviceKind::Host),
-            "nohost" => Some(OmpSelectorDeviceKind::NoHost),
-            "any" => Some(OmpSelectorDeviceKind::Any),
-            "cpu" => Some(OmpSelectorDeviceKind::Cpu),
-            "gpu" => Some(OmpSelectorDeviceKind::Gpu),
-            "fpga" => Some(OmpSelectorDeviceKind::Fpga),
+        match self {
+            Self::DeviceKind { kind, .. } => Some(*kind),
             _ => None,
         }
     }
@@ -946,20 +1083,18 @@ impl OmpSelectorTraitValue {
     /// schema.
     #[must_use]
     pub fn vendor(&self) -> Option<OmpSelectorVendor> {
-        match self.semantic_name() {
-            "amd" => Some(OmpSelectorVendor::Amd),
-            "arm" => Some(OmpSelectorVendor::Arm),
-            "bsc" => Some(OmpSelectorVendor::Bsc),
-            "cray" => Some(OmpSelectorVendor::Cray),
-            "fujitsu" => Some(OmpSelectorVendor::Fujitsu),
-            "gnu" => Some(OmpSelectorVendor::Gnu),
-            "ibm" => Some(OmpSelectorVendor::Ibm),
-            "intel" => Some(OmpSelectorVendor::Intel),
-            "llvm" => Some(OmpSelectorVendor::Llvm),
-            "nvidia" => Some(OmpSelectorVendor::Nvidia),
-            "pgi" => Some(OmpSelectorVendor::Pgi),
-            "ti" => Some(OmpSelectorVendor::Ti),
+        match self {
+            Self::Vendor { vendor, .. } => Some(*vendor),
             _ => None,
+        }
+    }
+}
+
+impl OmpSelectorTraitSpelling {
+    fn semantic_name(&self) -> &str {
+        match self {
+            Self::Identifier(identifier) => identifier.as_str(),
+            Self::StringLiteral(literal) => literal.value.as_str(),
         }
     }
 }
@@ -968,6 +1103,7 @@ impl fmt::Display for OmpSelectorTraitValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Identifier(identifier) => write!(f, "{identifier}"),
+            Self::DeviceKind { spelling, .. } | Self::Vendor { spelling, .. } => spelling.fmt(f),
             Self::StringLiteral(literal)
                 if literal.encoding == crate::host::CharacterEncoding::Fortran =>
             {
@@ -1012,6 +1148,17 @@ impl fmt::Display for OmpSelectorTraitValue {
                     }
                 }
                 f.write_str("\"")
+            }
+        }
+    }
+}
+
+impl fmt::Display for OmpSelectorTraitSpelling {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Identifier(identifier) => identifier.fmt(formatter),
+            Self::StringLiteral(literal) => {
+                OmpSelectorTraitValue::StringLiteral(literal.clone()).fmt(formatter)
             }
         }
     }
@@ -1977,8 +2124,13 @@ fn acc_cache_designator_shape(
             true
         }
         ExprKind::Literal(_)
+        | ExprKind::This
+        | ExprKind::Sizeof(_)
         | ExprKind::CppTemplateId { .. }
         | ExprKind::LegacyQualifiedInteger { .. }
+        | ExprKind::LegacyQualifiedName { .. }
+        | ExprKind::LegacyFortranSubscript { .. }
+        | ExprKind::LegacyFortranUnaryDesignator { .. }
         | ExprKind::Unary { .. }
         | ExprKind::FortranDefinedUnary { .. }
         | ExprKind::Binary { .. }
@@ -2098,11 +2250,19 @@ impl AccEndKind {
 /// OpenACC clause payloads covering the clauses that require structured data.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AccClausePayload {
-    Bare,
-    Expression(Expression),
+    Bare {
+        kind: AccClauseKind,
+    },
+    Expression {
+        kind: AccClauseKind,
+        value: Expression,
+    },
     NumGangs(Vec<Expression>),
     Tile(Vec<AccSizeExpression>),
-    ItemList(Vec<ClauseItem>),
+    ItemList {
+        kind: AccClauseKind,
+        items: Vec<ClauseItem>,
+    },
     Bind(AccBindTarget),
     Indirect(Option<AccBindTarget>),
     Collapse(AccCollapseClause),
@@ -2336,8 +2496,8 @@ pub struct AccGangClause {
 }
 
 impl AccGangClause {
-    pub(crate) fn new(arguments: Vec<AccGangArgument>) -> Result<Self, AstInvariantError> {
-        Ok(Self { arguments })
+    pub(crate) const fn new(arguments: Vec<AccGangArgument>) -> Self {
+        Self { arguments }
     }
 
     #[must_use]
@@ -2445,6 +2605,11 @@ impl AccWaitClause {
         if devnum.is_some() && queues.is_empty() {
             return Err(AstInvariantError::new(
                 "OpenACC wait devnum modifier requires at least one queue",
+            ));
+        }
+        if queues_keyword && queues.is_empty() {
+            return Err(AstInvariantError::new(
+                "OpenACC wait queues modifier requires at least one queue",
             ));
         }
         Ok(Self {
@@ -2746,7 +2911,7 @@ fn omp_payload_has_required_contents(payload: &OmpClausePayload) -> bool {
     use crate::ir::{ClauseData, DoacrossType, OmpDependence, OmpDoacrossIteration};
 
     match payload {
-        ClauseData::ItemList(items)
+        ClauseData::ItemList { items, .. }
         | ClauseData::Private { items }
         | ClauseData::Shared { items }
         | ClauseData::UseDevicePtr { items }
@@ -2814,7 +2979,7 @@ fn omp_payload_has_required_contents(payload: &OmpClausePayload) -> bool {
         },
         ClauseData::UsesAllocators { allocators } => !allocators.is_empty(),
         ClauseData::NumThreads { nthreads, .. } => !nthreads.is_empty(),
-        ClauseData::Bare
+        ClauseData::Bare { .. }
         | ClauseData::Nowait { .. }
         | ClauseData::Nogroup { .. }
         | ClauseData::Align { .. }
@@ -2891,10 +3056,10 @@ fn acc_payload_has_required_contents(payload: &AccClausePayload) -> bool {
     match payload {
         AccClausePayload::NumGangs(expressions) => !expressions.is_empty(),
         AccClausePayload::Tile(sizes) => !sizes.is_empty(),
-        AccClausePayload::ItemList(items) => !items.is_empty(),
+        AccClausePayload::ItemList { items, .. } => !items.is_empty(),
         AccClausePayload::DeviceType(device_types) => !device_types.is_empty(),
-        AccClausePayload::Bare
-        | AccClausePayload::Expression(_)
+        AccClausePayload::Bare { .. }
+        | AccClausePayload::Expression { .. }
         | AccClausePayload::Bind(_)
         | AccClausePayload::Indirect(_)
         | AccClausePayload::Collapse(_)
@@ -2910,231 +3075,174 @@ fn acc_payload_has_required_contents(payload: &AccClausePayload) -> bool {
     }
 }
 
-fn omp_payload_matches_kind(kind: OmpClauseKind, payload: &OmpClausePayload) -> bool {
+const fn omp_payload_kind(payload: &OmpClausePayload) -> OmpClauseKind {
     use crate::ir::{AtomicOp, ClauseData, ExtendedAtomicKind, MemoryOrder, ScanClauseMode};
     use OmpClauseKind as K;
 
     match payload {
-        ClauseData::Bare => matches!(
-            kind,
-            K::Parallel | K::Sections | K::For | K::Do | K::Taskgroup
-        ),
-        ClauseData::Nowait { .. } => kind == K::Nowait,
-        ClauseData::Nogroup { .. } => kind == K::Nogroup,
-        ClauseData::Branch { .. } => matches!(kind, K::Inbranch | K::Notinbranch),
-        ClauseData::Full { .. } => kind == K::Full,
-        ClauseData::Partial { .. } => kind == K::Partial,
-        ClauseData::Mergeable { .. } => kind == K::Mergeable,
-        ClauseData::Untied { .. } => kind == K::Untied,
-        ClauseData::Simd { .. } => kind == K::Simd,
-        ClauseData::Threads { .. } => kind == K::Threads,
-        ClauseData::Assumption { .. } => matches!(
-            kind,
-            K::NoOpenmp | K::NoOpenmpConstructs | K::NoOpenmpRoutines | K::NoParallelism
-        ),
-        ClauseData::Indirect { .. } => kind == K::Indirect,
-        ClauseData::Replayable { .. } => kind == K::Replayable,
-        ClauseData::Safesync { .. } => kind == K::Safesync,
-        ClauseData::Transparent { .. } => kind == K::Transparent,
-        ClauseData::Align { .. } => kind == K::Align,
-        ClauseData::Destroy { .. } => kind == K::Destroy,
-        ClauseData::Final { .. } => kind == K::Final,
-        ClauseData::GraphId { .. } => kind == K::GraphId,
-        ClauseData::Hint { .. } => kind == K::Hint,
-        ClauseData::Holds { .. } => kind == K::Holds,
-        ClauseData::Message { .. } => kind == K::Message,
-        ClauseData::Nocontext { .. } => kind == K::Nocontext,
-        ClauseData::Novariants { .. } => kind == K::Novariants,
-        ClauseData::Threadset(_) => kind == K::Threadset,
-        ClauseData::Memscope(_) => kind == K::Memscope,
-        ClauseData::Looprange { .. } => kind == K::Looprange,
-        ClauseData::GraphReset { .. } => kind == K::GraphReset,
-        ClauseData::ItemList(_) => matches!(kind, K::Interop | K::Link | K::Local | K::Nontemporal),
-        ClauseData::Sizes { .. } => kind == K::Sizes,
-        ClauseData::Permutation { .. } => kind == K::Permutation,
-        ClauseData::Counts { .. } => kind == K::Counts,
-        ClauseData::Uniform { .. } => kind == K::Uniform,
-        ClauseData::Use { .. } => kind == K::Use,
-        ClauseData::Enter { .. } => kind == K::Enter,
-        ClauseData::To { .. } => kind == K::To,
-        ClauseData::From { .. } => kind == K::From,
-        ClauseData::Scan { mode, .. } => matches!(
-            (kind, mode),
-            (K::Inclusive, ScanClauseMode::Inclusive) | (K::Exclusive, ScanClauseMode::Exclusive)
-        ),
-        ClauseData::InitComplete { .. } => kind == K::InitComplete,
-        ClauseData::Absent { .. } => kind == K::Absent,
-        ClauseData::Contains { .. } => kind == K::Contains,
-        ClauseData::AdjustArgs { .. } => kind == K::AdjustArgs,
-        ClauseData::AppendArgs { .. } => kind == K::AppendArgs,
-        ClauseData::Collector { .. } => kind == K::Collector,
-        ClauseData::Inductor { .. } => kind == K::Inductor,
-        ClauseData::Apply { .. } => kind == K::Apply,
-        ClauseData::Induction { .. } => kind == K::Induction,
-        ClauseData::Private { .. } => kind == K::Private,
-        ClauseData::Firstprivate { .. } => kind == K::Firstprivate,
-        ClauseData::Lastprivate { .. } => kind == K::Lastprivate,
-        ClauseData::Shared { .. } => kind == K::Shared,
-        ClauseData::Default { .. } => kind == K::Default,
-        ClauseData::Defaultmap { .. } => kind == K::Defaultmap,
-        ClauseData::Reduction { .. } => {
-            matches!(kind, K::Reduction | K::InReduction | K::TaskReduction)
-        }
-        ClauseData::Map { .. } => kind == K::Map,
-        ClauseData::UseDevicePtr { .. } => kind == K::UseDevicePtr,
-        ClauseData::UseDeviceAddr { .. } => kind == K::UseDeviceAddr,
-        ClauseData::IsDevicePtr { .. } => kind == K::IsDevicePtr,
-        ClauseData::HasDeviceAddr { .. } => kind == K::HasDeviceAddr,
-        ClauseData::Depend { .. } => kind == K::Depend,
-        ClauseData::Doacross { .. } => kind == K::Doacross,
-        ClauseData::Priority { .. } => kind == K::Priority,
-        ClauseData::Detach { .. } => kind == K::Detach,
-        ClauseData::Affinity { .. } => kind == K::Affinity,
-        ClauseData::Schedule { .. } => kind == K::Schedule,
-        ClauseData::Collapse { .. } => kind == K::Collapse,
-        ClauseData::Ordered { .. } => kind == K::Ordered,
-        ClauseData::Linear { .. } => kind == K::Linear,
-        ClauseData::Aligned { .. } => kind == K::Aligned,
-        ClauseData::Safelen { .. } => kind == K::Safelen,
-        ClauseData::Simdlen { .. } => kind == K::Simdlen,
-        ClauseData::If { .. } => kind == K::If,
-        ClauseData::ProcBind(_) => kind == K::ProcBind,
-        ClauseData::Bind(_) => kind == K::Bind,
-        ClauseData::NumThreads { .. } => kind == K::NumThreads,
-        ClauseData::Device { .. } => kind == K::Device,
-        ClauseData::DeviceType(_) => kind == K::DeviceType,
-        ClauseData::At(_) => kind == K::At,
-        ClauseData::Severity(_) => kind == K::Severity,
-        ClauseData::InitInterop { .. } | ClauseData::InitDepobj { .. } => kind == K::Init,
-        ClauseData::Fail { .. } => kind == K::Fail,
-        ClauseData::MemoryOrder { order, .. } => matches!(
-            (kind, order),
-            (K::SeqCst, MemoryOrder::SeqCst)
-                | (K::AcqRel, MemoryOrder::AcqRel)
-                | (K::Acquire, MemoryOrder::Acquire)
-                | (K::Release, MemoryOrder::Release)
-                | (K::Relaxed, MemoryOrder::Relaxed)
-        ),
-        ClauseData::AtomicOperation { op, .. } => matches!(
-            (kind, op),
-            (K::Read, AtomicOp::Read) | (K::Write, AtomicOp::Write) | (K::Update, AtomicOp::Update)
-        ),
-        ClauseData::ExtendedAtomic {
-            kind: extended_kind,
-            ..
-        } => matches!(
-            (kind, extended_kind),
-            (K::Capture, ExtendedAtomicKind::Capture)
-                | (K::Compare, ExtendedAtomicKind::Compare)
-                | (K::Weak, ExtendedAtomicKind::Weak)
-        ),
-        ClauseData::Order { .. } => kind == K::Order,
-        ClauseData::NumTeams { .. } => kind == K::NumTeams,
-        ClauseData::ThreadLimit { .. } => kind == K::ThreadLimit,
-        ClauseData::Allocate { .. } => kind == K::Allocate,
-        ClauseData::Allocator { .. } => kind == K::Allocator,
-        ClauseData::Copyin { .. } => kind == K::CopyIn,
-        ClauseData::Copyprivate { .. } => kind == K::Copyprivate,
-        ClauseData::DistSchedule { .. } => kind == K::DistSchedule,
-        ClauseData::Grainsize { .. } => kind == K::Grainsize,
-        ClauseData::NumTasks { .. } => kind == K::NumTasks,
-        ClauseData::Filter { .. } => kind == K::Filter,
-        ClauseData::UsesAllocators { .. } => kind == K::UsesAllocators,
-        ClauseData::Requirement { requirement, .. } => matches!(
-            (kind, requirement),
-            (
-                K::AtomicDefaultMemOrder,
-                crate::ir::RequireModifier::AtomicDefaultMemOrder(_)
-            ) | (
-                K::ReverseOffload,
-                crate::ir::RequireModifier::ReverseOffload
-            ) | (
-                K::UnifiedAddress,
-                crate::ir::RequireModifier::UnifiedAddress
-            ) | (
-                K::UnifiedSharedMemory,
-                crate::ir::RequireModifier::UnifiedSharedMemory
-            ) | (
-                K::DynamicAllocators,
-                crate::ir::RequireModifier::DynamicAllocators
-            ) | (K::SelfMaps, crate::ir::RequireModifier::SelfMaps)
-                | (
-                    K::DeviceSafesync,
-                    crate::ir::RequireModifier::DeviceSafesync
-                )
-                | (
-                    K::ExtImplementationDefinedRequirement,
-                    crate::ir::RequireModifier::ExtImplementationDefinedRequirement(_)
-                )
-        ),
-        ClauseData::DepobjUpdate { .. } => kind == K::DepobjUpdate,
-        ClauseData::MetadirectiveSelector { .. } => {
-            matches!(kind, K::When | K::Match | K::Otherwise)
-        }
+        ClauseData::Bare { kind }
+        | ClauseData::ItemList { kind, .. }
+        | ClauseData::Branch { kind, .. }
+        | ClauseData::Assumption { kind, .. }
+        | ClauseData::Reduction { kind, .. }
+        | ClauseData::MetadirectiveSelector { kind, .. } => *kind,
+        ClauseData::Nowait { .. } => K::Nowait,
+        ClauseData::Nogroup { .. } => K::Nogroup,
+        ClauseData::Full { .. } => K::Full,
+        ClauseData::Partial { .. } => K::Partial,
+        ClauseData::Mergeable { .. } => K::Mergeable,
+        ClauseData::Untied { .. } => K::Untied,
+        ClauseData::Simd { .. } => K::Simd,
+        ClauseData::Threads { .. } => K::Threads,
+        ClauseData::Indirect { .. } => K::Indirect,
+        ClauseData::Replayable { .. } => K::Replayable,
+        ClauseData::Safesync { .. } => K::Safesync,
+        ClauseData::Transparent { .. } => K::Transparent,
+        ClauseData::Align { .. } => K::Align,
+        ClauseData::Destroy { .. } => K::Destroy,
+        ClauseData::Final { .. } => K::Final,
+        ClauseData::GraphId { .. } => K::GraphId,
+        ClauseData::Hint { .. } => K::Hint,
+        ClauseData::Holds { .. } => K::Holds,
+        ClauseData::Message { .. } => K::Message,
+        ClauseData::Nocontext { .. } => K::Nocontext,
+        ClauseData::Novariants { .. } => K::Novariants,
+        ClauseData::Threadset(_) => K::Threadset,
+        ClauseData::Memscope(_) => K::Memscope,
+        ClauseData::Looprange { .. } => K::Looprange,
+        ClauseData::GraphReset { .. } => K::GraphReset,
+        ClauseData::Sizes { .. } => K::Sizes,
+        ClauseData::Permutation { .. } => K::Permutation,
+        ClauseData::Counts { .. } => K::Counts,
+        ClauseData::Uniform { .. } => K::Uniform,
+        ClauseData::Use { .. } => K::Use,
+        ClauseData::Enter { .. } => K::Enter,
+        ClauseData::To { .. } => K::To,
+        ClauseData::From { .. } => K::From,
+        ClauseData::Scan { mode, .. } => match mode {
+            ScanClauseMode::Inclusive => K::Inclusive,
+            ScanClauseMode::Exclusive => K::Exclusive,
+        },
+        ClauseData::InitComplete { .. } => K::InitComplete,
+        ClauseData::Absent { .. } => K::Absent,
+        ClauseData::Contains { .. } => K::Contains,
+        ClauseData::AdjustArgs { .. } => K::AdjustArgs,
+        ClauseData::AppendArgs { .. } => K::AppendArgs,
+        ClauseData::Collector { .. } => K::Collector,
+        ClauseData::Inductor { .. } => K::Inductor,
+        ClauseData::Apply { .. } => K::Apply,
+        ClauseData::Induction { .. } => K::Induction,
+        ClauseData::Private { .. } => K::Private,
+        ClauseData::Firstprivate { .. } => K::Firstprivate,
+        ClauseData::Lastprivate { .. } => K::Lastprivate,
+        ClauseData::Shared { .. } => K::Shared,
+        ClauseData::Default { .. } => K::Default,
+        ClauseData::Defaultmap { .. } => K::Defaultmap,
+        ClauseData::Map { .. } => K::Map,
+        ClauseData::UseDevicePtr { .. } => K::UseDevicePtr,
+        ClauseData::UseDeviceAddr { .. } => K::UseDeviceAddr,
+        ClauseData::IsDevicePtr { .. } => K::IsDevicePtr,
+        ClauseData::HasDeviceAddr { .. } => K::HasDeviceAddr,
+        ClauseData::Depend { .. } => K::Depend,
+        ClauseData::Doacross { .. } => K::Doacross,
+        ClauseData::Priority { .. } => K::Priority,
+        ClauseData::Detach { .. } => K::Detach,
+        ClauseData::Affinity { .. } => K::Affinity,
+        ClauseData::Schedule { .. } => K::Schedule,
+        ClauseData::Collapse { .. } => K::Collapse,
+        ClauseData::Ordered { .. } => K::Ordered,
+        ClauseData::Linear { .. } => K::Linear,
+        ClauseData::Aligned { .. } => K::Aligned,
+        ClauseData::Safelen { .. } => K::Safelen,
+        ClauseData::Simdlen { .. } => K::Simdlen,
+        ClauseData::If { .. } => K::If,
+        ClauseData::ProcBind(_) => K::ProcBind,
+        ClauseData::Bind(_) => K::Bind,
+        ClauseData::NumThreads { .. } => K::NumThreads,
+        ClauseData::Device { .. } => K::Device,
+        ClauseData::DeviceType(_) => K::DeviceType,
+        ClauseData::At(_) => K::At,
+        ClauseData::Severity(_) => K::Severity,
+        ClauseData::InitInterop { .. } | ClauseData::InitDepobj { .. } => K::Init,
+        ClauseData::Fail { .. } => K::Fail,
+        ClauseData::MemoryOrder { order, .. } => match order {
+            MemoryOrder::SeqCst => K::SeqCst,
+            MemoryOrder::AcqRel => K::AcqRel,
+            MemoryOrder::Acquire => K::Acquire,
+            MemoryOrder::Release => K::Release,
+            MemoryOrder::Relaxed => K::Relaxed,
+        },
+        ClauseData::AtomicOperation { op, .. } => match op {
+            AtomicOp::Read => K::Read,
+            AtomicOp::Write => K::Write,
+            AtomicOp::Update => K::Update,
+        },
+        ClauseData::ExtendedAtomic { kind, .. } => match kind {
+            ExtendedAtomicKind::Capture => K::Capture,
+            ExtendedAtomicKind::Compare => K::Compare,
+            ExtendedAtomicKind::Weak => K::Weak,
+        },
+        ClauseData::Order { .. } => K::Order,
+        ClauseData::NumTeams { .. } => K::NumTeams,
+        ClauseData::ThreadLimit { .. } => K::ThreadLimit,
+        ClauseData::Allocate { .. } => K::Allocate,
+        ClauseData::Allocator { .. } => K::Allocator,
+        ClauseData::Copyin { .. } => K::CopyIn,
+        ClauseData::Copyprivate { .. } => K::Copyprivate,
+        ClauseData::DistSchedule { .. } => K::DistSchedule,
+        ClauseData::Grainsize { .. } => K::Grainsize,
+        ClauseData::NumTasks { .. } => K::NumTasks,
+        ClauseData::Filter { .. } => K::Filter,
+        ClauseData::UsesAllocators { .. } => K::UsesAllocators,
+        ClauseData::Requirement { requirement, .. } => match requirement {
+            crate::ir::RequireModifier::AtomicDefaultMemOrder(_) => K::AtomicDefaultMemOrder,
+            crate::ir::RequireModifier::ReverseOffload => K::ReverseOffload,
+            crate::ir::RequireModifier::UnifiedAddress => K::UnifiedAddress,
+            crate::ir::RequireModifier::UnifiedSharedMemory => K::UnifiedSharedMemory,
+            crate::ir::RequireModifier::DynamicAllocators => K::DynamicAllocators,
+            crate::ir::RequireModifier::SelfMaps => K::SelfMaps,
+            crate::ir::RequireModifier::DeviceSafesync => K::DeviceSafesync,
+            crate::ir::RequireModifier::ExtImplementationDefinedRequirement(_) => {
+                K::ExtImplementationDefinedRequirement
+            }
+        },
+        ClauseData::DepobjUpdate { .. } => K::DepobjUpdate,
     }
 }
 
-fn acc_payload_matches_kind(kind: AccClauseKind, payload: &AccClausePayload) -> bool {
+const fn acc_payload_kind(payload: &AccClausePayload) -> AccClauseKind {
     use AccClauseKind as K;
     match payload {
-        AccClausePayload::Bare => matches!(
-            kind,
-            K::Async
-                | K::Auto
-                | K::Capture
-                | K::Finalize
-                | K::IfPresent
-                | K::Independent
-                | K::NoHost
-                | K::Read
-                | K::Seq
-                | K::Update
-                | K::Write
-                | K::SelfClause
-        ),
-        AccClausePayload::Expression(_) => matches!(
-            kind,
-            K::Async
-                | K::DefaultAsync
-                | K::DeviceNum
-                | K::If
-                | K::NumWorkers
-                | K::VectorLength
-                | K::SelfClause
-        ),
-        AccClausePayload::Bind(_) => kind == K::Bind,
-        AccClausePayload::Indirect(_) => kind == K::Indirect,
-        AccClausePayload::NumGangs(_) => kind == K::NumGangs,
-        AccClausePayload::Tile(_) => kind == K::Tile,
-        AccClausePayload::ItemList(_) => matches!(
-            kind,
-            K::DevicePtr | K::Firstprivate | K::NoCreate | K::Present | K::Private | K::SelfClause
-        ),
-        AccClausePayload::Collapse(_) => kind == K::Collapse,
-        AccClausePayload::Default(_) => kind == K::Default,
-        AccClausePayload::Copy(copy) => matches!(
-            (kind, copy.kind),
-            (K::Copy, AccCopyKind::Copy)
-                | (K::CopyIn, AccCopyKind::CopyIn)
-                | (K::CopyOut, AccCopyKind::CopyOut)
-        ),
-        AccClausePayload::Create(_) => kind == K::Create,
-        AccClausePayload::Data(data) => matches!(
-            (kind, data.kind),
-            (K::Attach, AccDataKind::Attach)
-                | (K::Detach, AccDataKind::Detach)
-                | (K::UseDevice, AccDataKind::UseDevice)
-                | (K::Link, AccDataKind::Link)
-                | (K::DeviceResident, AccDataKind::DeviceResident)
-                | (K::Device, AccDataKind::Device)
-                | (K::Delete, AccDataKind::Delete)
-        ),
-        AccClausePayload::DeviceType(_) => kind == K::DeviceType,
-        AccClausePayload::Gang(_) => kind == K::Gang,
-        AccClausePayload::Worker(_) => kind == K::Worker,
-        AccClausePayload::Vector(_) => kind == K::Vector,
-        AccClausePayload::Wait(_) => kind == K::Wait,
-        AccClausePayload::Reduction(_) => kind == K::Reduction,
+        AccClausePayload::Bare { kind }
+        | AccClausePayload::Expression { kind, .. }
+        | AccClausePayload::ItemList { kind, .. } => *kind,
+        AccClausePayload::NumGangs(_) => K::NumGangs,
+        AccClausePayload::Tile(_) => K::Tile,
+        AccClausePayload::Bind(_) => K::Bind,
+        AccClausePayload::Indirect(_) => K::Indirect,
+        AccClausePayload::Collapse(_) => K::Collapse,
+        AccClausePayload::Default(_) => K::Default,
+        AccClausePayload::Copy(copy) => match copy.kind {
+            AccCopyKind::Copy => K::Copy,
+            AccCopyKind::CopyIn => K::CopyIn,
+            AccCopyKind::CopyOut => K::CopyOut,
+        },
+        AccClausePayload::Create(_) => K::Create,
+        AccClausePayload::Data(data) => match data.kind {
+            AccDataKind::Attach => K::Attach,
+            AccDataKind::Detach => K::Detach,
+            AccDataKind::UseDevice => K::UseDevice,
+            AccDataKind::Link => K::Link,
+            AccDataKind::DeviceResident => K::DeviceResident,
+            AccDataKind::Device => K::Device,
+            AccDataKind::Delete => K::Delete,
+        },
+        AccClausePayload::DeviceType(_) => K::DeviceType,
+        AccClausePayload::Gang(_) => K::Gang,
+        AccClausePayload::Worker(_) => K::Worker,
+        AccClausePayload::Vector(_) => K::Vector,
+        AccClausePayload::Wait(_) => K::Wait,
+        AccClausePayload::Reduction(_) => K::Reduction,
     }
 }
 
@@ -3716,6 +3824,7 @@ define_acc_clause_kind! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::host::HostLanguage;
 
     #[test]
     fn omp_directive_conversion_round_trip() {
@@ -3740,7 +3849,10 @@ mod tests {
         assert!(
             OmpClause::new(
                 OmpClauseKind::Nontemporal,
-                ClauseData::ItemList(Vec::new()),
+                ClauseData::ItemList {
+                    kind: OmpClauseKind::Nontemporal,
+                    items: Vec::new(),
+                },
                 None,
                 None,
                 OmpClauseSourceSeparator::Space,
@@ -3765,9 +3877,86 @@ mod tests {
         assert!(
             AccClause::new(
                 AccClauseKind::Private,
-                AccClausePayload::ItemList(Vec::new()),
+                AccClausePayload::ItemList {
+                    kind: AccClauseKind::Private,
+                    items: Vec::new(),
+                },
                 None,
                 Span::entire("private"),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn clause_identity_is_derived_from_the_payload() {
+        let omp = OmpClause::new(
+            OmpClauseKind::Notinbranch,
+            ClauseData::Branch {
+                kind: OmpClauseKind::Notinbranch,
+                condition: None,
+            },
+            None,
+            None,
+            OmpClauseSourceSeparator::Space,
+            Span::entire("notinbranch"),
+        )
+        .unwrap();
+        assert_eq!(omp.kind(), OmpClauseKind::Notinbranch);
+
+        let acc = AccClause::new(
+            AccClauseKind::If,
+            AccClausePayload::Expression {
+                kind: AccClauseKind::If,
+                value: Expression::parse("ready", HostLanguage::C).unwrap(),
+            },
+            None,
+            Span::entire("if"),
+        )
+        .unwrap();
+        assert_eq!(acc.kind(), AccClauseKind::If);
+    }
+
+    #[test]
+    fn openacc_payload_constructors_preserve_typed_data_modifiers() {
+        let item = ClauseItem::Identifier(Identifier::new("value").unwrap());
+        assert!(
+            AccCopyClause::new(
+                AccCopyKind::CopyIn,
+                vec![AccDataModifier::Zero],
+                vec![item.clone()],
+            )
+            .is_ok()
+        );
+        assert!(
+            AccCreateClause::new(
+                AccCreateKind::Create,
+                vec![AccDataModifier::Zero, AccDataModifier::Zero],
+                vec![item],
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn openacc_payload_constructors_reject_unrepresentable_states() {
+        assert!(AccWaitClause::new(None, Vec::new(), true).is_err());
+
+        assert!(
+            AccClause::new(
+                AccClauseKind::DeviceType,
+                AccClausePayload::DeviceType(vec![AccDeviceType::Wildcard, AccDeviceType::Host,]),
+                None,
+                Span::entire("device_type"),
+            )
+            .is_err()
+        );
+        assert!(
+            AccClause::new(
+                AccClauseKind::DeviceType,
+                AccClausePayload::DeviceType(vec![AccDeviceType::Host, AccDeviceType::Host]),
+                None,
+                Span::entire("device_type"),
             )
             .is_err()
         );

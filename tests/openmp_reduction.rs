@@ -15,7 +15,7 @@ fn item_name(item: &ClauseItem) -> &str {
         ClauseItem::Variable(variable) => variable.expression().source(),
         ClauseItem::FortranCommonBlock(name) => name.as_str(),
         ClauseItem::Expression(expression) => expression.source(),
-        ClauseItem::LegacyTrailingSlash(identifier) => identifier.as_str(),
+        ClauseItem::OmpparserTrailingSlash(identifier) => identifier.as_str(),
     }
 }
 
@@ -45,6 +45,7 @@ fn reduction_modifiers_operators_and_items_are_typed() {
             modifiers,
             operator,
             items,
+            ..
         } = clause.payload()
         else {
             panic!("reduction clause must have a reduction payload");

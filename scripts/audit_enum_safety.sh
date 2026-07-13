@@ -120,6 +120,21 @@ reject_matches \
     -n 'fn (string|strings)[^\n]*(ToString|Display)|impl<[^>]*(ToString|Display)[^>]*>[[:space:]]+AbiStringLeaf' \
     crates/roup-capi/src/service.rs
 
+reject_matches \
+    "host type-token variants require public named constants" \
+    -n -U 'T::[A-Za-z_]+(?:\([^\n]*\))?[[:space:]]*=>[[:space:]]*\([[:space:]]*[0-9]' \
+    crates/roup-capi/src/service.rs
+
+reject_matches \
+    "host operator projections require public named constants" \
+    -n 'O::[A-Za-z_]+[[:space:]]*=>[[:space:]]*[0-9]' \
+    crates/roup-capi/src/service.rs
+
+reject_matches \
+    "host literal suffixes must use tagged nodes rather than positional integer bags" \
+    -n 'fn host_(integer|real)_suffix[^\n]*(Vec<u32>|u32)' \
+    crates/roup-capi/src/service.rs
+
 if ! rg -q 'FieldValue::Bool\(_\).*ROUP_FIELD_VALUE_BOOL' \
     crates/roup-capi/src/service.rs; then
     echo "error: boolean ABI fields must retain their dedicated value kind" >&2

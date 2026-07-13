@@ -137,7 +137,7 @@ fn update_host_and_self_share_one_canonical_ast_shape() {
     assert_eq!(canonical_clause.span().slice(self_source), Ok("self"));
     assert!(matches!(
         host_clause.payload(),
-        AccClausePayload::ItemList(items) if items.len() == 1
+        AccClausePayload::ItemList { items, .. } if items.len() == 1
     ));
 }
 

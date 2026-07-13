@@ -5,15 +5,33 @@
 #include <string>
 #include <vector>
 
+extern "C" const char *roup_ompparser_last_error() noexcept;
+
 namespace {
 
 bool rejects(const char *source) {
   try {
     std::unique_ptr<OpenMPDirective> directive(
         parseOpenMP(source, nullptr, nullptr));
-    return directive == nullptr;
+    if (directive != nullptr)
+      return false;
+    const char *detail = roup_ompparser_last_error();
+    if (detail == nullptr || *detail == '\0')
+      throw std::runtime_error("ompparser rejection lost its diagnostic");
+    return true;
   } catch (const std::exception &) {
     return true;
+  }
+}
+
+bool rejects_with_hard_error(const char *source) {
+  try {
+    std::unique_ptr<OpenMPDirective> directive(
+        parseOpenMP(source, nullptr, nullptr));
+    return false;
+  } catch (const std::exception &) {
+    const char *detail = roup_ompparser_last_error();
+    return detail != nullptr && *detail != '\0';
   }
 }
 
@@ -420,6 +438,19 @@ int main() {
   if (!rejects("#pragma omp parallel"))
     throw std::runtime_error("unknown base language did not fail explicitly");
   setLang(Lang_C);
+  bool invalid_language_rejected = false;
+  try {
+    setLang(static_cast<OpenMPBaseLang>(-1));
+  } catch (const std::invalid_argument &) {
+    const char *detail = roup_ompparser_last_error();
+    invalid_language_rejected = detail != nullptr && *detail != '\0';
+  }
+  if (!invalid_language_rejected)
+    throw std::runtime_error(
+        "invalid ompparser base language did not remain a hard error");
+  if (!rejects_with_hard_error("not a pragma"))
+    throw std::runtime_error(
+        "pre-parse input validation did not preserve its hard-error contract");
   if (!rejects(nullptr))
     throw std::runtime_error("null input was not rejected");
   if (!rejects(""))

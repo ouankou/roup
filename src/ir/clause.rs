@@ -24,10 +24,12 @@
 //! - User-defined reduction operators
 
 use std::fmt;
+use std::num::NonZeroU64;
 
 use super::{Expression, Identifier, LValue, Variable};
 use crate::ast::{
-    OmpDirective, OmpInductionIdentifier, OmpInductorExpression, OmpReductionIdentifier,
+    OmpClauseKind, OmpDirective, OmpInductionIdentifier, OmpInductorExpression,
+    OmpReductionIdentifier,
 };
 use crate::host::{StringLiteral, TypeName};
 
@@ -1201,8 +1203,8 @@ pub enum ClauseItem {
     FortranCommonBlock(Identifier),
     /// Expression (e.g., `n > 100` in `if(n > 100)`)
     Expression(Expression),
-    /// Historical ompparser list item with a trailing slash token.
-    LegacyTrailingSlash(Identifier),
+    /// Explicit ompparser extension for an identifier followed by `/`.
+    OmpparserTrailingSlash(Identifier),
 }
 
 impl fmt::Display for ClauseItem {
@@ -1212,7 +1214,7 @@ impl fmt::Display for ClauseItem {
             ClauseItem::Variable(var) => write!(f, "{var}"),
             ClauseItem::FortranCommonBlock(name) => write!(f, "/{name}/"),
             ClauseItem::Expression(expr) => write!(f, "{expr}"),
-            ClauseItem::LegacyTrailingSlash(identifier) => write!(f, "{identifier}/"),
+            ClauseItem::OmpparserTrailingSlash(identifier) => write!(f, "{identifier}/"),
         }
     }
 }
@@ -1258,7 +1260,7 @@ pub enum OmpParameterListItem {
     /// A named function parameter or Fortran dummy argument.
     Named(Identifier),
     /// A one-based absolute position in the parameter list.
-    Position(u64),
+    Position(NonZeroU64),
     /// An inclusive range. An omitted lower bound means the first parameter;
     /// an omitted upper bound means `omp_num_args`.
     Range(Box<OmpParameterRange>),
@@ -1561,7 +1563,7 @@ pub enum ClauseData {
     // Bare clauses (no parameters)
     // ========================================================================
     /// Clause with no parameters. Its name is owned by the enclosing clause kind.
-    Bare,
+    Bare { kind: OmpClauseKind },
     /// `nowait[(do_not_synchronize)]`.
     Nowait {
         do_not_synchronize: Option<Expression>,
@@ -1576,7 +1578,10 @@ pub enum ClauseData {
     // ========================================================================
     /// A remaining ordinary variable-list payload. Clauses whose list grammar
     /// is narrower or wider have dedicated variants below.
-    ItemList(Vec<ClauseItem>),
+    ItemList {
+        kind: OmpClauseKind,
+        items: Vec<ClauseItem>,
+    },
 
     /// `sizes(size-list)` on `tile` or `stripe`.
     Sizes { sizes: Vec<Expression> },
@@ -1657,7 +1662,10 @@ pub enum ClauseData {
     },
 
     /// `inbranch[(condition)]` or `notinbranch[(condition)]`.
-    Branch { condition: Option<Expression> },
+    Branch {
+        kind: OmpClauseKind,
+        condition: Option<Expression>,
+    },
 
     /// `full[(fully_unroll)]` on an unroll directive.
     Full { fully_unroll: Option<Expression> },
@@ -1682,7 +1690,10 @@ pub enum ClauseData {
     },
 
     /// One of the `no_openmp*` or `no_parallelism` assumption clauses.
-    Assumption { can_assume: Option<Expression> },
+    Assumption {
+        kind: OmpClauseKind,
+        can_assume: Option<Expression>,
+    },
 
     /// `indirect[(invoked_by_fptr)]` on a declare-target directive.
     Indirect { invoked_by_fptr: Option<Expression> },
@@ -1782,6 +1793,7 @@ pub enum ClauseData {
     // ========================================================================
     /// `reduction([modifier,]operator: list)` - Reduction operation
     Reduction {
+        kind: OmpClauseKind,
         modifiers: Vec<ReductionModifier>,
         operator: OmpReductionIdentifier,
         items: Vec<ClauseItem>,
@@ -2062,6 +2074,7 @@ pub enum ClauseData {
 
     /// Metadirective/variant selector with fully typed payload.
     MetadirectiveSelector {
+        kind: OmpClauseKind,
         selector: Box<crate::ast::OmpSelector>,
     },
 }

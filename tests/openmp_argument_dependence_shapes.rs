@@ -88,7 +88,10 @@ fn openmp_six_argument_positions_ranges_and_preferences_have_typed_shapes() {
         panic!("expected adjust_args payload");
     };
     assert_eq!(*operation, AdjustArgsModifier::NeedDevicePtr);
-    assert!(matches!(parameters[0], OmpParameterListItem::Position(1)));
+    assert!(matches!(
+        parameters[0],
+        OmpParameterListItem::Position(position) if position.get() == 1
+    ));
     assert!(matches!(
         &parameters[1],
         OmpParameterListItem::Range(range)

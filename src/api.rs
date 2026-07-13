@@ -28,8 +28,9 @@ use crate::lexer::Language as LexerLanguage;
 use crate::parser::{self, AstBuildError};
 use crate::source::Span;
 use crate::validation::{
-    SemanticFacts, require_openacc_semantic_facts, require_openmp_semantic_facts, validate_openacc,
-    validate_openacc_with_facts, validate_openmp, validate_openmp_with_facts,
+    SemanticFactProvider, SemanticFacts, require_openacc_semantic_facts,
+    require_openmp_semantic_facts, validate_openacc, validate_openacc_with_facts, validate_openmp,
+    validate_openmp_with_facts,
 };
 use crate::version::{
     HostLanguageProfile, OpenAccVersion, OpenMpVersion, SourceForm, VersionPolicy, VersionSet,
@@ -41,7 +42,19 @@ pub struct OpenMpConfig {
     version_policy: VersionPolicy<OpenMpVersion>,
     host: HostLanguageProfile,
     source_form: SourceForm,
-    source_compatibility: bool,
+    syntax_dialect: OpenMpSyntaxDialect,
+}
+
+/// Source grammar accepted by an OpenMP parser.
+///
+/// Extension dialects reproduce a named compatibility frontend while retaining
+/// fully typed structural data. Standard parsing remains strict; compatibility
+/// parsing defers specification-level validation to embedding-compiler facts.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum OpenMpSyntaxDialect {
+    #[default]
+    Standard,
+    OmpparserExtensions,
 }
 
 impl OpenMpConfig {
@@ -52,7 +65,7 @@ impl OpenMpConfig {
             version_policy: VersionPolicy::Any,
             host,
             source_form,
-            source_compatibility: false,
+            syntax_dialect: OpenMpSyntaxDialect::Standard,
         })
     }
 
@@ -91,15 +104,19 @@ impl OpenMpConfig {
         self.source_form
     }
 
-    /// Match the accepted source contract of the historical parser frontend.
+    /// Enable the explicitly modeled ompparser source extensions.
     ///
-    /// The result remains a fully typed AST. This mode relaxes only
-    /// specification-level validation that the historical frontend did not
-    /// perform; malformed syntax and unrepresentable data remain hard errors.
+    /// The result remains structurally typed even where the compatibility
+    /// frontend accepts syntax that requires later semantic validation.
     #[must_use]
-    pub const fn with_source_compatibility(mut self) -> Self {
-        self.source_compatibility = true;
+    pub const fn with_ompparser_extensions(mut self) -> Self {
+        self.syntax_dialect = OpenMpSyntaxDialect::OmpparserExtensions;
         self
+    }
+
+    #[must_use]
+    pub const fn syntax_dialect(self) -> OpenMpSyntaxDialect {
+        self.syntax_dialect
     }
 
     #[must_use]
@@ -114,7 +131,15 @@ pub struct OpenAccConfig {
     version_policy: VersionPolicy<OpenAccVersion>,
     host: HostLanguageProfile,
     source_form: SourceForm,
-    source_compatibility: bool,
+    syntax_dialect: OpenAccSyntaxDialect,
+}
+
+/// Source grammar accepted by an OpenACC parser.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum OpenAccSyntaxDialect {
+    #[default]
+    Standard,
+    AccparserExtensions,
 }
 
 impl OpenAccConfig {
@@ -125,7 +150,7 @@ impl OpenAccConfig {
             version_policy: VersionPolicy::Any,
             host,
             source_form,
-            source_compatibility: false,
+            syntax_dialect: OpenAccSyntaxDialect::Standard,
         })
     }
 
@@ -164,15 +189,19 @@ impl OpenAccConfig {
         self.source_form
     }
 
-    /// Match the accepted source contract of the historical parser frontend.
+    /// Enable the explicitly modeled accparser source extensions.
     ///
-    /// The result remains a fully typed AST. This mode relaxes only
-    /// specification-level validation that the historical frontend did not
-    /// perform; malformed syntax and unrepresentable data remain hard errors.
+    /// The result remains structurally typed even where the compatibility
+    /// frontend accepts syntax that requires later semantic validation.
     #[must_use]
-    pub const fn with_source_compatibility(mut self) -> Self {
-        self.source_compatibility = true;
+    pub const fn with_accparser_extensions(mut self) -> Self {
+        self.syntax_dialect = OpenAccSyntaxDialect::AccparserExtensions;
         self
+    }
+
+    #[must_use]
+    pub const fn syntax_dialect(self) -> OpenAccSyntaxDialect {
+        self.syntax_dialect
     }
 
     #[must_use]
@@ -205,7 +234,7 @@ impl OpenMpParser {
     /// constant-expression classification. Use [`Self::parse_with_facts`] when
     /// those semantic checks are required.
     pub fn parse(&self, source: &str) -> Result<ParsedOpenMpDirective, Diagnostic> {
-        self.parse_impl(source, None)
+        self.parse_impl(source, None::<&SemanticFacts>)
     }
 
     /// Parse and validate with semantic facts supplied by the embedding compiler.
@@ -218,16 +247,28 @@ impl OpenMpParser {
         self.parse_impl(source, Some(facts))
     }
 
+    /// Parse and validate using compiler-owned on-demand semantic queries.
+    pub fn parse_with_provider(
+        &self,
+        source: &str,
+        facts: &impl SemanticFactProvider,
+    ) -> Result<ParsedOpenMpDirective, Diagnostic> {
+        self.parse_impl(source, Some(facts))
+    }
+
     fn parse_impl(
         &self,
         source: &str,
-        facts: Option<&SemanticFacts>,
+        facts: Option<&impl SemanticFactProvider>,
     ) -> Result<ParsedOpenMpDirective, Diagnostic> {
         let parser =
             parser::openmp::parser().with_language(lexer_language(self.config.source_form));
         let parser_config = parser_config(self.config.host)
             .with_openmp_version_policy(self.config.version_policy)
-            .with_source_compatibility(self.config.source_compatibility);
+            .with_source_extensions(matches!(
+                self.config.syntax_dialect,
+                OpenMpSyntaxDialect::OmpparserExtensions
+            ));
         let directive = parser
             .parse_ast(source, &parser_config)
             .map_err(|error| ast_error(error, source))?;
@@ -245,11 +286,13 @@ impl OpenMpParser {
             Some(availability) => {
                 openmp_compatible_versions(availability, self.config.host.language())
             }
-            None if self.config.source_compatibility
-                && matches!(
-                    openmp.kind(),
-                    crate::ast::OmpDirectiveKind::Ompx | crate::ast::OmpDirectiveKind::EndSection
-                ) =>
+            None if matches!(
+                self.config.syntax_dialect,
+                OpenMpSyntaxDialect::OmpparserExtensions
+            ) && matches!(
+                openmp.kind(),
+                crate::ast::OmpDirectiveKind::Ompx | crate::ast::OmpDirectiveKind::EndSection
+            ) =>
             {
                 VersionSet::empty()
             }
@@ -272,7 +315,12 @@ impl OpenMpParser {
                         .ok_or_else(|| internal_availability_error("OpenMP", source))?,
                 );
             }
-            FeatureAvailability::Nonstandard { .. } if self.config.source_compatibility => {
+            FeatureAvailability::Nonstandard { .. }
+                if matches!(
+                    self.config.syntax_dialect,
+                    OpenMpSyntaxDialect::OmpparserExtensions
+                ) =>
+            {
                 compatible_versions = VersionSet::empty();
             }
             FeatureAvailability::Nonstandard { reason } => {
@@ -293,7 +341,12 @@ impl OpenMpParser {
                             .ok_or_else(|| internal_availability_error("OpenMP", source))?,
                     );
                 }
-                FeatureAvailability::Nonstandard { .. } if self.config.source_compatibility => {
+                FeatureAvailability::Nonstandard { .. }
+                    if matches!(
+                        self.config.syntax_dialect,
+                        OpenMpSyntaxDialect::OmpparserExtensions
+                    ) =>
+                {
                     compatible_versions = VersionSet::empty();
                 }
                 FeatureAvailability::Nonstandard { reason } => {
@@ -306,8 +359,10 @@ impl OpenMpParser {
                 }
             }
         }
-        if !self.config.source_compatibility
-            || matches!(self.config.version_policy, VersionPolicy::Exact(_))
+        if !matches!(
+            self.config.syntax_dialect,
+            OpenMpSyntaxDialect::OmpparserExtensions
+        ) || matches!(self.config.version_policy, VersionPolicy::Exact(_))
         {
             enforce_openmp_policy(
                 self.config.version_policy,
@@ -317,19 +372,29 @@ impl OpenMpParser {
             )?;
         }
         match facts {
-            Some(facts) if self.config.source_compatibility => require_openmp_semantic_facts(
-                &openmp,
-                self.config.version_policy,
-                Span::entire(source),
-                facts,
-            )?,
+            Some(facts)
+                if matches!(
+                    self.config.syntax_dialect,
+                    OpenMpSyntaxDialect::OmpparserExtensions
+                ) =>
+            {
+                require_openmp_semantic_facts(
+                    &openmp,
+                    self.config.version_policy,
+                    Span::entire(source),
+                    facts,
+                )?
+            }
             Some(facts) => validate_openmp_with_facts(
                 &openmp,
                 self.config.version_policy,
                 Span::entire(source),
                 facts,
             )?,
-            None if self.config.source_compatibility => {}
+            None if matches!(
+                self.config.syntax_dialect,
+                OpenMpSyntaxDialect::OmpparserExtensions
+            ) => {}
             None => validate_openmp(&openmp, self.config.version_policy, Span::entire(source))?,
         }
 
@@ -359,7 +424,7 @@ impl OpenAccParser {
 
     /// Parse and apply every context-independent structural and clause rule.
     pub fn parse(&self, source: &str) -> Result<ParsedOpenAccDirective, Diagnostic> {
-        self.parse_impl(source, None)
+        self.parse_impl(source, None::<&SemanticFacts>)
     }
 
     /// Parse and validate with semantic facts supplied by the embedding compiler.
@@ -372,15 +437,26 @@ impl OpenAccParser {
         self.parse_impl(source, Some(facts))
     }
 
+    /// Parse and validate using compiler-owned on-demand semantic queries.
+    pub fn parse_with_provider(
+        &self,
+        source: &str,
+        facts: &impl SemanticFactProvider,
+    ) -> Result<ParsedOpenAccDirective, Diagnostic> {
+        self.parse_impl(source, Some(facts))
+    }
+
     fn parse_impl(
         &self,
         source: &str,
-        facts: Option<&SemanticFacts>,
+        facts: Option<&impl SemanticFactProvider>,
     ) -> Result<ParsedOpenAccDirective, Diagnostic> {
         let parser =
             parser::openacc::parser().with_language(lexer_language(self.config.source_form));
-        let parser_config = parser_config(self.config.host)
-            .with_source_compatibility(self.config.source_compatibility);
+        let parser_config = parser_config(self.config.host).with_source_extensions(matches!(
+            self.config.syntax_dialect,
+            OpenAccSyntaxDialect::AccparserExtensions
+        ));
         let directive = parser
             .parse_ast(source, &parser_config)
             .map_err(|error| ast_error(error, source))?;
@@ -413,7 +489,12 @@ impl OpenAccParser {
                         .ok_or_else(|| internal_availability_error("OpenACC", source))?,
                 );
             }
-            FeatureAvailability::Nonstandard { .. } if self.config.source_compatibility => {
+            FeatureAvailability::Nonstandard { .. }
+                if matches!(
+                    self.config.syntax_dialect,
+                    OpenAccSyntaxDialect::AccparserExtensions
+                ) =>
+            {
                 compatible_versions = VersionSet::empty();
             }
             FeatureAvailability::Nonstandard { reason } => {
@@ -430,7 +511,12 @@ impl OpenAccParser {
                             .ok_or_else(|| internal_availability_error("OpenACC", source))?,
                     );
                 }
-                FeatureAvailability::Nonstandard { .. } if self.config.source_compatibility => {
+                FeatureAvailability::Nonstandard { .. }
+                    if matches!(
+                        self.config.syntax_dialect,
+                        OpenAccSyntaxDialect::AccparserExtensions
+                    ) =>
+                {
                     compatible_versions = VersionSet::empty();
                 }
                 FeatureAvailability::Nonstandard { reason } => {
@@ -443,8 +529,10 @@ impl OpenAccParser {
                 }
             }
         }
-        if !self.config.source_compatibility
-            || matches!(self.config.version_policy, VersionPolicy::Exact(_))
+        if !matches!(
+            self.config.syntax_dialect,
+            OpenAccSyntaxDialect::AccparserExtensions
+        ) || matches!(self.config.version_policy, VersionPolicy::Exact(_))
         {
             enforce_openacc_policy(
                 self.config.version_policy,
@@ -454,7 +542,12 @@ impl OpenAccParser {
             )?;
         }
         match facts {
-            Some(facts) if self.config.source_compatibility => {
+            Some(facts)
+                if matches!(
+                    self.config.syntax_dialect,
+                    OpenAccSyntaxDialect::AccparserExtensions
+                ) =>
+            {
                 require_openacc_semantic_facts(&openacc, Span::entire(source), facts)?
             }
             Some(facts) => validate_openacc_with_facts(
@@ -463,7 +556,10 @@ impl OpenAccParser {
                 Span::entire(source),
                 facts,
             )?,
-            None if self.config.source_compatibility => {}
+            None if matches!(
+                self.config.syntax_dialect,
+                OpenAccSyntaxDialect::AccparserExtensions
+            ) => {}
             None => validate_openacc(&openacc, self.config.version_policy, Span::entire(source))?,
         }
 
@@ -867,5 +963,29 @@ mod tests {
         assert_eq!(error.code(), DiagnosticCode::UnexpectedToken);
         assert_eq!(error.primary_span().slice(source), Ok(source));
         assert!(error.related_spans().is_empty());
+    }
+
+    #[test]
+    fn parser_accepts_on_demand_semantic_fact_providers() {
+        struct PositiveIntegerProvider;
+
+        impl crate::validation::SemanticFactProvider for PositiveIntegerProvider {
+            fn positive_integer_expression(
+                &self,
+                _site: crate::validation::OmpExpressionSite,
+            ) -> Option<bool> {
+                Some(true)
+            }
+        }
+
+        let parser = OpenMpConfig::new(c23(), SourceForm::Pragma)
+            .expect("valid configuration")
+            .parser();
+        parser
+            .parse_with_provider(
+                "#pragma omp parallel num_threads(runtime_count)",
+                &PositiveIntegerProvider,
+            )
+            .expect("provider query should satisfy the required semantic fact");
     }
 }

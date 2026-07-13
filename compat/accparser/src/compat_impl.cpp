@@ -26,7 +26,7 @@
 
 namespace {
 
-OpenACCBaseLang current_lang = ACC_Lang_unknown;
+thread_local OpenACCBaseLang current_lang = ACC_Lang_unknown;
 
 int location_component(std::size_t value, const char *context) {
   if (value == 0 ||
@@ -129,6 +129,54 @@ std::string copy_string(Length length_operation, Copy copy_operation,
   return value;
 }
 
+std::string host_node_legacy_spelling(RoupNodeHandle node,
+                                      std::uint32_t outer_field) {
+  const RoupNodeKind kind =
+      require_value(roup_node_kind(node), "querying host node kind").value;
+  std::uint32_t spelling_field = 0;
+  switch (kind.family) {
+  case ROUP_NODE_FAMILY_HOST_EXPRESSION:
+    spelling_field = outer_field == ROUP_FIELD_STEP
+                         ? ROUP_FIELD_COMPACT_SPELLING
+                         : ROUP_FIELD_SOURCE_SPELLING;
+    break;
+  case ROUP_NODE_FAMILY_HOST_VARIABLE:
+  case ROUP_NODE_FAMILY_HOST_LVALUE:
+    // accparser preserves the original spelling of data-clause variables in
+    // its public string-based AST. Keep that legacy projection at this final
+    // adapter boundary while the ROUP node itself remains fully typed.
+    spelling_field = ROUP_FIELD_SOURCE_SPELLING;
+    break;
+  case ROUP_NODE_FAMILY_HOST_TYPE_NAME:
+    spelling_field = ROUP_FIELD_CANONICAL_SPELLING;
+    break;
+  default:
+    throw std::runtime_error(
+        "legacy string projection requested for a non-host semantic node");
+  }
+  const std::size_t count =
+      require_value(roup_node_field_count(node), "querying host node fields")
+          .value;
+  for (std::size_t index = 0; index < count; ++index) {
+    const RoupFieldInfo info =
+        require_value(roup_node_field_info(node, index),
+                      "querying host node field metadata")
+            .value;
+    if (info.id != spelling_field)
+      continue;
+    if (info.value_kind != ROUP_FIELD_VALUE_STRING || info.count != 1) {
+      throw std::runtime_error("host node source spelling has invalid shape");
+    }
+    return copy_string(
+        [&] { return roup_node_field_string_length(node, index, 0); },
+        [&](std::uint8_t *output, std::size_t capacity) {
+          return roup_node_field_string_copy(node, index, 0, output, capacity);
+        },
+        "copying typed host node source spelling");
+  }
+  throw std::runtime_error("typed host node has no source spelling");
+}
+
 enum class FieldScope { Clause, Parameter, Node };
 
 class FieldReader {
@@ -170,11 +218,25 @@ public:
     }
     consume(*index);
     const RoupFieldInfo info = fields_[*index];
-    if (info.value_kind != ROUP_FIELD_VALUE_STRING || info.count != 1) {
+    if (info.count != 1 ||
+        (info.value_kind != ROUP_FIELD_VALUE_STRING &&
+         info.value_kind != ROUP_FIELD_VALUE_NODE)) {
       throw std::runtime_error("typed field " + std::to_string(id) +
-                               " is not one string");
+                               " is not a single string or node");
     }
-    return string_at(*index, 0);
+    if (info.value_kind == ROUP_FIELD_VALUE_STRING)
+      return string_at(*index, 0);
+    const RoupNodeResult acquired = require_value(
+        field_node(*index, 0), "acquiring a typed host-language node");
+    try {
+      std::string result = host_node_legacy_spelling(acquired.value, id);
+      require_ok(roup_node_release(acquired.value),
+                 "releasing a typed host-language node");
+      return result;
+    } catch (...) {
+      discard_cleanup_result(roup_node_release(acquired.value));
+      throw;
+    }
   }
 
   std::string required_string(std::uint32_t id) {
@@ -193,14 +255,28 @@ public:
     }
     consume(*index);
     const RoupFieldInfo info = fields_[*index];
-    if (info.value_kind != ROUP_FIELD_VALUE_STRING_LIST) {
+    if (info.value_kind != ROUP_FIELD_VALUE_STRING_LIST &&
+        info.value_kind != ROUP_FIELD_VALUE_NODE_LIST) {
       throw std::runtime_error("typed field " + std::to_string(id) +
-                               " is not a string list");
+                               " is not a string or node list");
     }
     std::vector<std::string> values;
     values.reserve(info.count);
     for (std::size_t value = 0; value < info.count; ++value) {
-      values.push_back(string_at(*index, value));
+      if (info.value_kind == ROUP_FIELD_VALUE_STRING_LIST) {
+        values.push_back(string_at(*index, value));
+      } else {
+        const RoupNodeResult acquired = require_value(
+            field_node(*index, value), "acquiring a typed host-language node");
+        try {
+          values.push_back(host_node_legacy_spelling(acquired.value, id));
+          require_ok(roup_node_release(acquired.value),
+                     "releasing a typed host-language node");
+        } catch (...) {
+          discard_cleanup_result(roup_node_release(acquired.value));
+          throw;
+        }
+      }
     }
     return values;
   }
@@ -545,6 +621,9 @@ std::string read_clause_item(RoupNodeHandle node) {
     break;
   case ROUP_CLAUSE_ITEM_EXPRESSION:
     value = fields.required_string(ROUP_FIELD_VALUE);
+    break;
+  case ROUP_CLAUSE_ITEM_OMPPARSER_TRAILING_SLASH:
+    value = fields.required_string(ROUP_FIELD_NAME) + "/";
     break;
   default:
     throw std::runtime_error("unknown typed clause-item variant");
@@ -1607,7 +1686,7 @@ ParseProfile parser_profile(const std::string &input) {
   profile.options.dialect = ROUP_DIALECT_OPENACC;
   profile.options.version_policy = ROUP_VERSION_ANY;
   profile.options.version = 0;
-  profile.options.flags = ROUP_PARSER_SOURCE_COMPATIBILITY;
+  profile.options.flags = ROUP_PARSER_ACCPARSER_EXTENSIONS;
 
   if (starts_with_case_insensitive(leading, "!$acc")) {
     if (language_is_explicit && current_lang != ACC_Lang_Fortran) {

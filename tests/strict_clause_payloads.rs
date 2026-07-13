@@ -118,7 +118,7 @@ fn standardized_selector_spelling_still_builds_typed_data() {
         "#pragma omp metadirective when(device={kind(cpu), isa(avx2)}, implementation={vendor(llvm)}, user={condition(flag)}, construct={parallel}: parallel)",
     )
     .unwrap();
-    let OmpClausePayload::MetadirectiveSelector { selector } =
+    let OmpClausePayload::MetadirectiveSelector { selector, .. } =
         parsed.directive().clauses()[0].payload()
     else {
         panic!("expected typed metadirective selector");

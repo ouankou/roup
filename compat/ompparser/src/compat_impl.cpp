@@ -25,7 +25,8 @@
 
 namespace {
 
-OpenMPBaseLang current_lang = Lang_unknown;
+thread_local OpenMPBaseLang current_lang = Lang_unknown;
+thread_local std::string last_adapter_error;
 
 constexpr std::size_t mapped_directive_count =
     0
@@ -147,6 +148,51 @@ std::string copy_string(Length length_operation, Copy copy_operation,
   return value;
 }
 
+std::string host_node_legacy_spelling(RoupNodeHandle node,
+                                      std::uint32_t outer_field) {
+  const RoupNodeKind kind =
+      require_value(roup_node_kind(node), "querying host node kind").value;
+  std::uint32_t spelling_field = 0;
+  switch (kind.family) {
+  case ROUP_NODE_FAMILY_HOST_EXPRESSION:
+    spelling_field = outer_field == ROUP_FIELD_STEP
+                         ? ROUP_FIELD_COMPACT_SPELLING
+                         : ROUP_FIELD_SOURCE_SPELLING;
+    break;
+  case ROUP_NODE_FAMILY_HOST_VARIABLE:
+  case ROUP_NODE_FAMILY_HOST_LVALUE:
+    spelling_field = ROUP_FIELD_COMPACT_SPELLING;
+    break;
+  case ROUP_NODE_FAMILY_HOST_TYPE_NAME:
+    spelling_field = ROUP_FIELD_CANONICAL_SPELLING;
+    break;
+  default:
+    throw std::runtime_error(
+        "legacy string projection requested for a non-host semantic node");
+  }
+  const std::size_t count =
+      require_value(roup_node_field_count(node), "querying host node fields")
+          .value;
+  for (std::size_t index = 0; index < count; ++index) {
+    const RoupFieldInfo info =
+        require_value(roup_node_field_info(node, index),
+                      "querying host node field metadata")
+            .value;
+    if (info.id != spelling_field)
+      continue;
+    if (info.value_kind != ROUP_FIELD_VALUE_STRING || info.count != 1) {
+      throw std::runtime_error("host node source spelling has invalid shape");
+    }
+    return copy_string(
+        [&] { return roup_node_field_string_length(node, index, 0); },
+        [&](std::uint8_t *output, std::size_t capacity) {
+          return roup_node_field_string_copy(node, index, 0, output, capacity);
+        },
+        "copying typed host node source spelling");
+  }
+  throw std::runtime_error("typed host node has no source spelling");
+}
+
 enum class FieldScope { Clause, Parameter, Node };
 
 class FieldReader {
@@ -188,11 +234,25 @@ public:
     }
     consume(*index);
     const RoupFieldInfo info = fields_[*index];
-    if (info.value_kind != ROUP_FIELD_VALUE_STRING || info.count != 1) {
+    if (info.count != 1 ||
+        (info.value_kind != ROUP_FIELD_VALUE_STRING &&
+         info.value_kind != ROUP_FIELD_VALUE_NODE)) {
       throw std::runtime_error("typed field " + std::to_string(id) +
-                               " is not one string");
+                               " is not a single string or node");
     }
-    return string_at(*index, 0);
+    if (info.value_kind == ROUP_FIELD_VALUE_STRING)
+      return string_at(*index, 0);
+    const RoupNodeResult acquired = require_value(
+        field_node(*index, 0), "acquiring a typed host-language node");
+    try {
+      std::string result = host_node_legacy_spelling(acquired.value, id);
+      require_ok(roup_node_release(acquired.value),
+                 "releasing a typed host-language node");
+      return result;
+    } catch (...) {
+      discard_cleanup_result(roup_node_release(acquired.value));
+      throw;
+    }
   }
 
   std::string required_string(std::uint32_t id) {
@@ -211,14 +271,28 @@ public:
     }
     consume(*index);
     const RoupFieldInfo info = fields_[*index];
-    if (info.value_kind != ROUP_FIELD_VALUE_STRING_LIST) {
+    if (info.value_kind != ROUP_FIELD_VALUE_STRING_LIST &&
+        info.value_kind != ROUP_FIELD_VALUE_NODE_LIST) {
       throw std::runtime_error("typed field " + std::to_string(id) +
-                               " is not a string list");
+                               " is not a string or node list");
     }
     std::vector<std::string> values;
     values.reserve(info.count);
     for (std::size_t value = 0; value < info.count; ++value) {
-      values.push_back(string_at(*index, value));
+      if (info.value_kind == ROUP_FIELD_VALUE_STRING_LIST) {
+        values.push_back(string_at(*index, value));
+      } else {
+        const RoupNodeResult acquired = require_value(
+            field_node(*index, value), "acquiring a typed host-language node");
+        try {
+          values.push_back(host_node_legacy_spelling(acquired.value, id));
+          require_ok(roup_node_release(acquired.value),
+                     "releasing a typed host-language node");
+        } catch (...) {
+          discard_cleanup_result(roup_node_release(acquired.value));
+          throw;
+        }
+      }
     }
     return values;
   }
@@ -593,7 +667,7 @@ std::string read_clause_item(RoupNodeHandle node) {
   case ROUP_CLAUSE_ITEM_EXPRESSION:
     value = fields.required_string(ROUP_FIELD_VALUE);
     break;
-  case ROUP_CLAUSE_ITEM_LEGACY_TRAILING_SLASH:
+  case ROUP_CLAUSE_ITEM_OMPPARSER_TRAILING_SLASH:
     value = fields.required_string(ROUP_FIELD_NAME) + "/";
     break;
   case ROUP_CLAUSE_ITEM_LVALUE:
@@ -5101,7 +5175,7 @@ RoupParserOptions parser_options(const std::string &input) {
   options.dialect = ROUP_DIALECT_OPENMP;
   options.version_policy = ROUP_VERSION_ANY;
   options.version = 0;
-  options.flags = ROUP_PARSER_SOURCE_COMPATIBILITY;
+  options.flags = ROUP_PARSER_OMPPARSER_EXTENSIONS;
 
   if (starts_with_case_insensitive(leading, "!$")) {
     if (current_lang != Lang_Fortran) {
@@ -5142,40 +5216,85 @@ RoupParserOptions parser_options(const std::string &input) {
 extern "C" void setLang(OpenMPBaseLang lang) {
   if (lang != Lang_C && lang != Lang_Cplusplus && lang != Lang_Fortran &&
       lang != Lang_unknown) {
-    throw std::invalid_argument("unsupported ompparser base language");
+    last_adapter_error = "unsupported ompparser base language";
+    throw std::invalid_argument(last_adapter_error);
   }
+  last_adapter_error.clear();
   current_lang = lang;
+}
+
+extern "C" const char *roup_ompparser_last_error() noexcept {
+  return last_adapter_error.c_str();
 }
 
 extern "C" OpenMPDirective *
 parseOpenMP(const char *input, OpenMPExprParseCallback expression_parser,
             void *expression_parser_data) {
-  if (input == nullptr)
+  last_adapter_error.clear();
+  if (input == nullptr) {
+    last_adapter_error = "parseOpenMP input must not be null";
     return nullptr;
+  }
   const std::size_t length = std::strlen(input);
-  if (length == 0)
+  if (length == 0) {
+    last_adapter_error = "parseOpenMP input must not be empty";
     return nullptr;
+  }
 
-  if (current_lang == Lang_unknown)
+  if (current_lang == Lang_unknown) {
+    last_adapter_error = "parseOpenMP base language has not been selected";
     return nullptr;
+  }
+
+  RoupParserOptions options{};
+  try {
+    options = parser_options(std::string(input, length));
+  } catch (const std::exception &error) {
+    last_adapter_error = error.what();
+    throw;
+  } catch (...) {
+    last_adapter_error = "unknown ompparser input validation failure";
+    throw;
+  }
 
   openmpSetExprParseCallback(expression_parser, expression_parser_data);
   openmpSetExprParseMode(OMP_EXPR_PARSE_none);
 
-  const RoupParserOptions options = parser_options(std::string(input, length));
-  const RoupParserResult parser = require_value(
-      roup_parser_create(options), "creating ROUP parser");
-  bool parser_live = true;
+  RoupParserHandle parser_handle{};
+  bool parser_live = false;
   RoupDirectiveHandle directive_handle{};
   bool directive_live = false;
   try {
+    const RoupParserResult parser = require_value(
+        roup_parser_create(options), "creating ROUP parser");
+    parser_handle = parser.value;
+    parser_live = true;
     const RoupDirectiveResult parsed =
-        roup_parse(parser.value,
+        roup_parse(parser_handle,
                    reinterpret_cast<const std::uint8_t *>(input), length);
     if (parsed.result.status == ROUP_STATUS_PARSE_ERROR) {
+      const RoupSizeResult message_length =
+          roup_error_message_length(parsed.result.error);
+      if (message_length.result.status == ROUP_STATUS_OK) {
+        last_adapter_error.assign(message_length.value, '\0');
+        const RoupSizeResult copied = roup_error_message_copy(
+            parsed.result.error,
+            reinterpret_cast<std::uint8_t *>(last_adapter_error.data()),
+            last_adapter_error.size());
+        if (copied.result.status != ROUP_STATUS_OK ||
+            copied.value != last_adapter_error.size()) {
+          last_adapter_error = "OpenMP directive was rejected";
+          if (copied.result.status != ROUP_STATUS_OK)
+            discard_cleanup_result(copied.result);
+        }
+      } else {
+        last_adapter_error = "OpenMP directive was rejected";
+        discard_cleanup_result(message_length.result);
+      }
       release_error_without_recursion(parsed.result.error);
-      require_ok(roup_parser_release(parser.value), "releasing ROUP parser");
+      require_ok(roup_parser_release(parser_handle), "releasing ROUP parser");
       parser_live = false;
+      openmpSetExprParseCallback(nullptr, nullptr);
       return nullptr;
     }
     require_ok(parsed.result, "parsing OpenMP directive");
@@ -5187,16 +5306,27 @@ parseOpenMP(const char *input, OpenMPExprParseCallback expression_parser,
     require_ok(roup_directive_release(directive_handle),
                "releasing parsed ROUP directive");
     directive_live = false;
-    require_ok(roup_parser_release(parser.value), "releasing ROUP parser");
+    require_ok(roup_parser_release(parser_handle), "releasing ROUP parser");
     parser_live = false;
+    openmpSetExprParseCallback(nullptr, nullptr);
     return converted.release();
-  } catch (...) {
+  } catch (const std::exception &error) {
+    last_adapter_error = error.what();
     if (directive_live) {
       discard_cleanup_result(roup_directive_release(directive_handle));
     }
     if (parser_live) {
-      discard_cleanup_result(roup_parser_release(parser.value));
+      discard_cleanup_result(roup_parser_release(parser_handle));
     }
+    openmpSetExprParseCallback(nullptr, nullptr);
+    return nullptr;
+  } catch (...) {
+    last_adapter_error = "unknown ompparser adapter failure";
+    if (directive_live)
+      discard_cleanup_result(roup_directive_release(directive_handle));
+    if (parser_live)
+      discard_cleanup_result(roup_parser_release(parser_handle));
+    openmpSetExprParseCallback(nullptr, nullptr);
     return nullptr;
   }
 }
